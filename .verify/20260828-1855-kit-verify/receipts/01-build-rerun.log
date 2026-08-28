@@ -1,7 +1,0 @@
-$ gates/selftest.sh (after stage-name fix)
-ok: gate closed before approval
-ok: gate open after approval
-ok: tamper invalidates approval
-ok: invalid stage name rejected
-SELFTEST PASS
-exit=0

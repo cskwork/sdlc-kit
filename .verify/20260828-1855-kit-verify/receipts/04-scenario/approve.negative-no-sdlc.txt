@@ -1,3 +1,0 @@
-$ /Users/danny/Documents/Git/sdlc-kit/gates/approve.sh intent /etc/hosts
-FAIL: no .sdlc/ here. Run init.sh first, from the project root.
-exit=1

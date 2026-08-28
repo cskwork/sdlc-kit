@@ -1,0 +1,6 @@
+# process residue — session evidence, never framework
+.verify/
+.impeccable/
+.sdlc/
+scratch/
+.DS_Store

@@ -1,3 +1,0 @@
-$ approve.sh '../../etc/pwn' …
-FAIL: stage must be [a-zA-Z0-9_-]+: '../../etc/pwn'
-exit=1
