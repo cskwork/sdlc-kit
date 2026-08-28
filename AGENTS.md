@@ -21,6 +21,13 @@ stage 6 writes a new `intent.md` — the loop feeds itself.
 
 Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>/spec.md`.
 
+**Every feature ends in a terminal state.** `gates/close.sh <slug>
+<shipped|abandoned|dead-end> "reason"` (human decision; `--delegated` per
+rule 3). Closing as abandoned or dead-end requires a lesson first — what was
+tried, why it failed, what would unblock it — so a failed run leaves more
+knowledge behind than it consumed. Harvest durable facts into DOMAIN.md at
+close. `status.sh` shows closed features one-line and proposes no next action.
+
 ## Hard rules (every stage, every harness)
 
 1. **Read the stage skill file COMPLETELY before acting.** Resolve paths
