@@ -1,6 +1,0 @@
-$ gates/selftest.sh
-ok: gate closed before approval
-ok: gate open after approval
-ok: tamper invalidates approval
-SELFTEST PASS
-exit=0

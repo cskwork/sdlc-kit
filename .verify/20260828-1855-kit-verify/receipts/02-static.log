@@ -1,6 +1,0 @@
-bash -n init.sh: exit=0
-bash -n gates/approve.sh: exit=0
-bash -n gates/check-gate.sh: exit=0
-bash -n gates/selftest.sh: exit=0
---- cross-refs: files referenced in AGENTS.md/skills exist ---
-all 16 referenced files exist

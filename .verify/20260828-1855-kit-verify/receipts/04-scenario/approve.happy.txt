@@ -1,4 +1,0 @@
-$ /Users/danny/Documents/Git/sdlc-kit/gates/approve.sh intent .sdlc/work/feat-x/intent.md
-APPROVED: intent of feat-x (.sdlc/work/feat-x/intent.md @ 73cb3858a687…)
-Commit .sdlc/approvals/feat-x.intent.approval with the artifact for the audit trail.
-exit=0

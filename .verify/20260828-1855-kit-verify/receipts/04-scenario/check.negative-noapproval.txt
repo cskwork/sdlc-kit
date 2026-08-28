@@ -1,3 +1,0 @@
-$ /Users/danny/Documents/Git/sdlc-kit/gates/check-gate.sh plan .sdlc/work/feat-x/intent.md
-GATE CLOSED: no approval for 'plan' of 'feat-x'. A human must run: gates/approve.sh plan .sdlc/work/feat-x/intent.md
-exit=1
