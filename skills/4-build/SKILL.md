@@ -41,10 +41,22 @@ implementation, not a QA gate at the end.
 
 When all steps are done and local checks are green, dispatch a fresh-context
 verifier (`roles/verifier.md`) with: plan.md, spec.md, changed-file list, and
-`.sdlc/config.md` commands. It runs the app/tests itself and reports evidence.
-You do not verify your own work in your own context.
+`.sdlc/config.md` commands (full dispatch contract per AGENTS.md rule 5). It
+runs the app/tests itself and reports evidence. You do not verify your own
+work in your own context.
 
-- Verifier finds a gap → fix → dispatch a NEW verifier. Repeat until clean.
+Verifier or adversary findings enter the **fix loop**:
+
+1. Triage every finding into **accepted** (will fix now) or **declined**
+   (with the reason). Both lists are recorded — in plan.md's Deviations or
+   the evidence file. Declined is a record, not an omission.
+2. The fix touches ONLY the accepted findings — no scope beyond them. A
+   finding that implies new scope goes to the human, not into the fix.
+3. Re-dispatch a NEW fresh-context checker with exactly two questions:
+   is each named finding resolved, and is there a new defect inside the
+   fix's blast radius?
+4. Max 3 rounds. Round 3 still red → STOP and escalate to the human with
+   the receipts; a fourth attempt without new information repeats the third.
 
 ## Exit
 

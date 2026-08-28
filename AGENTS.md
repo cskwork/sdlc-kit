@@ -47,7 +47,23 @@ Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>
    in a fresh context: a subagent if your harness has them (pi: subagent tool;
    Claude Code: Task tool; Codex: spawn), else a new session given only the
    role file + artifact paths. The role files are `roles/*.md`. The author of
-   an artifact never verifies its own artifact in the same context.
+   an artifact never verifies its own artifact in the same context. If your
+   harness lets you pick models, give the verifier and adversary the strongest
+   one available — their failure mode is a silent PASS that no later stage
+   catches.
+
+   **Dispatch contract.** Every role dispatch names, explicitly:
+   goal · inputs (exact artifact paths) · authority (which paths it may
+   write, usually none) · evidence (the verify commands from
+   `.sdlc/config.md`) · success criteria · output (file or report format) ·
+   stop rules (when to STOP and escalate instead of improvising). A dispatch
+   missing one of these is how a helper silently invents scope.
+
+   **Bulk rule.** Screenshots, probe logs, traces, and large command dumps
+   are evidence to read, not artifacts to keep. Write them to
+   `.sdlc/work/<feature>/scratch/` (gitignored), read them, quote the
+   deciding lines into the stage artifact, then delete the file. The
+   artifact is the record; cite the evidence, do not carry it.
 6. **Proof over claims.** Every "done" claim carries command output. Real
    verification commands live in the project's `.sdlc/config.md`.
 7. **Artifacts live in the project repo**, under `.sdlc/work/<feature>/`, and
