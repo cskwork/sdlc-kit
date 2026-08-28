@@ -1,91 +1,271 @@
+<div align="center">
+
 # sdlc-kit
 
-Portable, harness-neutral AI-native SDLC, adapted from [Anthropic's AI-Native
-SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook). Works with
-pi, Claude Code, Codex CLI, Gemini CLI, Cursor — anything that can read files
-and run shell commands.
+### Stop letting coding agents mark their own homework.
 
-**Core ideas** (all from the playbook, made harness-neutral):
+**A portable, harness-neutral SDLC for AI coding agents.**  
+Intent → spec → plan → build → evidence → maintain — with human approval gates, fresh-context review, and memory that improves the next run.
 
-- Artifact loop: `intent.md → spec.md → plan.md → code → evidence.md → new intent.md`
-- Human approval gates between stages, tamper-evident (sha256 catches post-approval
-  edits; forgery is held off by agent rules + git history of `.sdlc/approvals/`)
-- Intent stage *grills* the user and demands proof — users can be mistaken
-- Fresh-context adversarial reviewer + verifier at every stage boundary
-- Mistakes recorded once in bounded memory, never repeated, promoted into skills
-- Hooks/CLAUDE.md replaced by shell gates + a routing AGENTS.md any harness reads
+[![Release](https://img.shields.io/github/v/release/cskwork/sdlc-kit?style=flat-square&color=C79A55)](https://github.com/cskwork/sdlc-kit/releases/latest)
+[![GitHub Pages](https://img.shields.io/badge/live_site-open-C79A55?style=flat-square)](https://cskwork.github.io/sdlc-kit/)
+[![Harness neutral](https://img.shields.io/badge/harness-pi_%C2%B7_Claude_Code_%C2%B7_Codex_%C2%B7_Gemini-24211E?style=flat-square)](#works-with-your-agent)
 
-## Install
+[**See the live site**](https://cskwork.github.io/sdlc-kit/) · [**Install in 60 seconds**](#quick-start) · [**Read the contract**](AGENTS.md)
+
+</div>
+
+---
+
+Coding is fast now. **Being wrong is still expensive.**
+
+Most agent workflows optimize the build step: give the agent a prompt, let it write code, run tests, and hope the prompt meant what you thought it meant. sdlc-kit moves the hard work earlier and keeps independent checks throughout the loop:
+
+- The agent investigates before it asks you questions.
+- Claims in `intent.md` are labeled `[verified]` or `[assumed]`.
+- A fresh-context adversary reviews the spec before you approve it.
+- A different verifier checks the implementation against the approved artifacts.
+- Editing an approved artifact closes its gate automatically.
+- Failed attempts leave lessons and domain knowledge for the next run.
+
+It is adapted from [Anthropic's AI-Native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook), but it does not depend on Claude Code. The implementation is plain Markdown plus shell scripts. Any harness that can read files and run commands can use it.
+
+> sdlc-kit is an independent project and is not affiliated with Anthropic.
+
+## The loop
+
+```text
+┌────────────┐     human gate     ┌────────────┐     human gate
+│  1. INTENT │ ─────────────────▶ │   2. SPEC  │ ─────────────────┐
+│ intent.md  │                    │  spec.md   │                  │
+└─────▲──────┘                    └────────────┘                  ▼
+      │                                                     ┌────────────┐
+      │ new intent                                          │  3. PLAN   │
+      │                                                     │  plan.md   │
+┌─────┴──────┐                    ┌────────────┐             └─────┬──────┘
+│ 6. MAINTAIN│ ◀───────────────── │ 5. EVIDENCE│ ◀────────────────┘
+│ diagnosis  │   ship + observe   │evidence.md │   build + verify
+└────────────┘                    └────────────┘
+                                      ▲
+                                      │ fresh-context verifier
+                                ┌─────┴──────┐
+                                │  4. BUILD  │
+                                │code + tests│
+                                └────────────┘
+```
+
+Each stage produces one reviewable artifact. A human decision opens the next gate. The keystrokes may be delegated to the agent, but the approval record says so: `mode: delegated-chat`.
+
+When a shipped change fails, Maintain diagnoses it and writes the next `intent.md`. The loop feeds itself.
+
+## Why it is different
+
+| Typical agent workflow | sdlc-kit |
+|---|---|
+| Starts coding from the first request | Explores history, code, feasibility, browser, API, or DB before grilling the user |
+| Treats the user's diagnosis as truth | Marks claims `[verified: evidence]` or `[assumed: reason]` |
+| Keeps the plan inside one chat | Commits `intent.md`, `spec.md`, `plan.md`, and `evidence.md` with the code |
+| Author runs its own checks | Fresh-context verifier and adversary meet the work without the author's reasoning |
+| Approval is a chat message that disappears | sha256 approval records bind the decision to the exact artifact bytes |
+| Failed attempt becomes forgotten context | Lessons go to a bounded index; durable facts go to `DOMAIN.md` |
+| One generic worker does everything | Roles map onto local QA, reviewer, browser, API, or DB specialists when available |
+| "Done" is ambiguous | Every run closes as `shipped`, `abandoned`, or `dead-end` |
+
+## Quick start
 
 ```bash
-git clone <this-repo> ~/sdlc-kit
+# 1. Install once
+git clone https://github.com/cskwork/sdlc-kit ~/sdlc-kit
+
+# 2. Seed one project or monorepo shipping unit
+cd /path/to/your-project
+~/sdlc-kit/init.sh
+
+# 3. Add the project's real proof commands
+$EDITOR .sdlc/config.md
 ```
 
-Per project (greenfield or brownfield):
+Then point your harness at the routing contract:
+
+| Harness | Project instruction |
+|---|---|
+| **pi** | Add: `For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.` to the project `AGENTS.md` |
+| **Claude Code** | Add the same pointer to `CLAUDE.md` |
+| **Codex CLI** | Add the same pointer to `AGENTS.md` |
+| **Gemini CLI** | Add the same pointer to `GEMINI.md` |
+| **Cursor / other agents** | Put the pointer in the instruction file the harness loads, or paste `AGENTS.md` into the session |
+
+Now say:
+
+```text
+Start SDLC for <your feature, bug, or change>
+```
+
+The agent routes to Stage 1, explores the project, and asks one evidence-backed question at a time.
+
+## A 60-second example
+
+```text
+you    Start SDLC for claims status self-service
+agent  I checked the current API, UI flow, git history, and test harness.
+       One claim in the request is wrong. Here is the evidence...
+
+       [grill continues one question at a time]
+
+agent  intent.md is ready. Review the Human summary.
+you    approve
+agent  APPROVED: intent of claims-status (... @ a21d9c8f4b10…)
+       mode: delegated-chat
+
+       Stage 2 starts in fresh context.
+```
+
+If the approved file changes later:
+
+```text
+GATE CLOSED: intent.md was EDITED AFTER approval.
+A human must re-review and re-approve it.
+```
+
+No hidden state. No vendor-specific hook required. The files are the protocol.
+
+## What it produces
+
+Per feature, inside the **target project**:
+
+```text
+.sdlc/
+├── config.md                         # real build/test/lint/run commands
+├── approvals/
+│   └── <slug>.<stage>.approval       # hash · who · when · delegated mode
+├── memory/
+│   ├── INDEX.md                      # ≤50 lines of lesson pointers
+│   ├── DOMAIN.md                     # terms · verified facts · constraints
+│   └── lessons/<date>-<lesson>.md
+└── work/<slug>/
+    ├── intent.md                     # problem · proof · success · scope
+    ├── spec.md                       # Human summary · AS-IS → TO-BE · contract
+    ├── plan.md                       # files · order · risks · proof
+    ├── deviations.md                 # build-time differences; plan stays locked
+    ├── baseline.txt                  # brownfield behavior before the change
+    ├── evidence.md                   # commands · outputs · observed behavior
+    └── CLOSED                        # shipped · abandoned · dead-end
+```
+
+The public sdlc-kit repository stays framework-only. Domain artifacts live and version with the project they describe.
+
+## The safety model
+
+### Human decisions, agent keystrokes
+
+The human owns every gate decision. After explicit approval in chat, the agent may run:
 
 ```bash
-cd /path/to/project
-~/sdlc-kit/init.sh          # seeds .sdlc/ (work, approvals, memory, config)
-$EDITOR .sdlc/config.md     # fill in real build/test/lint commands
+gates/approve.sh <stage> .sdlc/work/<slug>/<artifact> --delegated
 ```
 
-Point your harness at the routing contract (pick one):
+The approval record stays explicit. Silence and generic "continue" are not approval.
 
-| Harness     | How |
-|-------------|-----|
-| pi          | `ln -s ~/sdlc-kit/AGENTS.md .sdlc/SDLC.md` and tell pi "run the SDLC in .sdlc/SDLC.md", or add a pointer line to your project AGENTS.md |
-| Claude Code | Add to project `CLAUDE.md`: `For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.` |
-| Codex CLI   | Same one-liner in project `AGENTS.md` |
-| Gemini CLI  | Same one-liner in `GEMINI.md` |
-| Anything    | Paste `AGENTS.md` into the session; the contract is files + scripts, not harness features |
+### Tamper-evident, not tamper-proof
 
-## Use
+`approve.sh` stores the artifact's sha256. `check-gate.sh` recomputes it before the next stage. A changed artifact closes the gate.
 
-```
-you:   "Start SDLC for <feature idea>"
-agent: reads skills/1-intent/SKILL.md, grills you, writes .sdlc/work/<feature>/intent.md
-you:   review, then:  ~/sdlc-kit/gates/approve.sh intent .sdlc/work/<feature>/intent.md
-agent: spec → you approve → plan → you approve → build → evidence → ship gate → done
-```
+This detects accidental or unauthorized post-approval edits. It does not stop a malicious process from forging a file. Agent rules plus the git history of `.sdlc/approvals/` form the audit trail.
 
-The agent checks gates itself and stops when one is closed. You approve; it
-moves. You can also delegate the keystrokes: say "approve" in chat and the
-agent runs the command with `--delegated` — always recorded, never silent
-(AGENTS.md rule 3).
+### Fresh context where optimism is dangerous
 
-Cockpit and endings:
+The artifact author does not verify its own work in the same context. Verifier, adversary, researcher, browser QA, API, and DB workers may fan out when their probes are independent. Writers remain singular: one writer per checkout.
+
+### Failed runs leave knowledge
 
 ```bash
-gates/status.sh          # every feature: gate states + the one next action
-gates/stats.sh           # time per stage, re-approval counts
 gates/close.sh <slug> <shipped|abandoned|dead-end> "reason"
 ```
 
-Every feature ends in a terminal state. Closing as abandoned or dead-end is
-blocked until a lesson exists for that slug — a failed run must leave more
-knowledge behind than it consumed.
+An abandoned or dead-end run cannot close until a lesson exists. It records what was tried, why it failed, and what would unblock it.
 
-## Layout
-
-```
-AGENTS.md        routing contract (the file every harness reads)
-init.sh          seed .sdlc/ into a target project
-skills/1-6       one skill per stage
-roles/           verifier, adversary, researcher — fresh-context briefs
-gates/           approve.sh · check-gate.sh · close.sh · status.sh · stats.sh · selftest.sh
-templates/       intent / spec / plan / evidence / lesson
-```
-
-## Upgrading
-
-`git pull` in the kit, then re-run `init.sh` in each project: it is
-idempotent — existing files are kept, files added by newer kit versions
-(e.g. `memory/DOMAIN.md`) are seeded. Check `gates/status.sh` still reads
-your features afterward.
-
-## Verify the kit itself
+## Cockpit
 
 ```bash
-gates/selftest.sh   # 9 checks: approve→open, tamper→closed, injection, corrupt
-                    # record, delegated mode, close-needs-lesson, YAML frontmatter
+gates/status.sh [slug]   # gate state + one next action
+gates/stats.sh           # time per stage + re-approval counts
+gates/selftest.sh        # gate, close, injection, corruption, YAML integrity
 ```
+
+Example:
+
+```text
+== claims-status
+  intent   APPROVED (danny @ 2026-08-28T10:18:53Z · delegated)
+  spec     APPROVED (danny @ 2026-08-28T10:43:30Z · delegated)
+  plan     PENDING approval
+  ship     —  (no artifact)
+  next  →  human gate: gates/approve.sh plan ...
+```
+
+## Works in complex codebases
+
+sdlc-kit is a process layer, not a replacement for the project's existing rules:
+
+- **Project rules win on how:** commands, branches, style, tools, deployment policy.
+- **sdlc-kit wins on process:** stages, approval gates, evidence, memory.
+- **Existing knowledge wins:** `DOMAIN.md` points to existing glossaries, `CONTEXT.md`, and ADRs instead of copying them.
+- **Existing agents win:** local QA, browser, API, reviewer, or DB specialists execute the kit's role contract.
+- **Monorepos stay scoped:** use one `.sdlc/` per shipping unit; root only for cross-unit changes.
+
+A genuine rule conflict is shown to the human with both texts quoted. The agent does not resolve it silently.
+
+## Greenfield and brownfield
+
+**Greenfield:** the intent validates demand and integration points before the spec opens.
+
+**Brownfield:** history, code graph, feasibility, and optional browser/API/DB probes establish AS-IS first. The plan captures a baseline before editing. Evidence proves the TO-BE and the unchanged neighboring behavior.
+
+## Upgrade
+
+```bash
+cd ~/sdlc-kit && git pull
+cd /path/to/project && ~/sdlc-kit/init.sh
+```
+
+`init.sh` is idempotent. Existing files stay intact; new seed files from later kit versions are added.
+
+## Repository map
+
+```text
+SKILL.md         discovery router: start · continue · status · close
+AGENTS.md        full portable process contract
+init.sh          idempotent project seed
+skills/1-6/      stage instructions
+roles/           verifier · adversary · researcher contracts
+gates/           approve · check · close · status · stats · selftest
+templates/       intent · spec · plan · evidence · lesson
+docs/index.html  bilingual EN/KO landing page
+```
+
+## Verify the kit
+
+```bash
+./gates/selftest.sh
+```
+
+The selftest covers gate open/close, artifact tampering, stage-name injection, bare-path rejection, corrupt approval records, delegated approval records, close-needs-lesson behavior, double-close rejection, and YAML frontmatter parsing.
+
+## What this is not
+
+- Not an autonomous production deployment system.
+- Not a substitute for project tests, CI, branch protection, or security review.
+- Not a promise that an agent cannot lie or forge files.
+- Not another agent runtime. Keep your harness; add a reliable process around it.
+
+## If this solves a problem you recognize
+
+Try it on one small brownfield issue. Let the first independent verifier find something the author missed. That is usually the moment the value becomes obvious.
+
+If you want agent work to remain reviewable after the chat scrolls away, **star the repository**, share the live site, and open an issue with the harness or workflow you want supported next.
+
+<div align="center">
+
+[**Get started**](#quick-start) · [**Live site**](https://cskwork.github.io/sdlc-kit/) · [**Latest release**](https://github.com/cskwork/sdlc-kit/releases/latest) · [**Open an issue**](https://github.com/cskwork/sdlc-kit/issues/new)
+
+</div>
