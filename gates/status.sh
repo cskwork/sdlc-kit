@@ -19,6 +19,12 @@ for dir in .sdlc/work/*/; do
   slug=$(basename "$dir")
   [ $# -ge 1 ] && [ "$slug" != "$1" ] && continue
   found=1
+  if [ -f "${dir}CLOSED" ]; then
+    cstate=$(grep '^state: ' "${dir}CLOSED" | cut -d' ' -f2)
+    creason=$(grep '^reason: ' "${dir}CLOSED" | cut -d' ' -f2-)
+    echo "== $slug   [CLOSED: $cstate] $creason"
+    continue
+  fi
   echo "== $slug"
   next_action=""
   for stage in $stages; do

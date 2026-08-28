@@ -49,7 +49,18 @@ grep -q '^mode: delegated-chat' .sdlc/approvals/feat-a.intent.approval || { echo
 grep -q '^mode: delegated-chat' .sdlc/approvals/feat-a.spec.approval || { echo "FAIL: delegated mode not recorded for spec"; exit 1; }
 echo "ok: delegated approval recorded at any stage"
 
-# 8. every SKILL.md frontmatter parses as YAML (guards the 'Triggers:' colon trap)
+# 8. close mechanism: dead-end blocked without lesson, allowed with, idempotent-refused
+mkdir -p .sdlc/memory/lessons
+if "$kit/gates/close.sh" feat-a dead-end "test reason" >/dev/null 2>&1; then
+  echo "FAIL: dead-end close allowed without a lesson"; exit 1; fi
+echo "lesson" > .sdlc/memory/lessons/2020-01-01-feat-a.md
+"$kit/gates/close.sh" feat-a dead-end "test reason" >/dev/null
+grep -q '^state: dead-end' .sdlc/work/feat-a/CLOSED || { echo "FAIL: CLOSED record wrong"; exit 1; }
+if "$kit/gates/close.sh" feat-a abandoned "again" >/dev/null 2>&1; then
+  echo "FAIL: double close allowed"; exit 1; fi
+echo "ok: close requires lesson, records state, refuses double close"
+
+# 9. every SKILL.md frontmatter parses as YAML (guards the 'Triggers:' colon trap)
 if command -v python3 >/dev/null 2>&1; then
   python3 - "$kit" <<'PYEOF'
 import sys, glob, os
