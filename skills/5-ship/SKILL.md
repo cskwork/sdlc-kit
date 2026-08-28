@@ -49,7 +49,18 @@ continual-improvement loop closing.
 
 > Review `.sdlc/work/<slug>/evidence.md`, then:
 > `<kit>/gates/approve.sh ship .sdlc/work/<slug>/evidence.md`
-> After approval, merge/release per your process. Commit `.sdlc/work/<slug>/`
-> and `.sdlc/approvals/` with the code.
 
 STOP after requesting approval.
+
+## After approval: commit discipline
+
+The ship approval and the commit check are two different human checks.
+
+1. Delete `.sdlc/work/<slug>/scratch/` if present (bulk is never committed).
+2. Stage NAMED paths only — the changed source files, `.sdlc/work/<slug>/`,
+   and `.sdlc/approvals/`. Never `git add -A` or `git add .`.
+3. Show the human the staged file list (`git status`) and the proposed commit
+   message — subject describes the behavior change in plain words, not file
+   names. Wait for their word; approval of evidence was not approval of the
+   staged set.
+4. Commit and push. Pushing a protected/shared branch needs its own approval.

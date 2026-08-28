@@ -8,6 +8,10 @@ cd "$target"
 
 mkdir -p .sdlc/{work,approvals,memory/lessons}
 
+# bulk evidence (screenshots, probe logs) is read+quoted+deleted, never committed
+grep -qxF '.sdlc/work/*/scratch/' .gitignore 2>/dev/null || \
+  echo '.sdlc/work/*/scratch/' >> .gitignore
+
 [ -f .sdlc/memory/INDEX.md ] || cat > .sdlc/memory/INDEX.md <<'EOF'
 # Lessons index — one line per lesson: [tags] summary → lessons/<file>
 # Agents: read THIS file only (≤50 lines); open a lesson file only when its tags match your task.
