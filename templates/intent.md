@@ -5,15 +5,15 @@
 - Requested by: <who>
 
 ## Problem
-<What breaks or hurts today. Who hits it, how often. NOT the solution.>
+<What breaks or hurts today. Who encounters it, and how often. Do not describe the solution here.>
 
 ## Evidence
 <Every factual claim, labeled:>
-- <claim> — [verified: <how — command output, file:line, repro steps, metric>]
-- <claim> — [assumed: <why it could not be verified>]
+- <claim> [verified: <command output, file:line, reproduction steps, or metric>]
+- <claim> [assumed: <why it could not be verified>]
 
 ## Success criteria
-<Observable behavior that means done. Machine-checkable where possible.>
+<Observable behavior that means done. Name a command or test where possible.>
 - [ ] <criterion>
 
 ## Out of scope / must not change
@@ -24,7 +24,7 @@
 <deadlines, compatibility, security/compliance, data migration>
 
 ## Open questions
-<carried forward explicitly — spec must answer or re-flag each>
+<Carry each question forward. The spec must answer it or flag it again.>
 - <question>
 
 ## Researcher findings   <!-- brownfield: summary + pointer to full report -->

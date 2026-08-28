@@ -3,14 +3,14 @@
 - From: spec.md (approved YYYY-MM-DD)
 
 ## Files that change
-- <path> (new | modified) — <why>
+- <path> (new | modified): <why>
 
 ## Order of work
-<each step leaves the tree green; tests land with their code>
+<Each step keeps configured checks passing. Add tests with the code they test.>
 1. <step>
 
 ## Risks
-- <rate limits, migrations, shared state, load-bearing quirks>
+- <rate limits, migrations, shared state, important quirks>
 
 ## Proof
 <per spec requirement: what demonstrates it, using .sdlc/config.md commands>

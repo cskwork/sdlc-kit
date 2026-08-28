@@ -5,53 +5,50 @@ description: "Evidence assembly, adversarial review, ship gate, commit disciplin
 
 # Stage 5: Ship
 
-Goal: an `evidence.md` that lets the human approve the release by reviewing
-what the agents flagged — layered agentic review first, human attention
-reserved for intent and risk.
+Goal: create `evidence.md` so a human can decide whether to release. Run agent
+reviews first. The human reviews findings about intent and risk.
 
 ## Before you start
 
 Fresh session. Read plan.md, spec.md, deviations.md (if present), and the
 diff (`git diff` against the base branch). Read `.sdlc/memory/INDEX.md` and
-`.sdlc/memory/DOMAIN.md`.
+`.sdlc/memory/DOMAIN.md`; open lesson files whose tags match the current task.
 
 ## Adversarial code review (fresh context)
 
 Dispatch an adversary (`roles/adversary.md`) with: spec.md, plan.md, the diff.
-It attacks: spec mismatch, missing untouched-checks, security issues, test
-theater (tests that can't fail), complexity that hides bugs. Fix findings or
+It checks spec mismatch, missing untouched checks, security issues, tests that
+cannot fail, and complexity that hides bugs. Fix findings or
 record justified rejections.
 
 ## Assemble evidence
 
 Fill `templates/evidence.md` → `.sdlc/work/<slug>/evidence.md`:
 
-- Per spec requirement: the command run + REAL output (paste, don't summarize
-  away the numbers). Evidence comes from the toolchain, not from your claims.
-- Brownfield: baseline vs after — same commands, diffed; each "stays
-  untouched" item explicitly checked.
-- Full test/lint/build output (trimmed to verdict lines + failures, if any).
+- For each spec requirement, include the exact command and real output. Keep
+  every numerical result. For long successful logs, include the verdict lines
+  and numbers and cite the full scratch output. Include all failure output.
+- For brownfield work, compare baseline and after using the same commands.
+  Check each "stays untouched" item.
+- Include full test, lint, and build results. Long successful logs may use the
+  same verdict-lines-and-scratch-citation rule.
 - Adversary findings + resolutions.
-- Anything NOT verified, stated plainly (environment limits, skipped checks).
-  An honest gap beats a false green.
-- UI-facing change? The verifier should have exercised the running app through
-  a browser/QA tool if one is available — and evidence.md must say whether
-  that happened or state plainly that no eyes were on pixels.
-- Where the spec has AS-IS → TO-BE pairs, evidence proves each TO-BE
-  observed (browser capture or command output) — the same pairs, third
-  column filled: OBSERVED.
+- State anything not verified, including environment limits and skipped checks.
+  Record a gap instead of marking the check as passed.
+- For UI changes, the verifier must use a browser or QA tool when one is
+  available and the app is reachable. Otherwise record why the UI was not
+  checked.
+- For every AS-IS to TO-BE pair, record the observed result and its command or
+  browser evidence.
 
-## Retro (mandatory, 2 minutes)
+## Retrospective (mandatory)
 
-Scan the feature's history: what went wrong, what surprised, what would you
-tell the next agent? Record lessons per skill 6 format. Separately, harvest
-domain knowledge: durable terms, verified facts, and constraints this feature
-uncovered go into `.sdlc/memory/DOMAIN.md` (dedup, keep the cap) — they are
-facts about the system, not mistakes, so they are not lessons. If a lesson
-fires on
-something a stage skill should have prevented, note in the lesson:
-`promote: skills/<n>` — the human can then patch the skill; that is the
-continual-improvement loop closing.
+Review the feature history. Record what went wrong, what surprised you, and
+what would help the next agent. Add lessons using the skill 6 format. Add
+durable terms, verified facts, and constraints to `.sdlc/memory/DOMAIN.md`.
+Deduplicate entries and keep the file within its limit. Domain facts describe
+the system; lessons describe mistakes. If a stage skill should have prevented
+a mistake, add `promote: skills/<n>` to the lesson.
 
 ## Gate
 
@@ -64,12 +61,12 @@ STOP after requesting approval.
 
 The ship approval and the commit check are two different human checks.
 
-1. Delete `.sdlc/work/<slug>/scratch/` if present — only artifacts ship.
-2. Stage NAMED paths only — the changed source files, `.sdlc/work/<slug>/`,
-   and `.sdlc/approvals/` (guardrail: `git add -A` / `git add .` sweep in
-   strays and are how scratch leaks into history).
-3. Show the human the staged file list (`git status`) and the proposed commit
-   message — subject describes the behavior change in plain words, not file
-   names. Wait for their word; approval of evidence was not approval of the
-   staged set.
-4. Commit and push. Pushing a protected/shared branch needs its own approval.
+1. Delete `.sdlc/work/<slug>/scratch/` if present. Only artifacts ship.
+2. Stage named paths only: changed source files, `.sdlc/work/<slug>/`, changed
+   `.sdlc/memory/` paths, and `.sdlc/approvals/`. Do not use `git add -A` or
+   `git add .` because they can include unrelated files and scratch output.
+3. Show the human the staged file list with `git status` and the proposed
+   commit message. Describe the behavior change, not file names. Wait for the
+   human to approve the staged set. Evidence approval does not approve the
+   staged files.
+4. Commit and push. Ask separately before pushing a protected or shared branch.

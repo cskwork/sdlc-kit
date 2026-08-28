@@ -4,8 +4,9 @@
 
 ### Stop letting coding agents mark their own homework.
 
-**A portable, harness-neutral SDLC for AI coding agents.**  
-Intent → spec → plan → build → evidence → maintain — with human approval gates, fresh-context review, and memory that improves the next run.
+**A portable SDLC for AI coding agents.**
+
+Intent → spec → plan → build → evidence → maintain, with human approval gates, fresh-context review, and lessons for the next run.
 
 [![Release](https://img.shields.io/github/v/release/cskwork/sdlc-kit?style=flat-square&color=C79A55)](https://github.com/cskwork/sdlc-kit/releases/latest)
 [![GitHub Pages](https://img.shields.io/badge/live_site-open-C79A55?style=flat-square)](https://cskwork.github.io/sdlc-kit/)
@@ -19,7 +20,7 @@ Intent → spec → plan → build → evidence → maintain — with human appr
 
 Coding is fast now. **Being wrong is still expensive.**
 
-Most agent workflows optimize the build step: give the agent a prompt, let it write code, run tests, and hope the prompt meant what you thought it meant. sdlc-kit moves the hard work earlier and keeps independent checks throughout the loop:
+A common agent workflow starts with implementation. The agent receives a prompt, writes code, runs tests, and assumes the request was clear. sdlc-kit moves clarification and evidence earlier and keeps independent checks through the loop:
 
 - The agent investigates before it asks you questions.
 - Claims in `intent.md` are labeled `[verified]` or `[assumed]`.
@@ -54,9 +55,9 @@ It is adapted from [Anthropic's AI-Native SDLC playbook](https://claude.com/blog
                                 └────────────┘
 ```
 
-Each stage produces one reviewable artifact. A human decision opens the next gate. The keystrokes may be delegated to the agent, but the approval record says so: `mode: delegated-chat`.
+Each stage produces one reviewable artifact. A human decision opens the next gate. After you approve, the agent may run the approval command. The record marks that delegation with `mode: delegated-chat`.
 
-When a shipped change fails, Maintain diagnoses it and writes the next `intent.md`. The loop feeds itself.
+When a shipped change fails, Maintain diagnoses it and writes the next `intent.md`.
 
 ## Why it is different
 
@@ -65,7 +66,7 @@ When a shipped change fails, Maintain diagnoses it and writes the next `intent.m
 | Starts coding from the first request | Explores history, code, feasibility, browser, API, or DB before grilling the user |
 | Treats the user's diagnosis as truth | Marks claims `[verified: evidence]` or `[assumed: reason]` |
 | Keeps the plan inside one chat | Commits `intent.md`, `spec.md`, `plan.md`, and `evidence.md` with the code |
-| Author runs its own checks | Fresh-context verifier and adversary meet the work without the author's reasoning |
+| Author runs its own checks | A fresh-context verifier and adversary review the work without the author's context |
 | Approval is a chat message that disappears | sha256 approval records bind the decision to the exact artifact bytes |
 | Failed attempt becomes forgotten context | Lessons go to a bounded index; durable facts go to `DOMAIN.md` |
 | One generic worker does everything | Roles map onto local QA, reviewer, browser, API, or DB specialists when available |
@@ -172,9 +173,9 @@ The approval record stays explicit. Silence and generic "continue" are not appro
 
 This detects accidental or unauthorized post-approval edits. It does not stop a malicious process from forging a file. Agent rules plus the git history of `.sdlc/approvals/` form the audit trail.
 
-### Fresh context where optimism is dangerous
+### Fresh-context review
 
-The artifact author does not verify its own work in the same context. Verifier, adversary, researcher, browser QA, API, and DB workers may fan out when their probes are independent. Writers remain singular: one writer per checkout.
+The artifact author does not verify the work in the same context. Independent workers may run in parallel. Use one writer per checkout.
 
 ### Failed runs leave knowledge
 
@@ -217,7 +218,7 @@ A genuine rule conflict is shown to the human with both texts quoted. The agent 
 
 ## Greenfield and brownfield
 
-**Greenfield:** the intent validates demand and integration points before the spec opens.
+**Greenfield:** Stage 1 records the problem and checks required integration points before Stage 2 opens.
 
 **Brownfield:** history, code graph, feasibility, and optional browser/API/DB probes establish AS-IS first. The plan captures a baseline before editing. Evidence proves the TO-BE and the unchanged neighboring behavior.
 
@@ -249,20 +250,20 @@ docs/index.html  bilingual EN/KO landing page
 ./gates/selftest.sh
 ```
 
-The selftest covers gate open/close, artifact tampering, stage-name injection, bare-path rejection, corrupt approval records, delegated approval records, close-needs-lesson behavior, double-close rejection, and YAML frontmatter parsing.
+The selftest covers gate state, artifact edits after approval, stage-name injection, bare-path rejection, corrupt approval records, delegated approvals, lesson requirements for closing, double-close rejection, and YAML frontmatter parsing.
 
 ## What this is not
 
 - Not an autonomous production deployment system.
 - Not a substitute for project tests, CI, branch protection, or security review.
 - Not a promise that an agent cannot lie or forge files.
-- Not another agent runtime. Keep your harness; add a reliable process around it.
+- Not another agent runtime. Keep your agent tool and add this process.
 
-## If this solves a problem you recognize
+## Try it
 
-Try it on one small brownfield issue. Let the first independent verifier find something the author missed. That is usually the moment the value becomes obvious.
+Start with one small brownfield issue. Compare what the independent verifier finds with what the author reported.
 
-If you want agent work to remain reviewable after the chat scrolls away, **star the repository**, share the live site, and open an issue with the harness or workflow you want supported next.
+If the process works for your team, star the repository or open an issue for the agent tool or workflow you want supported next.
 
 <div align="center">
 
