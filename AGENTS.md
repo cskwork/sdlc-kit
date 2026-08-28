@@ -21,6 +21,14 @@ stage 6 writes a new `intent.md` — the loop feeds itself.
 
 Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>/spec.md`.
 
+**`intent.md` is the root authority.** It flows to every stage through the
+artifact chain (spec traces to intent, plan to spec, build to plan), so later
+stages need not reread it. But if your input artifact ever seems to contradict
+`intent.md` — or you must make a judgment call the artifact does not cover —
+read `intent.md` and resolve against IT. If the conflict is real, STOP and
+surface it: an upstream gate may need to reopen. Never silently follow a
+downstream artifact away from the stated intent.
+
 ## Hard rules (every stage, every harness)
 
 1. **Read the stage skill file COMPLETELY before acting.** Resolve paths
