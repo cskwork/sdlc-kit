@@ -1,0 +1,3 @@
+$ /Users/danny/Documents/Git/sdlc-kit/gates/approve.sh
+usage: approve.sh <stage> <artifact-path>   (run from the project root)
+exit=1

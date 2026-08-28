@@ -1,0 +1,9 @@
+base: empty tree (new repo, 2 commits)
+743edd7 fix(gates): key approvals per feature slug — parallel features no longer share/clobber gates
+6107216 feat: harness-neutral AI-native SDLC kit — 6 stage skills, 3 fresh-context roles, sha256 tamper-evident gates, bounded lessons memory
+
+ templates/intent.md        | 31 +++++++++++++++++++++
+ templates/lesson.md        | 15 +++++++++++
+ templates/plan.md          | 25 +++++++++++++++++
+ templates/spec.md          | 28 +++++++++++++++++++
+ 20 files changed, 765 insertions(+)

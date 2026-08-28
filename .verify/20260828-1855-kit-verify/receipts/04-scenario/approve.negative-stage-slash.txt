@@ -1,0 +1,5 @@
+$ /Users/danny/Documents/Git/sdlc-kit/gates/approve.sh ../../etc/pwn .sdlc/work/feat-x/intent.md
+/Users/danny/Documents/Git/sdlc-kit/gates/approve.sh: line 22: .sdlc/approvals/feat-x.../../etc/pwn.approval: No such file or directory
+APPROVED: ../../etc/pwn of feat-x (.sdlc/work/feat-x/intent.md @ 73cb3858a687…)
+Commit .sdlc/approvals/feat-x.../../etc/pwn.approval with the artifact for the audit trail.
+exit=0
