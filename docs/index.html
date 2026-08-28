@@ -14,7 +14,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2314110d'/%3E%3Crect x='7' y='7' width='18' height='18' rx='2.5' fill='none' stroke='%23eab04d' stroke-width='2.4'/%3E%3Crect x='12' y='12' width='8' height='8' fill='%23eab04d'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700&amp;display=swap">
 <style>
   :root {
     --bg: #14110d;
@@ -123,6 +123,7 @@
     gap: clamp(2.5rem, 5vw, 4rem);
     align-items: center;
   }
+  .hero .wrap > * { min-width: 0; }
   @media (min-width: 940px) {
     .hero .wrap { grid-template-columns: 1.02fr 0.98fr; }
   }
@@ -172,7 +173,7 @@
     line-height: 2;
   }
   .harnesses b { color: var(--text); font-weight: 600; }
-  .harnesses .dot { color: var(--line-strong); padding-inline: 0.35rem; }
+  .harnesses .dot { color: #8f8672; padding-inline: 0.35rem; }
 
   /* ---------- terminal ---------- */
 
@@ -217,7 +218,7 @@
   .term-body .o { color: var(--text-2); }
   .term-body .ok { color: var(--accent); font-weight: 700; }
   .term-body .bad { color: var(--danger); font-weight: 700; }
-  .term-body .dim { color: #7d745f; }
+  .term-body .dim { color: #8f8672; }
 
   @media (prefers-reduced-motion: no-preference) {
     .term-body .ln {
@@ -399,6 +400,7 @@
   }
   .steps li {
     counter-increment: step;
+    min-width: 0;
     background: var(--bg-raised);
     border: 1px solid var(--line);
     border-radius: 10px;
@@ -510,7 +512,7 @@
 </head>
 <body>
 <!-- Design contract (impeccable, code-led; precisely specified brief)
-     THESIS: the page is the kit's own paper trail — every claim shown as a
+     THESIS: the page is the kit's own paper trail: every claim shown as a
      real artifact passing a gate; refuses the generic dev-tool hero of glow
      and feature-card grids.
      OWN-WORLD: warm ink ground, paper-white type, single brass accent; slab
@@ -518,8 +520,8 @@
      hashes; ledger hairlines instead of cards.
      STORY: visitor gets the six-stage loop with human gates, believes it via
      the tamper terminal (GATE CLOSED on edit), acts: clone + init.sh.
-     FIRST VIEWPORT: left — h1 sdlc-kit, pitch, sub, two CTAs, harness line;
-     right — terminal: approve → GATE OPEN → quiet edit → GATE CLOSED.
+     FIRST VIEWPORT: left: h1 sdlc-kit, pitch, sub, two CTAs, harness line;
+     right: terminal: approve → GATE OPEN → quiet edit → GATE CLOSED.
      FORM: code-led; brief pinned content, structure, and dark theme.
      FINISH: unreviewed and undocumented is unfinished; this build ends with
      the finish review, the verdict, DESIGN.md, and every shipping raster
@@ -554,7 +556,7 @@
       </div>
 
       <div class="term" role="img" aria-label="Terminal transcript: approving an intent opens the gate; quietly editing the artifact afterwards closes it.">
-        <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>your-project — zsh</span></div>
+        <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>your-project / zsh</span></div>
         <pre class="term-body"><span class="ln" style="--i:0"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/approve.sh intent .sdlc/work/payments/intent.md</span></span><span class="ln" style="--i:1"><span class="ok">APPROVED:</span><span class="o"> intent of payments (intent.md @ 435b90e32d44…)</span></span><span class="ln" style="--i:2"><span class="o">Commit .sdlc/approvals/payments.intent.approval — the audit trail.</span></span><span class="ln" style="--i:3"> </span><span class="ln" style="--i:4"><span class="p">$</span> <span class="c">$EDITOR .sdlc/work/payments/intent.md</span>  <span class="dim"># a quiet edit, after the fact</span></span><span class="ln" style="--i:5"> </span><span class="ln" style="--i:6"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh intent .sdlc/work/payments/intent.md</span></span><span class="ln" style="--i:7"><span class="bad">GATE CLOSED:</span><span class="o"> intent.md was EDITED AFTER approval.</span></span><span class="ln" style="--i:8"><span class="o">  approved: 435b90e32d447d978cc65669acee7161de1d03064cf4a90d38e63b839c7a2089</span></span><span class="ln" style="--i:9"><span class="o">   current: 31a373b832b5ac2679e579d1dc2ede71bd0430b53ce4edecad61b3cea74681dc</span></span><span class="ln caret" style="--i:10"><span class="o">A human must re-review and re-run approve.sh.</span></span></pre>
       </div>
     </div>
@@ -611,7 +613,7 @@
         </li>
         <li class="stage s6">
           <h3>Maintain <span class="art">intent.md + lesson</span></h3>
-          <p class="what">An incident becomes a diagnosed intent and a recorded lesson — not a vague complaint.</p>
+          <p class="what">An incident becomes a diagnosed intent and a recorded lesson, not a vague complaint.</p>
         </li>
 
         <li class="loop">
@@ -676,12 +678,12 @@
         <li>
           <span class="cmd">cd /path/to/project
 ~/sdlc-kit/init.sh</span>
-          <p class="note">Seeds <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code> — work, approvals, memory, config. Then fill in your real build, test, and lint commands in <code style="font-family:var(--mono);font-size:.9em">.sdlc/config.md</code>.</p>
+          <p class="note">Seeds <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code> (work, approvals, memory, config). Then fill in your real build, test, and lint commands in <code style="font-family:var(--mono);font-size:.9em">.sdlc/config.md</code>.</p>
         </li>
         <li>
           <span class="cmd">tell your harness:
 &ldquo;read ~/sdlc-kit/AGENTS.md and follow it&rdquo;</span>
-          <p class="note">One pointer line in your project&rsquo;s agent file does it — pick your harness below.</p>
+          <p class="note">One pointer line in your project&rsquo;s agent file does it. Pick your harness below.</p>
         </li>
       </ol>
 
@@ -692,11 +694,11 @@
             <tr><th scope="col">Harness</th><th scope="col">How</th></tr>
           </thead>
           <tbody>
-            <tr><th scope="row">pi</th><td><code>ln -s ~/sdlc-kit/AGENTS.md .sdlc/SDLC.md</code>, then tell pi to run the SDLC in that file — or add a pointer line to your project <code>AGENTS.md</code></td></tr>
+            <tr><th scope="row">pi</th><td><code>ln -s ~/sdlc-kit/AGENTS.md .sdlc/SDLC.md</code>, then tell pi to run the SDLC in that file, or add a pointer line to your project <code>AGENTS.md</code></td></tr>
             <tr><th scope="row">Claude Code</th><td>Add to project <code>CLAUDE.md</code>: <code>For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.</code></td></tr>
             <tr><th scope="row">Codex CLI</th><td>Same one-liner in project <code>AGENTS.md</code></td></tr>
             <tr><th scope="row">Gemini CLI</th><td>Same one-liner in <code>GEMINI.md</code></td></tr>
-            <tr><th scope="row">Anything else</th><td>Paste <code>AGENTS.md</code> into the session — the contract is files + scripts, not harness features</td></tr>
+            <tr><th scope="row">Anything else</th><td>Paste <code>AGENTS.md</code> into the session; the contract is files + scripts, not harness features</td></tr>
           </tbody>
         </table>
       </div>
@@ -719,7 +721,7 @@
 
 <footer class="site">
   <div class="wrap">
-    <p>sdlc-kit — plain files + shell. No hooks, no runtime, no lock-in.</p>
+    <p>sdlc-kit: plain files + shell. No hooks, no runtime, no lock-in.</p>
     <nav aria-label="Footer">
       <a href="https://github.com/cskwork/sdlc-kit">GitHub repository</a>
       <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">Anthropic&rsquo;s playbook</a>
