@@ -16,8 +16,9 @@ EOF
 
 [ -f .sdlc/config.md ] || cat > .sdlc/config.md <<EOF
 # SDLC config
-kit: $kit
-# Real commands agents must use for proof (fill these in — brownfield: copy from CI/Makefile):
+kit: $kit   # re-point this if the kit is moved or cloned elsewhere
+# Real commands agents must use for proof (fill these in — brownfield: copy from CI/Makefile).
+# AGENTS: if a command below is empty when you need it, STOP and ask the human to fill it in.
 build:
 test:
 lint:

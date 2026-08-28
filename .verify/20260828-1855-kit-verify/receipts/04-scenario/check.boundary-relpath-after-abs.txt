@@ -1,0 +1,3 @@
+$ /Users/danny/Documents/Git/sdlc-kit/gates/check-gate.sh spec .sdlc/work/feat-x/intent.md
+GATE OPEN: spec (danny @ 2026-08-28T09:56:13Z)
+exit=0

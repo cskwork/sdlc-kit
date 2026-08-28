@@ -8,7 +8,8 @@ and run shell commands.
 **Core ideas** (all from the playbook, made harness-neutral):
 
 - Artifact loop: `intent.md → spec.md → plan.md → code → evidence.md → new intent.md`
-- Human approval gates between stages, tamper-evident (sha256, not honor system)
+- Human approval gates between stages, tamper-evident (sha256 catches post-approval
+  edits; forgery is held off by agent rules + git history of `.sdlc/approvals/`)
 - Intent stage *grills* the user and demands proof — users can be mistaken
 - Fresh-context adversarial reviewer + verifier at every stage boundary
 - Mistakes recorded once in bounded memory, never repeated, promoted into skills

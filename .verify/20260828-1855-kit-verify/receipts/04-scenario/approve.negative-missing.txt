@@ -1,0 +1,3 @@
+$ /Users/danny/Documents/Git/sdlc-kit/gates/approve.sh intent .sdlc/work/feat-x/nope.md
+FAIL: artifact not found: .sdlc/work/feat-x/nope.md
+exit=1

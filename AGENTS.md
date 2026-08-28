@@ -12,12 +12,12 @@ stage 6 writes a new `intent.md` — the loop feeds itself.
 
 | # | Stage    | Read this skill first              | Artifact (in project `.sdlc/work/<feature>/`) | Gate to pass BEFORE starting |
 |---|----------|------------------------------------|-----------------------------------------------|------------------------------|
-| 1 | Intent   | `skills/1-intent/SKILL.md`         | `intent.md`                                   | none                         |
+| 1 | Intent   | `skills/1-intent/SKILL.md`         | `intent.md`                                   | none — proceed               |
 | 2 | Spec     | `skills/2-spec/SKILL.md`           | `spec.md`                                     | `intent`                     |
 | 3 | Plan     | `skills/3-plan/SKILL.md`           | `plan.md`                                     | `spec`                       |
 | 4 | Build    | `skills/4-build/SKILL.md`          | code + tests                                  | `plan`                       |
-| 5 | Ship     | `skills/5-ship/SKILL.md`           | `evidence.md`                                 | (build output)               |
-| 6 | Maintain | `skills/6-maintain/SKILL.md`       | new `intent.md` + lesson                      | `ship`                       |
+| 5 | Ship     | `skills/5-ship/SKILL.md`           | `evidence.md`                                 | none — build done + checks green |
+| 6 | Maintain | `skills/6-maintain/SKILL.md`       | new `intent.md` + lesson                      | none — triggered by incident |
 
 Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>/spec.md`.
 
@@ -25,11 +25,15 @@ Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>
 
 1. **Read the stage skill file COMPLETELY before acting.** Resolve paths
    relative to this kit's directory.
-2. **Check the gate first.** Run `gates/check-gate.sh <prev-stage> <artifact>`
-   from the project root. If it prints GATE CLOSED, STOP and tell the human
-   exactly what to approve. Never proceed past a closed gate.
-3. **Never run `gates/approve.sh`.** Approval is a human act. Writing an
-   approval yourself is falsifying an audit record.
+2. **Check the gate first** (stages 2-4; stages 1, 5, 6 have none — proceed).
+   Run `gates/check-gate.sh <prev-stage> <artifact>` from the project root.
+   Treat anything other than a printed `GATE OPEN` — including GATE CLOSED,
+   errors, or silence — as a closed gate: STOP and tell the human exactly what
+   to approve.
+3. **Never run `gates/approve.sh` and never write files under
+   `.sdlc/approvals/`.** Approval is a human act; creating or editing an
+   approval record yourself is falsifying an audit record. Approvals must be
+   committed to git — the git history is the real audit trail.
 4. **Memory, bounded.** At stage start, read `.sdlc/memory/INDEX.md` (never the
    whole lessons dir). Open only lesson files whose tags match the current
    task. When you make or discover a mistake, record it (see skill 6 format).

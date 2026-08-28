@@ -21,9 +21,11 @@ vague complaint. People triage and review the work; they no longer start it.
 ## Route by size
 
 - **Small, well-bounded fix** (single cause, obvious change, low blast
-  radius): run a compressed loop in one pass — mini-plan (files + proof) →
-  human approves plan gate → fix → verifier → evidence → ship gate. The two
-  gates survive even for hotfixes.
+  radius): run a compressed loop in one pass, in a NEW feature dir
+  `.sdlc/work/<fix-slug>/` (never reuse an old feature's dir — approvals are
+  keyed per slug and re-approving would overwrite its records): mini `plan.md`
+  (files + proof) → human approves plan gate → fix → verifier → `evidence.md`
+  → ship gate. The two gates survive even for hotfixes.
 - **Anything larger**: write `.sdlc/work/<new-slug>/intent.md` via
   `templates/intent.md`, with reproduction and diagnosis as embedded evidence
   (these claims are `[verified]` from birth). Then stage 1's gate applies and
@@ -40,7 +42,7 @@ and add ONE line to `.sdlc/memory/INDEX.md`:
 
 Memory discipline (context stays bounded):
 
-- INDEX.md stays ≤ 50 entries. Over? Merge near-duplicates, drop entries whose
+- INDEX.md stays ≤ 50 lines. Over? Merge near-duplicates, drop entries whose
   lesson got promoted into a skill (the skill now carries it).
 - A lesson that fires twice = promotion candidate: propose the exact skill
   edit to the human.
