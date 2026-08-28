@@ -46,6 +46,12 @@ Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>
    verification commands live in the project's `.sdlc/config.md`.
 7. **Artifacts live in the project repo**, under `.sdlc/work/<feature>/`, and
    are committed with the code. Never store work artifacts inside the kit.
+8. **Speak plainly (every report, every gate request).** Assume the reader
+   lost the thread. Start with one short paragraph of context: what stage you
+   are in, what happened before, what this message is for. Then the content.
+   Write in Simplified Technical English: short sentences, one idea per
+   sentence, active voice, no undefined jargon. Use the project's own
+   vocabulary. End with the one decision or action the reader must take.
 
 ## Greenfield vs brownfield
 
