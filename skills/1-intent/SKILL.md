@@ -1,6 +1,6 @@
 ---
 name: sdlc-intent
-description: Stage 1 — grill the user until intent is exact and evidenced, then write intent.md. Use when starting any SDLC feature, fix, or change.
+description: Stage 1 — grill the user until intent is exact and evidenced; write intent.md. Triggers: any new SDLC feature, fix, or change.
 ---
 
 # Stage 1: Intent
@@ -47,8 +47,8 @@ is a research task you have not dispatched yet.
 
 ## Grill protocol
 
-Interview the user ONE question at a time (never a questionnaire dump; use your
-harness's question tool if it has one). Keep going until you can state their
+Interview the user ONE question at a time — each answer shapes the next
+question (use your harness's question tool if it has one). Keep going until you can state their
 intent back and they say "yes, exactly" — aim for ~95% confidence. Cover:
 
 1. **Problem, not solution.** What breaks / hurts today? Who hits it, how
@@ -78,7 +78,7 @@ intent back and they say "yes, exactly" — aim for ~95% confidence. Cover:
 ## Write the artifact
 
 Fill `templates/intent.md` → `.sdlc/work/<slug>/intent.md`. Every claim
-labeled. Open questions carried explicitly, never silently dropped.
+labeled. Every open question is carried forward explicitly in its own section.
 
 ## Gate
 

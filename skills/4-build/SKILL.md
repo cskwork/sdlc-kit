@@ -1,6 +1,6 @@
 ---
 name: sdlc-build
-description: Stage 4 — execute approved plan.md with continuous verification and fresh-context verifier. Use after the plan gate is approved.
+description: Stage 4 — execute the plan with continuous verification, fresh-context verifier, triaged fix loop. Triggers: plan gate approved.
 ---
 
 # Stage 4: Build
@@ -24,9 +24,10 @@ implementation, not a QA gate at the end.
 - A check that must fail the build must fail it synchronously (direct throw,
   sync IO, or top-level await). An unawaited promise is not a gate — it fails
   only through environment defaults, which is a race, not a contract.
-- After each step, run test + lint from `.sdlc/config.md`. Fix code, never
-  tests — a failing test is information about the code. Never weaken, skip, or
-  delete a failing test to get green (record a lesson if you catch yourself trying).
+- After each step, run test + lint from `.sdlc/config.md`. A failing test is
+  information about the code: fix the code and keep the test intact until it
+  passes honestly (catch yourself reaching for the test file instead? record
+  a lesson).
 - **When you hit a mistake — yours, the plan's, or a surprise in the codebase —
   record it immediately** as a lesson (format in skill 6). This is how the
   same mistake never happens twice.

@@ -1,6 +1,6 @@
 ---
 name: sdlc-ship
-description: Stage 5 — assemble evidence.md (proof per requirement, adversarial code review), request the ship gate. Use after build completes.
+description: Stage 5 — adversarial code review, evidence.md, ship gate, commit discipline. Triggers: build green and verified.
 ---
 
 # Stage 5: Ship
@@ -59,9 +59,10 @@ STOP after requesting approval.
 
 The ship approval and the commit check are two different human checks.
 
-1. Delete `.sdlc/work/<slug>/scratch/` if present (bulk is never committed).
+1. Delete `.sdlc/work/<slug>/scratch/` if present — only artifacts ship.
 2. Stage NAMED paths only — the changed source files, `.sdlc/work/<slug>/`,
-   and `.sdlc/approvals/`. Never `git add -A` or `git add .`.
+   and `.sdlc/approvals/` (guardrail: `git add -A` / `git add .` sweep in
+   strays and are how scratch leaks into history).
 3. Show the human the staged file list (`git status`) and the proposed commit
    message — subject describes the behavior change in plain words, not file
    names. Wait for their word; approval of evidence was not approval of the

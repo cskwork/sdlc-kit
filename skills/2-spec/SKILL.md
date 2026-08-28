@@ -1,6 +1,6 @@
 ---
 name: sdlc-spec
-description: Stage 2 — generate spec.md from approved intent.md, then adversarial-review it before human sees it. Use after the intent gate is approved.
+description: Stage 2 — generate spec.md and adversarial-review it before the human gate. Triggers: intent gate approved.
 ---
 
 # Stage 2: Spec
@@ -26,13 +26,13 @@ Fill `templates/spec.md`. Rules:
   Write it LAST (after the adversarial pass), place it FIRST.
 - Every requirement traces to a line in intent.md. No invented features —
   gold-plating here is the #1 spec failure.
-- Answer intent.md's open questions or carry them forward explicitly as
-  flagged concerns. Never drop one.
+- Every intent.md open question ends up in exactly one of two places: answered
+  in the spec, or carried forward as a flagged concern.
 - Data shapes end-to-end first: schemas, API contracts, migrations, serialization.
   Get the domain model right before behavior.
 - Behavior as AS-IS → TO-BE pairs (template table). Brownfield AS-IS comes
-  from explorer/browser evidence with file:line or capture references — never
-  from memory of the request. The pair format is also how the change is
+  from explorer/browser evidence with file:line or capture references —
+  observed, not recalled. The pair format is also how the change is
   presented to the human at the gate: what happens today, what will happen
   after.
 - Brownfield: include a **"What stays untouched"** section — behavior that must
