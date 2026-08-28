@@ -52,6 +52,14 @@ Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>
    one available — their failure mode is a silent PASS that no later stage
    catches.
 
+   **Roles are contracts, not headcount.** A stage may fan out SEVERAL
+   workers under one role in parallel when their probes are independent —
+   e.g. one researcher on git history, one walking the live UI in a browser,
+   one probing an API, one reading the DB. Read-only fanout is bounded only
+   by usefulness; writers stay singular (one writer per checkout, always).
+   The dispatcher merges reports and settles contradictions with primary
+   evidence — a contradiction between two probes is a finding, not noise.
+
    **Dispatch contract.** Every role dispatch names, explicitly:
    goal · inputs (exact artifact paths) · authority (which paths it may
    write, usually none) · evidence (the verify commands from
