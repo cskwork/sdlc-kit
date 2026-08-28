@@ -5,42 +5,40 @@ description: "Read-only planning: files, order, risks, proof. Triggers: spec gat
 
 # Stage 3: Plan
 
-Goal: a `plan.md` naming exactly which files change, in what order, with what
-risks, and what proof will show it worked — before any code is written. This is
-plan-mode-as-default, harness-neutral: the rule "read everything, change
-nothing" is YOUR discipline in this stage, not a harness feature.
+Goal: create `plan.md` before changing code. Name the files, work order, risks,
+and proof. During this stage, read and run non-mutating commands only.
 
 ## Before you start
 
-1. `gates/check-gate.sh spec .sdlc/work/<slug>/spec.md` — STOP if closed.
+1. Run `gates/check-gate.sh spec .sdlc/work/<slug>/spec.md`. STOP if closed.
 2. Read spec.md fully. Read `.sdlc/memory/INDEX.md` and
-   `.sdlc/memory/DOMAIN.md`; open matching lessons. DOMAIN.md constraints
-   are plan risks by default.
+   `.sdlc/memory/DOMAIN.md`; open lesson files whose tags match the current
+   task. Treat DOMAIN.md constraints as plan risks.
 3. **Read-only rule: in this stage you may read code and run non-mutating
    commands only. No edits, no writes outside `.sdlc/work/<slug>/`.**
 
 ## Plan
 
-Explore the codebase (fresh-context researcher for large areas — keep raw
-exploration out of your context). Then fill `templates/plan.md`:
+Explore the codebase. Use a fresh-context researcher for large areas so raw
+exploration stays out of the main context. Then fill `templates/plan.md`:
 
-- **Files that change** — exact paths, new vs modified.
-- **Order of work** — steps sized so each leaves the tree green; tests land
-  with the code they test, not after.
-- **Risks** — rate limits, migrations, shared state, load-bearing quirks.
-- **Proof** — per spec requirement: the test or command that will demonstrate
-  it, using commands from `.sdlc/config.md`.
+- **Files that change.** Give exact paths and mark each as new or modified.
+- **Order of work.** Make each step keep the configured checks passing. Add
+  tests with the code they test.
+- **Risks.** Record rate limits, migrations, shared state, and important quirks.
+- **Proof.** For each spec requirement, name the test or command that proves it.
+  Use commands from `.sdlc/config.md`.
 - Brownfield additions:
-  - **Regression baseline** — the exact commands to run BEFORE changes, and
-    where output is saved (`.sdlc/work/<slug>/baseline.txt`).
-  - **Untouched checks** — how each "stays untouched" spec item is verified.
+  - **Regression baseline.** Give the exact commands to run before changes and
+    save their output to `.sdlc/work/<slug>/baseline.txt`.
+  - **Untouched checks.** Say how each "stays untouched" item is verified.
 
 ## Interview the human
 
-Walk them through the plan; iterate until they're satisfied. They know the
-load-bearing quirks the code doesn't show. If the codebase contradicts the
-spec (spec assumed X, code does Y), STOP and surface it — the spec gate may
-need to reopen. Do not silently patch the plan around a wrong spec.
+Walk the human through the plan and revise it until they are satisfied. They
+may know important constraints that the code does not show. If the code
+contradicts the spec, STOP and show the conflict. The spec gate may need to
+reopen. Do not change the plan to hide a wrong spec.
 
 ## Gate
 

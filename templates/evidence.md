@@ -11,7 +11,7 @@
 
 ## Regression   <!-- brownfield -->
 - Baseline vs after: <clean | diffs explained>
-- U1: <checked — result>
+- U1: <checked; result>
 
 ## Full checks
 - Build: `<command>` → <verdict>
