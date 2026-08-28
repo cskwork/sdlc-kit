@@ -30,6 +30,11 @@ Fill `templates/spec.md`. Rules:
   flagged concerns. Never drop one.
 - Data shapes end-to-end first: schemas, API contracts, migrations, serialization.
   Get the domain model right before behavior.
+- Behavior as AS-IS → TO-BE pairs (template table). Brownfield AS-IS comes
+  from explorer/browser evidence with file:line or capture references — never
+  from memory of the request. The pair format is also how the change is
+  presented to the human at the gate: what happens today, what will happen
+  after.
 - Brownfield: include a **"What stays untouched"** section — behavior that must
   survive, as testable statements. This becomes the regression baseline.
 - Flag concerns (security, compliance, UX, performance) inline — these are

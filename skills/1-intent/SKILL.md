@@ -30,6 +30,11 @@ in parallel where independent — and only then start the interview:
 - **Feasibility**: can the behavior be reproduced/run locally? What test
   infra, dev environments, tools, and access actually exist — verified, not
   assumed?
+- **Browser as-is** (UI-facing behavior or hard bugs, when a browser tool is
+  available and an environment is reachable): walk the real flow on the live
+  surface. Record actual behavior, the API calls fired, console errors —
+  observed, not inferred from code. Screenshots follow the bulk rule. For a
+  bug, the as-is capture IS the reproduction evidence.
 
 Skip a probe only when its subject does not exist (say so), or the change is
 trivial and you already know the exact file and symbol. Keep raw exploration
