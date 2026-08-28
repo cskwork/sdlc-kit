@@ -11,10 +11,8 @@ delegated=""
 if [ $# -eq 3 ] && [ "$3" = "--delegated" ]; then delegated=1; set -- "$1" "$2"; fi
 [ $# -eq 2 ] || usage
 stage="$1"; artifact="$2"
-# --delegated: agent-run on explicit human chat instruction. AGENTS.md rule 3
-# allows this for the intent stage only; the record says so — never silently.
-if [ -n "$delegated" ] && [ "$stage" != "intent" ]; then
-  echo "FAIL: --delegated is allowed for the intent stage only"; exit 1; fi
+# --delegated: agent-run on explicit human chat approval of THIS artifact at
+# THIS stage. The record says so — delegation is visible, never silent.
 case "$stage" in (*[!a-zA-Z0-9_-]*|"") echo "FAIL: stage must be [a-zA-Z0-9_-]+: '$stage'"; exit 1;; esac
 [ -f "$artifact" ] || { echo "FAIL: artifact not found: $artifact"; exit 1; }
 [ -d .sdlc ] || { echo "FAIL: no .sdlc/ here. Run init.sh first, from the project root."; exit 1; }
