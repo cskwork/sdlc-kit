@@ -25,7 +25,12 @@ Report format (target ≤ 60 lines — you are protecting the caller's context):
 - Quirks/risks: <list>
 - Claims checked: "<claim>" → CONFIRMED/REFUTED (<file:line>)
 - Unknowns: <what you could not determine>
+- Domain candidates: <durable terms/facts/constraints you verified that
+  belong in .sdlc/memory/DOMAIN.md — one line each with [verified: how]>
 ```
+
+The dispatcher merges Domain candidates into `.sdlc/memory/DOMAIN.md`
+(dedup against existing entries; keep the cap).
 
 Rules: file:line for everything; say "not found" rather than guess; abbreviate
 code — never paste whole files into the report.

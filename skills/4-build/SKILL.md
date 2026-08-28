@@ -11,7 +11,8 @@ implementation, not a QA gate at the end.
 ## Before you start
 
 1. `gates/check-gate.sh plan .sdlc/work/<slug>/plan.md` — STOP if closed.
-2. Read plan.md and spec.md. Read `.sdlc/memory/INDEX.md`; open matching lessons.
+2. Read plan.md and spec.md. Read `.sdlc/memory/INDEX.md` and
+   `.sdlc/memory/DOMAIN.md`; open matching lessons.
 3. **Brownfield: capture the regression baseline NOW** — run the baseline
    commands from plan.md, save output to `.sdlc/work/<slug>/baseline.txt`.
    No baseline = no way to prove you didn't break anything.

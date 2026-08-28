@@ -12,7 +12,8 @@ wrong in.
 
 ## Before you start
 
-1. Read `.sdlc/memory/INDEX.md`; open lessons whose tags match this request.
+1. Read `.sdlc/memory/INDEX.md` and `.sdlc/memory/DOMAIN.md`; open lessons
+   whose tags match this request.
 2. Pick a short kebab-case feature slug; create `.sdlc/work/<slug>/`.
 
 ## Explore FIRST — before any question reaches the human

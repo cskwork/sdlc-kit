@@ -12,7 +12,9 @@ spec-making and spec-verifying as possible; concentrate the human at the gate.
 ## Before you start
 
 1. `gates/check-gate.sh intent .sdlc/work/<slug>/intent.md` — STOP if closed.
-2. Read intent.md fully. Read `.sdlc/memory/INDEX.md`; open matching lessons.
+2. Read intent.md fully. Read `.sdlc/memory/INDEX.md` and
+   `.sdlc/memory/DOMAIN.md`; open matching lessons. Use DOMAIN.md terms —
+   the spec speaks the project's ubiquitous language.
 3. Brownfield: read the researcher report from stage 1 (or dispatch one now).
 
 ## Draft
