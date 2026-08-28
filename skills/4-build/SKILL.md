@@ -21,6 +21,9 @@ implementation, not a QA gate at the end.
 - Follow plan.md's order. Reality differs from plan? Small deviation: note it
   in plan.md's **Deviations** section and continue. Structural deviation
   (different files, different approach): STOP, tell the human, re-gate the plan.
+- A check that must fail the build must fail it synchronously (direct throw,
+  sync IO, or top-level await). An unawaited promise is not a gate — it fails
+  only through environment defaults, which is a race, not a contract.
 - After each step, run test + lint from `.sdlc/config.md`. Fix code, never
   tests — a failing test is information about the code. Never weaken, skip, or
   delete a failing test to get green (record a lesson if you catch yourself trying).
