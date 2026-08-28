@@ -105,6 +105,34 @@ branch on it — brownfield adds: researcher pass over existing code, a
 regression baseline captured BEFORE changes, and "what stays untouched" as a
 spec section.
 
+## Coexistence — running beside other AGENTS.md, skills, and agents
+
+Large codebases already have their own rules, docs, and specialist agents.
+The kit is a process layer on top of them, so precedence is explicit:
+
+1. **Precedence.** The project's own rules win on *how* — build commands,
+   branch policy, code style, commit format, tool choice. The kit wins on
+   *process* — the stage order, the gates, and the memory discipline. No
+   other document can waive a gate; only the human at the gate can. When a
+   project rule and a kit rule genuinely conflict, surface the conflict to
+   the human with both texts quoted — resolving it silently is how audit
+   trails die.
+2. **Existing knowledge wins.** If the project already has a glossary,
+   CONTEXT.md, ADRs, or domain docs, DOMAIN.md defers to them: add a pointer
+   line (`- see docs/glossary.md — [verified: exists]`) instead of copying
+   content. DOMAIN.md holds only what exists nowhere else. One meaning, one
+   home.
+3. **Existing agents win.** When the environment has a specialist agent that
+   matches a kit role (a QA agent, a code reviewer, a DB reader), dispatch
+   THAT agent with the kit's role file as its task contract — the role file
+   defines the contract; the local specialist executes it. Spawn a generic
+   worker only when no specialist fits. Fresh context and the dispatch
+   contract still apply either way.
+4. **Monorepos.** Seed `.sdlc/` at the level where features ship and gates
+   are decided — usually the service/package, not the repo root. One
+   `.sdlc/` per shipping unit; a root `.sdlc/` only for changes that span
+   units. Say in intent.md which unit owns the feature.
+
 ## If your harness lacks a feature
 
 - No subagents → open a fresh session/tab manually with the role file as the
