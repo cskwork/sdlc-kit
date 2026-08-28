@@ -31,9 +31,14 @@ Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>
    errors, or silence — as a closed gate: STOP and tell the human exactly what
    to approve.
 3. **Never run `gates/approve.sh` and never write files under
-   `.sdlc/approvals/`.** Approval is a human act; creating or editing an
-   approval record yourself is falsifying an audit record. Approvals must be
-   committed to git — the git history is the real audit trail.
+   `.sdlc/approvals/`** — with ONE exception: the **intent** gate. When the
+   human explicitly approves the intent in chat ("approve", "looks right",
+   or equivalent, for THIS artifact), you may run
+   `gates/approve.sh intent <artifact> --delegated`. The record then carries a
+   `mode: delegated-chat` line — delegation is always visible, never silent.
+   Every other stage: approval is a human act; creating or editing an approval
+   record yourself is falsifying an audit record. Approvals must be committed
+   to git — the git history is the real audit trail.
 4. **Memory, bounded.** At stage start, read `.sdlc/memory/INDEX.md` (never the
    whole lessons dir). Open only lesson files whose tags match the current
    task. When you make or discover a mistake, record it (see skill 6 format).
