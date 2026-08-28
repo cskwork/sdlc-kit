@@ -36,6 +36,9 @@ Fill `templates/evidence.md` → `.sdlc/work/<slug>/evidence.md`:
 - UI-facing change? The verifier should have exercised the running app through
   a browser/QA tool if one is available — and evidence.md must say whether
   that happened or state plainly that no eyes were on pixels.
+- Where the spec has AS-IS → TO-BE pairs, evidence proves each TO-BE
+  observed (browser capture or command output) — the same pairs, third
+  column filled: OBSERVED.
 
 ## Retro (mandatory, 2 minutes)
 

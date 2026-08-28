@@ -19,8 +19,16 @@ read only this summary plus Flagged concerns and still gate safely.>
 ## Data shapes
 <schemas, API contracts, migrations, serialization — end to end>
 
-## Behavior
-<flows, states, error handling. Edge cases explicit: empty/huge/concurrent/unauthorized/malformed>
+## Behavior: AS-IS → TO-BE
+<per flow, paired: AS-IS = what actually happens today (from explorer/browser
+evidence, file:line or capture — brownfield), TO-BE = what happens after this
+change. The delta between the columns IS the change; anything not in a TO-BE
+belongs in "What stays untouched". Edge cases explicit:
+empty/huge/concurrent/unauthorized/malformed>
+
+| # | Flow | AS-IS (evidence) | TO-BE |
+|---|------|------------------|-------|
+| B1 | <flow> | <today, with source> | <after> |
 
 ## What stays untouched   <!-- brownfield: testable statements; becomes regression baseline -->
 - U1: <existing behavior> — checked by: <command/test>
