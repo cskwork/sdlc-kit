@@ -32,6 +32,10 @@ implementation, not a QA gate at the end.
   same mistake never happens twice.
 - Independent parallel work: use worktrees/subagents if your harness supports
   them, one writer per file set. Otherwise, sequential is fine.
+- Tools: you may use build/test/dev tools freely. You must NOT use deploy or
+  release tools, or production systems/credentials — shipping is stage 5's
+  gate, not a build step. When your harness can restrict subagent tools, copy
+  each role's "Must not" list into the dispatch.
 
 ## Verify (fresh context, every time)
 

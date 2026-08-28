@@ -9,6 +9,18 @@ Goal: any trigger (bug report, incident, monitoring alert, ticket) becomes a
 *diagnosed* new `intent.md`, so the loop restarts with evidence instead of a
 vague complaint. People triage and review the work; they no longer start it.
 
+## Running headless? Sandbox first
+
+This stage may be triggered without a human (cron, webhook, ticket). When it
+is: run stateless in a sandbox with scoped credentials — read-only access to
+logs/metrics/code, NO standing production credentials, NO deploy tools. The
+agent may act only through gated routes: write `intent.md`, open a PR into
+the review gate, or fire a pre-approved runbook. A misdiagnosis must be able
+to produce a wrong document, never a wrong production action. Rollback of a
+shipped feature follows the same rule: propose the revert as a small fix
+through the plan gate (or run the project's rehearsed rollback runbook);
+never revert production directly from this stage.
+
 ## Diagnose
 
 1. Reproduce first. No repro → say so; capture what IS known. Never fix what

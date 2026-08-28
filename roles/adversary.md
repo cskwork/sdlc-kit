@@ -38,3 +38,10 @@ VERDICT: NO BLOCKERS | N BLOCKERS
 Rules: every objection needs concrete evidence (quote, path, line) — no vibes;
 an empty blocking section after a real attack is a valid outcome; finding
 nothing after a lazy skim is not.
+
+Tools:
+- Needs: file reads over the artifacts and diff.
+- May use if available: shell for non-mutating checks (grep, git log/diff) to
+  back an objection with evidence.
+- Must not: write any file, run the app's mutating commands, use deploy tools
+  or production credentials.

@@ -29,3 +29,10 @@ Report format (target ≤ 60 lines — you are protecting the caller's context):
 
 Rules: file:line for everything; say "not found" rather than guess; abbreviate
 code — never paste whole files into the report.
+
+Tools:
+- Needs: file reads, non-mutating shell (grep, find, git log).
+- May use if available: a READ-ONLY database tool when the question is about
+  real data shapes; code-navigation/LSP tools.
+- Must not: write any file, run mutating commands, touch production systems
+  or credentials.

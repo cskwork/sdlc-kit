@@ -33,6 +33,9 @@ Fill `templates/evidence.md` → `.sdlc/work/<slug>/evidence.md`:
 - Adversary findings + resolutions.
 - Anything NOT verified, stated plainly (environment limits, skipped checks).
   An honest gap beats a false green.
+- UI-facing change? The verifier should have exercised the running app through
+  a browser/QA tool if one is available — and evidence.md must say whether
+  that happened or state plainly that no eyes were on pixels.
 
 ## Retro (mandatory, 2 minutes)
 
