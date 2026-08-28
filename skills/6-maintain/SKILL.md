@@ -23,6 +23,10 @@ never revert production directly from this stage.
 
 ## Diagnose
 
+0. Explore first, fresh-context (per skill 1's rule): history researcher (was
+   this failure fixed before? reverted? why?) and feasibility researcher
+   (can it be reproduced here?) run BEFORE you form hypotheses or offer the
+   human any options.
 1. Reproduce first. No repro → say so; capture what IS known. Never fix what
    you can't reproduce.
 2. Trace the cause. Read `.sdlc/memory/INDEX.md` — has this failure mode been

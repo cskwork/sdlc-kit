@@ -15,6 +15,31 @@ wrong in.
 1. Read `.sdlc/memory/INDEX.md`; open lessons whose tags match this request.
 2. Pick a short kebab-case feature slug; create `.sdlc/work/<slug>/`.
 
+## Explore FIRST — before any question reaches the human
+
+Grilling without evidence produces questions the human cannot answer well and
+options nobody has feasibility-checked. As soon as the request is framed, fan
+out fresh-context researchers (`roles/researcher.md`, full dispatch contract),
+in parallel where independent — and only then start the interview:
+
+- **History** (brownfield): has this been tried before? Reverts, related
+  tickets, prior fixes and WHY they failed — from git history and commit
+  messages. A failed prior attempt reshapes the whole intent.
+- **Affected area**: entry points, data shapes, callers, side effects of the
+  code the request touches.
+- **Feasibility**: can the behavior be reproduced/run locally? What test
+  infra, dev environments, tools, and access actually exist — verified, not
+  assumed?
+
+Skip a probe only when its subject does not exist (say so), or the change is
+trivial and you already know the exact file and symbol. Keep raw exploration
+out of your own context — reports in, noise out.
+
+**Feasibility rule:** every option you put before the human must cite
+explorer evidence that it is actually possible (access exists, repro works,
+infra present). An option whose feasibility is unknown is not an option — it
+is a research task you have not dispatched yet.
+
 ## Grill protocol
 
 Interview the user ONE question at a time (never a questionnaire dump; use your
@@ -38,12 +63,12 @@ intent back and they say "yes, exactly" — aim for ~95% confidence. Cover:
 
 ## Classify: greenfield or brownfield
 
-- **Brownfield** (changes existing behavior): before finishing the interview,
-  dispatch a fresh-context researcher (`roles/researcher.md`) on the affected
-  area. Use its report to challenge the user's claims — this is where "user is
-  mistaken" is most often caught.
-- **Greenfield**: ask what existing systems it must integrate with; verify
-  those integration points exist as described.
+- **Brownfield** (changes existing behavior): use the explorer reports to
+  challenge the user's claims — this is where "user is mistaken" is most
+  often caught. Contradiction between a report and a claim goes to the user
+  with the evidence, before the intent is written.
+- **Greenfield**: ask what existing systems it must integrate with; the
+  feasibility explorer verifies those integration points exist as described.
 
 ## Write the artifact
 
