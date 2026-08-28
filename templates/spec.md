@@ -3,6 +3,15 @@
 - From: intent.md (approved YYYY-MM-DD)
 - Type: greenfield | brownfield
 
+## Human summary (read this first)
+
+<Plain language, ≤10 short sentences. Assume the reader lost the thread.
+Cover: what problem this solves · what will be built, concretely · what will
+NOT change · the decisions waiting at this gate (the flagged concerns, one
+line each, with your recommendation). One idea per sentence. No jargon.
+Everything below this section is the agent-facing contract; the human may
+read only this summary plus Flagged concerns and still gate safely.>
+
 ## Requirements
 <each traces to intent.md; each machine-checkable>
 - R1: <requirement> (intent: "<quoted line>")

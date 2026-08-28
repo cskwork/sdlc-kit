@@ -19,6 +19,11 @@ spec-making and spec-verifying as possible; concentrate the human at the gate.
 
 Fill `templates/spec.md`. Rules:
 
+- **Human summary first.** The spec body is an agent-facing contract; the
+  gate reviewer is a human. Write the top "Human summary" section in plain
+  speech (hard rule 8): what problem, what gets built, what stays unchanged,
+  and each flagged concern as a one-line decision with your recommendation.
+  Write it LAST (after the adversarial pass), place it FIRST.
 - Every requirement traces to a line in intent.md. No invented features —
   gold-plating here is the #1 spec failure.
 - Answer intent.md's open questions or carry them forward explicitly as
