@@ -57,7 +57,7 @@ AGENTS.md        routing contract (the file every harness reads)
 init.sh          seed .sdlc/ into a target project
 skills/1-6       one skill per stage
 roles/           verifier, adversary, researcher — fresh-context briefs
-gates/           approve.sh (human), check-gate.sh (agent), selftest.sh
+gates/           approve.sh (human decision; delegation per AGENTS.md rule 3), check-gate.sh (agent), selftest.sh
 templates/       intent / spec / plan / evidence / lesson
 ```
 

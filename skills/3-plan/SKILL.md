@@ -1,6 +1,6 @@
 ---
 name: sdlc-plan
-description: Stage 3 — turn approved spec.md into plan.md (files, order, risks, proof), read-only, then gate. Use after the spec gate is approved.
+description: Stage 3 — read-only planning: files, order, risks, proof into plan.md. Triggers: spec gate approved.
 ---
 
 # Stage 3: Plan

@@ -1,6 +1,6 @@
 ---
 name: sdlc-maintain
-description: Stage 6 — turn an incident/bug/request into a diagnosed new intent.md and a lesson; the loop feeds itself. Use when something breaks or a maintenance task arrives.
+description: Stage 6 — incident to diagnosed intent.md plus lesson; the loop feeds itself. Triggers: bug report, incident, alert, ticket.
 ---
 
 # Stage 6: Maintain — closing the loop
@@ -38,10 +38,10 @@ never revert production directly from this stage.
 
 - **Small, well-bounded fix** (single cause, obvious change, low blast
   radius): run a compressed loop in one pass, in a NEW feature dir
-  `.sdlc/work/<fix-slug>/` (never reuse an old feature's dir — approvals are
-  keyed per slug and re-approving would overwrite its records): mini `plan.md`
-  (files + proof) → human approves plan gate → fix → verifier → `evidence.md`
-  → ship gate. The two gates survive even for hotfixes.
+  `.sdlc/work/<fix-slug>/` (approvals are keyed per slug; a fresh dir keeps
+  prior records intact): mini `plan.md` (files + proof) → human approves the
+  plan gate → build and verify per skill 4's Execute and fix-loop rules →
+  `evidence.md` → ship gate. The two gates survive even for hotfixes.
 - **Anything larger**: write `.sdlc/work/<new-slug>/intent.md` via
   `templates/intent.md`, with reproduction and diagnosis as embedded evidence
   (these claims are `[verified]` from birth). Then stage 1's gate applies and
