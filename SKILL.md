@@ -18,6 +18,7 @@ it completely on first contact with a project, then come back here.
 | "where are we" / "sdlc status" | `gates/status.sh` (all features) + `gates/stats.sh` (timings). |
 | gate request answered "approve" in chat | `gates/approve.sh <stage> <artifact> --delegated` per AGENTS.md rule 3. |
 | incident / bug / alert on a shipped feature | Read `skills/6-maintain/SKILL.md`. |
+| "we're done / drop this / dead end" for a feature | `gates/close.sh <slug> <shipped\|abandoned\|dead-end> "reason"` — non-shipped closes need a lesson first. |
 | project has no `.sdlc/` yet | Run `<kit>/init.sh` from the project root; fill `.sdlc/config.md` commands; then stage 1. |
 
 ## Invariants (full text in AGENTS.md)

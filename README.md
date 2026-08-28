@@ -48,7 +48,22 @@ you:   review, then:  ~/sdlc-kit/gates/approve.sh intent .sdlc/work/<feature>/in
 agent: spec → you approve → plan → you approve → build → evidence → ship gate → done
 ```
 
-The agent checks gates itself and stops when one is closed. You approve; it moves.
+The agent checks gates itself and stops when one is closed. You approve; it
+moves. You can also delegate the keystrokes: say "approve" in chat and the
+agent runs the command with `--delegated` — always recorded, never silent
+(AGENTS.md rule 3).
+
+Cockpit and endings:
+
+```bash
+gates/status.sh          # every feature: gate states + the one next action
+gates/stats.sh           # time per stage, re-approval counts
+gates/close.sh <slug> <shipped|abandoned|dead-end> "reason"
+```
+
+Every feature ends in a terminal state. Closing as abandoned or dead-end is
+blocked until a lesson exists for that slug — a failed run must leave more
+knowledge behind than it consumed.
 
 ## Layout
 
@@ -57,7 +72,7 @@ AGENTS.md        routing contract (the file every harness reads)
 init.sh          seed .sdlc/ into a target project
 skills/1-6       one skill per stage
 roles/           verifier, adversary, researcher — fresh-context briefs
-gates/           approve.sh (human decision; delegation per AGENTS.md rule 3), check-gate.sh (agent), selftest.sh
+gates/           approve.sh · check-gate.sh · close.sh · status.sh · stats.sh · selftest.sh
 templates/       intent / spec / plan / evidence / lesson
 ```
 
@@ -71,5 +86,6 @@ your features afterward.
 ## Verify the kit itself
 
 ```bash
-gates/selftest.sh   # approve→open, tamper→closed
+gates/selftest.sh   # 9 checks: approve→open, tamper→closed, injection, corrupt
+                    # record, delegated mode, close-needs-lesson, YAML frontmatter
 ```
