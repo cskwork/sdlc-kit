@@ -20,4 +20,3 @@
 - Commands: <exact commands run BEFORE changes>
 - Saved to: .sdlc/work/<slug>/baseline.txt
 - U1 → <how each untouched item is re-checked>
-
