@@ -11,8 +11,9 @@ reserved for intent and risk.
 
 ## Before you start
 
-Fresh session. Read plan.md, spec.md, and the diff (`git diff` against the
-base branch). Read `.sdlc/memory/INDEX.md` and `.sdlc/memory/DOMAIN.md`.
+Fresh session. Read plan.md, spec.md, deviations.md (if present), and the
+diff (`git diff` against the base branch). Read `.sdlc/memory/INDEX.md` and
+`.sdlc/memory/DOMAIN.md`.
 
 ## Adversarial code review (fresh context)
 

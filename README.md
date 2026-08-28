@@ -61,6 +61,13 @@ gates/           approve.sh (human decision; delegation per AGENTS.md rule 3), c
 templates/       intent / spec / plan / evidence / lesson
 ```
 
+## Upgrading
+
+`git pull` in the kit, then re-run `init.sh` in each project: it is
+idempotent — existing files are kept, files added by newer kit versions
+(e.g. `memory/DOMAIN.md`) are seeded. Check `gates/status.sh` still reads
+your features afterward.
+
 ## Verify the kit itself
 
 ```bash
