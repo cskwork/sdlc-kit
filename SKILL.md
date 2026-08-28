@@ -1,6 +1,6 @@
 ---
 name: sdlc-kit
-description: "Gated SDLC loop: intent → spec → plan → build → evidence → maintain, human approval between stages. Triggers ONLY on explicit SDLC intent: 'start SDLC for X', 'continue the SDLC loop', 'sdlc status', 'run this through the gates', or an incident in a project that has a .sdlc/ directory. Plain feature/bug requests without SDLC wording or a .sdlc/ dir belong to other skills."
+description: "Gated SDLC loop with human approvals. Triggers: \"start SDLC\", \"sdlc status\", \"continue the loop\", \"through the gates\", or an incident in a project with .sdlc/. Plain feature requests without SDLC wording belong to other skills."
 ---
 
 # sdlc-kit router

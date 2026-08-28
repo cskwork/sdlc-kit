@@ -1,6 +1,6 @@
 ---
 name: sdlc-spec
-description: "Stage 2 — generate spec.md and adversarial-review it before the human gate. Triggers: intent gate approved."
+description: "Spec generation, adversary-reviewed before the human gate. Triggers: intent gate approved."
 ---
 
 # Stage 2: Spec
