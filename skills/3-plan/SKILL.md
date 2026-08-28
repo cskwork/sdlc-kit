@@ -13,7 +13,9 @@ nothing" is YOUR discipline in this stage, not a harness feature.
 ## Before you start
 
 1. `gates/check-gate.sh spec .sdlc/work/<slug>/spec.md` — STOP if closed.
-2. Read spec.md fully. Read `.sdlc/memory/INDEX.md`; open matching lessons.
+2. Read spec.md fully. Read `.sdlc/memory/INDEX.md` and
+   `.sdlc/memory/DOMAIN.md`; open matching lessons. DOMAIN.md constraints
+   are plan risks by default.
 3. **Read-only rule: in this stage you may read code and run non-mutating
    commands only. No edits, no writes outside `.sdlc/work/<slug>/`.**
 

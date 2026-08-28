@@ -40,9 +40,15 @@ Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>
    artifact changed after the human's approval words, re-request — their words
    applied to a file that no longer exists. Approvals must be committed to git
    — the git history is the real audit trail.
-4. **Memory, bounded.** At stage start, read exactly one memory file —
-   `.sdlc/memory/INDEX.md` — then open the individual lesson files whose tags
-   match the current task. When you make or discover a mistake, record it (see skill 6 format).
+4. **Memory, bounded.** At stage start, read two memory files —
+   `.sdlc/memory/INDEX.md` (lessons: mistakes and correct moves) and
+   `.sdlc/memory/DOMAIN.md` (domain knowledge: terms, verified facts,
+   load-bearing constraints) — then open the individual lesson files whose
+   tags match the current task. The two are different content types: a
+   lesson says "we made this mistake once"; DOMAIN.md says "this is how
+   this system works". Researchers write newly verified facts back to
+   DOMAIN.md; both files stay capped (INDEX ≤50 lines, DOMAIN ≤100 — over,
+   split by subdomain with pointer lines). When you make or discover a mistake, record it (see skill 6 format).
 5. **Fresh context for helpers.** Verification and adversarial review must run
    in a fresh context: a subagent if your harness has them (pi: subagent tool;
    Claude Code: Task tool; Codex: spawn), else a new session given only the

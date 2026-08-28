@@ -12,7 +12,7 @@ reserved for intent and risk.
 ## Before you start
 
 Fresh session. Read plan.md, spec.md, and the diff (`git diff` against the
-base branch). Read `.sdlc/memory/INDEX.md`.
+base branch). Read `.sdlc/memory/INDEX.md` and `.sdlc/memory/DOMAIN.md`.
 
 ## Adversarial code review (fresh context)
 
@@ -43,7 +43,11 @@ Fill `templates/evidence.md` → `.sdlc/work/<slug>/evidence.md`:
 ## Retro (mandatory, 2 minutes)
 
 Scan the feature's history: what went wrong, what surprised, what would you
-tell the next agent? Record lessons per skill 6 format. If a lesson fires on
+tell the next agent? Record lessons per skill 6 format. Separately, harvest
+domain knowledge: durable terms, verified facts, and constraints this feature
+uncovered go into `.sdlc/memory/DOMAIN.md` (dedup, keep the cap) — they are
+facts about the system, not mistakes, so they are not lessons. If a lesson
+fires on
 something a stage skill should have prevented, note in the lesson:
 `promote: skills/<n>` — the human can then patch the skill; that is the
 continual-improvement loop closing.

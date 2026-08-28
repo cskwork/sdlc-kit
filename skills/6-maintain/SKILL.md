@@ -29,7 +29,8 @@ never revert production directly from this stage.
    human any options.
 1. Reproduce first. No repro → say so; capture what IS known. Never fix what
    you can't reproduce.
-2. Trace the cause. Read `.sdlc/memory/INDEX.md` — has this failure mode been
+2. Trace the cause. Read `.sdlc/memory/INDEX.md` and
+   `.sdlc/memory/DOMAIN.md` — has this failure mode been
    seen before? If a past lesson matches, cite it in the diagnosis.
 3. Check the feature's `evidence.md`: was this covered by proof, or was it a
    verification gap? A gap is itself a lesson (`promote: skills/5-ship`).

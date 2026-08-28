@@ -18,6 +18,22 @@ grep -qxF '.sdlc/work/*/scratch/' .gitignore 2>/dev/null || \
 # When full, merge/prune oldest entries; promote repeat offenders into the stage skill itself.
 EOF
 
+[ -f .sdlc/memory/DOMAIN.md ] || cat > .sdlc/memory/DOMAIN.md <<'EOF'
+# Domain knowledge — how THIS system works (≤100 lines; over → split by
+# subdomain into memory/domain/<area>.md and keep one pointer line here)
+# Continuously updated: researchers write back verified facts; ship retro
+# harvests new entries. Facts carry [verified: how] like intent claims.
+
+## Terms (ubiquitous language)
+<!-- - term — meaning in this project -->
+
+## Facts
+<!-- - fact — [verified: file:line / command / capture] -->
+
+## Constraints (load-bearing)
+<!-- - constraint the code depends on — [verified: how] -->
+EOF
+
 [ -f .sdlc/config.md ] || cat > .sdlc/config.md <<EOF
 # SDLC config
 kit: $kit   # re-point this if the kit is moved or cloned elsewhere
