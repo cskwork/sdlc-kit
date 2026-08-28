@@ -1,6 +1,6 @@
 ---
 name: sdlc-intent
-description: "Stage 1 — grill the user until intent is exact and evidenced; write intent.md. Triggers: any new SDLC feature, fix, or change."
+description: "Explore-first grilling until intent is exact and evidenced. Triggers: new SDLC feature, fix, or change."
 ---
 
 # Stage 1: Intent

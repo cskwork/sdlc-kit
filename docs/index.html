@@ -27,9 +27,9 @@
     --accent: #eab04d;
     --accent-ink: #241a06;
     --danger: #ec8168;
-    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --slab: "Bitter", "Iowan Old Style", Georgia, serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", "Apple SD Gothic Neo", "Noto Sans KR", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    --slab: "Bitter", "Iowan Old Style", Georgia, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
   }
 
   * { box-sizing: border-box; }
@@ -114,6 +114,21 @@
     align-items: center;
     gap: 0.45rem;
   }
+  .top-actions { display: inline-flex; align-items: center; gap: 1.2rem; }
+  .lang {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--text-2);
+    background: transparent;
+    border: 1px solid var(--line-strong);
+    border-radius: 99px;
+    padding: 0.34rem 0.8rem;
+    cursor: pointer;
+    transition: color 120ms ease-out, border-color 120ms ease-out;
+  }
+  .lang:hover { color: var(--accent); border-color: var(--accent); }
 
   /* ---------- hero ---------- */
 
@@ -319,18 +334,16 @@
       grid-template-columns: 1fr 5.2rem 1fr 5.2rem 1fr;
       grid-template-areas:
         "s1 e12 s2 e23 s3"
-        "lp .  .  e34 dn"
+        "lp .  .  .  dn"
         "s6 e56 s5 e45 s4";
       align-items: stretch;
     }
     .s1 { grid-area: s1; } .s2 { grid-area: s2; } .s3 { grid-area: s3; }
     .s4 { grid-area: s4; } .s5 { grid-area: s5; } .s6 { grid-area: s6; }
-    .e12 { grid-area: e12; } .e23 { grid-area: e23; } .e34 { grid-area: e34; }
+    .e12 { grid-area: e12; } .e23 { grid-area: e23; } .e34 { grid-area: dn; }
     .e45 { grid-area: e45; } .e56 { grid-area: e56; }
     .flow .loop { grid-area: lp; }
     .flow .edge { justify-content: center; }
-    .flow .edge.h .arr-r { display: block; }
-    .flow .edge.v { flex-direction: column; }
     .flow .loop {
       display: flex;
       flex-direction: column;
@@ -526,36 +539,40 @@
      FINISH: unreviewed and undocumented is unfinished; this build ends with
      the finish review, the verdict, DESIGN.md, and every shipping raster
      carrying its provenance. -->
-<a class="skip" href="#main">Skip to content</a>
+<noscript><style>.top-actions .lang { display: none; }</style></noscript>
+<a class="skip" href="#main" data-i18n="skip">Skip to content</a>
 
 <header class="topbar">
   <div class="wrap">
     <a class="wordmark" href="#top">sdlc<b>-kit</b></a>
+    <span class="top-actions">
+      <button type="button" class="lang" id="lang-toggle" aria-pressed="false">한국어</button>
     <a class="gh" href="https://github.com/cskwork/sdlc-kit">
       <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
       GitHub
     </a>
+    </span>
   </div>
 </header>
 
 <main id="main">
   <!-- ============ hero ============ -->
-  <section class="hero" id="top" aria-label="sdlc-kit introduction">
+  <section class="hero" id="top" aria-label="sdlc-kit introduction" data-i18n-aria="hero-aria">
     <div class="wrap">
       <div>
         <h1>sdlc<span class="kit">-kit</span></h1>
-        <p class="pitch">Anthropic&rsquo;s AI-native SDLC playbook, as plain files&nbsp;+&nbsp;shell.</p>
-        <p class="sub">Six stages, one artifact each, a human approval gate between. Your agent reads the files, runs the gates, and stops when a gate is closed. No runtime, no hooks, no lock-in.</p>
+        <p class="pitch" data-i18n="pitch">Anthropic&rsquo;s AI-native SDLC playbook, as plain files&nbsp;+&nbsp;shell.</p>
+        <p class="sub" data-i18n="sub">Six stages, one artifact each, a human approval gate between. Your agent reads the files, runs the gates, and stops when a gate is closed. No runtime, no hooks, no lock-in.</p>
         <p class="cta-row">
-          <a class="btn btn-primary" href="#install">Get started
+          <a class="btn btn-primary" href="#install"><span data-i18n="cta-start">Get started</span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
           </a>
           <a class="btn btn-ghost" href="https://github.com/cskwork/sdlc-kit">GitHub repository</a>
         </p>
-        <p class="harnesses"><b>pi</b><span class="dot">·</span><b>Claude Code</b><span class="dot">·</span><b>Codex CLI</b><span class="dot">·</span><b>Gemini CLI</b><span class="dot">·</span><b>Cursor</b><br>any of them can read files and run shell commands.</p>
+        <p class="harnesses"><b>pi</b><span class="dot">·</span><b>Claude Code</b><span class="dot">·</span><b>Codex CLI</b><span class="dot">·</span><b>Gemini CLI</b><span class="dot">·</span><b>Cursor</b><br><span data-i18n="harness-note">any of them can read files and run shell commands.</span></p>
       </div>
 
-      <div class="term" role="img" aria-label="Terminal transcript: approving an intent opens the gate; quietly editing the artifact afterwards closes it.">
+      <div class="term" role="img" aria-label="Terminal transcript: approving an intent opens the gate; quietly editing the artifact afterwards closes it." data-i18n-aria="term-aria">
         <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>your-project / zsh</span></div>
         <pre class="term-body"><span class="ln" style="--i:0"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/approve.sh intent .sdlc/work/payments/intent.md</span></span><span class="ln" style="--i:1"><span class="ok">APPROVED:</span><span class="o"> intent of payments (intent.md @ 435b90e32d44…)</span></span><span class="ln" style="--i:2"><span class="o">Commit .sdlc/approvals/payments.intent.approval — the audit trail.</span></span><span class="ln" style="--i:3"> </span><span class="ln" style="--i:4"><span class="p">$</span> <span class="c">$EDITOR .sdlc/work/payments/intent.md</span>  <span class="dim"># a quiet edit, after the fact</span></span><span class="ln" style="--i:5"> </span><span class="ln" style="--i:6"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh intent .sdlc/work/payments/intent.md</span></span><span class="ln" style="--i:7"><span class="bad">GATE CLOSED:</span><span class="o"> intent.md was EDITED AFTER approval.</span></span><span class="ln" style="--i:8"><span class="o">  approved: 435b90e32d447d978cc65669acee7161de1d03064cf4a90d38e63b839c7a2089</span></span><span class="ln" style="--i:9"><span class="o">   current: 31a373b832b5ac2679e579d1dc2ede71bd0430b53ce4edecad61b3cea74681dc</span></span><span class="ln caret" style="--i:10"><span class="o">A human must re-review and re-run approve.sh.</span></span></pre>
       </div>
@@ -565,100 +582,100 @@
   <!-- ============ the loop ============ -->
   <section class="band" id="loop" aria-labelledby="loop-h">
     <div class="wrap">
-      <h2 id="loop-h">Six stages. One artifact each. A human gate between.</h2>
-      <p class="section-lede">Every stage reads its skill file, produces exactly one artifact, and stops at the gate. You approve the artifact; only then does the next stage start. Stage&nbsp;6 turns any incident into the next intent: the loop feeds itself.</p>
+      <h2 id="loop-h" data-i18n="loop-h">Six stages. One artifact each. A human gate between.</h2>
+      <p class="section-lede" data-i18n="loop-lede">Every stage reads its skill file, produces exactly one artifact, and stops at the gate. You approve the artifact; only then does the next stage start. Stage&nbsp;6 turns any incident into the next intent: the loop feeds itself.</p>
 
-      <ol class="flow" aria-label="The six-stage loop with human approval gates">
+      <ol class="flow" aria-label="The six-stage loop with human approval gates" data-i18n-aria="flow-aria">
         <li class="stage s1">
-          <h3>Intent <span class="art">intent.md</span></h3>
-          <p class="what">The agent explores first, then grills you until the intent is exact and evidenced.</p>
+          <h3><span data-i18n="s1-h">Intent</span> <span class="art">intent.md</span></h3>
+          <p class="what" data-i18n="s1-p">The agent explores first, then grills you until the intent is exact and evidenced.</p>
         </li>
         <li class="edge gate e12">
           <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M0 5h41M38 1.5 42 5l-4 3.5"/></svg>
-          <span class="lbl">human gate · approve intent</span>
+          <span class="lbl" data-i18n="e12">human gate · approve intent</span>
         </li>
         <li class="stage s2">
-          <h3>Spec <span class="art">spec.md</span></h3>
-          <p class="what">Generated from the intent, adversarially reviewed before it reaches you.</p>
+          <h3><span data-i18n="s2-h">Spec</span> <span class="art">spec.md</span></h3>
+          <p class="what" data-i18n="s2-p">Generated from the intent, adversarially reviewed before it reaches you.</p>
         </li>
         <li class="edge gate e23">
           <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M0 5h41M38 1.5 42 5l-4 3.5"/></svg>
-          <span class="lbl">human gate · approve spec</span>
+          <span class="lbl" data-i18n="e23">human gate · approve spec</span>
         </li>
         <li class="stage s3">
-          <h3>Plan <span class="art">plan.md</span></h3>
-          <p class="what">Read-only: which files change, in what order, with what proof it worked.</p>
+          <h3><span data-i18n="s3-h">Plan</span> <span class="art">plan.md</span></h3>
+          <p class="what" data-i18n="s3-p">Read-only: which files change, in what order, with what proof it worked.</p>
         </li>
 
         <li class="edge gate e34">
           <svg class="d" width="10" height="52" viewBox="0 0 10 52" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 0v47M1.5 43.5 5 48l3.5-4.5"/></svg>
-          <span class="lbl">human gate · approve plan</span>
+          <span class="lbl" data-i18n="e34">human gate · approve plan</span>
         </li>
 
         <li class="stage s4">
-          <h3>Build <span class="art">code + tests</span></h3>
-          <p class="what">The plan executed with verification woven through, not bolted on at the end.</p>
+          <h3><span data-i18n="s4-h">Build</span> <span class="art">code + tests</span></h3>
+          <p class="what" data-i18n="s4-p">The plan executed with verification woven through, not bolted on at the end.</p>
         </li>
         <li class="edge e45">
           <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M46 5H5M8 1.5 4 5l4 3.5"/></svg>
-          <span class="lbl">checks green · no gate</span>
+          <span class="lbl" data-i18n="e45">checks green · no gate</span>
         </li>
         <li class="stage s5">
-          <h3>Ship <span class="art">evidence.md</span></h3>
-          <p class="what">Adversarial review plus evidence; you approve the release by reading what was flagged.</p>
+          <h3><span data-i18n="s5-h">Ship</span> <span class="art">evidence.md</span></h3>
+          <p class="what" data-i18n="s5-p">Adversarial review plus evidence; you approve the release by reading what was flagged.</p>
         </li>
         <li class="edge e56">
           <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M46 5H5M8 1.5 4 5l4 3.5"/></svg>
-          <span class="lbl">incident triggers · no gate</span>
+          <span class="lbl" data-i18n="e56">incident triggers · no gate</span>
         </li>
         <li class="stage s6">
-          <h3>Maintain <span class="art">intent.md + lesson</span></h3>
-          <p class="what">An incident becomes a diagnosed intent and a recorded lesson, not a vague complaint.</p>
+          <h3><span data-i18n="s6-h">Maintain</span> <span class="art">intent.md + lesson</span></h3>
+          <p class="what" data-i18n="s6-p">An incident becomes a diagnosed intent and a recorded lesson, not a vague complaint.</p>
         </li>
 
         <li class="loop">
           <svg width="10" height="52" viewBox="0 0 10 52" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 52V5M1.5 8.5 5 4l3.5 4.5"/></svg>
-          <span class="lbl">writes the next intent.md</span>
+          <span class="lbl" data-i18n="loop-lbl">writes the next intent.md</span>
         </li>
       </ol>
-      <p class="loopnote">A production issue in stage&nbsp;6 writes a new <b>intent.md</b>. People triage and review the work; they no longer start it.</p>
+      <p class="loopnote" data-i18n="loopnote">A production issue in stage&nbsp;6 writes a new <b>intent.md</b>. People triage and review the work; they no longer start it.</p>
     </div>
   </section>
 
   <!-- ============ why ============ -->
   <section class="band band-alt" id="why" aria-labelledby="why-h">
     <div class="wrap">
-      <h2 id="why-h">What the gates buy you</h2>
-      <p class="section-lede">The kit is small on purpose. Everything it adds sits between your decision and the agent&rsquo;s next move.</p>
+      <h2 id="why-h" data-i18n="why-h">What the gates buy you</h2>
+      <p class="section-lede" data-i18n="why-lede">The kit is small on purpose. Everything it adds sits between your decision and the agent&rsquo;s next move.</p>
 
       <dl class="ledger">
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>Grilled intents</dt>
-          <dd>Stage&nbsp;1 explores before it asks, then labels every claim in <code>intent.md</code> <code>[verified]</code> with evidence or <code>[assumed]</code> with a reason. Users can be mistaken; this is the cheapest stage to find out.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg><span data-i18n="l1-t">Grilled intents</span></dt>
+          <dd data-i18n="l1-d">Stage&nbsp;1 explores before it asks, then labels every claim in <code>intent.md</code> <code>[verified]</code> with evidence or <code>[assumed]</code> with a reason. Users can be mistaken; this is the cheapest stage to find out.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M9 12h6M12 9v6"/></svg>Tamper-evident gates</dt>
-          <dd><code>approve.sh</code> records the artifact&rsquo;s sha256; one quiet edit after approval and the next <code>check-gate.sh</code> prints <code>GATE CLOSED</code> on its own.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M9 12h6M12 9v6"/></svg><span data-i18n="l2-t">Tamper-evident gates</span></dt>
+          <dd data-i18n="l2-d"><code>approve.sh</code> records the artifact&rsquo;s sha256; one quiet edit after approval and the next <code>check-gate.sh</code> prints <code>GATE CLOSED</code> on its own.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-4.2-7.6"/><path d="M21 3v5h-5"/></svg>Delegation stays visible</dt>
-          <dd>An agent may run the approval only on your explicit words in chat. The record then carries <code>mode: delegated-chat</code>, so the keystrokes were never silent.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-4.2-7.6"/><path d="M21 3v5h-5"/></svg><span data-i18n="l3-t">Delegation stays visible</span></dt>
+          <dd data-i18n="l3-d">An agent may run the approval only on your explicit words in chat. The record then carries <code>mode: delegated-chat</code>, so the keystrokes were never silent.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="18" rx="1.5"/><rect x="13" y="3" width="8" height="18" rx="1.5"/><path d="M6.5 7h1M16.5 7h1"/></svg>Fresh-context review</dt>
-          <dd>A verifier, an adversary, and a researcher each meet the work in a context that did not author it (<code>report only, fix nothing</code>), so a soft pass can&rsquo;t coast on the author&rsquo;s optimism.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="18" rx="1.5"/><rect x="13" y="3" width="8" height="18" rx="1.5"/><path d="M6.5 7h1M16.5 7h1"/></svg><span data-i18n="l4-t">Fresh-context review</span></dt>
+          <dd data-i18n="l4-d">A verifier, an adversary, and a researcher each meet the work in a context that did not author it (<code>report only, fix nothing</code>), so a soft pass can&rsquo;t coast on the author&rsquo;s optimism.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="8" height="14" rx="1.5"/><rect x="14" y="5" width="7" height="14" rx="1.5"/><path d="M11 12h3"/></svg>AS-IS → TO-BE specs</dt>
-          <dd>Specs pair what actually happens today (file:line evidence) with what happens after the change. The delta between the columns <em>is</em> the change.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="8" height="14" rx="1.5"/><rect x="14" y="5" width="7" height="14" rx="1.5"/><path d="M11 12h3"/></svg><span data-i18n="l5-t">AS-IS → TO-BE specs</span></dt>
+          <dd data-i18n="l5-d">Specs pair what actually happens today (file:line evidence) with what happens after the change. The delta between the columns <em>is</em> the change.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M9 10h6M9 14h6"/></svg>Memory that stays bounded</dt>
-          <dd>Mistakes land once in a &le;50-line <code>INDEX.md</code>, then get promoted into the skill that prevents them. Read one index; never repeat a lesson.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M9 10h6M9 14h6"/></svg><span data-i18n="l6-t">Memory that stays bounded</span></dt>
+          <dd data-i18n="l6-d">Mistakes land once in a &le;50-line <code>INDEX.md</code>, then get promoted into the skill that prevents them. Read one index; never repeat a lesson.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.2 0-2.4-.25-3.4-.7L3 21l1.7-6.1A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.5 10h7M8.5 13.5h4"/></svg>Plain speech, by rule</dt>
-          <dd>Rule&nbsp;8: every message to a human starts with context, keeps to short active sentences, and ends with the one decision you owe.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.2 0-2.4-.25-3.4-.7L3 21l1.7-6.1A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.5 10h7M8.5 13.5h4"/></svg><span data-i18n="l7-t">Plain speech, by rule</span></dt>
+          <dd data-i18n="l7-d">Rule&nbsp;8: every message to a human starts with context, keeps to short active sentences, and ends with the one decision you owe.</dd>
         </div>
       </dl>
     </div>
@@ -667,38 +684,38 @@
   <!-- ============ install ============ -->
   <section class="band" id="install" aria-labelledby="install-h">
     <div class="wrap">
-      <h2 id="install-h">Three commands, then hand it your harness</h2>
-      <p class="section-lede">No installer, no daemon. The kit directory stays framework-only; your project gets a <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code> whose artifacts version with your code.</p>
+      <h2 id="install-h" data-i18n="inst-h">Three commands, then hand it your harness</h2>
+      <p class="section-lede" data-i18n="inst-lede">No installer, no daemon. The kit directory stays framework-only; your project gets a <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code> whose artifacts version with your code.</p>
 
       <ol class="steps">
         <li>
           <span class="cmd">git clone https://github.com/cskwork/sdlc-kit ~/sdlc-kit</span>
-          <p class="note">Once per machine. That&rsquo;s the whole install.</p>
+          <p class="note" data-i18n="st1-n">Once per machine. That&rsquo;s the whole install.</p>
         </li>
         <li>
           <span class="cmd">cd /path/to/project
 ~/sdlc-kit/init.sh</span>
-          <p class="note">Seeds <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code> (work, approvals, memory, config). Then fill in your real build, test, and lint commands in <code style="font-family:var(--mono);font-size:.9em">.sdlc/config.md</code>.</p>
+          <p class="note" data-i18n="st2-n">Seeds <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code> (work, approvals, memory, config). Then fill in your real build, test, and lint commands in <code style="font-family:var(--mono);font-size:.9em">.sdlc/config.md</code>.</p>
         </li>
         <li>
           <span class="cmd">tell your harness:
 &ldquo;read ~/sdlc-kit/AGENTS.md and follow it&rdquo;</span>
-          <p class="note">One pointer line in your project&rsquo;s agent file does it. Pick your harness below.</p>
+          <p class="note" data-i18n="st3-n">One pointer line in your project&rsquo;s agent file does it. Pick your harness below.</p>
         </li>
       </ol>
 
       <div class="tablewrap">
         <table class="how">
-          <caption>Point your harness at the routing contract</caption>
+          <caption data-i18n="how-cap">Point your harness at the routing contract</caption>
           <thead>
-            <tr><th scope="col">Harness</th><th scope="col">How</th></tr>
+            <tr><th scope="col" data-i18n="how-h1">Harness</th><th scope="col" data-i18n="how-h2">How</th></tr>
           </thead>
           <tbody>
-            <tr><th scope="row">pi</th><td><code>ln -s ~/sdlc-kit/AGENTS.md .sdlc/SDLC.md</code>, then tell pi to run the SDLC in that file, or add a pointer line to your project <code>AGENTS.md</code></td></tr>
-            <tr><th scope="row">Claude Code</th><td>Add to project <code>CLAUDE.md</code>: <code>For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.</code></td></tr>
-            <tr><th scope="row">Codex CLI</th><td>Same one-liner in project <code>AGENTS.md</code></td></tr>
-            <tr><th scope="row">Gemini CLI</th><td>Same one-liner in <code>GEMINI.md</code></td></tr>
-            <tr><th scope="row">Anything else</th><td>Paste <code>AGENTS.md</code> into the session; the contract is files + scripts, not harness features</td></tr>
+            <tr><th scope="row">pi</th><td data-i18n="r-pi"><code>ln -s ~/sdlc-kit/AGENTS.md .sdlc/SDLC.md</code>, then tell pi to run the SDLC in that file, or add a pointer line to your project <code>AGENTS.md</code></td></tr>
+            <tr><th scope="row">Claude Code</th><td data-i18n="r-cc">Add to project <code>CLAUDE.md</code>: <code>For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.</code></td></tr>
+            <tr><th scope="row">Codex CLI</th><td data-i18n="r-cx">Same one-liner in project <code>AGENTS.md</code></td></tr>
+            <tr><th scope="row">Gemini CLI</th><td data-i18n="r-gm">Same one-liner in <code>GEMINI.md</code></td></tr>
+            <tr><th scope="row">Anything else</th><td data-i18n="r-else">Paste <code>AGENTS.md</code> into the session; the contract is files + scripts, not harness features</td></tr>
           </tbody>
         </table>
       </div>
@@ -711,9 +728,9 @@
       <div class="honest">
         <h2 id="limits-h">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
-          Honest limit: tamper-evident, not tamper-proof
+          <span data-i18n="lim-h">Honest limit: tamper-evident, not tamper-proof</span>
         </h2>
-        <p>Approval records catch post-approval edits and mistakes: the sha256 mismatch is mechanical. A malicious agent forging records is a different threat. That line is held by agent rules and by the git history of <code>.sdlc/approvals/</code>. Approvals are committed with the code, and that history is the real audit trail.</p>
+        <p data-i18n="lim-p">Approval records catch post-approval edits and mistakes: the sha256 mismatch is mechanical. A malicious agent forging records is a different threat. That line is held by agent rules and by the git history of <code>.sdlc/approvals/</code>. Approvals are committed with the code, and that history is the real audit trail.</p>
       </div>
     </div>
   </section>
@@ -721,13 +738,134 @@
 
 <footer class="site">
   <div class="wrap">
-    <p>sdlc-kit: plain files + shell. No hooks, no runtime, no lock-in.</p>
-    <nav aria-label="Footer">
-      <a href="https://github.com/cskwork/sdlc-kit">GitHub repository</a>
-      <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">Anthropic&rsquo;s playbook</a>
-      <a href="#install">Get started</a>
+    <p data-i18n="foot-p">sdlc-kit: plain files + shell. No hooks, no runtime, no lock-in.</p>
+    <nav aria-label="Footer" data-i18n-aria="foot-aria">
+      <a href="https://github.com/cskwork/sdlc-kit" data-i18n="foot-gh">GitHub repository</a>
+      <a href="https://claude.com/blog/the-ai-native-sdlc-playbook" data-i18n="foot-pb">Anthropic&rsquo;s playbook</a>
+      <a href="#install" data-i18n="foot-start">Get started</a>
     </nav>
   </div>
 </footer>
+<script>
+(function () {
+  "use strict";
+  var KEY = "sdlc-kit-lang";
+  var KO = {
+    "skip": '본문으로 건너뛰기',
+    "pitch": 'Anthropic의 AI 네이티브 SDLC 플레이북, 평문 파일 + 셸.',
+    "sub": '여섯 단계, 단계마다 산출물 하나, 그 사이마다 사람의 승인 게이트. 에이전트는 파일을 읽고 게이트를 실행하고, 게이트가 닫혀 있으면 멈춥니다. 런타임도 훅도 종속성도 없습니다.',
+    "cta-start": '시작하기',
+    "harness-note": '어느 것이든 파일을 읽고 셸 명령을 실행할 수 있습니다.',
+    "loop-h": '여섯 단계. 단계마다 산출물 하나. 그 사이마다 사람의 승인 게이트.',
+    "loop-lede": '각 단계는 스킬 파일을 읽고, 산출물을 정확히 하나 만들고, 게이트 앞에서 멈춥니다. 당신이 산출물을 승인해야 다음 단계가 시작됩니다. 6단계는 모든 장애를 다음 의도(intent.md)로 바꿉니다. 루프가 스스로를 이어갑니다.',
+    "s1-h": '의도',
+    "s1-p": '에이전트는 먼저 탐색한 뒤, 의도가 정확하고 근거를 갖출 때까지 당신을 심문합니다.',
+    "e12": '사람 승인 게이트 · intent 승인',
+    "s2-h": '명세',
+    "s2-p": '의도에서 생성되며, 당신에게 전달되기 전에 적대적 검토를 거칩니다.',
+    "e23": '사람 승인 게이트 · spec 승인',
+    "s3-h": '계획',
+    "s3-p": '읽기 전용: 어떤 파일을 어떤 순서로 바꾸고, 동작을 무엇으로 증명할지.',
+    "e34": '사람 승인 게이트 · plan 승인',
+    "s4-h": '빌드',
+    "s4-p": '계획을 실행하되, 검증을 마지막에 덧붙이지 않고 처음부터 짜 넣습니다.',
+    "e45": '검사 통과 · 게이트 없음',
+    "s5-h": '출시',
+    "s5-p": '적대적 검토와 증거. 지적된 내용을 직접 읽고 출시를 승인합니다.',
+    "e56": '장애 발생 · 게이트 없음',
+    "s6-h": '유지보수',
+    "s6-p": '장애는 막연한 불만이 아니라, 원인을 진단한 의도와 기록된 교훈으로 남습니다.',
+    "loop-lbl": '다음 intent.md 작성',
+    "loopnote": '6단계의 운영 장애는 새 <b>intent.md</b>를 작성합니다. 사람은 일을 분류하고 검토할 뿐, 직접 시작하지 않습니다.',
+    "why-h": '승인 게이트가 얻어 주는 것',
+    "why-lede": '이 키트는 일부러 작게 유지합니다. 추가되는 모든 것은 당신의 결정과 에이전트의 다음 행동 사이에 놓입니다.',
+    "l1-t": '의도 심문',
+    "l1-d": '1단계는 묻기 전에 먼저 탐색하고, <code>intent.md</code>의 모든 주장에 근거가 있으면 <code>[verified]</code>, 근거가 없으면 그 이유와 함께 <code>[assumed]</code>로 표시합니다. 사용자도 틀릴 수 있습니다. 가장 저렴하게 확인할 수 있는 단계가 바로 여기입니다.',
+    "l2-t": '변조 감지 게이트',
+    "l2-d": '<code>approve.sh</code>는 산출물의 sha256을 기록합니다. 승인 뒤에 파일을 조용히 고치면, 다음 <code>check-gate.sh</code>가 스스로 <code>GATE CLOSED</code>를 출력합니다.',
+    "l3-t": '위임도 기록에 남음',
+    "l3-d": '에이전트가 승인을 실행할 수 있는 때는 채팅에서 당신이 명시적으로 지시했을 때뿐입니다. 기록에는 <code>mode: delegated-chat</code>이 남으므로, 승인이 조용히 이루어지는 일은 없습니다.',
+    "l4-t": '신선한 컨텍스트 검토',
+    "l4-d": '검증자, 적대자, 리서처가 각자 이 작업을 만들지 않은 새 컨텍스트에서 실행되어 작업을 마주합니다(<code>report only, fix nothing</code>). 저자의 낙관에 기대어 대충 통과하는 일은 없습니다.',
+    "l5-t": 'AS-IS → TO-BE 명세',
+    "l5-d": '명세는 오늘 실제로 일어나는 일(file:line 근거)과 변경 후에 일어날 일을 나란히 적습니다. 두 칼럼의 차이가 <em>곧</em> 변경입니다.',
+    "l6-t": '한도를 지키는 교훈 메모리',
+    "l6-d": '실수는 ≤50줄짜리 <code>INDEX.md</code>에 한 번 기록된 뒤, 그 실수를 막는 스킬로 승격됩니다. 인덱스 하나만 읽으면 같은 교훈을 반복하지 않습니다.',
+    "l7-t": '규칙이 된 평문 원칙',
+    "l7-d": '규칙 8: 사람에게 보내는 모든 메시지는 맥락으로 시작하고, 짧은 능동문을 유지하며, 마지막은 당신이 내려야 할 단 하나의 결정입니다.',
+    "inst-h": '명령 세 줄, 그다음은 하네스에 맡김',
+    "inst-lede": '설치 프로그램도 데몬도 없습니다. 키트 디렉터리는 프레임워크 전용으로 남고, 프로젝트에는 코드와 함께 버전 관리되는 <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code>가 생깁니다.',
+    "st1-n": '머신당 한 번. 설치는 이것이 전부입니다.',
+    "st2-n": '<code style="font-family:var(--mono);font-size:.9em">.sdlc/</code>를 생성합니다(work, approvals, memory, config). 이어서 <code style="font-family:var(--mono);font-size:.9em">.sdlc/config.md</code>에 실제 빌드·테스트·린트 명령을 채워 넣으세요.',
+    "st3-n": '프로젝트의 에이전트 파일에 포인터 한 줄이면 끝입니다. 아래 표에서 하네스를 고르세요.',
+    "how-cap": '하네스를 라우팅 계약에 연결하기',
+    "how-h1": '하네스',
+    "how-h2": '방법',
+    "r-pi": '<code>ln -s ~/sdlc-kit/AGENTS.md .sdlc/SDLC.md</code>로 연결한 뒤 pi에게 이 파일의 SDLC를 실행하라고 알려 주거나, 프로젝트 <code>AGENTS.md</code>에 포인터 한 줄을 추가합니다.',
+    "r-cc": '프로젝트 <code>CLAUDE.md</code>에 다음을 추가합니다: <code>For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.</code>',
+    "r-cx": '프로젝트 <code>AGENTS.md</code>에 같은 한 줄을 추가합니다.',
+    "r-gm": '<code>GEMINI.md</code>에 같은 한 줄을 추가합니다.',
+    "r-else": '세션에 <code>AGENTS.md</code>를 붙여 넣으세요. 계약은 파일 + 스크립트이며 하네스 기능이 아닙니다.',
+    "lim-h": '정직한 한계: 변조 감지이지 변조 방지가 아님',
+    "lim-p": '승인 기록은 승인 이후의 편집과 실수를 잡아 냅니다. sha256 불일치는 기계적으로 드러나기 때문입니다. 기록을 위조하는 악의적인 에이전트는 별개의 위협이고, 그 선은 에이전트 규칙과 <code>.sdlc/approvals/</code>의 git 히스토리가 지킵니다. 승인 기록은 코드와 함께 커밋되며, 그 히스토리가 실제 감사 추적입니다.',
+    "foot-p": 'sdlc-kit: 평문 파일 + 셸. 훅 없음, 런타임 없음, 종속성 없음.',
+    "foot-gh": 'GitHub 저장소',
+    "foot-pb": 'Anthropic의 플레이북',
+    "foot-start": '시작하기'
+  };
+  var KO_ARIA = {
+    "hero-aria": 'sdlc-kit 소개',
+    "term-aria": '터미널 화면: intent를 승인하면 게이트가 열리고, 승인 뒤에 조용히 파일을 고치면 닫힙니다.',
+    "flow-aria": '사람 승인 게이트가 있는 여섯 단계 루프',
+    "foot-aria": '푸터'
+  };
+  var enText = new WeakMap();
+  var enAria = new WeakMap();
+  var btn = document.getElementById("lang-toggle");
+
+  function apply(lang) {
+    var ko = lang === "ko";
+    document.documentElement.lang = lang;
+    var i, el, v, list = document.querySelectorAll("[data-i18n]");
+    for (i = 0; i < list.length; i++) {
+      el = list[i];
+      if (ko) {
+        if (!enText.has(el)) enText.set(el, el.innerHTML);
+        v = KO[el.getAttribute("data-i18n")];
+        if (typeof v === "string") el.innerHTML = v;
+      } else if (enText.has(el)) {
+        el.innerHTML = enText.get(el);
+      }
+    }
+    list = document.querySelectorAll("[data-i18n-aria]");
+    for (i = 0; i < list.length; i++) {
+      el = list[i];
+      if (ko) {
+        if (!enAria.has(el)) enAria.set(el, el.getAttribute("aria-label"));
+        v = KO_ARIA[el.getAttribute("data-i18n-aria")];
+        if (typeof v === "string") el.setAttribute("aria-label", v);
+      } else if (enAria.has(el)) {
+        el.setAttribute("aria-label", enAria.get(el));
+      }
+    }
+    if (btn) {
+      btn.textContent = ko ? "English" : "한국어";
+      btn.setAttribute("aria-pressed", ko ? "true" : "false");
+    }
+  }
+
+  var saved = null;
+  try { saved = localStorage.getItem(KEY); } catch (e) {}
+  var start = (saved === "ko" || saved === "en") ? saved
+    : ((navigator.language || "en").toLowerCase().indexOf("ko") === 0 ? "ko" : "en");
+  apply(start);
+
+  if (btn) btn.addEventListener("click", function () {
+    var next = document.documentElement.lang === "ko" ? "en" : "ko";
+    try { localStorage.setItem(KEY, next); } catch (e) {}
+    apply(next);
+  });
+})();
+</script>
 </body>
 </html>

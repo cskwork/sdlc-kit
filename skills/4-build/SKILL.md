@@ -1,6 +1,6 @@
 ---
 name: sdlc-build
-description: "Stage 4 — execute the plan with continuous verification, fresh-context verifier, triaged fix loop. Triggers: plan gate approved."
+description: "Plan execution with fresh-context verification and triaged fix loop. Triggers: plan gate approved."
 ---
 
 # Stage 4: Build
