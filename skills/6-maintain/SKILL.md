@@ -1,6 +1,6 @@
 ---
 name: sdlc-maintain
-description: Stage 6 — incident to diagnosed intent.md plus lesson; the loop feeds itself. Triggers: bug report, incident, alert, ticket.
+description: "Stage 6 — incident to diagnosed intent.md plus lesson; the loop feeds itself. Triggers: bug report, incident, alert, ticket."
 ---
 
 # Stage 6: Maintain — closing the loop

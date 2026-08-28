@@ -1,6 +1,6 @@
 ---
 name: sdlc-ship
-description: Stage 5 — adversarial code review, evidence.md, ship gate, commit discipline. Triggers: build green and verified.
+description: "Stage 5 — adversarial code review, evidence.md, ship gate, commit discipline. Triggers: build green and verified."
 ---
 
 # Stage 5: Ship
