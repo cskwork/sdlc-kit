@@ -49,4 +49,35 @@ grep -q '^mode: delegated-chat' .sdlc/approvals/feat-a.intent.approval || { echo
 grep -q '^mode: delegated-chat' .sdlc/approvals/feat-a.spec.approval || { echo "FAIL: delegated mode not recorded for spec"; exit 1; }
 echo "ok: delegated approval recorded at any stage"
 
+# 8. every SKILL.md frontmatter parses as YAML (guards the 'Triggers:' colon trap)
+if command -v python3 >/dev/null 2>&1; then
+  python3 - "$kit" <<'PYEOF'
+import sys, glob, os
+failed = []
+for p in glob.glob(os.path.join(sys.argv[1], '**/SKILL.md'), recursive=True):
+    text = open(p).read()
+    if not text.startswith('---'):
+        failed.append(f'{p}: no frontmatter'); continue
+    fm = text.split('---')[1]
+    try:
+        import yaml
+        d = yaml.safe_load(fm)
+        assert isinstance(d, dict) and 'name' in d and 'description' in d
+    except ImportError:
+        for line in fm.strip().split('\n'):
+            if line and not line.startswith((' ', '#')) and ': ' in line:
+                v = line.split(': ', 1)[1]
+                if ': ' in v and not v.startswith(('"', "'", '|', '>')):
+                    failed.append(f'{p}: unquoted colon in value: {line[:60]}')
+    except Exception as e:
+        failed.append(f'{p}: {e}')
+if failed:
+    print('\n'.join(failed)); sys.exit(1)
+PYEOF
+  [ $? -eq 0 ] || { echo "FAIL: SKILL.md frontmatter invalid (see above)"; exit 1; }
+  echo "ok: all SKILL.md frontmatter valid"
+else
+  echo "skip: python3 absent, frontmatter check skipped"
+fi
+
 echo "SELFTEST PASS"

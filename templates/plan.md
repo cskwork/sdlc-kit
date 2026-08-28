@@ -21,5 +21,3 @@
 - Saved to: .sdlc/work/<slug>/baseline.txt
 - U1 → <how each untouched item is re-checked>
 
-## Deviations
-<filled during build — what differed from plan and why>

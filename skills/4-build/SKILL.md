@@ -20,7 +20,9 @@ implementation, not a QA gate at the end.
 ## Execute
 
 - Follow plan.md's order. Reality differs from plan? Small deviation: note it
-  in plan.md's **Deviations** section and continue. Structural deviation
+  in `.sdlc/work/<slug>/deviations.md` (create on first use) and continue —
+  the approved plan.md stays byte-identical, so its gate stays open.
+  Structural deviation
   (different files, different approach): STOP, tell the human, re-gate the plan.
 - A check that must fail the build must fail it synchronously (direct throw,
   sync IO, or top-level await). An unawaited promise is not a gate — it fails
@@ -50,8 +52,8 @@ work in your own context.
 Verifier or adversary findings enter the **fix loop**:
 
 1. Triage every finding into **accepted** (will fix now) or **declined**
-   (with the reason). Both lists are recorded — in plan.md's Deviations or
-   the evidence file. Declined is a record, not an omission.
+   (with the reason). Both lists are recorded — in deviations.md or the
+   evidence file. Declined is a record, not an omission.
 2. The fix touches ONLY the accepted findings — no scope beyond them. A
    finding that implies new scope goes to the human, not into the fix.
 3. Re-dispatch a NEW fresh-context checker with exactly two questions:
