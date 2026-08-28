@@ -42,11 +42,11 @@ out=$("$kit/gates/check-gate.sh" intent "$a" 2>&1) && { echo "FAIL: gate open on
 case "$out" in (*"GATE CLOSED"*) echo "ok: corrupt record closed with message";;
   (*) echo "FAIL: corrupt record closed SILENTLY"; exit 1;; esac
 
-# 7. --delegated: allowed for intent, recorded, refused elsewhere
+# 7. --delegated: works at any stage, always recorded
 "$kit/gates/approve.sh" intent "$a" --delegated >/dev/null
 grep -q '^mode: delegated-chat' .sdlc/approvals/feat-a.intent.approval || { echo "FAIL: delegated mode not recorded"; exit 1; }
-if "$kit/gates/approve.sh" spec "$a" --delegated >/dev/null 2>&1; then
-  echo "FAIL: --delegated accepted for non-intent stage"; exit 1; fi
-echo "ok: delegated approval intent-only and recorded"
+"$kit/gates/approve.sh" spec "$a" --delegated >/dev/null
+grep -q '^mode: delegated-chat' .sdlc/approvals/feat-a.spec.approval || { echo "FAIL: delegated mode not recorded for spec"; exit 1; }
+echo "ok: delegated approval recorded at any stage"
 
 echo "SELFTEST PASS"
