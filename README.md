@@ -166,13 +166,13 @@ The public sdlc-kit repository stays framework-only. Domain artifacts live and v
 
 ### Human decisions, agent keystrokes
 
-The human owns every gate decision. After explicit approval in chat, the agent may run:
+The human owns every gate decision — directly at the gate, or up front by setting `lazymode` in `.sdlc/config.md`. After explicit approval in chat, the agent may run:
 
 ```bash
 gates/approve.sh <stage> .sdlc/work/<slug>/<artifact> --delegated
 ```
 
-The approval record stays explicit. Silence and generic "continue" are not approval.
+The approval record stays explicit. Silence and generic "continue" are not approval; a lazymode waiver is approval the human configured in advance, and the record names it.
 
 ### Tamper-evident, not tamper-proof
 
