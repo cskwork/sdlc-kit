@@ -20,7 +20,7 @@ Read it completely on first contact with a project, then return here.
 | "where are we" / "sdlc status" | `gates/status.sh` (all features) + `gates/stats.sh` (timings). |
 | gate request answered "approve" in chat | `gates/approve.sh <stage> <artifact> --delegated` per AGENTS.md rule 3. |
 | incident / bug / alert on a shipped feature | Read `skills/6-maintain/SKILL.md`. |
-| "we're done / drop this / dead end" for a feature | `gates/close.sh <slug> <shipped\|abandoned\|dead-end\|handed-off> "reason"`. Dead-end/abandoned need a lesson; handed-off needs an external ticket/PR reference. |
+| "we're done / drop this / dead end" for a feature | `gates/close.sh <slug> <shipped\|abandoned\|dead-end\|handed-off> "reason"`. Dead-end/abandoned need a lesson (lazymode ≥3: the reason line suffices); handed-off needs an external ticket/PR reference. |
 | project has no `.sdlc/` yet | Run `<kit>/init.sh` from the project root; ask the human which lazymode level they want (0–4, default 1; AGENTS.md rule 3) and set it in `.sdlc/config.md`; fill the config commands; then stage 1. |
 
 ## Coexistence (full text in AGENTS.md)
@@ -33,7 +33,8 @@ Monorepos: one `.sdlc/` per shipping unit.
 
 ## Invariants (full text in AGENTS.md)
 
-Before stages 2–4, check the gate. Use fresh contexts for spec, plan, build,
-and verification. Read `memory/INDEX.md` and `memory/DOMAIN.md` at every stage
-start. Speak plainly to the human. Keep artifacts in the project. Store large
+Before stages 2–4, check the gate. Dispatch stage work and verification to
+subagents; the orchestrator keeps only artifacts, summaries, and gate
+decisions (AGENTS.md rule 5). Read `memory/INDEX.md` and `memory/DOMAIN.md` at
+every stage start. Speak plainly to the human. Keep artifacts in the project. Store large
 evidence in scratch/ and cite only the deciding lines.
