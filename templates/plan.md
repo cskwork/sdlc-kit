@@ -33,3 +33,10 @@ Policy: AGENTS.md rule 3.>
 - Commands: <exact commands run BEFORE changes>
 - Saved to: .sdlc/work/<slug>/baseline.txt
 - U1 → <how each untouched item is re-checked>
+
+## Adversarial review
+<objections + resolutions and the adversary's tier re-check; this records
+that the review behind an --agent-adversary approval actually occurred>
+- <objection>: <resolution>
+- Gate tier re-check: <adversary verdict on the trip-wires>
+- VERDICT: <NO BLOCKERS | n blockers, fixed>

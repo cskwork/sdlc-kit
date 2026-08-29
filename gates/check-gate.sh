@@ -26,4 +26,20 @@ if [ "$want" != "$have" ]; then
   echo "A human must re-review and re-run: gates/approve.sh $stage $artifact"
   exit 1
 fi
+
+# upstream chain: the approval also bound the upstream bytes it was derived from
+up_art=$(awk '/^upstream: /{sub(/^upstream: /,""); print; exit}' "$rec")
+up_want=$(awk '/^upstream_sha256: /{print $2; exit}' "$rec")
+if [ -n "$up_want" ]; then
+  [ -f "$up_art" ] || { echo "GATE CLOSED: upstream artifact missing: $up_art"; exit 1; }
+  up_have=$(sha "$up_art")
+  if [ "$up_want" != "$up_have" ]; then
+    echo "GATE CLOSED: upstream $up_art changed AFTER '$stage' was approved."
+    echo "  bound:   $up_want"
+    echo "  current: $up_have"
+    echo "The approved $stage was derived from different upstream bytes."
+    echo "A human must re-review and re-run: gates/approve.sh $stage $artifact"
+    exit 1
+  fi
+fi
 echo "GATE OPEN: $stage ($(grep '^approved_by: ' "$rec" | awk '{print $2}') @ $(grep '^approved_at: ' "$rec" | awk '{print $2}'))"

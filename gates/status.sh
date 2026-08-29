@@ -4,6 +4,20 @@
 set -euo pipefail
 [ -d .sdlc ] || { echo "FAIL: no .sdlc/ here. Run init.sh first, from the project root."; exit 1; }
 
+# warn when the kit moved on since this project was seeded (see init.sh)
+kitdir="$(cd "$(dirname "$0")/.." && pwd)"
+seeded=$(awk '/^kit_version: /{print $2; exit}' .sdlc/config.md 2>/dev/null || true)
+if [ -n "$seeded" ]; then
+  curver=""
+  if [ "$(git -C "$kitdir" rev-parse --show-toplevel 2>/dev/null)" = "$kitdir" ]; then
+    curver=$(git -C "$kitdir" describe --tags --always 2>/dev/null || true)
+  fi
+  [ -n "$curver" ] || curver=$(cat "$kitdir/VERSION" 2>/dev/null || true)
+  if [ -n "$curver" ] && [ "$curver" != "$seeded" ]; then
+    echo "note: kit is $curver; this project was seeded with $seeded — gates may behave differently mid-feature"
+  fi
+fi
+
 sha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1"; else sha256sum "$1"; fi | awk '{print $1}'; }
 
 # stage order and the artifact each gate locks

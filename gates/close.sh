@@ -43,6 +43,7 @@ fi
   echo "closed_by: $(whoami)"
   echo "closed_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   [ -n "$delegated" ] && echo "mode: delegated-chat (agent-run on explicit human instruction)" || true
+  [ -n "$delegated" ] && echo "runner: agent" || true
 } > "$dir/CLOSED"
 echo "CLOSED: $slug ($state) — $reason"
 echo "Reminder: harvest durable facts into .sdlc/memory/DOMAIN.md, then commit"
