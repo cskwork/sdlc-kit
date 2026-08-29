@@ -19,18 +19,85 @@ PR, or run a pre-approved runbook. A wrong diagnosis may produce a wrong documen
 change production. Handle rollback through the plan gate or the project's
 rehearsed rollback runbook. Never revert production directly from this stage.
 
+## Intake (before any research or hypothesis)
+
+Ask the reporter these five questions in one message. Skip any already
+answered. Each answer kills hypothesis classes for free; a researcher
+fan-out dispatched before these answers wastes most of its budget.
+
+1. Which exact control did you use? (button label / menu item / gesture)
+2. What did you see immediately after? (nothing at all, a popup, an error,
+   a partial change) — "nothing at all" and "something wrong appeared" are
+   different bug classes.
+3. Which environment and when? (prod/stg/dev, URL, approximate time — this
+   picks the deploy ref and the log window)
+4. What account/role? (permissions often hide or disable the control)
+5. Do you have a console log, network capture, or screenshot? If not, can
+   you reproduce once with DevTools open?
+
+Record the answers in `intent.md` under Evidence. Track question 5
+explicitly (see Evidence tracking below).
+
 ## Diagnose
 
-0. Before forming a hypothesis or offering options, run fresh-context history
+0. **Check the deployed ref first.** Run `tools/refcheck.sh
+   origin/<deploy-branch> <suspected paths>` from the repo root. On DRIFT,
+   read every file via `git show <ref>:<path>` and name the ref for each
+   fact in every report. A diagnosis of the working tree may describe code
+   nobody is running.
+1. Run the cheap probes in `probes.md` (same directory) that match the
+   symptom BEFORE dispatching researcher fan-out. Probes cost seconds and
+   set direction; fan-out is for breadth the probes cannot cover.
+2. Before forming a hypothesis or offering options, run fresh-context history
    and feasibility research under skill 1. Check whether this failure was fixed
    or reverted before, why, and whether it can be reproduced here.
-1. Reproduce the issue first. If it cannot be reproduced, say so and record
+3. Reproduce the issue first. If it cannot be reproduced, say so and record
    what is known. Do not fix an issue you cannot reproduce.
-2. Trace the cause. Read `.sdlc/memory/INDEX.md` and
+4. Trace the cause. Read `.sdlc/memory/INDEX.md` and
    `.sdlc/memory/DOMAIN.md`, then open lesson files whose tags match the task.
    Check whether this failure mode has occurred before. If a past lesson matches, cite it in the diagnosis.
-3. Check the feature's `evidence.md`: was this covered by proof, or was it a
+5. Separate the claim before hunting: "it does not react" is a state/handler
+   problem; "it looks wrong/disabled" is a RENDERING problem until proven
+   otherwise. They have different checklists.
+6. **Class sweep.** When a found defect is an instance of a pattern (missing
+   filter, guard, timeout, lock), grep the same file/module for the whole
+   class and report a count table. Before changing any shared symbol,
+   produce the call-site × guard table. One instance is a bug; the table is
+   the scope, and it decides fix ordering.
+7. Check the feature's `evidence.md`: was this covered by proof, or was it a
    verification gap? A gap is itself a lesson (`promote: skills/5-ship`).
+
+## Evidence tracking
+
+Reproduction evidence requested from a human tends to evaporate in chat.
+Make its state explicit in `intent.md`:
+
+    - reproduction evidence: requested 2026-08-29 (console+network capture)
+      → update to: received <date> | waived-by-human <date, why>
+
+A diagnosis that ships while evidence is `requested` must say so in its
+report and in any ticket it produces. Do not silently drop the request.
+If `.sdlc/config.md` has empty `test:`/`lint:` commands, record one line of
+verification debt in the artifact: what could not be run, and what manual
+check replaced it.
+
+## Adversarial review of the diagnosis (before the fix plan is approved)
+
+A confident diagnosis built without reproduction NEEDS hostile review.
+Dispatch fresh-context adversaries (rule 5 of AGENTS.md) with these four
+standing assignments — each has caught real errors:
+
+1. **Recount.** Redo every enumeration independently (counts of queries,
+   call sites, guards). Watch for aliases and pattern variants the first
+   pass missed.
+2. **Propagation proof.** For each claimed error mechanism, prove the error
+   can actually REACH the code the fix would touch. A layer that swallows
+   its own errors refutes the fix above it.
+3. **Zero-risk attack.** Attack every "zero risk", "never happens",
+   "always" phrase. Enumerate the states where the impossible thing is
+   normal today.
+4. **Rival hypothesis.** Propose at least one alternative that fits the
+   same evidence, and name the single observation that would distinguish it.
 
 ## Route by size
 

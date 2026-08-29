@@ -8,12 +8,24 @@ that touches claims status"), plus the repo root.
 
 Do:
 
+0. If the question concerns deployed/production behavior, run
+   `tools/refcheck.sh <deploy-ref> <paths>` (kit-relative) first. On DRIFT,
+   read files via `git show <ref>:<path>` and name the ref next to every
+   file:line citation in your report.
 1. Map the area: entry points, key files, data shapes (schemas/types/tables),
    callers and dependencies, side effects (IO, network, global state).
 2. Note important quirks that could affect the change: workarounds, TODOs,
    suspicious duplication, version constraints, and feature flags.
 3. Verify claims you were given ("the bug is in module Y", "the API does X"):
    confirm or refute with file:line evidence.
+4. Class sweep: if you find a defect that is an instance of a pattern
+   (missing filter/guard/timeout/lock), grep the same file or module for the
+   whole class and report a count table, not just the one instance.
+5. Shared-symbol audit: before reporting that a shared query/function should
+   change, list every call site and whether each guards the result
+   (null/empty check). The call-site × guard table goes in your report.
+6. Gate check: when verifying a constant or flag ("logging is on"), read the
+   condition AROUND it. A true constant inside a dead branch is false.
 
 Report format (target: 60 lines or fewer):
 

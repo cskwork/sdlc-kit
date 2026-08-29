@@ -70,7 +70,7 @@ When a shipped change fails, Maintain diagnoses it and writes the next `intent.m
 | Approval is a chat message that disappears | sha256 approval records bind the decision to the exact artifact bytes |
 | Failed attempt becomes forgotten context | Lessons go to a bounded index; durable facts go to `DOMAIN.md` |
 | One generic worker does everything | Roles map onto local QA, reviewer, browser, API, or DB specialists when available |
-| "Done" is ambiguous | Every run closes as `shipped`, `abandoned`, or `dead-end` |
+| "Done" is ambiguous | Every run closes as `shipped`, `abandoned`, `dead-end`, or `handed-off` |
 
 ## Quick start
 
@@ -150,7 +150,7 @@ Per feature, inside the **target project**:
     ├── deviations.md                 # build-time differences; plan stays locked
     ├── baseline.txt                  # brownfield behavior before the change
     ├── evidence.md                   # commands · outputs · observed behavior
-    └── CLOSED                        # shipped · abandoned · dead-end
+    └── CLOSED                        # shipped · abandoned · dead-end · handed-off
 ```
 
 The public sdlc-kit repository stays framework-only. Domain artifacts live and version with the project they describe.
@@ -180,10 +180,23 @@ The artifact author does not verify the work in the same context. Independent wo
 ### Failed runs leave knowledge
 
 ```bash
-gates/close.sh <slug> <shipped|abandoned|dead-end> "reason"
+gates/close.sh <slug> <shipped|abandoned|dead-end|handed-off> "reason"
 ```
 
-An abandoned or dead-end run cannot close until a lesson exists. It records what was tried, why it failed, and what would unblock it.
+An abandoned or dead-end run cannot close until a lesson exists. It records what was tried, why it failed, and what would unblock it. A handed-off close must name the external ticket or PR, so the audit trail continues outside the kit.
+
+### Incident diagnosis starts with cheap probes
+
+Stage 6 does not begin with a broad agent fan-out. It first checks the deployed ref, asks which control failed, tracks requested reproduction evidence, and runs the short probes in `skills/6-maintain/probes.md`.
+
+The probes catch four common diagnosis mistakes before they reach a fix plan:
+
+- reading a stale checkout instead of the deployed branch;
+- changing one shared query without auditing every caller;
+- adding a `try/catch` where the lower layer already swallows the error;
+- calling a change "zero risk" without checking normal missing-data states.
+
+When the incident cannot be reproduced, fresh-context adversaries recount the scope, prove the claimed error propagation, attack every "never" claim, and propose a rival cause. Outstanding console, network, or screenshot evidence stays visible in `status.sh` until it is received or the human waives it.
 
 ## Cockpit
 

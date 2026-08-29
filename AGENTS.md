@@ -22,11 +22,13 @@ stage 6 creates a new `intent.md` and starts the loop again.
 Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>/spec.md`.
 
 **Every feature ends in a terminal state.** Run `gates/close.sh <slug>
-<shipped|abandoned|dead-end> "reason"` after the human decides. Use
+<shipped|abandoned|dead-end|handed-off> "reason"` after the human decides. Use
 `--delegated` under rule 3. An abandoned or dead-end close requires a lesson
-that records what was tried, why it failed, and what would unblock it. Add
-durable facts to DOMAIN.md when closing. `status.sh` shows each closed feature
-on one line and proposes no next action.
+that records what was tried, why it failed, and what would unblock it. A
+handed-off close requires the external ticket/PR key or URL in the reason, so
+the audit trail continues outside this loop. Add durable facts to DOMAIN.md
+when closing. `status.sh` shows each closed feature on one line and proposes
+no next action.
 
 ## Hard rules (every stage, every harness)
 
