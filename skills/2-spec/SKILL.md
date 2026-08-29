@@ -64,6 +64,10 @@ data shapes, missing edge cases, scope creep, and untestable requirements.
 
 ## Gate
 
+At lazymode ≥2 (AGENTS.md rule 3): after the adversary pass, run
+`<kit>/gates/approve.sh spec .sdlc/work/<slug>/spec.md --lazy`, post the
+Human summary and Flagged concerns as FYI, and continue to plan. Otherwise:
+
 > Review `.sdlc/work/<slug>/spec.md`, especially **Flagged concerns**.
 > Then: `<kit>/gates/approve.sh spec .sdlc/work/<slug>/spec.md`
 

@@ -173,4 +173,27 @@ out=$("$kit/gates/close.sh" feat-e dead-end "test promote" 2>&1)
 case "$out" in (*"PROMOTE:"*async*) echo "ok: repeated lesson tag triggers promotion reminder";;
   (*) echo "FAIL: no promotion reminder for repeated tag"; exit 1;; esac
 
+# 17. --lazy: refused with no lazymode / below the level, accepted at the level, recorded, shown
+mkdir -p .sdlc/work/feat-f
+fi2=.sdlc/work/feat-f/intent.md; fs=.sdlc/work/feat-f/spec.md; fp=.sdlc/work/feat-f/plan.md
+echo "goal" > "$fi2"; echo "spec" > "$fs"; echo "plan" > "$fp"
+rm -f .sdlc/config.md
+if "$kit/gates/approve.sh" plan "$fp" --lazy >/dev/null 2>&1; then
+  echo "FAIL: lazy approval accepted without lazymode in config"; exit 1; fi
+printf 'lazymode: 1\n' > .sdlc/config.md
+if "$kit/gates/approve.sh" spec "$fs" --lazy >/dev/null 2>&1; then
+  echo "FAIL: lazy spec approval accepted at lazymode 1"; exit 1; fi
+"$kit/gates/approve.sh" plan "$fp" --lazy >/dev/null
+grep -q '^mode: lazy' .sdlc/approvals/feat-f.plan.approval || { echo "FAIL: lazy mode not recorded"; exit 1; }
+grep -q '^runner: agent' .sdlc/approvals/feat-f.plan.approval || { echo "FAIL: agent runner not recorded for lazy"; exit 1; }
+printf 'lazymode: 4\n' > .sdlc/config.md
+"$kit/gates/approve.sh" intent "$fi2" --lazy >/dev/null
+"$kit/gates/approve.sh" spec "$fs" --lazy >/dev/null
+echo "evidence" > .sdlc/work/feat-f/evidence.md   # ship PENDING so status must hint --lazy
+out=$("$kit/gates/status.sh" feat-f) || { echo "FAIL: status.sh crashed with lazymode set"; exit 1; }
+case "$out" in (*"lazymode: 4"*) ;; (*) echo "FAIL: lazymode not shown in status"; exit 1;; esac
+case "$out" in (*"· lazy"*) ;; (*) echo "FAIL: lazy approval mode not shown in status"; exit 1;; esac
+case "$out" in (*"--lazy"*) ;; (*) echo "FAIL: pending ship gate should hint --lazy at lazymode 4"; exit 1;; esac
+echo "ok: lazy approval enforces the lazymode level, is recorded, and shows in status"
+
 echo "SELFTEST PASS"
