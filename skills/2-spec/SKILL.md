@@ -63,7 +63,7 @@ data shapes, missing edge cases, scope creep, and untestable requirements.
   **Adversarial review** section (proof for the human that review happened).
 - If it finds an intent contradiction you cannot resolve from the artifacts:
   STOP, return the question to the user. Do not guess.
-- Repeat until the adversary has no blocking objections (max 3 rounds; then
+- Repeat until the adversary has no blocking objections (max 2 rounds; then
   escalate remaining objections to the human as flagged concerns).
 
 ## Gate
