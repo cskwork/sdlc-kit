@@ -51,6 +51,10 @@ Fill `templates/spec.md`. Rules:
 
 ## Adversarial verification (automated, before the human)
 
+Lazy shortcut: at lazymode ≥2 (AGENTS.md rule 3), run `tools/tripwire.sh`
+over the draft spec.md first — a clean scan skips this review; any hit runs
+it in full.
+
 Dispatch a fresh-context adversary (`roles/adversary.md`) with ONLY: intent.md,
 draft spec.md, and researcher report if any. It checks intent mismatch, wrong
 data shapes, missing edge cases, scope creep, and untestable requirements.
@@ -64,10 +68,11 @@ data shapes, missing edge cases, scope creep, and untestable requirements.
 
 ## Gate
 
-At lazymode ≥2 (AGENTS.md rule 3): after the adversary pass, run
+At lazymode ≥2 (AGENTS.md rule 3): after a clean tripwire scan or a passed
+adversary review (see the lazy shortcut above), run
 `<kit>/gates/approve.sh spec .sdlc/work/<slug>/spec.md --lazy`, post the
-Human summary and Flagged concerns as FYI, and continue to plan in a fresh
-context (AGENTS.md rule 5). Otherwise:
+Human summary and Flagged concerns as FYI, and dispatch plan
+(`skills/3-plan`) as a subagent task (AGENTS.md rule 5). Otherwise:
 
 > Review `.sdlc/work/<slug>/spec.md`, especially **Flagged concerns**.
 > Then: `<kit>/gates/approve.sh spec .sdlc/work/<slug>/spec.md`

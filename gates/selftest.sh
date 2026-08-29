@@ -201,4 +201,14 @@ printf 'lazymode: 4\r\n' > .sdlc/config.md  # CRLF-saved config must still parse
 "$kit/gates/approve.sh" ship .sdlc/work/feat-f/evidence.md --lazy >/dev/null || { echo "FAIL: CRLF lazymode config not parsed"; exit 1; }
 echo "ok: lazy approval enforces the lazymode level, range, and CRLF, is recorded, and shows in status"
 
+# 18. lazymode >=3 waives the lesson requirement on non-shipped closes; below 3 keeps it
+mkdir -p .sdlc/work/feat-g .sdlc/work/feat-h
+echo "goal" > .sdlc/work/feat-g/intent.md; echo "goal" > .sdlc/work/feat-h/intent.md
+printf 'lazymode: 3\n' > .sdlc/config.md
+"$kit/gates/close.sh" feat-g dead-end "spike did not pan out" >/dev/null || { echo "FAIL: lazymode 3 close still demands a lesson"; exit 1; }
+printf 'lazymode: 2\n' > .sdlc/config.md
+if "$kit/gates/close.sh" feat-h dead-end "no lesson here" >/dev/null 2>&1; then
+  echo "FAIL: lazymode 2 close allowed without a lesson"; exit 1; fi
+echo "ok: lazymode >=3 waives the lesson, below 3 still requires it"
+
 echo "SELFTEST PASS"

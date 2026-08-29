@@ -62,4 +62,4 @@ mkdir -p .sdlc/approvals
   [ -n "$mode" ] && echo "runner: agent" || true
 } > ".sdlc/approvals/${slug}.${stage}.approval"
 echo "APPROVED: $stage of $slug ($artifact)"
-echo "Commit .sdlc/approvals/${slug}.${stage}.approval with the artifact for the audit trail."
+echo "Recorded. Approvals are committed once, at ship (skills/5-ship commit discipline)."

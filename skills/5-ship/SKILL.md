@@ -10,11 +10,16 @@ reviews first. The human reviews findings about intent and risk.
 
 ## Before you start
 
-Fresh session. Read plan.md, spec.md, deviations.md (if present), and the
-diff (`git diff` against the base branch). Read `.sdlc/memory/INDEX.md` and
+Run as a dispatched subagent (AGENTS.md rule 5) — do not assemble evidence in
+the context that built the code. Read plan.md, spec.md, deviations.md (if
+present), and the diff (`git diff` against the base branch). Read `.sdlc/memory/INDEX.md` and
 `.sdlc/memory/DOMAIN.md`; open lesson files whose tags match the current task.
 
 ## Adversarial code review (fresh context)
+
+Lazy shortcut: at lazymode ≥3 (AGENTS.md rule 3), save the diff to
+`scratch/diff.txt` and run `tools/tripwire.sh` over it — a clean scan skips
+this review; any hit runs it in full.
 
 Dispatch an adversary (`roles/adversary.md`) with: spec.md, plan.md, the diff.
 It checks spec mismatch, missing untouched checks, security issues, tests that
@@ -54,7 +59,8 @@ the human (`close.sh` prints these).
 
 ## Gate
 
-At lazymode ≥3 (AGENTS.md rule 3): after the adversary pass, run
+At lazymode ≥3 (AGENTS.md rule 3): after a clean tripwire scan or a passed
+adversary review (see the lazy shortcut above), run
 `<kit>/gates/approve.sh ship .sdlc/work/<slug>/evidence.md --lazy`, post the
 evidence summary as FYI, and continue to commit discipline. Otherwise:
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# tripwire.sh <plan.md> — heuristic scan for plan-gate trip-wires (AGENTS.md rule 3).
-# Input to the adversary's tier re-check. It does not replace judgment: a clean
-# scan is not a clean verdict, and a hit is a question, not a conviction.
+# tripwire.sh <artifact> — heuristic scan for trip-wires (AGENTS.md rule 3).
+# Input to the adversary's tier re-check, and the pre-scan that decides whether
+# a lazymode-waived gate needs an adversary at all. It does not replace
+# judgment: a hit is a question, not a conviction.
 set -euo pipefail
 { [ $# -eq 1 ] && [ -f "$1" ]; } || { echo "usage: tripwire.sh <plan.md>"; exit 1; }
 plan="$1"

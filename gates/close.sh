@@ -27,12 +27,18 @@ if [ "$state" = "handed-off" ]; then
   fi
 fi
 
-# knowledge check: non-shipped closes must leave a lesson behind
+# knowledge check: non-shipped closes must leave a lesson behind.
+# lazymode >=3 (AGENTS.md rule 3) waives the separate lesson file — the
+# mandatory reason line in CLOSED is the record.
 if [ "$state" != "shipped" ] && [ "$state" != "handed-off" ]; then
-  if ! ls .sdlc/memory/lessons/*"$slug"* >/dev/null 2>&1; then
+  lm_raw=$(awk '/^lazymode: /{gsub(/\r/,""); print $2; exit}' .sdlc/config.md 2>/dev/null || true)
+  lm="$lm_raw"
+  case "$lm" in (''|*[!0-9]*) lm=0;; (*) [ "$lm" -le 4 ] || lm=0;; esac
+  if [ "$lm" -lt 3 ] && ! ls .sdlc/memory/lessons/*"$slug"* >/dev/null 2>&1; then
     echo "BLOCKED: closing as '$state' requires a lesson first."
     echo "  Write .sdlc/memory/lessons/$(date +%Y-%m-%d)-$slug.md (what was tried,"
     echo "  why it failed, what would unblock it) + one INDEX.md line, then re-run."
+    echo "  (lazymode >=3 in .sdlc/config.md waives this; the reason is the record)"
     exit 1
   fi
 fi
@@ -60,4 +66,4 @@ if [ -f .sdlc/memory/INDEX.md ]; then
 fi
 
 echo "Reminder: harvest durable facts into .sdlc/memory/DOMAIN.md, then commit"
-echo "$dir and .sdlc/memory/ for the audit trail."
+echo "$dir, .sdlc/approvals/, and .sdlc/memory/ for the audit trail."

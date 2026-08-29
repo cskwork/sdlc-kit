@@ -67,5 +67,6 @@ Verifier or adversary findings enter the **fix loop**:
 
 ## Exit
 
-There is no gate script here. Stage 5 evidence review is the build gate. Proceed
-to `skills/5-ship/SKILL.md` in a fresh session, passing only the slug.
+There is no gate script here. Stage 5 evidence review is the build gate.
+Dispatch ship (`skills/5-ship/SKILL.md`) as a subagent task, passing only the
+slug (AGENTS.md rule 5).

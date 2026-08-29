@@ -24,7 +24,8 @@ Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>
 **Every feature ends in a terminal state**: `gates/close.sh <slug>
 <shipped|abandoned|dead-end|handed-off> "reason"` after the human decides
 (`--delegated` under rule 3). Abandoned or dead-end requires a lesson first:
-what was tried, why it failed, what would unblock it. Handed-off requires the
+what was tried, why it failed, what would unblock it (lazymode ≥3 waives the
+separate lesson file — the close reason is the record). Handed-off requires the
 external ticket/PR key or URL in the reason. Add durable facts to DOMAIN.md
 when closing.
 
@@ -38,15 +39,16 @@ when closing.
    `gates/check-gate.sh <prev-stage> <artifact>` from the project root.
    Anything but a printed `GATE OPEN` — including errors and silence — is
    closed: STOP and tell the human exactly what to approve. At a gate
-   lazymode waives (rule 3), the remedy is the stage's adversary pass plus
-   `--lazy`, not a human ask.
+   lazymode waives (rule 3), the remedy is a clean tripwire scan — or the
+   stage's adversary pass on a hit — plus `--lazy`, not a human ask.
 3. **Intent, spec, and ship approvals are human decisions** (unless the
    project's lazymode waives one — see the table below). Run
    `gates/approve.sh <stage> <artifact> --delegated` only after the human
    explicitly approves that artifact in chat ("approve", "looks right", or
    equivalent). Never approve on silence, a general "continue", or your own
    judgment. Never write to `.sdlc/approvals/` directly.
-   Commit approvals to git; its history is the audit trail. Approvals do not
+   Approvals are committed once, at ship, with the code (skills/5-ship commit
+   discipline); git history is the audit trail. Approvals do not
    bind file bytes: editing an approved artifact does not close its gate, but
    a change that alters what the human approved deserves a fresh ask.
 
@@ -72,12 +74,13 @@ when closing.
    - 2 — intent and ship human; spec and plan auto
    - 3 — intent human; spec, plan, and ship auto
    - 4 — no human gates; the whole loop runs autonomously
-   lazymode waives the human decision, nothing else: the stage's adversary
-   review must still pass before `--lazy` (intent defines none — at level 4,
-   dispatch a fresh-context adversary over intent.md before approving),
-   approvals are still recorded, and every auto-approved gate
-   still posts its Human summary (and any trip-wire list) to the human as
-   FYI. `approve.sh --lazy` refuses a stage the configured level keeps
+   lazymode waives the human decision, nothing else. Before `--lazy`, scan
+   the artifact (ship: the diff, saved to scratch/) with `tools/tripwire.sh`:
+   a clean scan approves directly; any hit requires the stage's adversary
+   review to pass first (intent defines no adversary — a hit on intent.md
+   gets a fresh-context adversary). Approvals are still recorded, and every
+   auto-approved gate still posts its Human summary (and any trip-wire list)
+   to the human as FYI. `approve.sh --lazy` refuses a stage the configured level keeps
    human, and any `lazymode:` value outside 0-4 counts as 0.
 4. **Keep memory bounded.** At each stage start read `.sdlc/memory/INDEX.md`
    (lessons; 50 lines max) and `.sdlc/memory/DOMAIN.md` (terms, verified
@@ -90,6 +93,14 @@ when closing.
    Codex: spawn), else a new session given only the `roles/*.md` file and
    artifact paths — never in the context that authored the artifact. Give
    the verifier and adversary the strongest model available.
+
+   **Stages are dispatches too.** When the harness has subagents, run each
+   stage's work — spec draft, plan, build, evidence assembly — as a subagent
+   given the stage skill path and the artifact paths. The orchestrator (the
+   session talking to the human) routes, checks gates, and holds only
+   summaries and decisions; raw exploration and file contents stay in the
+   subagent and die with it. This is what keeps the loop cheap: one long
+   orchestrator context that read everything defeats the point.
 
    **Roles are contracts, not headcount.** Independent probes (git history,
    live UI, API, DB) may run in parallel under one role: fewest read-only
