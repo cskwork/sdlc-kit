@@ -27,7 +27,6 @@ A common agent workflow starts with implementation. The agent receives a prompt,
 - A fresh-context adversary reviews the spec before you approve it.
 - A routine plan auto-approves after a clean adversary review; migrations, deletions, API, security, and infra changes escalate to you.
 - A different verifier checks the implementation against the approved artifacts.
-- Editing an approved artifact closes its gate automatically.
 - Failed attempts leave lessons and domain knowledge for the next run.
 
 It is adapted from [Anthropic's AI-Native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook), but it does not depend on Claude Code. The implementation is plain Markdown plus shell scripts. Any harness that can read files and run commands can use it.
@@ -58,7 +57,7 @@ It is adapted from [Anthropic's AI-Native SDLC playbook](https://claude.com/blog
 
 Each stage produces one reviewable artifact. Intent, spec, and ship gates are human decisions; after you approve in chat, the agent may run the approval command, and the record marks that delegation with `mode: delegated-chat`. The plan gate is tiered: a fresh-context adversary reviews every plan, a routine plan auto-approves (`mode: agent-adversary`), and any trip-wire — migration, data deletion, public API, security paths, infra/config, beyond-spec scope — makes it a human gate.
 
-`lazymode` slides that human/auto line. `init.sh` seeds `lazymode: 1` in `.sdlc/config.md` and the agent asks you which level you want. Each level names the gates that stay human: **0** intent, spec, plan trip-wires, ship (everything as designed) · **1** (default) intent, spec, ship · **2** intent, ship · **3** intent · **4** none — the loop runs autonomously. A waived gate is auto-approved with `gates/approve.sh <stage> <artifact> --lazy` (recorded as `mode: lazy`), only after the stage's adversary review passes; approvals still record and chain hashes, and `approve.sh --lazy` refuses any gate the configured level keeps human.
+`lazymode` slides that human/auto line. `init.sh` seeds `lazymode: 1` in `.sdlc/config.md` and the agent asks you which level you want. Each level names the gates that stay human: **0** intent, spec, plan trip-wires, ship (everything as designed) · **1** (default) intent, spec, ship · **2** intent, ship · **3** intent · **4** none — the loop runs autonomously. A waived gate is auto-approved with `gates/approve.sh <stage> <artifact> --lazy` (recorded as `mode: lazy`), only after the stage's adversary review passes; approvals are still recorded, and `approve.sh --lazy` refuses any gate the configured level keeps human.
 
 When a shipped change fails, Maintain diagnoses it and writes the next `intent.md`.
 
@@ -70,7 +69,7 @@ When a shipped change fails, Maintain diagnoses it and writes the next `intent.m
 | Treats the user's diagnosis as truth | Marks claims `[verified: evidence]` or `[assumed: reason]` |
 | Keeps the plan inside one chat | Commits `intent.md`, `spec.md`, `plan.md`, and `evidence.md` with the code |
 | Author runs its own checks | A fresh-context verifier and adversary review the work without the author's context |
-| Approval is a chat message that disappears | sha256 approval records bind the decision to the exact artifact bytes |
+| Approval is a chat message that disappears | Approval records name the stage, artifact, time, and mode, and commit with the code |
 | Failed attempt becomes forgotten context | Lessons go to a bounded index; durable facts go to `DOMAIN.md` |
 | One generic worker does everything | Roles map onto local QA, reviewer, browser, API, or DB specialists when available |
 | "Done" is ambiguous | Every run closes as `shipped`, `abandoned`, `dead-end`, or `handed-off` |
@@ -120,17 +119,10 @@ agent  I checked the current API, UI flow, git history, and test harness.
 
 agent  intent.md is ready. Review the Human summary.
 you    approve
-agent  APPROVED: intent of claims-status (... @ a21d9c8f4b10…)
+agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
        mode: delegated-chat
 
        Stage 2 starts in fresh context.
-```
-
-If the approved file changes later:
-
-```text
-GATE CLOSED: intent.md was EDITED AFTER approval.
-A human must re-review and re-approve it.
 ```
 
 No hidden state. No vendor-specific hook required. The files are the protocol.
@@ -143,7 +135,7 @@ Per feature, inside the **target project**:
 .sdlc/
 ├── config.md                         # real build/test/lint/run commands
 ├── approvals/
-│   └── <slug>.<stage>.approval       # hash · who · when · delegated mode
+│   └── <slug>.<stage>.approval       # stage · when · mode
 ├── memory/
 │   ├── INDEX.md                      # ≤50 lines of lesson pointers
 │   ├── DOMAIN.md                     # terms · verified facts · constraints
@@ -158,7 +150,7 @@ Per feature, inside the **target project**:
     └── CLOSED                        # shipped · abandoned · dead-end · handed-off
 ```
 
-`init.sh` also adds one line to the project's `.gitignore` (scratch evidence stays uncommitted) and one to its `.gitattributes` (`.sdlc/** text eol=lf`), so approval hashes agree across macOS, Linux, and Windows checkouts of the same commit.
+`init.sh` also adds one line to the project's `.gitignore`: scratch evidence stays uncommitted, and stays on disk until ship's end-of-loop cleanup.
 
 The public sdlc-kit repository stays framework-only. Domain artifacts live and version with the project they describe.
 
@@ -174,13 +166,9 @@ gates/approve.sh <stage> .sdlc/work/<slug>/<artifact> --delegated
 
 The approval record stays explicit. Silence and generic "continue" are not approval; a lazymode waiver is approval the human configured in advance, and the record names it.
 
-### Tamper-evident, not tamper-proof
+### A record, not a lock
 
-`approve.sh` stores the artifact's sha256. `check-gate.sh` recomputes it before the next stage. A changed artifact closes the gate.
-
-Approvals also chain: spec binds the intent bytes it was derived from, plan binds spec, ship binds plan. Editing an approved upstream file closes every downstream gate until a human re-reviews.
-
-This detects accidental or unauthorized post-approval edits. It does not stop a malicious process from forging a file. Agent rules plus the git history of `.sdlc/approvals/` form the audit trail.
+`approve.sh` writes a plain marker: stage, artifact, time, and mode. `check-gate.sh` only checks that the marker and the artifact exist — editing an approved file does not close its gate. The honesty of the trail comes from agent rules plus the git history of `.sdlc/approvals/`, committed with the code.
 
 ### Fresh-context review
 
@@ -212,15 +200,15 @@ When the incident cannot be reproduced, fresh-context adversaries recount the sc
 ```bash
 gates/status.sh [slug]   # gate state + one next action
 gates/stats.sh           # time per stage + re-approval counts
-gates/selftest.sh        # gate, close, injection, corruption, chaining, status render, YAML integrity
+gates/selftest.sh        # gate, close, injection, lazymode, status render, YAML integrity
 ```
 
 Example:
 
 ```text
 == claims-status
-  intent   APPROVED (danny @ 2026-08-28T10:18:53Z · delegated)
-  spec     APPROVED (danny @ 2026-08-28T10:43:30Z · delegated)
+  intent   APPROVED (@ 2026-08-28T10:18:53Z · delegated)
+  spec     APPROVED (@ 2026-08-28T10:43:30Z · delegated)
   plan     PENDING approval
   ship     —  (no artifact)
   next  →  plan gate (tiered): gates/approve.sh plan ...
@@ -281,7 +269,7 @@ docs/index.html  bilingual EN/KO landing page
 ./gates/selftest.sh
 ```
 
-The selftest covers gate state, artifact edits after approval, stage-name injection, bare-path rejection, corrupt approval records, delegated approvals, lesson requirements for closing, double-close rejection, YAML frontmatter parsing, and LF line endings in every script.
+The selftest covers gate state, stage-name injection, bare-path rejection, delegated and lazy approvals, lesson requirements for closing, double-close rejection, YAML frontmatter parsing, and LF line endings in every script.
 
 ## What this is not
 

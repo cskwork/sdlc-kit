@@ -29,7 +29,7 @@ for dir in .sdlc/work/*/; do
 done
 
 echo
-echo "re-approvals per gate (>1 = gate rejected/tampered at least once), from git history:"
+echo "re-approvals per gate (>1 = gate rejected at least once), from git history:"
 if git rev-parse --git-dir >/dev/null 2>&1; then
   for rec in .sdlc/approvals/*.approval; do
     [ -f "$rec" ] || continue

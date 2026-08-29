@@ -27,12 +27,9 @@ $line
   echo "$line" >> "$f"
 }
 
-# bulk evidence (screenshots, probe logs) is read+quoted+deleted, never committed
+# bulk evidence (screenshots, probe logs) is read+quoted, kept until ship
+# cleanup, never committed
 ensure_line .gitignore '.sdlc/work/*/scratch/'
-
-# Approval records hash artifact bytes. Without this, a CRLF checkout on Windows
-# hashes differently from an LF checkout elsewhere and every gate reads TAMPERED.
-ensure_line .gitattributes '.sdlc/** text eol=lf'
 
 [ -f .sdlc/memory/INDEX.md ] || cat > .sdlc/memory/INDEX.md <<'EOF'
 # Lessons index — one line per lesson: [tags] summary → lessons/<file>

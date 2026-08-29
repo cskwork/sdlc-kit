@@ -34,8 +34,6 @@ if [ "$lazy" -gt 0 ]; then
   echo "lazymode: $lazy (human gates kept: $keep)"
 fi
 
-sha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1"; else sha256sum "$1"; fi | awk '{print $1}'; }
-
 # stage order and the artifact each gate locks
 stages="intent spec plan ship"
 artifact_for() { case "$1" in
@@ -84,21 +82,11 @@ for dir in .sdlc/work/*/; do
         fi
       fi
     else
-      want=$(grep '^sha256: ' "$rec" | awk '{print $2}' || true)
-      if [ -z "$want" ]; then
-        state="CORRUPT record"
-        [ -z "$next_action" ] && next_action="re-approve: gates/approve.sh $stage $art"
-      elif [ "$want" != "$(sha "$art")" ]; then
-        state="TAMPERED (edited after approval)"
-        [ -z "$next_action" ] && next_action="re-review + re-approve: gates/approve.sh $stage $art"
-      else
-        by=$(grep '^approved_by: ' "$rec" | awk '{print $2}')
-        at=$(grep '^approved_at: ' "$rec" | awk '{print $2}')
-        mode=$(grep -q '^mode: delegated' "$rec" && echo " · delegated" || true)
-        [ -z "$mode" ] && mode=$(grep -q '^mode: agent-adversary' "$rec" && echo " · agent-adversary" || true)
-        [ -z "$mode" ] && mode=$(grep -q '^mode: lazy' "$rec" && echo " · lazy" || true)
-        state="APPROVED ($by @ $at$mode)"
-      fi
+      at=$(grep '^approved_at: ' "$rec" | awk '{print $2}')
+      mode=$(grep -q '^mode: delegated' "$rec" && echo " · delegated" || true)
+      [ -z "$mode" ] && mode=$(grep -q '^mode: agent-adversary' "$rec" && echo " · agent-adversary" || true)
+      [ -z "$mode" ] && mode=$(grep -q '^mode: lazy' "$rec" && echo " · lazy" || true)
+      state="APPROVED (@ $at$mode)"
     fi
     printf "  %-8s %s\n" "$stage" "$state"
   done

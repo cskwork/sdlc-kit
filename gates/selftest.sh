@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# selftest.sh — proves the gate mechanism works: approve→open, tamper→closed.
+# selftest.sh — proves the gate mechanism works: approve→open, unapproved→closed.
 set -euo pipefail
 kit="$(cd "$(dirname "$0")/.." && pwd)"
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
@@ -18,11 +18,10 @@ echo "ok: gate closed before approval"
 "$kit/gates/check-gate.sh" intent "$a" >/dev/null
 echo "ok: gate open after approval"
 
-# 3. tamper → gate closed
-echo "sneaky edit" >> "$a"
-if "$kit/gates/check-gate.sh" intent "$a" >/dev/null 2>&1; then
-  echo "FAIL: gate open after tamper"; exit 1; fi
-echo "ok: tamper invalidates approval"
+# 3. edit after approval → gate STAYS open (approvals are markers, not hashes)
+echo "later edit" >> "$a"
+"$kit/gates/check-gate.sh" intent "$a" >/dev/null || { echo "FAIL: gate closed by a post-approval edit"; exit 1; }
+echo "ok: post-approval edit does not close the gate"
 
 # 4. stage name injection rejected
 if "$kit/gates/approve.sh" "../../etc/pwn" "$a" >/dev/null 2>&1; then
@@ -35,12 +34,12 @@ if "$kit/gates/approve.sh" intent bare.md >/dev/null 2>&1; then
   echo "FAIL: bare-path artifact accepted (slug '.')"; exit 1; fi
 echo "ok: bare-path artifact rejected"
 
-# 6. corrupt approval record → closed WITH a message (never silent)
-"$kit/gates/approve.sh" intent "$a" >/dev/null   # re-approve tampered file
-grep -v '^sha256: ' .sdlc/approvals/feat-a.intent.approval > t && mv t .sdlc/approvals/feat-a.intent.approval
-out=$("$kit/gates/check-gate.sh" intent "$a" 2>&1) && { echo "FAIL: gate open on corrupt record"; exit 1; }
-case "$out" in (*"GATE CLOSED"*) echo "ok: corrupt record closed with message";;
-  (*) echo "FAIL: corrupt record closed SILENTLY"; exit 1;; esac
+# 6. approved artifact missing → closed WITH a message (never silent)
+mv "$a" "$a.bak"
+out=$("$kit/gates/check-gate.sh" intent "$a" 2>&1) && { echo "FAIL: gate open on missing artifact"; exit 1; }
+case "$out" in (*"GATE CLOSED"*) echo "ok: missing artifact closed with message";;
+  (*) echo "FAIL: missing artifact closed SILENTLY"; exit 1;; esac
+mv "$a.bak" "$a"
 
 # 7. --delegated: works at any stage, always recorded (with the agent runner)
 "$kit/gates/approve.sh" intent "$a" --delegated >/dev/null
@@ -143,12 +142,11 @@ out=$("$kit/gates/status.sh") || { echo "FAIL: status.sh crashed on full run"; e
 case "$out" in (*"[CLOSED: dead-end]"*) ;; (*) echo "FAIL: closed feature not rendered"; exit 1;; esac
 echo "ok: status.sh renders empty, tiered, approved, and closed states"
 
-# 14. upstream chaining: editing intent after spec approval closes the spec gate
+# 14. no upstream chaining: editing intent after spec approval keeps the spec gate open
 "$kit/gates/check-gate.sh" spec .sdlc/work/feat-d/spec.md >/dev/null
 echo "tweak" >> .sdlc/work/feat-d/intent.md
-out=$("$kit/gates/check-gate.sh" spec .sdlc/work/feat-d/spec.md 2>&1) && { echo "FAIL: spec gate open though upstream intent changed"; exit 1; }
-case "$out" in (*"upstream"*) echo "ok: upstream edit closes the downstream gate";;
-  (*) echo "FAIL: gate closed without naming the upstream cause"; exit 1;; esac
+"$kit/gates/check-gate.sh" spec .sdlc/work/feat-d/spec.md >/dev/null || { echo "FAIL: spec gate closed by an upstream edit"; exit 1; }
+echo "ok: upstream edit does not close the downstream gate"
 
 # 15. tripwire.sh: flags risky plans, stays quiet on clean ones
 tw=.sdlc/work/feat-d/tw.md
