@@ -56,7 +56,9 @@ plan.md, and `.sdlc/memory/DOMAIN.md`. It checks that every requirement has a
 proof command, the file list and order are complete, risks are not
 understated, and the **Gate tier** verdict is correct. Fix findings; record
 each objection + resolution and the tier re-check in plan.md's
-**Adversarial review** section. If the code contradicts the spec,
+**Adversarial review** section. If there were blocking findings, re-run the
+adversary over the fixed plan (max 2 rounds; then escalate remaining
+objections to the human as flagged concerns). If the code contradicts the spec,
 STOP and show the conflict to the human. The spec gate may need to reopen.
 Do not change the plan to hide a wrong spec.
 
