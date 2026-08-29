@@ -29,22 +29,9 @@ not only at the end.
 - A check that must fail the build must fail it synchronously (direct throw,
   sync IO, or top-level await). An unawaited promise is not a gate. It depends
   on environment behavior and may finish too late.
-- **Browser-E2E authoring rules** (each earned by a recorded lesson):
-  - Settlement: waiting for a selector shared by two routes proves nothing.
-    Mark the old node (e.g. `data-e2e-stale`), then wait for the NEW render's
-    distinguishing proof — exact expected heading text plus focus set by the
-    router's completion path. No retries, no sleeps.
-  - Existing UI is not proof a replacement request settled. Wait for the NEW
-    request to complete and for its distinguishing DOM before asserting.
-  - No backticks inside Go raw strings. Embedded browser JavaScript uses
-    string concatenation.
-  - A Tab walk starts at the document origin only after focusing `body` with
-    a temporary `tabindex` then removing it; `activeElement.blur()` resets
-    nothing.
-  - Home-grown checkers (catalogue parsers, parity scripts) must fail closed:
-    accept the full source shape (quoted AND identifier keys, comments,
-    template literals), validate with a real parser, and prove the failure
-    path with a synthetic mismatch.
+- When a plan adds or changes browser E2E or a source-analysis checker, read
+  [`test-authoring.md`](test-authoring.md) before editing it and apply every
+  relevant rule.
 - After each step, run test + lint from `.sdlc/config.md`. A failing test is
   information about the code: fix the code and keep the test intact until it
   passes honestly (catch yourself reaching for the test file instead? record
