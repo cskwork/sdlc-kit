@@ -150,4 +150,27 @@ out=$("$kit/gates/check-gate.sh" spec .sdlc/work/feat-d/spec.md 2>&1) && { echo 
 case "$out" in (*"upstream"*) echo "ok: upstream edit closes the downstream gate";;
   (*) echo "FAIL: gate closed without naming the upstream cause"; exit 1;; esac
 
+# 15. tripwire.sh: flags risky plans, stays quiet on clean ones
+tw=.sdlc/work/feat-d/tw.md
+printf 'step 1: run ALTER TABLE users\nstep 2: edit Dockerfile\n' > "$tw"
+out=$("$kit/tools/tripwire.sh" "$tw")
+case "$out" in (*"TRIP-WIRE?"*) ;; (*) echo "FAIL: tripwire missed a migration"; exit 1;; esac
+printf 'step 1: rename a local variable\n' > "$tw"
+out=$("$kit/tools/tripwire.sh" "$tw")
+case "$out" in (*"no trip-wire candidates"*) ;; (*) echo "FAIL: tripwire false positive on a clean plan"; exit 1;; esac
+echo "ok: tripwire flags risk and stays quiet on clean plans"
+
+# 16. close.sh prints a promotion reminder for lesson tags repeating 3+ times
+mkdir -p .sdlc/work/feat-e
+echo "goal" > .sdlc/work/feat-e/intent.md
+echo "lesson" > .sdlc/memory/lessons/2020-01-02-feat-e.md
+cat >> .sdlc/memory/INDEX.md <<'EOF'
+- [async, gate] one → lessons/a.md
+- [async] two → lessons/b.md
+- [async, test] three → lessons/c.md
+EOF
+out=$("$kit/gates/close.sh" feat-e dead-end "test promote" 2>&1)
+case "$out" in (*"PROMOTE:"*async*) echo "ok: repeated lesson tag triggers promotion reminder";;
+  (*) echo "FAIL: no promotion reminder for repeated tag"; exit 1;; esac
+
 echo "SELFTEST PASS"

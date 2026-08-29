@@ -35,6 +35,8 @@ exploration stays out of the main context. Then fill `templates/plan.md`:
 - **Gate tier.** Check every trip-wire from AGENTS.md rule 3 (migration, data
   deletion, public API, security paths, infra/config, beyond-spec scope) and
   record the verdict in the template's **Gate tier** section, with reasons.
+  Run `<kit>/tools/tripwire.sh .sdlc/work/<slug>/plan.md` and include its
+  output in the adversary dispatch.
 - **Human summary.** Five short sentences or fewer at the top: what changes,
   the main risk, how it is proven. Write it last, place it first.
 

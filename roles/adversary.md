@@ -22,7 +22,8 @@ Attack, in order:
    list and work order are complete; risks reflect DOMAIN.md constraints; and
    the **Gate tier** verdict is correct — re-check every trip-wire yourself
    (migration, data deletion, public API, security paths, infra/config,
-   beyond-spec scope). An understated tier is a blocking finding.
+   beyond-spec scope). `tools/tripwire.sh` output, when provided, is evidence
+   to check, not a verdict. An understated tier is a blocking finding.
 7. **For diffs**: spec mismatch, security (injection, authz, secrets, unsafe
    deserialization), test theater (tests that cannot fail / assert nothing),
    silently changed behavior that spec says stays untouched.
