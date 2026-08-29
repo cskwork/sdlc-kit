@@ -6,7 +6,8 @@ description: "Gated SDLC loop with human approvals. Triggers: \"start SDLC\", \"
 # sdlc-kit router
 
 One loop, six stages, one artifact per stage, and a gate between stages:
-human at intent, spec, and ship; tiered at plan (AGENTS.md rule 3).
+human at intent, spec, and ship; tiered at plan; `lazymode:` in
+`.sdlc/config.md` can waive human gates (AGENTS.md rule 3).
 This file routes requests. `AGENTS.md` in this directory is the full contract.
 Read it completely on first contact with a project, then return here.
 
@@ -20,7 +21,7 @@ Read it completely on first contact with a project, then return here.
 | gate request answered "approve" in chat | `gates/approve.sh <stage> <artifact> --delegated` per AGENTS.md rule 3. |
 | incident / bug / alert on a shipped feature | Read `skills/6-maintain/SKILL.md`. |
 | "we're done / drop this / dead end" for a feature | `gates/close.sh <slug> <shipped\|abandoned\|dead-end\|handed-off> "reason"`. Dead-end/abandoned need a lesson; handed-off needs an external ticket/PR reference. |
-| project has no `.sdlc/` yet | Run `<kit>/init.sh` from the project root; fill `.sdlc/config.md` commands; then stage 1. |
+| project has no `.sdlc/` yet | Run `<kit>/init.sh` from the project root; ask the human which lazymode level they want (0–4, default 1; AGENTS.md rule 3) and set it in `.sdlc/config.md`; fill the config commands; then stage 1. |
 
 ## Coexistence (full text in AGENTS.md)
 

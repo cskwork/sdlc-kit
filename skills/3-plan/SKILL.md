@@ -60,7 +60,10 @@ Do not change the plan to hide a wrong spec.
 - **No trip-wires and no blockers**: run
   `<kit>/gates/approve.sh plan .sdlc/work/<slug>/plan.md --agent-adversary`,
   post the Human summary to the human as FYI, and continue to build.
-- **Any trip-wire**: this is a human gate.
+- **Any trip-wire**: this is a human gate — unless lazymode ≥1 (AGENTS.md
+  rule 3): then run
+  `<kit>/gates/approve.sh plan .sdlc/work/<slug>/plan.md --lazy`, post the
+  Human summary AND the trip-wire list as FYI, and continue to build.
 
   > Review `.sdlc/work/<slug>/plan.md`, then:
   > `<kit>/gates/approve.sh plan .sdlc/work/<slug>/plan.md`

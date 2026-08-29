@@ -54,6 +54,10 @@ the human (`close.sh` prints these).
 
 ## Gate
 
+At lazymode ≥3 (AGENTS.md rule 3): after the adversary pass, run
+`<kit>/gates/approve.sh ship .sdlc/work/<slug>/evidence.md --lazy`, post the
+evidence summary as FYI, and continue to commit discipline. Otherwise:
+
 > Review `.sdlc/work/<slug>/evidence.md`, then:
 > `<kit>/gates/approve.sh ship .sdlc/work/<slug>/evidence.md`
 
@@ -61,7 +65,9 @@ STOP after requesting approval.
 
 ## After approval: commit discipline
 
-The ship approval and the commit check are two different human checks.
+The ship approval and the commit check are two different human checks. At
+lazymode ≥3 the staged-set check is also autonomous: verify the staged list
+yourself against the rules below, post it as FYI, and commit.
 
 1. Delete `.sdlc/work/<slug>/scratch/` if present. Only artifacts ship.
 2. Stage named paths only: changed source files, `.sdlc/work/<slug>/`, changed

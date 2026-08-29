@@ -58,6 +58,8 @@ It is adapted from [Anthropic's AI-Native SDLC playbook](https://claude.com/blog
 
 Each stage produces one reviewable artifact. Intent, spec, and ship gates are human decisions; after you approve in chat, the agent may run the approval command, and the record marks that delegation with `mode: delegated-chat`. The plan gate is tiered: a fresh-context adversary reviews every plan, a routine plan auto-approves (`mode: agent-adversary`), and any trip-wire — migration, data deletion, public API, security paths, infra/config, beyond-spec scope — makes it a human gate.
 
+`lazymode` slides that human/auto line. `init.sh` seeds `lazymode: 1` in `.sdlc/config.md` and the agent asks you which level you want. Each level names the gates that stay human: **0** intent, spec, plan trip-wires, ship (everything as designed) · **1** (default) intent, spec, ship · **2** intent, ship · **3** intent · **4** none — the loop runs autonomously. A waived gate is auto-approved with `gates/approve.sh <stage> <artifact> --lazy` (recorded as `mode: lazy`), only after the stage's adversary review passes; approvals still record and chain hashes, and `approve.sh --lazy` refuses any gate the configured level keeps human.
+
 When a shipped change fails, Maintain diagnoses it and writes the next `intent.md`.
 
 ## Why it is different

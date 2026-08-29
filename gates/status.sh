@@ -18,6 +18,17 @@ if [ -n "$seeded" ]; then
   fi
 fi
 
+# lazymode (AGENTS.md rule 3): which human gates this project waives
+lazy=$(awk '/^lazymode: /{print $2; exit}' .sdlc/config.md 2>/dev/null || true)
+case "$lazy" in (''|*[!0-9]*) lazy=0;; esac
+lazy_min() { case "$1" in plan) echo 1;; spec) echo 2;; ship) echo 3;; intent) echo 4;; esac; }
+if [ "$lazy" -gt 0 ]; then
+  case "$lazy" in
+    1) keep="intent, spec, ship";; 2) keep="intent, ship";; 3) keep="intent";; *) keep="none";;
+  esac
+  echo "lazymode: $lazy (human gates kept: $keep)"
+fi
+
 sha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1"; else sha256sum "$1"; fi | awk '{print $1}'; }
 
 # stage order and the artifact each gate locks
@@ -57,7 +68,9 @@ for dir in .sdlc/work/*/; do
     elif [ ! -f "$rec" ]; then
       state="PENDING approval"
       if [ -z "$next_action" ]; then
-        if [ "$stage" = plan ]; then
+        if [ "$lazy" -ge "$(lazy_min "$stage")" ]; then
+          next_action="lazy gate (lazymode $lazy): gates/approve.sh $stage $art --lazy after a clean adversary review (AGENTS.md rule 3)"
+        elif [ "$stage" = plan ]; then
           next_action="plan gate (tiered): gates/approve.sh plan $art --agent-adversary after a clean adversary review, or human approval on any trip-wire (AGENTS.md rule 3)"
         else
           next_action="human gate: gates/approve.sh $stage $art"
@@ -76,6 +89,7 @@ for dir in .sdlc/work/*/; do
         at=$(grep '^approved_at: ' "$rec" | awk '{print $2}')
         mode=$(grep -q '^mode: delegated' "$rec" && echo " · delegated" || true)
         [ -z "$mode" ] && mode=$(grep -q '^mode: agent-adversary' "$rec" && echo " · agent-adversary" || true)
+        [ -z "$mode" ] && mode=$(grep -q '^mode: lazy' "$rec" && echo " · lazy" || true)
         state="APPROVED ($by @ $at$mode)"
       fi
     fi

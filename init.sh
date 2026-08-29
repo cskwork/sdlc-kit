@@ -78,6 +78,11 @@ fi
 [ -f .sdlc/config.md ] || cat > .sdlc/config.md <<EOF
 # SDLC config
 $kit_lines
+# lazymode 0-4 — which gates stay HUMAN (policy: AGENTS.md rule 3).
+# AGENTS: ask the human which level they want at init; 1 is the default.
+#   0: intent, spec, plan trip-wires, ship (everything as designed)
+#   1: intent, spec, ship    2: intent, ship    3: intent    4: none
+lazymode: 1
 # Real commands agents must use for proof (fill these in — brownfield: copy from CI/Makefile).
 # AGENTS: if a command below is empty when you need it, STOP and ask the human to fill it in.
 build:
@@ -88,5 +93,6 @@ EOF
 
 echo "Seeded .sdlc/ in $(pwd)"
 echo "Next: 1) fill .sdlc/config.md verification commands"
-echo "      2) point your harness at $kit/AGENTS.md (see README)"
-echo "      3) start a feature: agent reads $kit/skills/1-intent/SKILL.md"
+echo "      2) AGENT: ask the human which lazymode level to use (0-4; default 1 is already set in .sdlc/config.md)"
+echo "      3) point your harness at $kit/AGENTS.md (see README)"
+echo "      4) start a feature: agent reads $kit/skills/1-intent/SKILL.md"

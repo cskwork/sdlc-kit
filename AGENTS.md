@@ -38,7 +38,8 @@ when closing.
    `gates/check-gate.sh <prev-stage> <artifact>` from the project root.
    Anything but a printed `GATE OPEN` — including errors and silence — is
    closed: STOP and tell the human exactly what to approve.
-3. **Intent, spec, and ship approvals are human decisions.** Run
+3. **Intent, spec, and ship approvals are human decisions** (unless the
+   project's lazymode waives one — see the table below). Run
    `gates/approve.sh <stage> <artifact> --delegated` only after the human
    explicitly approves that artifact in chat ("approve", "looks right", or
    equivalent). Never approve on silence, a general "continue", or your own
@@ -56,6 +57,23 @@ when closing.
      --agent-adversary` (recorded as `mode: agent-adversary`), post the
      plan's Human summary as FYI, and continue to build.
    - Any trip-wire: a human gate, exactly like the others.
+
+   **lazymode moves the human/auto line.** `lazymode: 0-4` in
+   `.sdlc/config.md` names which gates stay HUMAN; init.sh seeds 1 and the
+   agent asks the human which level they want at init. Each level keeps
+   these gates human and auto-approves the rest with `gates/approve.sh
+   <stage> <artifact> --lazy`:
+   - 0 — intent, spec, ship human; plan tiered (exactly the rules above)
+   - 1 (default) — intent, spec, ship human; plan always auto,
+     trip-wires included
+   - 2 — intent and ship human; spec and plan auto
+   - 3 — intent human; spec, plan, and ship auto
+   - 4 — no human gates; the whole loop runs autonomously
+   lazymode waives the human decision, nothing else: the stage's adversary
+   review must still pass before `--lazy`, approvals still record and chain
+   hashes, and every auto-approved gate still posts its Human summary (and
+   any trip-wire list) to the human as FYI. `approve.sh --lazy` refuses a
+   stage the configured level keeps human.
 4. **Keep memory bounded.** At each stage start read `.sdlc/memory/INDEX.md`
    (lessons; 50 lines max) and `.sdlc/memory/DOMAIN.md` (terms, verified
    facts, constraints; 100 lines max), then open lesson files whose tags

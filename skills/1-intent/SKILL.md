@@ -81,7 +81,9 @@ labeled. Every open question is carried forward explicitly in its own section.
 
 ## Gate
 
-Tell the user:
+At lazymode 4 (AGENTS.md rule 3): run
+`<kit>/gates/approve.sh intent .sdlc/work/<slug>/intent.md --lazy`, post the
+intent summary to the human as FYI, and continue. Otherwise tell the user:
 
 > Review `.sdlc/work/<slug>/intent.md`. If it says exactly what you want, run:
 > `<kit>/gates/approve.sh intent .sdlc/work/<slug>/intent.md`

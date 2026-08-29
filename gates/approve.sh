@@ -3,19 +3,22 @@
 # Intent, spec, and ship approvals are HUMAN decisions: run directly, or
 # --delegated after the human's explicit approval in chat. For the plan stage
 # ONLY, --agent-adversary records the tiered auto-approval: adversary review
-# passed and no trip-wires (policy: AGENTS.md hard rule 3).
+# passed and no trip-wires (policy: AGENTS.md hard rule 3). --lazy records an
+# auto-approval for a gate that `lazymode:` in .sdlc/config.md waives (rule 3);
+# it is refused for any gate the configured level keeps human.
 # Records a tamper-evident approval: sha256 of the artifact + who + when.
 # Threat model: catches post-approval edits and mistakes, NOT a malicious agent
 # forging records — that line is held by rule 3 plus
 # git history of .sdlc/approvals/, which is the real audit trail.
 set -euo pipefail
 
-usage() { echo "usage: approve.sh <stage> <artifact-path> [--delegated | --agent-adversary]   (run from the project root)"; exit 1; }
+usage() { echo "usage: approve.sh <stage> <artifact-path> [--delegated | --agent-adversary | --lazy]   (run from the project root)"; exit 1; }
 mode=""
 if [ $# -eq 3 ]; then
   case "$3" in
     --delegated) mode="delegated-chat (agent-run on explicit human instruction)";;
     --agent-adversary) mode="agent-adversary (auto-approved: adversary review passed, no trip-wires)";;
+    --lazy) mode="lazy";;
     *) usage;;
   esac
   set -- "$1" "$2"
@@ -29,6 +32,20 @@ esac
 case "$stage" in (*[!a-zA-Z0-9_-]*|"") echo "FAIL: stage must be [a-zA-Z0-9_-]+: '$stage'"; exit 1;; esac
 [ -f "$artifact" ] || { echo "FAIL: artifact not found: $artifact"; exit 1; }
 [ -d .sdlc ] || { echo "FAIL: no .sdlc/ here. Run init.sh first, from the project root."; exit 1; }
+
+# lazymode policy (AGENTS.md rule 3): the level in .sdlc/config.md decides which
+# human gates are waived — plan at >=1, spec at >=2, ship at >=3, intent at >=4.
+if [ "$mode" = "lazy" ]; then
+  lm=$(awk '/^lazymode: /{print $2; exit}' .sdlc/config.md 2>/dev/null || true)
+  case "$lm" in (''|*[!0-9]*) lm=0;; esac
+  case "$stage" in plan) need=1;; spec) need=2;; ship) need=3;; intent) need=4;;
+    *) echo "FAIL: --lazy applies only to intent, spec, plan, or ship"; exit 1;; esac
+  if [ "$lm" -lt "$need" ]; then
+    echo "FAIL: lazymode $lm keeps the '$stage' gate HUMAN (--lazy needs lazymode >= $need in .sdlc/config.md). A human must approve."
+    exit 1
+  fi
+  mode="lazy (auto-approved: lazymode $lm waives the $stage human gate; adversary review passed)"
+fi
 
 # slug = artifact's parent dir name; keys approvals per feature
 slug=$(basename "$(dirname "$artifact")")
