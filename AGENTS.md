@@ -1,17 +1,14 @@
 # sdlc-kit agent routing contract
 
-This kit implements Anthropic's AI-Native SDLC playbook with plain files and
-shell scripts. It works across agent tools without runtime hooks or
-vendor-specific features.
+Anthropic's AI-Native SDLC playbook as plain Markdown and shell scripts. No
+runtime hooks, no vendor-specific features.
 
 ## The loop
 
-Six stages. Each stage produces ONE artifact. An approval of that artifact
-(recorded by `gates/approve.sh`) opens the next stage. Intent, spec, and ship
-approvals are human decisions. The plan gate is tiered (rule 3): a routine
-plan auto-approves after a clean adversary review; any trip-wire escalates it
-to a human. A production issue in stage 6 creates a new `intent.md` and
-starts the loop again.
+Six stages, one artifact each. An approval recorded by `gates/approve.sh`
+opens the next stage. Intent, spec, and ship approvals are human decisions;
+the plan gate is tiered (rule 3). A production issue in stage 6 writes the
+next `intent.md` and restarts the loop.
 
 | # | Stage    | Read this skill first              | Artifact (in project `.sdlc/work/<feature>/`) | Gate to pass BEFORE starting |
 |---|----------|------------------------------------|-----------------------------------------------|------------------------------|
@@ -24,132 +21,103 @@ starts the loop again.
 
 Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>/spec.md`.
 
-**Every feature ends in a terminal state.** Run `gates/close.sh <slug>
-<shipped|abandoned|dead-end|handed-off> "reason"` after the human decides. Use
-`--delegated` under rule 3. An abandoned or dead-end close requires a lesson
-that records what was tried, why it failed, and what would unblock it. A
-handed-off close requires the external ticket/PR key or URL in the reason, so
-the audit trail continues outside this loop. Add durable facts to DOMAIN.md
-when closing. `status.sh` shows each closed feature on one line and proposes
-no next action.
+**Every feature ends in a terminal state**: `gates/close.sh <slug>
+<shipped|abandoned|dead-end|handed-off> "reason"` after the human decides
+(`--delegated` under rule 3). Abandoned or dead-end requires a lesson first:
+what was tried, why it failed, what would unblock it. Handed-off requires the
+external ticket/PR key or URL in the reason. Add durable facts to DOMAIN.md
+when closing.
 
 ## Hard rules (every stage, every harness)
 
 1. **Read the stage skill file COMPLETELY before acting.** Resolve paths
-   relative to this kit's directory. On Windows, run every `gates/*.sh` and
-   `tools/*.sh` through Git Bash or WSL, not PowerShell or cmd. When a native
-   Windows path is needed, `.sdlc/config.md` records it as `kit_windows:`.
-2. **Check the gate first** for stages 2-4. Stages 1, 5, and 6 have no gate.
-   Run `gates/check-gate.sh <prev-stage> <artifact>` from the project root.
-   Treat any result other than a printed `GATE OPEN` as a closed gate. This
-   includes GATE CLOSED, errors, and silence. STOP and tell the human exactly
-   what to approve.
-3. **Intent, spec, and ship approvals are human decisions. The command may be
-   delegated.** Run `gates/approve.sh <stage> <artifact> --delegated` only
-   after the human explicitly approves this artifact at this stage in chat.
-   Valid responses include "approve", "looks right", or an equivalent answer
-   to the gate request. The record then includes `mode: delegated-chat`.
-   Never approve based on silence, a general "continue", or your own
-   judgment. Never write directly to `.sdlc/approvals/`. If the artifact
-   changes after the human approves it, ask again because the approval
-   applied to different bytes. Commit approvals to git. Git history is the
-   audit trail.
+   relative to this kit's directory. On Windows run `gates/*.sh` and
+   `tools/*.sh` through Git Bash or WSL; `.sdlc/config.md` records a native
+   path as `kit_windows:` when one is needed.
+2. **Check the gate first** for stages 2-4 (stages 1, 5, and 6 have none):
+   `gates/check-gate.sh <prev-stage> <artifact>` from the project root.
+   Anything but a printed `GATE OPEN` — including errors and silence — is
+   closed: STOP and tell the human exactly what to approve.
+3. **Intent, spec, and ship approvals are human decisions.** Run
+   `gates/approve.sh <stage> <artifact> --delegated` only after the human
+   explicitly approves that artifact in chat ("approve", "looks right", or
+   equivalent). Never approve on silence, a general "continue", or your own
+   judgment. Never write to `.sdlc/approvals/` directly. If the artifact
+   changes after approval, ask again — the approval bound different bytes.
+   Commit approvals to git; its history is the audit trail.
 
    **The plan gate is tiered.** Trip-wires: schema or data migration, data
    deletion or destructive backfill, public API or contract change,
    security-sensitive paths (auth, secrets, permissions), infra or config
-   change, and work beyond the approved spec scope. Anything the build stage
-   would execute irreversibly is a trip-wire. plan.md records the verdict in
-   its **Gate tier** section, and the fresh-context adversary re-checks every
-   trip-wire itself; an understated tier is a blocking finding.
-   - No trip-wires and no adversary blockers: run
-     `gates/approve.sh plan <plan.md> --agent-adversary` (recorded as
-     `mode: agent-adversary`), post plan.md's Human summary to the human as
-     FYI, and continue to build without stopping.
-   - Any trip-wire: the plan gate is a human gate, exactly like the others.
-4. **Keep memory bounded.** At each stage start, read
-   `.sdlc/memory/INDEX.md` and `.sdlc/memory/DOMAIN.md`. INDEX.md stores lessons
-   about past mistakes and their corrections. DOMAIN.md stores terms, verified
-   facts, and important constraints. Then open lesson files whose tags match
-   the current task. Researchers return verified domain candidates in their
-   reports. The dispatcher merges those candidates into DOMAIN.md. Keep
-   INDEX.md at 50 lines or fewer and DOMAIN.md at 100 lines or fewer. If either
-   file exceeds its limit, split it by subdomain and add pointer lines. Record
-   each new mistake in the skill 6 format.
-5. **Fresh context for helpers.** Verification and adversarial review must run
-   in a fresh context: a subagent if your harness has them (pi: subagent tool;
-   Claude Code: Task tool; Codex: spawn), else a new session given only the
-   role file + artifact paths. The role files are `roles/*.md`. Verification
-   always runs in a context that did not author the artifact. If your
-   harness lets you pick models, give the verifier and adversary the strongest
-   one available. A weak review can let defects pass.
+   change, beyond-spec scope — anything build would execute irreversibly.
+   plan.md records the verdict in its **Gate tier** section; the adversary
+   re-checks every trip-wire, and an understated tier is a blocking finding.
+   - No trip-wires and no blockers: run `gates/approve.sh plan <plan.md>
+     --agent-adversary` (recorded as `mode: agent-adversary`), post the
+     plan's Human summary as FYI, and continue to build.
+   - Any trip-wire: a human gate, exactly like the others.
+4. **Keep memory bounded.** At each stage start read `.sdlc/memory/INDEX.md`
+   (lessons; 50 lines max) and `.sdlc/memory/DOMAIN.md` (terms, verified
+   facts, constraints; 100 lines max), then open lesson files whose tags
+   match the task. The dispatcher merges researchers' verified domain
+   candidates into DOMAIN.md. Over a limit: split by subdomain and leave
+   pointer lines. Record each new mistake in the skill 6 format.
+5. **Fresh context for helpers.** Verification and adversarial review run in
+   a fresh context — a subagent (pi: subagent tool; Claude Code: Task;
+   Codex: spawn), else a new session given only the `roles/*.md` file and
+   artifact paths — never in the context that authored the artifact. Give
+   the verifier and adversary the strongest model available.
 
-   **Roles are contracts, not headcount.** A stage may run several workers
-   under one role when their probes are independent. Examples include git
-   history, the live UI, an API, and the database. Use the fewest read-only
-   workers needed. Use one writer per checkout. The dispatcher merges reports
-   and resolves contradictions with primary evidence. A contradiction between
-   two probes is a finding.
+   **Roles are contracts, not headcount.** Independent probes (git history,
+   live UI, API, DB) may run in parallel under one role: fewest read-only
+   workers, one writer per checkout. The dispatcher resolves contradictions
+   with primary evidence; a contradiction between probes is a finding.
 
-   **Dispatch contract.** Every role dispatch must name its goal, exact input
-   paths, write authority, verification commands from `.sdlc/config.md`,
-   success criteria, output format, and stop rules. Stop rules say when to STOP
-   and escalate instead of improvising. Missing fields let a helper invent
-   scope.
+   **Dispatch contract.** Every dispatch names: goal, exact input paths,
+   write authority, verification commands from `.sdlc/config.md`, success
+   criteria, output format, and stop rules (when to STOP and escalate
+   instead of improvising).
 
-   **Bulk rule.** Screenshots, probe logs, traces, and large command dumps are
-   temporary evidence. Write them to the gitignored
-   `.sdlc/work/<feature>/scratch/` directory. Read them, quote the deciding
-   lines in the stage artifact, then delete them. Keep the citation, not the
-   bulk file.
-6. **Proof over claims.** Every "done" claim carries command output. Real
-   verification commands live in the project's `.sdlc/config.md`.
-7. **Artifacts live in the project repo**, under `.sdlc/work/<feature>/`, and
-   are committed with the code. The kit directory stays framework-only.
-8. **Speak plainly in every report, gate request, and question.** Assume the
-   reader lost the thread. Start with one short paragraph of context: what stage you
-   are in, what happened before, what this message is for. Then the content.
-   Write in Simplified Technical English: short sentences, one idea per
-   sentence, active voice, no undefined jargon. Use the project's own
-   vocabulary. End with the one decision or action the reader must take.
+   **Bulk rule.** Screenshots, probe logs, traces, and large command dumps
+   go to the gitignored `.sdlc/work/<feature>/scratch/`; quote the deciding
+   lines in the stage artifact, then delete the file.
+6. **Proof over claims.** Every "done" claim carries command output, using
+   the real commands in `.sdlc/config.md`.
+7. **Artifacts live in the project repo** under `.sdlc/work/<feature>/`,
+   committed with the code. The kit directory stays framework-only.
+8. **Speak plainly.** Every report, gate request, and question starts with
+   one short context paragraph (which stage, what happened before, what this
+   message is for), uses short active sentences and the project's own
+   vocabulary, and ends with the one decision or action the reader must
+   take.
 
 ## Greenfield vs brownfield
 
-Stage 1 classifies the feature as greenfield (new system/module) or brownfield
-(change to existing behavior) and records it in `intent.md`. Downstream skills
-branch on it. Brownfield work adds a researcher pass over existing code, a
-regression baseline captured before changes, and a "what stays untouched"
-section in the spec.
+Stage 1 records the classification in `intent.md`; downstream skills branch
+on it. Brownfield adds a researcher pass over existing code, a regression
+baseline captured before changes, and a "what stays untouched" spec section.
 
 ## Running beside other AGENTS.md files, skills, and agents
 
-Large codebases already have their own rules, docs, and specialist agents.
-The kit is a process layer on top of them, so precedence is explicit:
-
-1. **Precedence.** The project's own rules control implementation details such
-   as build commands, branch policy, code style, commit format, and tool choice.
-   The kit controls stage order, gates, and memory. No
-   other document can waive a gate; only the human at the gate can. When a
-   project rule and a kit rule genuinely conflict, show both texts to the
-   human. Do not resolve the conflict silently.
-2. **Existing knowledge wins.** If the project already has a glossary,
-   CONTEXT.md, ADRs, or domain docs, DOMAIN.md defers to them: add a pointer
-   line (`- see docs/glossary.md [verified: exists]`) instead of copying
-   content. DOMAIN.md holds only facts that exist nowhere else.
-3. **Existing agents win.** When the environment has a specialist agent that
-   matches a kit role (a QA agent, a code reviewer, a DB reader), dispatch
-   that agent with the kit's role file as its task contract. The role file
-   defines the contract, and the local specialist executes it. Spawn a generic
-   worker only when no specialist fits. Fresh context and the dispatch
-   contract still apply either way.
-4. **Monorepos.** Seed `.sdlc/` at the level where features ship and gates
-   are decided. This is usually the service or package, not the repo root. One
-   `.sdlc/` per shipping unit; a root `.sdlc/` only for changes that span
-   units. Say in intent.md which unit owns the feature.
+1. **Precedence.** Project rules control implementation (build commands,
+   branch policy, style, commit format, tools); the kit controls stage
+   order, gates, and memory. Only the human at a gate can waive a gate. On a
+   genuine conflict, show both texts to the human — never resolve it
+   silently.
+2. **Existing knowledge wins.** DOMAIN.md points at existing glossaries,
+   CONTEXT.md, ADRs, and domain docs (`- see docs/glossary.md
+   [verified: exists]`) and holds only facts that exist nowhere else.
+3. **Existing agents win.** Dispatch a matching local specialist (QA agent,
+   code reviewer, DB reader) with the kit's role file as its task contract;
+   spawn a generic worker only when no specialist fits. Fresh context and
+   the dispatch contract still apply.
+4. **Monorepos.** One `.sdlc/` per shipping unit — usually the service or
+   package, not the repo root; a root `.sdlc/` only for cross-unit changes.
+   intent.md names the owning unit.
 
 ## If your harness lacks a feature
 
-- Without subagents, open a fresh session or tab with the role file and
-  artifact paths as the complete prompt. Paste the report back.
-- Without a file-read tool, paste file contents manually. The contract is the
+- No subagents: open a fresh session or tab with the role file and artifact
+  paths as the complete prompt; paste the report back.
+- No file-read tool: paste file contents manually. The contract is the
   files, not the transport.
