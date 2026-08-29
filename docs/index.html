@@ -553,7 +553,7 @@
       <div>
         <h1>sdlc<span class="kit">-kit</span></h1>
         <p class="pitch" data-i18n="pitch">Anthropic&rsquo;s AI-native SDLC playbook, as plain files&nbsp;+&nbsp;shell.</p>
-        <p class="sub" data-i18n="sub">Six stages, one artifact each, a human approval gate between. Your agent reads the files, runs the gates, and stops when a gate is closed. No runtime, no hooks, no lock-in.</p>
+        <p class="sub" data-i18n="sub">Six stages, one artifact each, human approval gates where they count. Your agent reads the files, runs the gates, and stops when a gate is closed. No runtime, no hooks, no lock-in.</p>
         <p class="cta-row">
           <a class="btn btn-primary" href="#install"><span data-i18n="cta-start">Get started</span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
@@ -573,8 +573,8 @@
   <!-- ============ the loop ============ -->
   <section class="band" id="loop" aria-labelledby="loop-h">
     <div class="wrap">
-      <h2 id="loop-h" data-i18n="loop-h">Six stages. One artifact each. A human gate between.</h2>
-      <p class="section-lede" data-i18n="loop-lede">Every stage reads its skill file, produces one artifact, and stops at the gate. The next stage starts only after you approve that artifact. Stage&nbsp;6 turns an incident into the next intent.</p>
+      <h2 id="loop-h" data-i18n="loop-h">Six stages. One artifact each. Human gates where they count.</h2>
+      <p class="section-lede" data-i18n="loop-lede">Every stage reads its skill file, produces one artifact, and stops at the gate. You approve intent, spec, and the release. A routine plan is approved by an adversary review; risky plans escalate to you. Stage&nbsp;6 turns an incident into the next intent.</p>
 
       <ol class="flow" aria-label="The six-stage loop with human approval gates" data-i18n-aria="flow-aria">
         <li class="stage s1">
@@ -600,7 +600,7 @@
 
         <li class="edge gate e34">
           <svg class="d" width="10" height="52" viewBox="0 0 10 52" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 0v47M1.5 43.5 5 48l3.5-4.5"/></svg>
-          <span class="lbl" data-i18n="e34">human gate · approve plan</span>
+          <span class="lbl" data-i18n="e34">tiered gate · human on risk</span>
         </li>
 
         <li class="stage s4">
@@ -650,7 +650,7 @@
         </div>
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-4.2-7.6"/><path d="M21 3v5h-5"/></svg><span data-i18n="l3-t">Delegation stays visible</span></dt>
-          <dd data-i18n="l3-d">An agent may run the approval only on your explicit words in chat. The record then carries <code>mode: delegated-chat</code>, so the keystrokes were never silent.</dd>
+          <dd data-i18n="l3-d">At human gates, an agent may run the approval only on your explicit words in chat; the record then carries <code>mode: delegated-chat</code>. A plan approved by adversary review carries <code>mode: agent-adversary</code>. Either way, the keystrokes were never silent.</dd>
         </div>
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="18" rx="1.5"/><rect x="13" y="3" width="8" height="18" rx="1.5"/><path d="M6.5 7h1M16.5 7h1"/></svg><span data-i18n="l4-t">Fresh-context review</span></dt>
@@ -748,11 +748,11 @@
   var KO = {
     "skip": '본문으로 건너뛰기',
     "pitch": 'Anthropic의 AI 네이티브 SDLC 플레이북, 평문 파일 + 셸.',
-    "sub": '여섯 단계, 단계마다 산출물 하나, 그 사이마다 사람의 승인 게이트. 에이전트는 파일을 읽고 게이트를 실행하고, 게이트가 닫혀 있으면 멈춥니다. 런타임도 훅도 종속성도 없습니다.',
+    "sub": '여섯 단계, 단계마다 산출물 하나, 꼭 필요한 곳에 사람의 승인 게이트. 에이전트는 파일을 읽고 게이트를 실행하고, 게이트가 닫혀 있으면 멈춥니다. 런타임도 훅도 종속성도 없습니다.',
     "cta-start": '시작하기',
     "harness-note": '어느 것이든 파일을 읽고 셸 명령을 실행할 수 있습니다.',
-    "loop-h": '여섯 단계. 단계마다 산출물 하나. 그 사이마다 사람의 승인 게이트.',
-    "loop-lede": '각 단계는 스킬 파일을 읽고 산출물 하나를 만든 뒤 게이트에서 멈춥니다. 산출물을 승인해야 다음 단계가 시작됩니다. 6단계는 장애를 다음 intent로 바꿉니다.',
+    "loop-h": '여섯 단계. 단계마다 산출물 하나. 꼭 필요한 곳에 사람 게이트.',
+    "loop-lede": '각 단계는 스킬 파일을 읽고 산출물 하나를 만든 뒤 게이트에서 멈춥니다. intent·spec·출시는 사람이 승인합니다. 일상적인 plan은 적대적 검토가 승인하고, 위험한 plan만 사람에게 올라옵니다. 6단계는 장애를 다음 intent로 바꿉니다.',
     "s1-h": '의도',
     "s1-p": '에이전트는 먼저 탐색한 뒤, 의도가 정확하고 근거를 갖출 때까지 당신을 심문합니다.',
     "e12": '사람 승인 게이트 · intent 승인',
@@ -761,7 +761,7 @@
     "e23": '사람 승인 게이트 · spec 승인',
     "s3-h": '계획',
     "s3-p": '읽기 전용: 어떤 파일을 어떤 순서로 바꾸고, 동작을 무엇으로 증명할지.',
-    "e34": '사람 승인 게이트 · plan 승인',
+    "e34": '단계형 게이트 · 위험 시 사람 승인',
     "s4-h": '빌드',
     "s4-p": '빌드는 계획을 따르고 각 단계에서 검증합니다.',
     "e45": '검사 통과 · 게이트 없음',
@@ -779,7 +779,7 @@
     "l2-t": '변조 감지 게이트',
     "l2-d": '<code>approve.sh</code>는 산출물의 sha256을 기록합니다. 승인 뒤에 파일을 조용히 고치면, 다음 <code>check-gate.sh</code>가 스스로 <code>GATE CLOSED</code>를 출력합니다.',
     "l3-t": '위임도 기록에 남음',
-    "l3-d": '에이전트가 승인을 실행할 수 있는 때는 채팅에서 당신이 명시적으로 지시했을 때뿐입니다. 기록에는 <code>mode: delegated-chat</code>이 남으므로, 승인이 조용히 이루어지는 일은 없습니다.',
+    "l3-d": '사람 게이트에서 에이전트가 승인을 실행할 수 있는 때는 채팅에서 당신이 명시적으로 지시했을 때뿐이며, 기록에는 <code>mode: delegated-chat</code>이 남습니다. 적대적 검토로 승인된 plan에는 <code>mode: agent-adversary</code>가 남습니다. 어느 쪽이든 승인이 조용히 이루어지는 일은 없습니다.',
     "l4-t": '신선한 컨텍스트 검토',
     "l4-d": '검증자, 적대자, 리서처는 새 컨텍스트에서 실행됩니다. 이들은 작업을 만든 당사자가 아니며 파일을 바꾸지 않고 발견 사항만 보고합니다.',
     "l5-t": 'AS-IS → TO-BE 명세',

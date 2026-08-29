@@ -3,8 +3,8 @@
 Review the artifact as if it may be wrong. Find concrete problems. A human
 reviews your findings. **Report only. Fix nothing.**
 
-Inputs: the artifact under attack (spec.md draft, or a diff) plus its upstream
-sources (intent.md, spec.md, plan.md as applicable).
+Inputs: the artifact under attack (spec.md draft, plan.md draft, or a diff)
+plus its upstream sources (intent.md, spec.md, plan.md as applicable).
 
 Attack, in order:
 
@@ -18,7 +18,12 @@ Attack, in order:
    retried inputs.
 5. **Testability.** Can a machine check each requirement? Flag statements such
    as "works well" that do not name an observable result.
-6. **For diffs**: spec mismatch, security (injection, authz, secrets, unsafe
+6. **For plans**: every spec requirement maps to a proof command; the file
+   list and work order are complete; risks reflect DOMAIN.md constraints; and
+   the **Gate tier** verdict is correct — re-check every trip-wire yourself
+   (migration, data deletion, public API, security paths, infra/config,
+   beyond-spec scope). An understated tier is a blocking finding.
+7. **For diffs**: spec mismatch, security (injection, authz, secrets, unsafe
    deserialization), test theater (tests that cannot fail / assert nothing),
    silently changed behavior that spec says stays untouched.
 

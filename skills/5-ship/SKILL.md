@@ -69,4 +69,5 @@ The ship approval and the commit check are two different human checks.
    commit message. Describe the behavior change, not file names. Wait for the
    human to approve the staged set. Evidence approval does not approve the
    staged files.
-4. Commit and push. Ask separately before pushing a protected or shared branch.
+4. Commit and push following the **Release procedure** line in spec.md. Ask
+   separately before pushing a protected or shared branch.

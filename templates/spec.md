@@ -31,6 +31,10 @@ cases where they apply.>
 ## What stays untouched   <!-- brownfield: testable statements; becomes regression baseline -->
 - U1: <existing behavior>; checked by <command/test>
 
+## Release procedure
+<one line; ship follows this; "none" is a valid deploy command>
+- branch `feat/<slug>` → merge to `<target>` → push → deploy: `<command | none>`
+
 ## Flagged concerns
 <List concerns for human decision at the gate.>
 - [ ] <concern>; owner: <security/compliance/UX/...>
