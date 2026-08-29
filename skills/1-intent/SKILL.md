@@ -41,7 +41,10 @@ trivial and you already know the exact file and symbol. Keep raw exploration out
 **Feasibility rule:** Every option shown to the human must cite evidence that
 it is possible. This may include working access, a reproduction, or available
 infrastructure. If feasibility is unknown, dispatch research instead of
-presenting the option.
+presenting the option. When feasibility hinges on a dependency or version
+pair (library A compiles against library B), reading upstream notes is not
+evidence: require a compile probe (`go mod edit` + `go build`, or the
+equivalent) on the exact candidate pair before the option reaches the human.
 
 ## Grill protocol
 
