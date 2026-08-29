@@ -176,6 +176,8 @@ The approval record stays explicit. Silence and generic "continue" are not appro
 
 `approve.sh` stores the artifact's sha256. `check-gate.sh` recomputes it before the next stage. A changed artifact closes the gate.
 
+Approvals also chain: spec binds the intent bytes it was derived from, plan binds spec, ship binds plan. Editing an approved upstream file closes every downstream gate until a human re-reviews.
+
 This detects accidental or unauthorized post-approval edits. It does not stop a malicious process from forging a file. Agent rules plus the git history of `.sdlc/approvals/` form the audit trail.
 
 ### Fresh-context review
@@ -208,7 +210,7 @@ When the incident cannot be reproduced, fresh-context adversaries recount the sc
 ```bash
 gates/status.sh [slug]   # gate state + one next action
 gates/stats.sh           # time per stage + re-approval counts
-gates/selftest.sh        # gate, close, injection, corruption, YAML integrity
+gates/selftest.sh        # gate, close, injection, corruption, chaining, status render, YAML integrity
 ```
 
 Example:

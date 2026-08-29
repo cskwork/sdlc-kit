@@ -47,8 +47,9 @@ blocks planning, return the question to the spec gate instead of improvising.
 Dispatch an adversary (`roles/adversary.md`) with ONLY: spec.md, draft
 plan.md, and `.sdlc/memory/DOMAIN.md`. It checks that every requirement has a
 proof command, the file list and order are complete, risks are not
-understated, and the **Gate tier** verdict is correct. Fix findings; note
-each objection + resolution in plan.md. If the code contradicts the spec,
+understated, and the **Gate tier** verdict is correct. Fix findings; record
+each objection + resolution and the tier re-check in plan.md's
+**Adversarial review** section. If the code contradicts the spec,
 STOP and show the conflict to the human. The spec gate may need to reopen.
 Do not change the plan to hide a wrong spec.
 

@@ -56,9 +56,20 @@ EOF
 <!-- - constraint the code depends on — [verified: how] -->
 EOF
 
+# Record which kit version seeded this project; status.sh warns when the kit
+# has since moved on, so a mid-feature rule change is visible, not silent.
+# A vendored copy sits inside another repo, where git describe would report the
+# host repo's tags — only trust git when the kit dir is its own toplevel.
+kit_ver=""
+if [ "$(git -C "$kit" rev-parse --show-toplevel 2>/dev/null)" = "$kit" ]; then
+  kit_ver=$(git -C "$kit" describe --tags --always 2>/dev/null || true)
+fi
+[ -n "$kit_ver" ] || kit_ver=$(cat "$kit/VERSION" 2>/dev/null || echo unknown)
+
 # Under Git Bash the kit path is a POSIX one (/c/Users/…). An agent that shells
 # out to PowerShell or cmd cannot use it, so record the native path too.
-kit_lines="kit: $kit   # re-point this if the kit is moved or cloned elsewhere"
+kit_lines="kit: $kit   # re-point this if the kit is moved or cloned elsewhere
+kit_version: $kit_ver   # kit version this project was seeded with"
 if command -v cygpath >/dev/null 2>&1 && kit_win=$(cygpath -w "$kit" 2>/dev/null) && [ -n "$kit_win" ]; then
   kit_lines="$kit_lines
 kit_windows: $kit_win   # same kit, native path for PowerShell/cmd"
