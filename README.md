@@ -25,7 +25,7 @@ A common agent workflow starts with implementation. The agent receives a prompt,
 - The agent investigates before it asks you questions.
 - Claims in `intent.md` are labeled `[verified]` or `[assumed]`.
 - A fresh-context adversary reviews the spec before you approve it.
-- A routine plan auto-approves after a clean trip-wire scan; migrations, deletions, API, security, and infra changes get an adversary review or escalate to you, depending on lazymode.
+- A routine plan auto-approves after a clean adversary review; migrations, deletions, API, security, and infra changes escalate to you.
 - A different verifier checks the implementation against the approved artifacts.
 - Failed attempts leave lessons and domain knowledge for the next run.
 
@@ -57,7 +57,7 @@ It is adapted from [Anthropic's AI-Native SDLC playbook](https://claude.com/blog
 
 Each stage produces one reviewable artifact. Intent, spec, and ship gates are human decisions; after you approve in chat, the agent may run the approval command, and the record marks that delegation with `mode: delegated-chat`. The plan gate is tiered: a fresh-context adversary reviews every plan, a routine plan auto-approves (`mode: agent-adversary`), and any trip-wire — migration, data deletion, public API, security paths, infra/config, beyond-spec scope — makes it a human gate.
 
-`lazymode` slides that human/auto line. `init.sh` seeds `lazymode: 1` in `.sdlc/config.md` and the agent asks you which level you want. Each level names the gates that stay human: **0** intent, spec, plan trip-wires, ship (everything as designed) · **1** (default) intent, spec, ship · **2** intent, ship · **3** intent · **4** none — the loop runs autonomously. A waived gate is auto-approved with `gates/approve.sh <stage> <artifact> --lazy` (recorded as `mode: lazy`) after a clean `tripwire.sh` scan — or, when the scan hits, after the stage's adversary review passes; approvals are still recorded, and `approve.sh --lazy` refuses any gate the configured level keeps human.
+`lazymode` slides that human/auto line. `init.sh` seeds `lazymode: 1` in `.sdlc/config.md` and the agent asks you which level you want. Each level names the gates that stay human: **0** intent, spec, plan trip-wires, ship (everything as designed) · **1** (default) intent, spec, ship · **2** intent, ship · **3** intent · **4** none — the loop runs autonomously. A waived gate is auto-approved with `gates/approve.sh <stage> <artifact> --lazy` (recorded as `mode: lazy`). Plan and ship always keep their full adversary review first — plan authorizes irreversible work, ship is the last look before the push; intent and spec may skip theirs on a clean `tripwire.sh` scan. Approvals are still recorded, and `approve.sh --lazy` refuses any gate the configured level keeps human.
 
 When a shipped change fails, Maintain diagnoses it and writes the next `intent.md`.
 

@@ -39,8 +39,9 @@ when closing.
    `gates/check-gate.sh <prev-stage> <artifact>` from the project root.
    Anything but a printed `GATE OPEN` — including errors and silence — is
    closed: STOP and tell the human exactly what to approve. At a gate
-   lazymode waives (rule 3), the remedy is a clean tripwire scan — or the
-   stage's adversary pass on a hit — plus `--lazy`, not a human ask.
+   lazymode waives (rule 3), the remedy is the stage's lazy review — the
+   adversary pass for plan and ship; a tripwire scan, adversary on a hit,
+   for intent and spec — plus `--lazy`, not a human ask.
 3. **Intent, spec, and ship approvals are human decisions** (unless the
    project's lazymode waives one — see the table below). Run
    `gates/approve.sh <stage> <artifact> --delegated` only after the human
@@ -74,13 +75,16 @@ when closing.
    - 2 — intent and ship human; spec and plan auto
    - 3 — intent human; spec, plan, and ship auto
    - 4 — no human gates; the whole loop runs autonomously
-   lazymode waives the human decision, nothing else. Before `--lazy`, scan
-   the artifact (ship: the diff, saved to scratch/) with `tools/tripwire.sh`:
-   a clean scan approves directly; any hit requires the stage's adversary
-   review to pass first (intent defines no adversary — a hit on intent.md
-   gets a fresh-context adversary). Approvals are still recorded, and every
-   auto-approved gate still posts its Human summary (and any trip-wire list)
-   to the human as FYI. `approve.sh --lazy` refuses a stage the configured level keeps
+   lazymode waives the human decision, nothing else. **Plan and ship keep
+   their full adversary review before `--lazy`** — plan authorizes what
+   build executes irreversibly, and ship's diff review is the last look
+   before the push; a keyword scan must never be the only reviewer there.
+   For intent and spec (recoverable downstream), scan the artifact with
+   `tools/tripwire.sh`: a clean scan approves directly; any hit requires the
+   stage's adversary review to pass first (intent defines no adversary — a
+   hit on intent.md gets a fresh-context adversary). Approvals are still
+   recorded, and every auto-approved gate still posts its Human summary
+   (and any trip-wire list) to the human as FYI. `approve.sh --lazy` refuses a stage the configured level keeps
    human, and any `lazymode:` value outside 0-4 counts as 0.
 4. **Keep memory bounded.** At each stage start read `.sdlc/memory/INDEX.md`
    (lessons; 50 lines max) and `.sdlc/memory/DOMAIN.md` (terms, verified

@@ -17,9 +17,8 @@ present), and the diff (`git diff` against the base branch). Read `.sdlc/memory/
 
 ## Adversarial code review (fresh context)
 
-Lazy shortcut: at lazymode ≥3 (AGENTS.md rule 3), save the diff to
-`scratch/diff.txt` and run `tools/tripwire.sh` over it — a clean scan skips
-this review; any hit runs it in full.
+This review runs at every lazymode level — it is the last look at the diff
+before the push, and the only security pass (AGENTS.md rule 3).
 
 Dispatch an adversary (`roles/adversary.md`) with: spec.md, plan.md, the diff.
 It checks spec mismatch, missing untouched checks, security issues, tests that
@@ -59,8 +58,7 @@ the human (`close.sh` prints these).
 
 ## Gate
 
-At lazymode ≥3 (AGENTS.md rule 3): after a clean tripwire scan or a passed
-adversary review (see the lazy shortcut above), run
+At lazymode ≥3 (AGENTS.md rule 3): after the adversary pass, run
 `<kit>/gates/approve.sh ship .sdlc/work/<slug>/evidence.md --lazy`, post the
 evidence summary as FYI, and continue to commit discipline. Otherwise:
 
