@@ -26,6 +26,11 @@ for dir in .sdlc/work/*/; do
     continue
   fi
   echo "== $slug"
+  # incident evidence still outstanding? (see skills/6-maintain Evidence tracking)
+  if [ -f "${dir}intent.md" ] && grep -q 'reproduction evidence: requested' "${dir}intent.md" \
+     && ! grep -qE 'reproduction evidence: .*(received|waived-by-human)' "${dir}intent.md"; then
+    echo "   EVIDENCE OUTSTANDING: reproduction still 'requested' in intent.md"
+  fi
   next_action=""
   for stage in $stages; do
     art="$dir$(artifact_for "$stage")"

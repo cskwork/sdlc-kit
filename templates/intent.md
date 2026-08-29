@@ -12,6 +12,10 @@
 - <claim> [verified: <command output, file:line, reproduction steps, or metric>]
 - <claim> [assumed: <why it could not be verified>]
 
+<For incidents — track requested evidence explicitly; do not let it evaporate:>
+- reproduction evidence: requested <date> (<what was asked for>) | received <date> | waived-by-human <date, why>
+- verification debt: <what could not be run because config.md test/lint is empty, and what replaced it>
+
 ## Success criteria
 <Observable behavior that means done. Name a command or test where possible.>
 - [ ] <criterion>

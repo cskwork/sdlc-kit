@@ -60,7 +60,16 @@ if "$kit/gates/close.sh" feat-a abandoned "again" >/dev/null 2>&1; then
   echo "FAIL: double close allowed"; exit 1; fi
 echo "ok: close requires lesson, records state, refuses double close"
 
-# 9. every SKILL.md frontmatter parses as YAML (guards the 'Triggers:' colon trap)
+# 9. handed-off: blocked without external reference, allowed with key/URL, no lesson required
+mkdir -p .sdlc/work/feat-b
+if "$kit/gates/close.sh" feat-b handed-off "sent to another team" >/dev/null 2>&1; then
+  echo "FAIL: handed-off close allowed without an external reference"; exit 1; fi
+"$kit/gates/close.sh" feat-b handed-off "tracking continues in A20-1240" >/dev/null
+grep -q '^state: handed-off' .sdlc/work/feat-b/CLOSED || { echo "FAIL: handed-off state not recorded"; exit 1; }
+grep -q '^reason: tracking continues in A20-1240' .sdlc/work/feat-b/CLOSED || { echo "FAIL: handed-off reference not recorded"; exit 1; }
+echo "ok: handed-off requires and records external reference"
+
+# 10. every SKILL.md frontmatter parses as YAML (guards the 'Triggers:' colon trap)
 if command -v python3 >/dev/null 2>&1; then
   python3 - "$kit" <<'PYEOF'
 import sys, glob, os
