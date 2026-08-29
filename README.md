@@ -74,6 +74,8 @@ When a shipped change fails, Maintain diagnoses it and writes the next `intent.m
 
 ## Quick start
 
+Requires `bash`, `git`, and coreutils. macOS and Linux already have them. On Windows, use **Git Bash** (bundled with [Git for Windows](https://gitforwindows.org/)) or WSL, and run every kit command there, including the ones your agent runs. PowerShell and cmd cannot execute the scripts.
+
 ```bash
 # 1. Install once
 git clone https://github.com/cskwork/sdlc-kit ~/sdlc-kit
@@ -152,6 +154,8 @@ Per feature, inside the **target project**:
     ├── evidence.md                   # commands · outputs · observed behavior
     └── CLOSED                        # shipped · abandoned · dead-end · handed-off
 ```
+
+`init.sh` also adds one line to the project's `.gitignore` (scratch evidence stays uncommitted) and one to its `.gitattributes` (`.sdlc/** text eol=lf`), so approval hashes agree across macOS, Linux, and Windows checkouts of the same commit.
 
 The public sdlc-kit repository stays framework-only. Domain artifacts live and version with the project they describe.
 
@@ -244,12 +248,21 @@ cd /path/to/project && ~/sdlc-kit/init.sh
 
 `init.sh` is idempotent. Existing files stay intact; new seed files from later kit versions are added.
 
+A Windows clone made before the kit pinned its line endings still holds CRLF scripts, which bash refuses to run. Re-normalize that clone once:
+
+```bash
+cd ~/sdlc-kit && git rm --cached -r -q . && git reset --hard
+```
+
+That discards any local edits inside the kit clone.
+
 ## Repository map
 
 ```text
 SKILL.md         discovery router: start · continue · status · close
 AGENTS.md        full portable process contract
 init.sh          idempotent project seed
+.gitattributes   pins LF endings so scripts survive a Windows clone
 skills/1-6/      stage instructions
 roles/           verifier · adversary · researcher contracts
 gates/           approve · check · close · status · stats · selftest
@@ -263,7 +276,7 @@ docs/index.html  bilingual EN/KO landing page
 ./gates/selftest.sh
 ```
 
-The selftest covers gate state, artifact edits after approval, stage-name injection, bare-path rejection, corrupt approval records, delegated approvals, lesson requirements for closing, double-close rejection, and YAML frontmatter parsing.
+The selftest covers gate state, artifact edits after approval, stage-name injection, bare-path rejection, corrupt approval records, delegated approvals, lesson requirements for closing, double-close rejection, YAML frontmatter parsing, and LF line endings in every script.
 
 ## What this is not
 

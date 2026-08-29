@@ -33,7 +33,9 @@ no next action.
 ## Hard rules (every stage, every harness)
 
 1. **Read the stage skill file COMPLETELY before acting.** Resolve paths
-   relative to this kit's directory.
+   relative to this kit's directory. On Windows, run every `gates/*.sh` and
+   `tools/*.sh` through Git Bash or WSL, not PowerShell or cmd. When a native
+   Windows path is needed, `.sdlc/config.md` records it as `kit_windows:`.
 2. **Check the gate first** for stages 2-4. Stages 1, 5, and 6 have no gate.
    Run `gates/check-gate.sh <prev-stage> <artifact>` from the project root.
    Treat any result other than a printed `GATE OPEN` as a closed gate. This

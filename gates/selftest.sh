@@ -69,9 +69,21 @@ grep -q '^state: handed-off' .sdlc/work/feat-b/CLOSED || { echo "FAIL: handed-of
 grep -q '^reason: tracking continues in A20-1240' .sdlc/work/feat-b/CLOSED || { echo "FAIL: handed-off reference not recorded"; exit 1; }
 echo "ok: handed-off requires and records external reference"
 
-# 10. every SKILL.md frontmatter parses as YAML (guards the 'Triggers:' colon trap)
-if command -v python3 >/dev/null 2>&1; then
-  python3 - "$kit" <<'PYEOF'
+# 10. shell scripts are LF-only — a CRLF checkout (Git for Windows default
+#     core.autocrlf=true, without .gitattributes) makes bash reject every script
+crlf=$(find "$kit" -name '*.sh' -not -path '*/.git/*' -exec awk '/\r/{print FILENAME}' {} + | sort -u)
+[ -z "$crlf" ] || { echo "FAIL: CRLF line endings — bash on Windows cannot run these:"; echo "$crlf"; exit 1; }
+echo "ok: shell scripts are LF-only"
+
+# 11. every SKILL.md frontmatter parses as YAML (guards the 'Triggers:' colon trap)
+py=""
+for c in python3 python py; do
+  command -v "$c" >/dev/null 2>&1 || continue
+  # -c '' rejects the Windows Store alias stub, which resolves but never runs
+  "$c" -c '' >/dev/null 2>&1 && { py="$c"; break; }
+done
+if [ -n "$py" ]; then
+  if ! "$py" - "$kit" <<'PYEOF'
 import sys, glob, os
 failed = []
 for p in glob.glob(os.path.join(sys.argv[1], '**/SKILL.md'), recursive=True):
@@ -94,10 +106,12 @@ for p in glob.glob(os.path.join(sys.argv[1], '**/SKILL.md'), recursive=True):
 if failed:
     print('\n'.join(failed)); sys.exit(1)
 PYEOF
-  [ $? -eq 0 ] || { echo "FAIL: SKILL.md frontmatter invalid (see above)"; exit 1; }
+  then
+    echo "FAIL: SKILL.md frontmatter invalid (see above)"; exit 1
+  fi
   echo "ok: all SKILL.md frontmatter valid"
 else
-  echo "skip: python3 absent, frontmatter check skipped"
+  echo "skip: no working python found, frontmatter check skipped"
 fi
 
 echo "SELFTEST PASS"
