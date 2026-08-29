@@ -46,9 +46,10 @@ blocks planning, return the question to the spec gate instead of improvising.
 
 ## Adversarial review (fresh context)
 
-Lazy shortcut: at lazymode ≥1 (AGENTS.md rule 3), run `tools/tripwire.sh`
-over the draft plan.md first — a clean scan skips this review; any hit runs
-it in full.
+This review runs at every lazymode level — plan authorizes what build
+executes irreversibly, so a keyword scan is never its substitute
+(AGENTS.md rule 3). `tools/tripwire.sh` output is evidence for the
+adversary, not a verdict.
 
 Dispatch an adversary (`roles/adversary.md`) with ONLY: spec.md, draft
 plan.md, and `.sdlc/memory/DOMAIN.md`. It checks that every requirement has a
@@ -61,8 +62,7 @@ Do not change the plan to hide a wrong spec.
 
 ## Gate (tiered, AGENTS.md rule 3)
 
-At lazymode ≥1: after the lazy shortcut above (clean scan, or adversary pass
-on a hit), run
+At lazymode ≥1: after the adversary review above passes, run
 `<kit>/gates/approve.sh plan .sdlc/work/<slug>/plan.md --lazy`, post the
 Human summary and any trip-wire list as FYI, and continue to build.
 

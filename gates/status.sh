@@ -72,9 +72,13 @@ for dir in .sdlc/work/*/; do
       state="PENDING approval"
       if [ -z "$next_action" ]; then
         if [ "$stage" = plan ] && [ "$lazy" -ge 1 ]; then
-          next_action="plan gate (lazymode $lazy): gates/approve.sh plan $art --lazy after a clean tripwire scan or adversary pass (AGENTS.md rule 3)"
+          next_action="plan gate (lazymode $lazy): gates/approve.sh plan $art --lazy after the adversary pass (AGENTS.md rule 3)"
         elif [ "$lazy" -ge "$(lazy_min "$stage")" ]; then
-          next_action="lazy gate (lazymode $lazy): gates/approve.sh $stage $art --lazy after a clean tripwire scan or adversary pass (AGENTS.md rule 3)"
+          if [ "$stage" = ship ]; then
+            next_action="lazy gate (lazymode $lazy): gates/approve.sh ship $art --lazy after the adversary pass (AGENTS.md rule 3)"
+          else
+            next_action="lazy gate (lazymode $lazy): gates/approve.sh $stage $art --lazy after a clean tripwire scan or adversary pass (AGENTS.md rule 3)"
+          fi
         elif [ "$stage" = plan ]; then
           next_action="plan gate (tiered): gates/approve.sh plan $art --agent-adversary after a clean adversary review, or human approval on any trip-wire (AGENTS.md rule 3)"
         else
