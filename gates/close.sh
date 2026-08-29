@@ -46,5 +46,19 @@ fi
   [ -n "$delegated" ] && echo "runner: agent" || true
 } > "$dir/CLOSED"
 echo "CLOSED: $slug ($state) — $reason"
+
+# promotion reminder: a lesson tag repeating 3+ times means the stage skill
+# should absorb the fix, not the memory (see skills/6-maintain lesson format)
+if [ -f .sdlc/memory/INDEX.md ]; then
+  rep=$(awk '!/^#/ && match($0, /\[[^]]+\]/) {
+      s = substr($0, RSTART+1, RLENGTH-2); n = split(s, t, /[, ]+/)
+      for (i = 1; i <= n; i++) if (t[i] != "") c[t[i]]++
+    } END { for (k in c) if (c[k] >= 3) print "  " k " (" c[k] "x)" }' .sdlc/memory/INDEX.md)
+  if [ -n "$rep" ]; then
+    echo "PROMOTE: these lesson tags repeat 3+ times — fold the fix into the stage skill:"
+    echo "$rep"
+  fi
+fi
+
 echo "Reminder: harvest durable facts into .sdlc/memory/DOMAIN.md, then commit"
 echo "$dir and .sdlc/memory/ for the audit trail."
