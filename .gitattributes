@@ -1,0 +1,4 @@
+# Shell scripts must reach the working tree with LF endings. Git for Windows
+# defaults to core.autocrlf=true, which would rewrite them to CRLF on clone and
+# leave bash failing with: /usr/bin/env bash^M: bad interpreter.
+* text=auto eol=lf
