@@ -11,7 +11,7 @@ case "$stage" in (*[!a-zA-Z0-9_-]*|"") echo "GATE CLOSED: invalid stage name '$s
 slug=$(basename "$(dirname "$artifact")")
 rec=".sdlc/approvals/${slug}.${stage}.approval"
 
-[ -f "$rec" ] || { echo "GATE CLOSED: no approval for '$stage' of '$slug'. A human must run: gates/approve.sh $stage $artifact"; exit 1; }
+[ -f "$rec" ] || { echo "GATE CLOSED: no approval for '$stage' of '$slug'. Needed: gates/approve.sh $stage $artifact (human decision, or --lazy when lazymode waives this gate — AGENTS.md rule 3)"; exit 1; }
 [ -f "$artifact" ] || { echo "GATE CLOSED: approved artifact missing: $artifact"; exit 1; }
 
 want=$(grep '^sha256: ' "$rec" | awk '{print $2}' || true)

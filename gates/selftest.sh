@@ -194,6 +194,13 @@ out=$("$kit/gates/status.sh" feat-f) || { echo "FAIL: status.sh crashed with laz
 case "$out" in (*"lazymode: 4"*) ;; (*) echo "FAIL: lazymode not shown in status"; exit 1;; esac
 case "$out" in (*"· lazy"*) ;; (*) echo "FAIL: lazy approval mode not shown in status"; exit 1;; esac
 case "$out" in (*"--lazy"*) ;; (*) echo "FAIL: pending ship gate should hint --lazy at lazymode 4"; exit 1;; esac
-echo "ok: lazy approval enforces the lazymode level, is recorded, and shows in status"
+if "$kit/gates/approve.sh" build "$fp" --lazy >/dev/null 2>&1; then
+  echo "FAIL: --lazy accepted for an unknown stage"; exit 1; fi
+printf 'lazymode: 10\n' > .sdlc/config.md   # out of range must fail CLOSED
+if "$kit/gates/approve.sh" ship .sdlc/work/feat-f/evidence.md --lazy >/dev/null 2>&1; then
+  echo "FAIL: out-of-range lazymode failed OPEN"; exit 1; fi
+printf 'lazymode: 4\r\n' > .sdlc/config.md  # CRLF-saved config must still parse
+"$kit/gates/approve.sh" ship .sdlc/work/feat-f/evidence.md --lazy >/dev/null || { echo "FAIL: CRLF lazymode config not parsed"; exit 1; }
+echo "ok: lazy approval enforces the lazymode level, range, and CRLF, is recorded, and shows in status"
 
 echo "SELFTEST PASS"

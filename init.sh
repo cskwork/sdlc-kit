@@ -75,14 +75,16 @@ if command -v cygpath >/dev/null 2>&1 && kit_win=$(cygpath -w "$kit" 2>/dev/null
 kit_windows: $kit_win   # same kit, native path for PowerShell/cmd"
 fi
 
-[ -f .sdlc/config.md ] || cat > .sdlc/config.md <<EOF
-# SDLC config
-$kit_lines
-# lazymode 0-4 — which gates stay HUMAN (policy: AGENTS.md rule 3).
+lazy_block="# lazymode 0-4 — which gates stay HUMAN (policy: AGENTS.md rule 3).
 # AGENTS: ask the human which level they want at init; 1 is the default.
 #   0: intent, spec, plan trip-wires, ship (everything as designed)
 #   1: intent, spec, ship    2: intent, ship    3: intent    4: none
-lazymode: 1
+lazymode: 1"
+
+[ -f .sdlc/config.md ] || cat > .sdlc/config.md <<EOF
+# SDLC config
+$kit_lines
+$lazy_block
 # Real commands agents must use for proof (fill these in — brownfield: copy from CI/Makefile).
 # AGENTS: if a command below is empty when you need it, STOP and ask the human to fill it in.
 build:
@@ -90,6 +92,13 @@ test:
 lint:
 run:
 EOF
+
+# projects seeded before lazymode existed keep their config; append the block
+# so the "default 1 is already set" claim below is true on re-runs too
+if ! grep -q '^lazymode:' .sdlc/config.md; then
+  if [ -s .sdlc/config.md ] && [ -n "$(tail -c 1 .sdlc/config.md)" ]; then echo >> .sdlc/config.md; fi
+  printf '%s\n' "$lazy_block" >> .sdlc/config.md
+fi
 
 echo "Seeded .sdlc/ in $(pwd)"
 echo "Next: 1) fill .sdlc/config.md verification commands"

@@ -81,9 +81,12 @@ labeled. Every open question is carried forward explicitly in its own section.
 
 ## Gate
 
-At lazymode 4 (AGENTS.md rule 3): run
+At lazymode 4 (AGENTS.md rule 3): dispatch a fresh-context adversary
+(`roles/adversary.md`) over intent.md — this stage has no other adversary
+pass. When it raises no blocking objection, run
 `<kit>/gates/approve.sh intent .sdlc/work/<slug>/intent.md --lazy`, post the
-intent summary to the human as FYI, and continue. Otherwise tell the user:
+intent summary and any objections to the human as FYI, and move to Stage 2
+in a fresh context. Otherwise tell the user:
 
 > Review `.sdlc/work/<slug>/intent.md`. If it says exactly what you want, run:
 > `<kit>/gates/approve.sh intent .sdlc/work/<slug>/intent.md`

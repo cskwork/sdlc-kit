@@ -36,12 +36,15 @@ case "$stage" in (*[!a-zA-Z0-9_-]*|"") echo "FAIL: stage must be [a-zA-Z0-9_-]+:
 # lazymode policy (AGENTS.md rule 3): the level in .sdlc/config.md decides which
 # human gates are waived — plan at >=1, spec at >=2, ship at >=3, intent at >=4.
 if [ "$mode" = "lazy" ]; then
-  lm=$(awk '/^lazymode: /{print $2; exit}' .sdlc/config.md 2>/dev/null || true)
-  case "$lm" in (''|*[!0-9]*) lm=0;; esac
+  # \r stripped: a CRLF-saved config must not silently disable lazymode
+  lm_raw=$(awk '/^lazymode: /{gsub(/\r/,""); print $2; exit}' .sdlc/config.md 2>/dev/null || true)
+  lm="$lm_raw"
+  # anything outside 0-4 fails CLOSED — a typo must never grant a wider waiver
+  case "$lm" in (''|*[!0-9]*) lm=0;; (*) [ "$lm" -le 4 ] || lm=0;; esac
   case "$stage" in plan) need=1;; spec) need=2;; ship) need=3;; intent) need=4;;
     *) echo "FAIL: --lazy applies only to intent, spec, plan, or ship"; exit 1;; esac
   if [ "$lm" -lt "$need" ]; then
-    echo "FAIL: lazymode $lm keeps the '$stage' gate HUMAN (--lazy needs lazymode >= $need in .sdlc/config.md). A human must approve."
+    echo "FAIL: lazymode '${lm_raw:-unset}' keeps the '$stage' gate HUMAN (--lazy needs lazymode >= $need, valid range 0-4, in .sdlc/config.md). A human must approve."
     exit 1
   fi
   mode="lazy (auto-approved: lazymode $lm waives the $stage human gate; adversary review passed)"
