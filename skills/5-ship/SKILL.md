@@ -69,13 +69,15 @@ The ship approval and the commit check are two different human checks. At
 lazymode ≥3 the staged-set check is also autonomous: verify the staged list
 yourself against the rules below, post it as FYI, and commit.
 
-1. Delete `.sdlc/work/<slug>/scratch/` if present. Only artifacts ship.
-2. Stage named paths only: changed source files, `.sdlc/work/<slug>/`, changed
+1. Stage named paths only: changed source files, `.sdlc/work/<slug>/`, changed
    `.sdlc/memory/` paths, and `.sdlc/approvals/`. Do not use `git add -A` or
-   `git add .` because they can include unrelated files and scratch output.
-3. Show the human the staged file list with `git status` and the proposed
+   `git add .` because they can include unrelated files and scratch output
+   (scratch/ is gitignored and stays on disk until step 3).
+2. Show the human the staged file list with `git status` and the proposed
    commit message. Describe the behavior change, not file names. Wait for the
    human to approve the staged set. Evidence approval does not approve the
    staged files.
-4. Commit and push following the **Release procedure** line in spec.md. Ask
-   separately before pushing a protected or shared branch.
+3. Commit and push following the **Release procedure** line in spec.md. Ask
+   separately before pushing a protected or shared branch. After the push,
+   delete `.sdlc/work/<slug>/scratch/` — the one cleanup of the loop. Nothing
+   is deleted before this point.

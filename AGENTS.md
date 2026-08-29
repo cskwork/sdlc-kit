@@ -45,9 +45,10 @@ when closing.
    `gates/approve.sh <stage> <artifact> --delegated` only after the human
    explicitly approves that artifact in chat ("approve", "looks right", or
    equivalent). Never approve on silence, a general "continue", or your own
-   judgment. Never write to `.sdlc/approvals/` directly. If the artifact
-   changes after approval, ask again — the approval bound different bytes.
-   Commit approvals to git; its history is the audit trail.
+   judgment. Never write to `.sdlc/approvals/` directly.
+   Commit approvals to git; its history is the audit trail. Approvals do not
+   bind file bytes: editing an approved artifact does not close its gate, but
+   a change that alters what the human approved deserves a fresh ask.
 
    **The plan gate is tiered.** Trip-wires: schema or data migration, data
    deletion or destructive backfill, public API or contract change,
@@ -74,7 +75,7 @@ when closing.
    lazymode waives the human decision, nothing else: the stage's adversary
    review must still pass before `--lazy` (intent defines none — at level 4,
    dispatch a fresh-context adversary over intent.md before approving),
-   approvals still record and chain hashes, and every auto-approved gate
+   approvals are still recorded, and every auto-approved gate
    still posts its Human summary (and any trip-wire list) to the human as
    FYI. `approve.sh --lazy` refuses a stage the configured level keeps
    human, and any `lazymode:` value outside 0-4 counts as 0.
@@ -102,7 +103,8 @@ when closing.
 
    **Bulk rule.** Screenshots, probe logs, traces, and large command dumps
    go to the gitignored `.sdlc/work/<feature>/scratch/`; quote the deciding
-   lines in the stage artifact, then delete the file.
+   lines in the stage artifact and keep the file. Cleanup happens once, at
+   the end of ship (skills/5-ship), never mid-loop.
 6. **Proof over claims.** Every "done" claim carries command output, using
    the real commands in `.sdlc/config.md`.
 7. **Artifacts live in the project repo** under `.sdlc/work/<feature>/`,

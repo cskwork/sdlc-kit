@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>sdlc-kit | Gated SDLC for AI coding agents</title>
-<meta name="description" content="Anthropic's AI-native SDLC playbook as plain files + shell: six stages, one artifact each, tamper-evident human approval gates. Works with pi, Claude Code, Codex CLI, Gemini CLI, Cursor.">
+<meta name="description" content="Anthropic's AI-native SDLC playbook as plain files + shell: six stages, one artifact each, human approval gates on the record. Works with pi, Claude Code, Codex CLI, Gemini CLI, Cursor.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="sdlc-kit | Gated SDLC for AI coding agents">
-<meta property="og:description" content="Six stages, one artifact each, tamper-evident human approval gates. Plain files + shell, any harness.">
+<meta property="og:description" content="Six stages, one artifact each, human approval gates on the record. Plain files + shell, any harness.">
 <meta property="og:url" content="https://github.com/cskwork/sdlc-kit">
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#14110d">
@@ -525,9 +525,9 @@
 </head>
 <body>
 <!-- Design contract
-     Purpose: show the six-stage loop, human gates, and approval hash check.
+     Purpose: show the six-stage loop, human gates, and the approval record.
      Visual system: warm dark background, light text, brass accent, Bitter
-     headings, monospace for files, commands, and hashes, and thin ledger rules.
+     headings, monospace for files and commands, and thin ledger rules.
      First view: introduction and actions on the left; approval terminal on the
      right. -->
 <noscript><style>.top-actions .lang { display: none; }</style></noscript>
@@ -563,9 +563,9 @@
         <p class="harnesses"><b>pi</b><span class="dot">·</span><b>Claude Code</b><span class="dot">·</span><b>Codex CLI</b><span class="dot">·</span><b>Gemini CLI</b><span class="dot">·</span><b>Cursor</b><br><span data-i18n="harness-note">any of them can read files and run shell commands.</span></p>
       </div>
 
-      <div class="term" role="img" aria-label="Terminal transcript: approving an intent opens the gate; quietly editing the artifact afterwards closes it." data-i18n-aria="term-aria">
+      <div class="term" role="img" aria-label="Terminal transcript: an unapproved stage prints GATE CLOSED; after the human's approval is recorded, the gate opens." data-i18n-aria="term-aria">
         <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>your-project / zsh</span></div>
-        <pre class="term-body"><span class="ln" style="--i:0"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/approve.sh intent .sdlc/work/payments/intent.md</span></span><span class="ln" style="--i:1"><span class="ok">APPROVED:</span><span class="o"> intent of payments (intent.md @ 435b90e32d44…)</span></span><span class="ln" style="--i:2"><span class="o">Commit .sdlc/approvals/payments.intent.approval — the audit trail.</span></span><span class="ln" style="--i:3"> </span><span class="ln" style="--i:4"><span class="p">$</span> <span class="c">$EDITOR .sdlc/work/payments/intent.md</span>  <span class="dim"># a quiet edit, after the fact</span></span><span class="ln" style="--i:5"> </span><span class="ln" style="--i:6"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh intent .sdlc/work/payments/intent.md</span></span><span class="ln" style="--i:7"><span class="bad">GATE CLOSED:</span><span class="o"> intent.md was EDITED AFTER approval.</span></span><span class="ln" style="--i:8"><span class="o">  approved: 435b90e32d447d978cc65669acee7161de1d03064cf4a90d38e63b839c7a2089</span></span><span class="ln" style="--i:9"><span class="o">   current: 31a373b832b5ac2679e579d1dc2ede71bd0430b53ce4edecad61b3cea74681dc</span></span><span class="ln caret" style="--i:10"><span class="o">A human must re-review and re-run approve.sh.</span></span></pre>
+        <pre class="term-body"><span class="ln" style="--i:0"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh spec .sdlc/work/payments/spec.md</span></span><span class="ln" style="--i:1"><span class="bad">GATE CLOSED:</span><span class="o"> no approval for 'spec' of 'payments'.</span></span><span class="ln" style="--i:2"><span class="o">Needed: gates/approve.sh spec … (human decision — AGENTS.md rule 3)</span></span><span class="ln" style="--i:3"> </span><span class="ln" style="--i:4"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/approve.sh spec .sdlc/work/payments/spec.md --delegated</span>  <span class="dim"># after "approve" in chat</span></span><span class="ln" style="--i:5"><span class="ok">APPROVED:</span><span class="o"> spec of payments (.sdlc/work/payments/spec.md)</span></span><span class="ln" style="--i:6"><span class="o">Commit .sdlc/approvals/payments.spec.approval — the audit trail.</span></span><span class="ln" style="--i:7"> </span><span class="ln" style="--i:8"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh spec .sdlc/work/payments/spec.md</span></span><span class="ln caret" style="--i:9"><span class="ok">GATE OPEN:</span><span class="o"> spec (approved @ 2026-08-30T09:12:44Z)</span></span></pre>
       </div>
     </div>
   </section>
@@ -645,8 +645,8 @@
           <dd data-i18n="l1-d">Stage&nbsp;1 explores before it asks, then labels every claim in <code>intent.md</code> <code>[verified]</code> with evidence or <code>[assumed]</code> with a reason. Users can be mistaken; this is the cheapest stage to find out.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M9 12h6M12 9v6"/></svg><span data-i18n="l2-t">Tamper-evident gates</span></dt>
-          <dd data-i18n="l2-d"><code>approve.sh</code> records the artifact&rsquo;s sha256; one quiet edit after approval and the next <code>check-gate.sh</code> prints <code>GATE CLOSED</code> on its own.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M9 12h6M12 9v6"/></svg><span data-i18n="l2-t">Approvals on the record</span></dt>
+          <dd data-i18n="l2-d"><code>approve.sh</code> writes a plain record — stage, artifact, time, mode — committed with the code; <code>check-gate.sh</code> prints <code>GATE CLOSED</code> until it exists.</dd>
         </div>
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-4.2-7.6"/><path d="M21 3v5h-5"/></svg><span data-i18n="l3-t">Delegation stays visible</span></dt>
@@ -723,9 +723,9 @@
       <div class="honest">
         <h2 id="limits-h">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
-          <span data-i18n="lim-h">Honest limit: tamper-evident, not tamper-proof</span>
+          <span data-i18n="lim-h">Honest limit: a record, not a lock</span>
         </h2>
-        <p data-i18n="lim-p">Approval records catch edits after approval because the recorded hash no longer matches. They do not prevent a malicious process from forging records. Agent rules and approval history provide the remaining audit trail. Commit approvals with the code.</p>
+        <p data-i18n="lim-p">Approval records are plain markers. They do not detect later edits and do not prevent a process from forging records. Agent rules and the git history of the approvals provide the audit trail. Commit approvals with the code.</p>
       </div>
     </div>
   </section>
@@ -776,8 +776,8 @@
     "why-lede": '이 키트는 다음 단계의 실행을 통제하는 데 필요한 파일, 스크립트, 게이트만 추가합니다.',
     "l1-t": '의도 심문',
     "l1-d": '1단계는 묻기 전에 먼저 탐색하고, <code>intent.md</code>의 모든 주장에 근거가 있으면 <code>[verified]</code>, 근거가 없으면 그 이유와 함께 <code>[assumed]</code>로 표시합니다. 사용자도 틀릴 수 있습니다. 가장 저렴하게 확인할 수 있는 단계가 바로 여기입니다.',
-    "l2-t": '변조 감지 게이트',
-    "l2-d": '<code>approve.sh</code>는 산출물의 sha256을 기록합니다. 승인 뒤에 파일을 조용히 고치면, 다음 <code>check-gate.sh</code>가 스스로 <code>GATE CLOSED</code>를 출력합니다.',
+    "l2-t": '기록으로 남는 승인',
+    "l2-d": '<code>approve.sh</code>는 단계·산출물·시각·모드를 담은 평문 기록을 남기고 코드와 함께 커밋합니다. 기록이 없으면 <code>check-gate.sh</code>가 <code>GATE CLOSED</code>를 출력합니다.',
     "l3-t": '위임도 기록에 남음',
     "l3-d": '사람 게이트에서 에이전트가 승인을 실행할 수 있는 때는 채팅에서 당신이 명시적으로 지시했을 때뿐이며, 기록에는 <code>mode: delegated-chat</code>이 남습니다. 적대적 검토로 승인된 plan에는 <code>mode: agent-adversary</code>가 남습니다. 어느 쪽이든 승인이 조용히 이루어지는 일은 없습니다.',
     "l4-t": '신선한 컨텍스트 검토',
@@ -803,8 +803,8 @@
     "r-cx": '프로젝트 <code>AGENTS.md</code>에 같은 한 줄을 추가합니다.',
     "r-gm": '<code>GEMINI.md</code>에 같은 한 줄을 추가합니다.',
     "r-else": '세션에 <code>AGENTS.md</code>를 붙여 넣으세요. 계약은 파일 + 스크립트이며 하네스 기능이 아닙니다.',
-    "lim-h": '정직한 한계: 변조 감지이지 변조 방지가 아님',
-    "lim-p": '승인 기록은 기록된 해시가 더 이상 일치하지 않으므로 승인 후 편집을 잡아냅니다. 악의적인 프로세스가 기록을 위조하는 일까지 막지는 못합니다. 나머지 감사 추적은 에이전트 규칙과 승인 기록의 히스토리가 담당합니다. 승인 기록은 코드와 함께 커밋합니다.',
+    "lim-h": '정직한 한계: 기록이지 잠금장치가 아님',
+    "lim-p": '승인 기록은 평문 마커입니다. 승인 뒤의 편집을 감지하지 않고, 프로세스가 기록을 위조하는 일도 막지 못합니다. 감사 추적은 에이전트 규칙과 승인 기록의 git 히스토리가 담당합니다. 승인 기록은 코드와 함께 커밋합니다.',
     "foot-p": 'sdlc-kit: 평문 파일 + 셸. 훅 없음, 런타임 없음, 종속성 없음.',
     "foot-gh": 'GitHub 저장소',
     "foot-pb": 'Anthropic의 플레이북',
@@ -812,7 +812,7 @@
   };
   var KO_ARIA = {
     "hero-aria": 'sdlc-kit 소개',
-    "term-aria": '터미널 화면: intent를 승인하면 게이트가 열리고, 승인 뒤에 조용히 파일을 고치면 닫힙니다.',
+    "term-aria": '터미널 화면: 승인 기록이 없는 단계는 GATE CLOSED를 출력하고, 사람의 승인이 기록되면 게이트가 열립니다.',
     "flow-aria": '사람 승인 게이트가 있는 여섯 단계 루프',
     "foot-aria": '푸터'
   };

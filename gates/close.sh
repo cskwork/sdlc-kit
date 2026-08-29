@@ -40,7 +40,6 @@ fi
 {
   echo "state: $state"
   echo "reason: $reason"
-  echo "closed_by: $(whoami)"
   echo "closed_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   [ -n "$delegated" ] && echo "mode: delegated-chat (agent-run on explicit human instruction)" || true
   [ -n "$delegated" ] && echo "runner: agent" || true

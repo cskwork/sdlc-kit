@@ -6,10 +6,8 @@
 # passed and no trip-wires (policy: AGENTS.md hard rule 3). --lazy records an
 # auto-approval for a gate that `lazymode:` in .sdlc/config.md waives (rule 3);
 # it is refused for any gate the configured level keeps human.
-# Records a tamper-evident approval: sha256 of the artifact + who + when.
-# Threat model: catches post-approval edits and mistakes, NOT a malicious agent
-# forging records — that line is held by rule 3 plus
-# git history of .sdlc/approvals/, which is the real audit trail.
+# The record is a plain marker: stage + when + mode. The audit trail is rule 3
+# plus the git history of .sdlc/approvals/.
 set -euo pipefail
 
 usage() { echo "usage: approve.sh <stage> <artifact-path> [--delegated | --agent-adversary | --lazy]   (run from the project root)"; exit 1; }
@@ -55,28 +53,13 @@ slug=$(basename "$(dirname "$artifact")")
 case "$slug" in (.|/|"") echo "FAIL: artifact must live in a feature dir (.sdlc/work/<slug>/)"; exit 1;; esac
 
 mkdir -p .sdlc/approvals
-sha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1"; else sha256sum "$1"; fi | awk '{print $1}'; }
-hash=$(sha "$artifact")
-
-# upstream chaining: bind this approval to the artifact it was derived from,
-# so an edit to an approved upstream closes every downstream gate (check-gate.sh).
-upstream_for() { case "$1" in spec) echo "intent.md";; plan) echo "spec.md";; ship) echo "plan.md";; *) echo "";; esac; }
-up_art=""; up_hash=""
-up_name=$(upstream_for "$stage")
-if [ -n "$up_name" ] && [ -f "$(dirname "$artifact")/$up_name" ]; then
-  up_art="$(dirname "$artifact")/$up_name"
-  up_hash=$(sha "$up_art")
-fi
 
 {
   echo "stage: $stage"
   echo "artifact: $artifact"
-  echo "sha256: $hash"
-  echo "approved_by: $(whoami)"
   echo "approved_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  [ -n "$up_hash" ] && { echo "upstream: $up_art"; echo "upstream_sha256: $up_hash"; } || true
   [ -n "$mode" ] && echo "mode: $mode" || true
   [ -n "$mode" ] && echo "runner: agent" || true
 } > ".sdlc/approvals/${slug}.${stage}.approval"
-echo "APPROVED: $stage of $slug ($artifact @ ${hash:0:12}…)"
+echo "APPROVED: $stage of $slug ($artifact)"
 echo "Commit .sdlc/approvals/${slug}.${stage}.approval with the artifact for the audit trail."
