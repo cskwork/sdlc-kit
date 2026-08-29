@@ -25,6 +25,7 @@ A common agent workflow starts with implementation. The agent receives a prompt,
 - The agent investigates before it asks you questions.
 - Claims in `intent.md` are labeled `[verified]` or `[assumed]`.
 - A fresh-context adversary reviews the spec before you approve it.
+- A routine plan auto-approves after a clean adversary review; migrations, deletions, API, security, and infra changes escalate to you.
 - A different verifier checks the implementation against the approved artifacts.
 - Editing an approved artifact closes its gate automatically.
 - Failed attempts leave lessons and domain knowledge for the next run.
@@ -55,7 +56,7 @@ It is adapted from [Anthropic's AI-Native SDLC playbook](https://claude.com/blog
                                 └────────────┘
 ```
 
-Each stage produces one reviewable artifact. A human decision opens the next gate. After you approve, the agent may run the approval command. The record marks that delegation with `mode: delegated-chat`.
+Each stage produces one reviewable artifact. Intent, spec, and ship gates are human decisions; after you approve in chat, the agent may run the approval command, and the record marks that delegation with `mode: delegated-chat`. The plan gate is tiered: a fresh-context adversary reviews every plan, a routine plan auto-approves (`mode: agent-adversary`), and any trip-wire — migration, data deletion, public API, security paths, infra/config, beyond-spec scope — makes it a human gate.
 
 When a shipped change fails, Maintain diagnoses it and writes the next `intent.md`.
 
@@ -218,7 +219,7 @@ Example:
   spec     APPROVED (danny @ 2026-08-28T10:43:30Z · delegated)
   plan     PENDING approval
   ship     —  (no artifact)
-  next  →  human gate: gates/approve.sh plan ...
+  next  →  plan gate (tiered): gates/approve.sh plan ...
 ```
 
 ## Works in complex codebases

@@ -6,16 +6,19 @@ vendor-specific features.
 
 ## The loop
 
-Six stages. Each stage produces ONE artifact. A human approval of that artifact
-(recorded by `gates/approve.sh`) opens the next stage. A production issue in
-stage 6 creates a new `intent.md` and starts the loop again.
+Six stages. Each stage produces ONE artifact. An approval of that artifact
+(recorded by `gates/approve.sh`) opens the next stage. Intent, spec, and ship
+approvals are human decisions. The plan gate is tiered (rule 3): a routine
+plan auto-approves after a clean adversary review; any trip-wire escalates it
+to a human. A production issue in stage 6 creates a new `intent.md` and
+starts the loop again.
 
 | # | Stage    | Read this skill first              | Artifact (in project `.sdlc/work/<feature>/`) | Gate to pass BEFORE starting |
 |---|----------|------------------------------------|-----------------------------------------------|------------------------------|
 | 1 | Intent   | `skills/1-intent/SKILL.md`         | `intent.md`                                   | none; proceed               |
 | 2 | Spec     | `skills/2-spec/SKILL.md`           | `spec.md`                                     | `intent`                     |
 | 3 | Plan     | `skills/3-plan/SKILL.md`           | `plan.md`                                     | `spec`                       |
-| 4 | Build    | `skills/4-build/SKILL.md`          | code + tests                                  | `plan`                       |
+| 4 | Build    | `skills/4-build/SKILL.md`          | code + tests                                  | `plan` (tiered, rule 3)      |
 | 5 | Ship     | `skills/5-ship/SKILL.md`           | `evidence.md`                                 | none; build done and checks pass |
 | 6 | Maintain | `skills/6-maintain/SKILL.md`       | new `intent.md` + lesson                      | none; triggered by incident |
 
@@ -41,15 +44,29 @@ no next action.
    Treat any result other than a printed `GATE OPEN` as a closed gate. This
    includes GATE CLOSED, errors, and silence. STOP and tell the human exactly
    what to approve.
-3. **Approval is a human decision. The command may be delegated.** Run
-   `gates/approve.sh <stage> <artifact> --delegated` only after the human
-   explicitly approves this artifact at this stage in chat. Valid responses
-   include "approve", "looks right", or an equivalent answer to the gate
-   request. The record then includes `mode: delegated-chat`. Never approve
-   based on silence, a general "continue", or your own judgment. Never write
-   directly to `.sdlc/approvals/`. If the artifact changes after the human
-   approves it, ask again because the approval applied to different bytes.
-   Commit approvals to git. Git history is the audit trail.
+3. **Intent, spec, and ship approvals are human decisions. The command may be
+   delegated.** Run `gates/approve.sh <stage> <artifact> --delegated` only
+   after the human explicitly approves this artifact at this stage in chat.
+   Valid responses include "approve", "looks right", or an equivalent answer
+   to the gate request. The record then includes `mode: delegated-chat`.
+   Never approve based on silence, a general "continue", or your own
+   judgment. Never write directly to `.sdlc/approvals/`. If the artifact
+   changes after the human approves it, ask again because the approval
+   applied to different bytes. Commit approvals to git. Git history is the
+   audit trail.
+
+   **The plan gate is tiered.** Trip-wires: schema or data migration, data
+   deletion or destructive backfill, public API or contract change,
+   security-sensitive paths (auth, secrets, permissions), infra or config
+   change, and work beyond the approved spec scope. Anything the build stage
+   would execute irreversibly is a trip-wire. plan.md records the verdict in
+   its **Gate tier** section, and the fresh-context adversary re-checks every
+   trip-wire itself; an understated tier is a blocking finding.
+   - No trip-wires and no adversary blockers: run
+     `gates/approve.sh plan <plan.md> --agent-adversary` (recorded as
+     `mode: agent-adversary`), post plan.md's Human summary to the human as
+     FYI, and continue to build without stopping.
+   - Any trip-wire: the plan gate is a human gate, exactly like the others.
 4. **Keep memory bounded.** At each stage start, read
    `.sdlc/memory/INDEX.md` and `.sdlc/memory/DOMAIN.md`. INDEX.md stores lessons
    about past mistakes and their corrections. DOMAIN.md stores terms, verified

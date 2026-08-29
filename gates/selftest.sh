@@ -114,4 +114,15 @@ else
   echo "skip: no working python found, frontmatter check skipped"
 fi
 
+# 12. --agent-adversary: recorded for plan, rejected for every other stage
+mkdir -p .sdlc/work/feat-c
+p=.sdlc/work/feat-c/plan.md
+echo "plan: test" > "$p"
+"$kit/gates/approve.sh" plan "$p" --agent-adversary >/dev/null
+grep -q '^mode: agent-adversary' .sdlc/approvals/feat-c.plan.approval || { echo "FAIL: agent-adversary mode not recorded"; exit 1; }
+"$kit/gates/check-gate.sh" plan "$p" >/dev/null
+if "$kit/gates/approve.sh" spec "$p" --agent-adversary >/dev/null 2>&1; then
+  echo "FAIL: agent-adversary accepted for a non-plan stage"; exit 1; fi
+echo "ok: agent-adversary approval is plan-only and recorded"
+
 echo "SELFTEST PASS"

@@ -5,7 +5,8 @@ description: "Gated SDLC loop with human approvals. Triggers: \"start SDLC\", \"
 
 # sdlc-kit router
 
-One loop, six stages, one artifact per stage, and a human gate between stages.
+One loop, six stages, one artifact per stage, and a gate between stages:
+human at intent, spec, and ship; tiered at plan (AGENTS.md rule 3).
 This file routes requests. `AGENTS.md` in this directory is the full contract.
 Read it completely on first contact with a project, then return here.
 

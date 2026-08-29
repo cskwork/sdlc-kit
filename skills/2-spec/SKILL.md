@@ -40,6 +40,12 @@ Fill `templates/spec.md`. Rules:
   after.
 - Brownfield: include a **"What stays untouched"** section with testable
   statements about behavior that must survive. This becomes the regression baseline.
+- **Ask for constraints the code does not show.** Ownership boundaries,
+  forbidden areas, deploy windows, compatibility promises. Record them in the
+  spec. The plan stage inherits them and does not interview the human again.
+- **State the release procedure in one line** (template section): branch →
+  merge target → push → deploy command. Ship follows this line; "none" is a
+  valid deploy command.
 - Flag security, compliance, UX, and performance concerns inline. The human
   resolves them at the gate.
 
