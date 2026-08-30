@@ -29,7 +29,16 @@ not only at the end.
   `.sdlc/work/<slug>/deviations.md` and continue. Create the file on first use.
   Keep the approved plan.md byte-identical so its gate stays open. For a
   structural deviation such as different files or a different approach, STOP,
-  tell the human, and re-gate the plan.
+  tell the human, and re-gate the plan. When the deviation's root cause is a
+  factual error in spec.md (wrong data shape, wrong AS-IS claim), re-gate the
+  spec first — with the evidence — then the plan: an artifact that no longer
+  says what the human approved needs a fresh ask (AGENTS.md rule 3).
+- **Re-gate cap: two per stage, per feature.** A third surprise in the same
+  stage means stage 1 got the facts wrong, not that the plan needs another
+  pass. STOP, show the human the trail (deviations.md + the re-approval
+  history), and let them choose: back to intent with the new facts, or close
+  dead-end with a lesson. Endless spec↔plan churn is a finding about intent,
+  never progress.
 - A check that must fail the build must fail it synchronously (direct throw,
   sync IO, or top-level await). An unawaited promise is not a gate. It depends
   on environment behavior and may finish too late.
