@@ -1,7 +1,10 @@
 # Intent: <feature slug>
 
+- Goal: <ONE plain-language sentence anyone can understand — who can do what
+  once this ships. Written to be copy-pasted into a status report verbatim.>
 - Date: YYYY-MM-DD
 - Type: greenfield | brownfield
+- Track: full (default) | micro — <only when ALL criteria hold; evidence per skills/1-intent>
 - Requested by: <who>
 
 ## Problem

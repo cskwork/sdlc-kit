@@ -12,7 +12,10 @@ reviews first. The human reviews findings about intent and risk.
 
 Run as a dispatched subagent (AGENTS.md rule 5) — do not assemble evidence in
 the context that built the code. Read plan.md, spec.md, deviations.md (if
-present), and the diff (`git diff` against the base branch). Read `.sdlc/memory/INDEX.md` and
+present), and the diff (`git diff` against the base branch). Micro-track
+features have no spec or plan: intent.md replaces both as the upstream
+source, and its success criteria are the requirements. Read
+`.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`, and
 `.sdlc/memory/DOMAIN.md`; open lesson files whose tags match the current task.
 
 ## Adversarial code review (fresh context)
@@ -20,7 +23,8 @@ present), and the diff (`git diff` against the base branch). Read `.sdlc/memory/
 This review runs at every lazymode level — it is the last look at the diff
 before the push, and the only security pass (AGENTS.md rule 3).
 
-Dispatch an adversary (`roles/adversary.md`) with: spec.md, plan.md, the diff.
+Dispatch an adversary (`roles/adversary.md`) with: spec.md, plan.md, the
+diff (micro: intent.md and the diff).
 It checks spec mismatch, missing untouched checks, security issues, tests that
 cannot fail, and complexity that hides bugs. Fix findings or
 record justified rejections.
@@ -48,13 +52,15 @@ Fill `templates/evidence.md` → `.sdlc/work/<slug>/evidence.md`:
 ## Retrospective (mandatory)
 
 Review the feature history. Record what went wrong, what surprised you, and
-what would help the next agent. Add lessons using the skill 6 format. Add
-durable terms, verified facts, and constraints to `.sdlc/memory/DOMAIN.md`.
-Deduplicate entries and keep the file within its limit. Domain facts describe
-the system; lessons describe mistakes. If a stage skill should have prevented
-a mistake, add `promote: skills/<n>` to the lesson. A tag that appears three
-or more times in INDEX.md must be promoted: propose the stage-skill change to
-the human (`close.sh` prints these).
+what would help the next agent — all into the feature's
+`.sdlc/work/<slug>/harvest.md` (lesson candidates in the skill 6 format;
+durable terms, verified facts, and constraints as domain candidates).
+Shared memory files are written only at close, by the closer (AGENTS.md
+rule 4). Domain facts describe the system; lessons describe mistakes. If a
+stage skill should have prevented a mistake, add `promote: skills/<n>` to
+the lesson candidate. A tag that appears three or more times in INDEX.md
+must be promoted: propose the stage-skill change to the human (`close.sh`
+prints these).
 
 ## Gate
 
@@ -73,8 +79,9 @@ The ship approval and the commit check are two different human checks. At
 lazymode ≥3 the staged-set check is also autonomous: verify the staged list
 yourself against the rules below, post it as FYI, and commit.
 
-1. Stage named paths only: changed source files, `.sdlc/work/<slug>/`, changed
-   `.sdlc/memory/` paths, and `.sdlc/approvals/`. Do not use `git add -A` or
+1. Stage named paths only: changed source files, `.sdlc/work/<slug>/`
+   (harvest.md included), `.sdlc/approvals/`, and `.sdlc/memory/POLICY.md`
+   when a mid-loop transcription changed it. Do not use `git add -A` or
    `git add .` because they can include unrelated files and scratch output
    (scratch/ is gitignored and stays on disk until step 3).
 2. Show the human the staged file list with `git status` and the proposed

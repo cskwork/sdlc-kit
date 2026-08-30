@@ -1,0 +1,17 @@
+name: selftest
+on:
+  push:
+permissions:
+  contents: read
+jobs:
+  selftest:
+    strategy:
+      fail-fast: false
+      matrix:
+        # windows runs under Git Bash — the documented first-class Windows target
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash gates/selftest.sh
+        shell: bash

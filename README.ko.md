@@ -61,6 +61,10 @@ Intent → spec → plan → build → evidence → maintain. 사람 승인 게�
 
 배포된 변경이 실패하면 Maintain 단계가 진단하고 다음 `intent.md`를 씁니다.
 
+모든 티켓이 6단계를 다 도는 것은 아닙니다. 사소한 티켓 — 트립와이어 클린, 수정할 파일 확정, 기존 명령으로 성공 검증 가능 — 은 **마이크로 트랙**을 탑니다. intent(게이트) → build → ship로 바로 가고, ship의 adversary 리뷰가 diff의 유일한 리뷰가 됩니다(intent.md에 `Track: micro`, 기준은 `skills/1-intent`). 반대로 한 번에 파악이 안 되는 티켓은 **map**(`map.md`: 목적지 · 정한 것 · 모르는 것 · 안 할 것)부터 만들고, 세션마다 미결 하나씩 풀어 intent.md를 쓸 수 있을 때까지 진행합니다.
+
+루프 도중의 교훈·도메인 후보는 피처 자신의 `harvest.md`에만 쌓입니다. 공유 메모리(`INDEX.md`, `DOMAIN.md`, `lessons/`)를 쓰는 주체는 close 단계 하나뿐이라 병렬 루프가 충돌하지 않습니다. 채팅에서 선언한 하드 룰은 — 사람의 말이 있을 때만, 날짜와 함께 — `.sdlc/memory/POLICY.md`에 전사되고, adversary는 위반을 차단 사유로 처리합니다.
+
 ## 무엇이 다른가
 
 | 흔한 에이전트 워크플로 | sdlc-kit |
@@ -137,20 +141,24 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
 ├── approvals/
 │   └── <slug>.<stage>.approval       # 단계 · 시각 · 모드
 ├── memory/
+│   ├── POLICY.md                     # 사람이 선언한 하드 룰, 에이전트는 전사만
 │   ├── INDEX.md                      # 교훈 포인터, 50줄 이하
 │   ├── DOMAIN.md                     # 용어 · 확인된 사실 · 제약
 │   └── lessons/<date>-<lesson>.md
-└── work/<slug>/
-    ├── intent.md                     # 문제 · 증명 · 성공 기준 · 범위
-    ├── spec.md                       # Human summary · AS-IS → TO-BE · 계약
-    ├── plan.md                       # 파일 · 순서 · 리스크 · 증명
-    ├── deviations.md                 # 빌드 중 편차 기록, plan은 잠긴 채 유지
-    ├── baseline.txt                  # 브라운필드의 변경 전 동작
-    ├── evidence.md                   # 명령 · 출력 · 관찰된 동작
-    └── CLOSED                        # shipped · abandoned · dead-end · handed-off
+├── work/<slug>/                      # 열린 피처만
+│   ├── intent.md                     # 문제 · 증명 · 성공 기준 · 범위
+│   ├── spec.md                       # Human summary · AS-IS → TO-BE · 계약
+│   ├── plan.md                       # 파일 · 순서 · 리스크 · 증명
+│   ├── deviations.md                 # 빌드 중 편차 기록, plan은 잠긴 채 유지
+│   ├── baseline.txt                  # 브라운필드의 변경 전 동작
+│   ├── harvest.md                    # 루프 중 교훈·도메인 후보, close에서 병합
+│   └── evidence.md                   # 명령 · 출력 · 관찰된 동작
+└── archive/<slug>/                   # 닫힌 피처, close.sh가 여기로 옮김
+    ├── CLOSED                        # shipped · abandoned · dead-end · handed-off
+    └── approvals/                    # 피처의 승인 기록도 함께 이동
 ```
 
-`init.sh`는 프로젝트 `.gitignore`에 한 줄을 추가합니다. scratch 증거는 커밋되지 않고, ship의 루프 종료 정리 전까지 디스크에 남습니다.
+`init.sh`는 프로젝트 `.gitignore`에 두 줄을 추가합니다(`work/`와 `archive/`의 scratch). scratch 증거는 커밋되지 않고, ship의 루프 종료 정리 전까지 디스크에 남습니다.
 
 공개 sdlc-kit 저장소는 프레임워크만 담습니다. 도메인 산출물은 그것이 설명하는 프로젝트 안에서 함께 버전 관리됩니다.
 
@@ -168,7 +176,7 @@ gates/approve.sh <stage> .sdlc/work/<slug>/<artifact> --delegated
 
 ### 잠금장치가 아니라 기록
 
-`approve.sh`는 단계, 산출물, 시각, 모드를 평문으로 씁니다. `check-gate.sh`는 기록과 산출물이 존재하는지만 봅니다. 승인된 파일을 수정해도 게이트는 닫히지 않습니다. 추적의 정직함은 에이전트 규칙과, 코드와 함께 커밋되는 `.sdlc/approvals/`의 git 히스토리에서 나옵니다.
+`approve.sh`는 단계, 산출물, 시각, 모드를 평문으로 씁니다. `check-gate.sh`는 기록과 산출물이 존재하는지만 봅니다. 승인된 파일을 수정해도 게이트는 닫히지 않습니다. 추적의 정직함은 에이전트 규칙과, 코드와 함께 커밋되는 `.sdlc/approvals/`(닫힌 피처는 `.sdlc/archive/<slug>/approvals/`로 이어짐)의 git 히스토리에서 나옵니다.
 
 ### 새 컨텍스트 리뷰
 
@@ -180,7 +188,7 @@ gates/approve.sh <stage> .sdlc/work/<slug>/<artifact> --delegated
 gates/close.sh <slug> <shipped|abandoned|dead-end|handed-off> "reason"
 ```
 
-abandoned나 dead-end는 교훈이 없으면 닫히지 않습니다(lazymode 3 이상에서는 필수 입력인 종료 사유가 기록을 대신합니다). 무엇을 시도했고, 왜 실패했고, 무엇이 있으면 뚫리는지를 적습니다. handed-off는 외부 티켓이나 PR을 반드시 지목해야 합니다. 감사 추적이 킷 밖에서도 끊기지 않게 하기 위해서입니다.
+abandoned나 dead-end는 교훈이 없으면 닫히지 않습니다(lazymode 3 이상에서는 필수 입력인 종료 사유가 기록을 대신합니다). 무엇을 시도했고, 왜 실패했고, 무엇이 있으면 뚫리는지를 적습니다. handed-off는 외부 티켓이나 PR을 반드시 지목해야 합니다. 감사 추적이 킷 밖에서도 끊기지 않게 하기 위해서입니다. 종결은 곧 아카이브입니다. 피처 디렉토리와 승인 기록이 `.sdlc/archive/<slug>/`로 이동해 `status.sh`는 열린 작업만 보여줍니다.
 
 ### 장애 진단은 싼 프로브부터
 
@@ -198,8 +206,8 @@ abandoned나 dead-end는 교훈이 없으면 닫히지 않습니다(lazymode 3 �
 ## 조종석
 
 ```bash
-gates/status.sh [slug]   # 게이트 상태 + 다음 액션 하나
-gates/stats.sh           # 단계별 소요 시간 + 재승인 횟수
+gates/status.sh [--all[=n]] [slug]  # 열린 피처 + 다음 액션 하나, --all은 최신 아카이브 20건 포함
+gates/stats.sh [--all]              # 단계별 소요 시간 + 재승인 횟수, 기본은 열린 피처 + 최근 종결 20건
 gates/selftest.sh        # 게이트, 종결, 인젝션, lazymode, status 렌더, YAML 무결성
 ```
 
@@ -269,7 +277,7 @@ docs/index.html  EN/KO 랜딩 페이지
 ./gates/selftest.sh
 ```
 
-셀프테스트는 게이트 상태, 단계명 인젝션, 경로 이탈 거부, delegated와 lazy 승인, 종결 시 교훈 요구, 이중 종결 거부, YAML 프런트매터 파싱, 전체 스크립트의 LF 줄 끝을 검사합니다.
+셀프테스트는 게이트 상태, 단계명 인젝션, 경로 이탈 거부, delegated와 lazy 승인, 종결 시 교훈 요구, 이중 종결 거부, 종결 시 아카이브(승인 기록 이동과 status 범위 포함), YAML 프런트매터 파싱, 전체 스크립트의 LF 줄 끝을 검사합니다.
 
 ## 이것이 아닌 것
 

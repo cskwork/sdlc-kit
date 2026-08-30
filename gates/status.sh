@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
-# status.sh [slug] — cockpit: where is each feature in the loop, what is the next action.
-# Run from the project root (needs .sdlc/).
+# status.sh [--all[=<n>]] [slug] — cockpit: where is each OPEN feature in the
+# loop, what is the next action. Closed features live in .sdlc/archive/
+# (close.sh moves them); --all lists the newest 20, --all=<n> widens that.
+# A slug argument finds archived features without --all. Run from the project
+# root (needs .sdlc/).
 set -euo pipefail
 [ -d .sdlc ] || { echo "FAIL: no .sdlc/ here. Run init.sh first, from the project root."; exit 1; }
+# --all is BOUNDED by default (newest 20) so an agent that runs it does not
+# pull thousands of archive lines into its context; --all=<n> widens it.
+all=""; cap=20
+case "${1:-}" in
+  --all) all=1; shift;;
+  --all=*)
+    all=1; cap="${1#--all=}"; shift
+    case "$cap" in (''|*[!0-9]*) echo "FAIL: --all=<n> needs a number, got '$cap'"; exit 1;; esac;;
+esac
 
 # warn when the kit moved on since this project was seeded (see init.sh)
 kitdir="$(cd "$(dirname "$0")/.." && pwd)"
@@ -55,14 +67,30 @@ for dir in .sdlc/work/*/; do
     echo "== $slug   [CLOSED: $cstate] $creason"
     continue
   fi
-  echo "== $slug"
+  # micro track (skills/1-intent): no spec or plan; the intent gate opens
+  # build. ([^a-z]|$) keeps "microservice-…" values from reading as micro.
+  micro=""
+  if [ -f "${dir}intent.md" ] && grep -qiE '^- track: micro([^a-z]|$)' "${dir}intent.md"; then
+    micro=1
+  fi
+  # self-healing: a spec.md on disk means the feature went full track,
+  # whatever the Track line says (micro→full upgrades can forget the edit)
+  if [ -f "${dir}spec.md" ]; then micro=""; fi
+  echo "== $slug${micro:+   (micro)}"
   # incident evidence still outstanding? (see skills/6-maintain Evidence tracking)
   if [ -f "${dir}intent.md" ] && grep -q 'reproduction evidence: requested' "${dir}intent.md" \
      && ! grep -qE 'reproduction evidence: .*(received|waived-by-human)' "${dir}intent.md"; then
     echo "   EVIDENCE OUTSTANDING: reproduction still 'requested' in intent.md"
   fi
   next_action=""
-  for stage in $stages; do
+  # a map-first feature (skills/1-intent "Chart a map first") is not ready
+  # for intent.md — the next action is the map's top Unknown, not the artifact
+  if [ -f "${dir}map.md" ] && [ ! -f "${dir}intent.md" ]; then
+    next_action="resolve the top Unknown in ${dir}map.md (skills/1-intent 'Chart a map first')"
+  fi
+  loop_stages="$stages"
+  if [ -n "$micro" ]; then loop_stages="intent ship"; fi
+  for stage in $loop_stages; do
     art="$dir$(artifact_for "$stage")"
     rec=".sdlc/approvals/${slug}.${stage}.approval"
     if [ ! -f "$art" ]; then
@@ -97,4 +125,41 @@ for dir in .sdlc/work/*/; do
   if [ -z "$next_action" ]; then next_action="loop complete — next: $(next_hint ship)"; fi
   echo "  next  →  $next_action"
 done
-[ $found -eq 1 ] || { echo "no features under .sdlc/work/${1:+ matching '$1'}"; exit 1; }
+
+# archived (closed) features: one line each with --all, or when named by slug
+show_archived() { # <dir>
+  local d="$1" slug cstate creason
+  slug=$(basename "$d")
+  # || true: a hand-migrated archive dir may lack CLOSED or a reason line;
+  # under pipefail a non-matching grep would otherwise kill the whole run
+  cstate=$(grep '^state: ' "$d/CLOSED" 2>/dev/null | cut -d' ' -f2 || true)
+  creason=$(grep '^reason: ' "$d/CLOSED" 2>/dev/null | cut -d' ' -f2- || true)
+  echo "== $slug   [CLOSED: ${cstate:-?}] ${creason:-} (archived)"
+}
+if [ -n "$all" ]; then
+  total=0; shown=0
+  # newest first: dir mtime ≈ close time (CLOSED is written just before the move)
+  while IFS= read -r dir; do
+    [ -n "$dir" ] && [ -d "$dir" ] || continue
+    [ $# -ge 1 ] && [ "$(basename "$dir")" != "$1" ] && continue
+    total=$((total + 1))
+    [ "$shown" -lt "$cap" ] || continue
+    shown=$((shown + 1))
+    found=1
+    show_archived "$dir"
+  done < <(ls -1td .sdlc/archive/*/ 2>/dev/null || true)
+  if [ "$total" -gt "$shown" ]; then
+    echo "(… $((total - shown)) more archived — status.sh --all=<n>, or ls .sdlc/archive/)"
+  fi
+elif [ $# -ge 1 ] && [ $found -eq 0 ] && [ -d ".sdlc/archive/$1" ]; then
+  found=1
+  show_archived ".sdlc/archive/$1"
+fi
+
+if [ $found -eq 0 ]; then
+  echo "no open features under .sdlc/work/${1:+ matching '$1'}"
+  if [ -z "$all" ] && ls -d .sdlc/archive/*/ >/dev/null 2>&1; then
+    echo "(archived features exist — status.sh --all lists them)"
+  fi
+  exit 1
+fi

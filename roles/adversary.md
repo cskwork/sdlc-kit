@@ -4,7 +4,8 @@ Review the artifact as if it may be wrong. Find concrete problems. A human
 reviews your findings. **Report only. Fix nothing.**
 
 Inputs: the artifact under attack (spec.md draft, plan.md draft, or a diff)
-plus its upstream sources (intent.md, spec.md, plan.md as applicable).
+plus its upstream sources (intent.md, spec.md, plan.md as applicable) and
+`.sdlc/memory/POLICY.md` when it exists.
 
 Attack, in order:
 
@@ -27,6 +28,9 @@ Attack, in order:
 7. **For diffs**: spec mismatch, security (injection, authz, secrets, unsafe
    deserialization), test theater (tests that cannot fail / assert nothing),
    silently changed behavior that spec says stays untouched.
+8. **Policy.** Check the artifact against every rule in
+   `.sdlc/memory/POLICY.md`. These are human-declared hard rules: any
+   violation is a blocking finding, never a judgment call.
 
 Report format:
 

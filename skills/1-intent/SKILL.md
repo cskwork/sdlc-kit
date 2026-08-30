@@ -11,9 +11,13 @@ least costly place to correct a wrong assumption.
 
 ## Before you start
 
-1. Read `.sdlc/memory/INDEX.md` and `.sdlc/memory/DOMAIN.md`; open lessons
-   whose tags match this request.
-2. Pick a short kebab-case feature slug; create `.sdlc/work/<slug>/`.
+1. Read `.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`, and
+   `.sdlc/memory/DOMAIN.md`; open lessons whose tags match this request.
+2. Pick a kebab-case feature slug; create `.sdlc/work/<slug>/`. Prefix with
+   the tracker key when one exists (`a20-1234-fix-login`), else the date
+   (`260830-fix-login`) — at thousands of tickets, bare names collide. Slugs
+   are single-use: if `.sdlc/archive/<slug>/` already exists, pick another
+   (`approve.sh` refuses reused slugs).
 
 ## Explore before asking questions
 
@@ -79,10 +83,59 @@ confidence. Cover:
 - **Greenfield**: ask what existing systems it must integrate with; the
   feasibility explorer verifies those integration points exist as described.
 
+## Too small for the full loop? Micro track
+
+**The full track is the default.** This skill is normally invoked for real
+bug fixes and features — those run all six stages. Micro is the exception
+for genuinely trivial changes (a typo, a copy change, a one-line guard);
+a single "maybe" on any criterion below means full. A trivial ticket may
+skip spec and plan entirely (intent → build → ship) when ALL of these hold:
+
+- `tools/tripwire.sh` over intent.md is clean — nothing irreversible;
+- the probes named the exact files and symbols to change;
+- success is checkable by an existing command from `.sdlc/config.md`;
+- intent.md has no open questions.
+
+Record the verdict in intent.md's `Track:` line with the reasons
+(`- Track: micro — tripwire clean, single file, test exists`). The intent
+gate then authorizes build directly (`check-gate.sh intent …`); intent.md's
+success criteria serve as the plan, and ship keeps its full adversary
+review — the only review the diff gets. Any surprise during build (new
+files, a trip-wire, growing scope) upgrades to the full track: STOP,
+rewrite the Track line to `- Track: full — upgraded from micro (<reason>)`,
+and write spec.md. Incidents have their own version of this — the
+compressed loop in skills/6-maintain.
+
+## Too big for one pass? Chart a map first
+
+When the interview cannot pin the intent down in one pass — several decisions
+still open, the destination itself fuzzy — do not force a vague intent.md
+through the gate. Fill `templates/map.md` → `.sdlc/work/<slug>/map.md` and
+work the map instead:
+
+- **Destination**: what "arrived" looks like, in one paragraph.
+- **Decided**: decisions made so far, one line each, evidence-labeled.
+- **Unknown**: open questions in order. Each session resolves the top one
+  (a probe, research, or a question to the human) and moves it to Decided.
+- **Out of scope**: what this ticket will not do.
+
+The map lives beside the other artifacts and survives the session; the next
+session reads it and takes the top Unknown. When Unknown is empty, write
+intent.md as usual — the intent gate stays on intent.md, never on the map.
+If an Unknown turns out to be an independent shippable change, open a new
+feature slug for it and record the reference under Decided. When resolving
+an Unknown surfaces a durable fact about the system, add it to the feature's
+`.sdlc/work/<slug>/harvest.md` as a domain candidate (merged into DOMAIN.md
+at close — AGENTS.md rule 4) — Decided records the decision, the harvest
+carries the fact to every later feature.
+
 ## Write the artifact
 
 Fill `templates/intent.md` → `.sdlc/work/<slug>/intent.md`. Every claim
 labeled. Every open question is carried forward explicitly in its own section.
+The `Goal:` line is the reporting sentence: one plain-language sentence — no
+code identifiers, no jargon — that a non-technical reader understands and can
+copy verbatim into a status report ("teachers can re-order quiz questions").
 
 ## Gate
 

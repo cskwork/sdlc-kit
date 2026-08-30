@@ -51,6 +51,9 @@ fi
 # slug = artifact's parent dir name; keys approvals per feature
 slug=$(basename "$(dirname "$artifact")")
 case "$slug" in (.|/|"") echo "FAIL: artifact must live in a feature dir (.sdlc/work/<slug>/)"; exit 1;; esac
+# slugs are single-use: a reused archived slug would strand the new work at
+# close time and cross-wire stats with the archived feature's records
+[ -d ".sdlc/archive/$slug" ] && { echo "FAIL: slug '$slug' is already closed and archived (.sdlc/archive/$slug) — pick a new slug (skills/1-intent)"; exit 1; }
 
 mkdir -p .sdlc/approvals
 

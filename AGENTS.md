@@ -21,9 +21,23 @@ next `intent.md` and restarts the loop.
 
 Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>/spec.md`.
 
+**Micro track for trivial tickets.** The full track is the default; micro
+is the exception for genuinely trivial changes, and any doubt means full.
+Stage 1 may record `Track: micro` in
+intent.md only when the tripwire scan of intent.md is clean, the exact files
+and symbols are known, and success is checkable by an existing command
+(criteria: skills/1-intent). Micro features skip spec and plan entirely:
+intent (gate) → build → ship. Ship keeps its full adversary review — it is
+the only review the diff gets. Any surprise during build (new files, a
+trip-wire, growing scope) upgrades the feature to the full track: STOP,
+rewrite the Track line to `- Track: full — upgraded from micro (<reason>)`,
+and write spec.md.
+
 **Every feature ends in a terminal state**: `gates/close.sh <slug>
 <shipped|abandoned|dead-end|handed-off> "reason"` after the human decides
-(`--delegated` under rule 3). Abandoned or dead-end requires a lesson first:
+(`--delegated` under rule 3). close.sh then archives the feature: the dir and
+its approval records move to `.sdlc/archive/<slug>/`, so `gates/status.sh`
+stays scoped to open work (`--all` lists archived features). Abandoned or dead-end requires a lesson first:
 what was tried, why it failed, what would unblock it (lazymode ≥3 waives the
 separate lesson file — the close reason is the record). Handed-off requires the
 external ticket/PR key or URL in the reason. Add durable facts to DOMAIN.md
@@ -37,13 +51,17 @@ when closing.
    path as `kit_windows:` when one is needed.
 2. **Check the gate first** for stages 2-4 (stages 1, 5, and 6 have none):
    `gates/check-gate.sh <prev-stage> <artifact>` from the project root.
+   Micro-track features have no spec or plan: build checks the `intent` gate.
    Anything but a printed `GATE OPEN` — including errors and silence — is
    closed: STOP and tell the human exactly what to approve. At a gate
    lazymode waives (rule 3), the remedy is the stage's lazy review — the
    adversary pass for plan and ship; a tripwire scan, adversary on a hit,
    for intent and spec — plus `--lazy`, not a human ask.
 3. **Intent, spec, and ship approvals are human decisions** (unless the
-   project's lazymode waives one — see the table below). Run
+   project's lazymode waives one — see the table below). On the micro track
+   there is no spec approval at all: the human authorized that when
+   approving the intent.md that carries the `Track: micro` verdict (see the
+   Micro track paragraph). Run
    `gates/approve.sh <stage> <artifact> --delegated` only after the human
    explicitly approves that artifact in chat ("approve", "looks right", or
    equivalent). Never approve on silence, a general "continue", or your own
@@ -86,12 +104,30 @@ when closing.
    recorded, and every auto-approved gate still posts its Human summary
    (and any trip-wire list) to the human as FYI. `approve.sh --lazy` refuses a stage the configured level keeps
    human, and any `lazymode:` value outside 0-4 counts as 0.
-4. **Keep memory bounded.** At each stage start read `.sdlc/memory/INDEX.md`
-   (lessons; 50 lines max) and `.sdlc/memory/DOMAIN.md` (terms, verified
-   facts, constraints; 100 lines max), then open lesson files whose tags
-   match the task. The dispatcher merges researchers' verified domain
-   candidates into DOMAIN.md. Over a limit: split by subdomain and leave
-   pointer lines. Record each new mistake in the skill 6 format.
+4. **Keep memory bounded.** At each stage start read
+   `.sdlc/memory/POLICY.md` (human-declared hard rules),
+   `.sdlc/memory/INDEX.md` (lessons; 50 lines max), `.sdlc/memory/DOMAIN.md`
+   (terms, verified facts, constraints; 100 lines max), and the feature's
+   own `harvest.md` if present, then open lesson files whose tags match the
+   task. Over a limit: split by subdomain and leave pointer lines.
+   **INDEX.md, DOMAIN.md, and lessons/ have one writer: the close step.**
+   Mid-loop, stages and
+   researchers append lesson and domain candidates to
+   `.sdlc/work/<slug>/harvest.md` (templates/harvest.md), never to INDEX.md
+   or DOMAIN.md — parallel loops would race or merge-conflict on the shared
+   files. At close, merge harvest into lessons/INDEX/DOMAIN and delete it;
+   `close.sh` blocks while harvest.md exists. Record each new mistake in the
+   skill 6 format, drafted in harvest.md.
+   **POLICY.md is written only on the human's word** (the one shared-memory
+   file outside the close-writer rule). When the human states a hard rule in
+   chat, transcribe it with the date and their words; never add, soften, or
+   remove a rule on your own judgment. A mid-loop transcription is committed
+   with the next close. The adversary treats a policy violation as a
+   blocking finding.
+   The archive is bounded the same way: `status.sh --all` and `stats.sh`
+   default to the newest 20 closed features. Never read the whole
+   `.sdlc/archive/` into a working context — answer archive questions with
+   a targeted `ls`, `grep`, or a single slug lookup.
 5. **Fresh context for helpers.** Verification and adversarial review run in
    a fresh context — a subagent (pi: subagent tool; Claude Code: Task;
    Codex: spawn), else a new session given only the `roles/*.md` file and
@@ -122,8 +158,9 @@ when closing.
    the end of ship (skills/5-ship), never mid-loop.
 6. **Proof over claims.** Every "done" claim carries command output, using
    the real commands in `.sdlc/config.md`.
-7. **Artifacts live in the project repo** under `.sdlc/work/<feature>/`,
-   committed with the code. The kit directory stays framework-only.
+7. **Artifacts live in the project repo** under `.sdlc/work/<feature>/`
+   while open and `.sdlc/archive/<feature>/` after close, committed with the
+   code. The kit directory stays framework-only.
 8. **Speak plainly.** Every report, gate request, and question starts with
    one short context paragraph (which stage, what happened before, what this
    message is for), uses short active sentences and the project's own

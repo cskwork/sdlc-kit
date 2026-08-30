@@ -61,6 +61,10 @@ Each stage produces one reviewable artifact. Intent, spec, and ship gates are hu
 
 When a shipped change fails, Maintain diagnoses it and writes the next `intent.md`.
 
+Not every ticket needs all six stages. A trivial ticket — tripwire-clean, exact files known, success checkable by an existing command — takes the **micro track**: intent (gate) → build → ship, with ship's adversary review as the diff's only review (`Track: micro` in intent.md; criteria in `skills/1-intent`). A ticket too foggy to pin down starts with a **map** (`map.md`: destination · decided · unknown · out of scope) and resolves one unknown per session before intent.md is written.
+
+Mid-loop, lesson and domain candidates stage in the feature's own `harvest.md`; the close step is the only writer of shared memory (`INDEX.md`, `DOMAIN.md`, `lessons/`), so parallel loops never collide on those files. Hard rules you state in chat are transcribed — on your word only, with the date — into `.sdlc/memory/POLICY.md`, and the adversary treats any violation as a blocking finding.
+
 ## Why it is different
 
 | Typical agent workflow | sdlc-kit |
@@ -137,20 +141,24 @@ Per feature, inside the **target project**:
 ├── approvals/
 │   └── <slug>.<stage>.approval       # stage · when · mode
 ├── memory/
+│   ├── POLICY.md                     # human-declared hard rules; agents transcribe only
 │   ├── INDEX.md                      # ≤50 lines of lesson pointers
 │   ├── DOMAIN.md                     # terms · verified facts · constraints
 │   └── lessons/<date>-<lesson>.md
-└── work/<slug>/
-    ├── intent.md                     # problem · proof · success · scope
-    ├── spec.md                       # Human summary · AS-IS → TO-BE · contract
-    ├── plan.md                       # files · order · risks · proof
-    ├── deviations.md                 # build-time differences; plan stays locked
-    ├── baseline.txt                  # brownfield behavior before the change
-    ├── evidence.md                   # commands · outputs · observed behavior
-    └── CLOSED                        # shipped · abandoned · dead-end · handed-off
+├── work/<slug>/                      # OPEN features only
+│   ├── intent.md                     # problem · proof · success · scope
+│   ├── spec.md                       # Human summary · AS-IS → TO-BE · contract
+│   ├── plan.md                       # files · order · risks · proof
+│   ├── deviations.md                 # build-time differences; plan stays locked
+│   ├── baseline.txt                  # brownfield behavior before the change
+│   ├── harvest.md                    # mid-loop lesson/domain candidates; merged at close
+│   └── evidence.md                   # commands · outputs · observed behavior
+└── archive/<slug>/                   # closed features; close.sh moves them here
+    ├── CLOSED                        # shipped · abandoned · dead-end · handed-off
+    └── approvals/                    # the feature's approval records move with it
 ```
 
-`init.sh` also adds one line to the project's `.gitignore`: scratch evidence stays uncommitted, and stays on disk until ship's end-of-loop cleanup.
+`init.sh` also adds two lines to the project's `.gitignore` (scratch under `work/` and `archive/`): scratch evidence stays uncommitted, and stays on disk until ship's end-of-loop cleanup.
 
 The public sdlc-kit repository stays framework-only. Domain artifacts live and version with the project they describe.
 
@@ -168,7 +176,7 @@ The approval record stays explicit. Silence and generic "continue" are not appro
 
 ### A record, not a lock
 
-`approve.sh` writes a plain marker: stage, artifact, time, and mode. `check-gate.sh` only checks that the marker and the artifact exist — editing an approved file does not close its gate. The honesty of the trail comes from agent rules plus the git history of `.sdlc/approvals/`, committed with the code.
+`approve.sh` writes a plain marker: stage, artifact, time, and mode. `check-gate.sh` only checks that the marker and the artifact exist — editing an approved file does not close its gate. The honesty of the trail comes from agent rules plus the git history of `.sdlc/approvals/` (for closed features, continued under `.sdlc/archive/<slug>/approvals/`), committed with the code.
 
 ### Fresh-context review
 
@@ -180,7 +188,7 @@ The artifact author does not verify the work in the same context. Independent wo
 gates/close.sh <slug> <shipped|abandoned|dead-end|handed-off> "reason"
 ```
 
-An abandoned or dead-end run cannot close until a lesson exists (at lazymode ≥3, the mandatory close reason is the record instead). It records what was tried, why it failed, and what would unblock it. A handed-off close must name the external ticket or PR, so the audit trail continues outside the kit.
+An abandoned or dead-end run cannot close until a lesson exists (at lazymode ≥3, the mandatory close reason is the record instead). It records what was tried, why it failed, and what would unblock it. A handed-off close must name the external ticket or PR, so the audit trail continues outside the kit. Closing also archives: the feature dir and its approval records move to `.sdlc/archive/<slug>/`, keeping `status.sh` scoped to open work.
 
 ### Incident diagnosis starts with cheap probes
 
@@ -198,8 +206,8 @@ When the incident cannot be reproduced, fresh-context adversaries recount the sc
 ## Cockpit
 
 ```bash
-gates/status.sh [slug]   # gate state + one next action
-gates/stats.sh           # time per stage + re-approval counts
+gates/status.sh [--all[=n]] [slug]  # open features + one next action; --all adds the newest 20 archived
+gates/stats.sh [--all]              # time per stage + re-approval counts; default open + 20 recent closed
 gates/selftest.sh        # gate, close, injection, lazymode, status render, YAML integrity
 ```
 
@@ -269,7 +277,7 @@ docs/index.html  bilingual EN/KO landing page
 ./gates/selftest.sh
 ```
 
-The selftest covers gate state, stage-name injection, bare-path rejection, delegated and lazy approvals, lesson requirements for closing, double-close rejection, YAML frontmatter parsing, and LF line endings in every script.
+The selftest covers gate state, stage-name injection, bare-path rejection, delegated and lazy approvals, lesson requirements for closing, double-close rejection, archive-on-close (with approval records and status scoping), YAML frontmatter parsing, and LF line endings in every script.
 
 ## What this is not
 
