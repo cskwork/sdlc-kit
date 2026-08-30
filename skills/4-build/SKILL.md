@@ -11,7 +11,11 @@ not only at the end.
 ## Before you start
 
 1. Run `gates/check-gate.sh plan .sdlc/work/<slug>/plan.md`. STOP if closed.
-2. Read plan.md and spec.md. Read `.sdlc/memory/INDEX.md` and
+   Micro-track features (intent.md `Track: micro`) have no spec or plan:
+   check `gates/check-gate.sh intent .sdlc/work/<slug>/intent.md` instead,
+   and treat intent.md's success criteria as the plan.
+2. Read plan.md and spec.md (micro: intent.md). Read
+   `.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`, and
    `.sdlc/memory/DOMAIN.md`; open lesson files whose tags match the current
    task.
 3. **Brownfield: capture the regression baseline before editing.** Run the
@@ -36,9 +40,11 @@ not only at the end.
   information about the code: fix the code and keep the test intact until it
   passes honestly (catch yourself reaching for the test file instead? record
   a lesson).
-- **Record each mistake immediately.** This includes your mistakes, plan
-  mistakes, and surprises in the codebase. Use the skill 6 lesson format so a
-  future run can avoid it.
+- **Record each mistake immediately** in the feature's
+  `.sdlc/work/<slug>/harvest.md` (AGENTS.md rule 4 — shared memory files are
+  written only at close). This includes your mistakes, plan mistakes, and
+  surprises in the codebase. Use the skill 6 lesson format so a future run
+  can avoid it.
 - Independent parallel work: use worktrees/subagents if your harness supports
   them, one writer per file set. Otherwise, sequential is fine.
 - Tools: you may use build/test/dev tools freely. You must NOT use deploy or

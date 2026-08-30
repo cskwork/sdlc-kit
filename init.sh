@@ -28,8 +28,10 @@ $line
 }
 
 # bulk evidence (screenshots, probe logs) is read+quoted, kept until ship
-# cleanup, never committed
+# cleanup, never committed — in work/ while open, in archive/ after close.sh
+# moves a feature there with scratch still present
 ensure_line .gitignore '.sdlc/work/*/scratch/'
+ensure_line .gitignore '.sdlc/archive/*/scratch/'
 
 [ -f .sdlc/memory/INDEX.md ] || cat > .sdlc/memory/INDEX.md <<'EOF'
 # Lessons index — one line per lesson: [tags] summary → lessons/<file>
@@ -37,11 +39,23 @@ ensure_line .gitignore '.sdlc/work/*/scratch/'
 # When full, merge/prune oldest entries; promote repeat offenders into the stage skill itself.
 EOF
 
+[ -f .sdlc/memory/POLICY.md ] || cat > .sdlc/memory/POLICY.md <<'EOF'
+# Policy — human-declared hard rules for this repository (≤50 lines)
+# WRITE PATH: only when the human states a rule in chat does the agent
+# transcribe it here, with the date and the human's words. Agents never add,
+# soften, or remove a rule on their own judgment.
+# READ PATH: every stage start (AGENTS.md rule 4); the adversary treats a
+# violation as a blocking finding.
+#
+# - <rule> — [human: YYYY-MM-DD "quoted words"]
+EOF
+
 [ -f .sdlc/memory/DOMAIN.md ] || cat > .sdlc/memory/DOMAIN.md <<'EOF'
 # Domain knowledge — how THIS system works (≤100 lines; over → split by
 # subdomain into memory/domain/<area>.md and keep one pointer line here)
-# Continuously updated: researchers write back verified facts; ship retro
-# harvests new entries. Facts carry [verified: how] like intent claims.
+# ONE writer: the close step. Mid-loop candidates stage in the feature's
+# work/<slug>/harvest.md and merge here at close (AGENTS.md rule 4).
+# Facts carry [verified: how] like intent claims.
 
 ## Terms (ubiquitous language)
 <!-- - term — meaning in this project -->

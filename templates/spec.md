@@ -5,10 +5,14 @@
 
 ## Human summary (read this first)
 
-<Use no more than 10 short sentences. State the problem, what will be built,
-what will not change, and each flagged concern with your recommendation. One
-idea per sentence. Use plain words. The human should be able to approve the
-spec from this section and Flagged concerns alone.>
+<Use no more than 10 short sentences. Write for a reader with NO technical
+background: no code identifiers, no jargon (explain an unavoidable term in
+the same sentence), describe what a user can or cannot do — not system
+internals. State the problem, what will be built, what will not change, and
+each flagged concern with your recommendation. One idea per sentence. If a
+non-developer colleague could not follow a sentence, rewrite it. The human
+should be able to approve the spec from this section and Flagged concerns
+alone.>
 
 ## Requirements
 <each traces to intent.md; each machine-checkable>

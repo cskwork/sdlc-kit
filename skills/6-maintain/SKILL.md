@@ -54,7 +54,8 @@ explicitly (see Evidence tracking below).
 3. Reproduce the issue first. If it cannot be reproduced, say so and record
    what is known. Do not fix an issue you cannot reproduce.
 4. Trace the cause. Read `.sdlc/memory/INDEX.md` and
-   `.sdlc/memory/DOMAIN.md`, then open lesson files whose tags match the task.
+   `.sdlc/memory/DOMAIN.md`, and `.sdlc/memory/POLICY.md`, then open lesson
+   files whose tags match the task.
    Check whether this failure mode has occurred before. If a past lesson matches, cite it in the diagnosis.
 5. Separate the claim before hunting: "it does not react" is a state/handler
    problem; "it looks wrong/disabled" is a RENDERING problem until proven
@@ -64,8 +65,9 @@ explicitly (see Evidence tracking below).
    class and report a count table. Before changing any shared symbol,
    produce the call-site × guard table. One instance is a bug; the table is
    the scope, and it decides fix ordering.
-7. Check the feature's `evidence.md`: was this covered by proof, or was it a
-   verification gap? A gap is itself a lesson (`promote: skills/5-ship`).
+7. Check the feature's `evidence.md` — a shipped feature is archived, so it
+   sits at `.sdlc/archive/<slug>/evidence.md`: was this covered by proof, or
+   was it a verification gap? A gap is itself a lesson (`promote: skills/5-ship`).
 
 ## Evidence tracking
 
@@ -112,8 +114,10 @@ standing assignments — each has caught real errors:
 
 ## Record the lesson (every incident, no exceptions)
 
-Create `.sdlc/memory/lessons/YYYY-MM-DD-<slug>.md` via `templates/lesson.md`
-and add ONE line to `.sdlc/memory/INDEX.md`:
+Draft the lesson in the fix feature's `.sdlc/work/<fix-slug>/harvest.md`
+(shared memory files are written only at close — AGENTS.md rule 4). The
+close merge materializes it as `.sdlc/memory/lessons/YYYY-MM-DD-<slug>.md`
+via `templates/lesson.md` plus ONE line in `.sdlc/memory/INDEX.md`:
 
 ```
 - [tags,comma,separated] one-line summary → lessons/YYYY-MM-DD-<slug>.md

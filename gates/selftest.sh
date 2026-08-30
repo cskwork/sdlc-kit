@@ -4,6 +4,7 @@ set -euo pipefail
 kit="$(cd "$(dirname "$0")/.." && pwd)"
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"; mkdir -p .sdlc/work/feat-a
+git init -q .   # close.sh's .gitignore handling is git-repo-only
 
 a=.sdlc/work/feat-a/intent.md
 echo "goal: test" > "$a"
@@ -49,24 +50,31 @@ grep -q '^runner: agent' .sdlc/approvals/feat-a.intent.approval || { echo "FAIL:
 grep -q '^mode: delegated-chat' .sdlc/approvals/feat-a.spec.approval || { echo "FAIL: delegated mode not recorded for spec"; exit 1; }
 echo "ok: delegated approval recorded at any stage"
 
-# 8. close mechanism: dead-end blocked without lesson, allowed with, idempotent-refused
+# 8. close mechanism: dead-end blocked without lesson, allowed with, idempotent-refused,
+#    and the feature + its approvals archive out of work/
 mkdir -p .sdlc/memory/lessons
 if "$kit/gates/close.sh" feat-a dead-end "test reason" >/dev/null 2>&1; then
   echo "FAIL: dead-end close allowed without a lesson"; exit 1; fi
 echo "lesson" > .sdlc/memory/lessons/2020-01-01-feat-a.md
-"$kit/gates/close.sh" feat-a dead-end "test reason" >/dev/null
-grep -q '^state: dead-end' .sdlc/work/feat-a/CLOSED || { echo "FAIL: CLOSED record wrong"; exit 1; }
+mkdir -p .sdlc/work/feat-a/scratch && echo bulk > .sdlc/work/feat-a/scratch/dump.log
+out=$("$kit/gates/close.sh" feat-a dead-end "test reason")
+grep -q '^state: dead-end' .sdlc/archive/feat-a/CLOSED || { echo "FAIL: CLOSED record wrong or not archived"; exit 1; }
+[ -d .sdlc/work/feat-a ] && { echo "FAIL: closed feature still under work/"; exit 1; }
+[ -f .sdlc/archive/feat-a/approvals/feat-a.intent.approval ] || { echo "FAIL: approvals not archived with the feature"; exit 1; }
+ls .sdlc/approvals/feat-a.*.approval >/dev/null 2>&1 && { echo "FAIL: approvals left behind in .sdlc/approvals/"; exit 1; }
+grep -q '^\.sdlc/archive/\*/scratch/$' .gitignore || { echo "FAIL: archive scratch not gitignored on close"; exit 1; }
+case "$out" in (*"scratch/ still has files"*) ;; (*) echo "FAIL: leftover scratch not flagged at close"; exit 1;; esac
 if "$kit/gates/close.sh" feat-a abandoned "again" >/dev/null 2>&1; then
   echo "FAIL: double close allowed"; exit 1; fi
-echo "ok: close requires lesson, records state, refuses double close"
+echo "ok: close requires lesson, archives feature+approvals, refuses double close"
 
 # 9. handed-off: blocked without external reference, allowed with key/URL, no lesson required
 mkdir -p .sdlc/work/feat-b
 if "$kit/gates/close.sh" feat-b handed-off "sent to another team" >/dev/null 2>&1; then
   echo "FAIL: handed-off close allowed without an external reference"; exit 1; fi
 "$kit/gates/close.sh" feat-b handed-off "tracking continues in A20-1240" >/dev/null
-grep -q '^state: handed-off' .sdlc/work/feat-b/CLOSED || { echo "FAIL: handed-off state not recorded"; exit 1; }
-grep -q '^reason: tracking continues in A20-1240' .sdlc/work/feat-b/CLOSED || { echo "FAIL: handed-off reference not recorded"; exit 1; }
+grep -q '^state: handed-off' .sdlc/archive/feat-b/CLOSED || { echo "FAIL: handed-off state not recorded"; exit 1; }
+grep -q '^reason: tracking continues in A20-1240' .sdlc/archive/feat-b/CLOSED || { echo "FAIL: handed-off reference not recorded"; exit 1; }
 echo "ok: handed-off requires and records external reference"
 
 # 10. shell scripts are LF-only — a CRLF checkout (Git for Windows default
@@ -139,8 +147,12 @@ case "$out" in (*"plan gate (tiered)"*) ;; (*) echo "FAIL: tiered plan hint miss
 out=$("$kit/gates/status.sh" feat-d) || { echo "FAIL: status.sh crashed after tier approval"; exit 1; }
 case "$out" in (*"agent-adversary"*) ;; (*) echo "FAIL: agent-adversary mode not shown"; exit 1;; esac
 out=$("$kit/gates/status.sh") || { echo "FAIL: status.sh crashed on full run"; exit 1; }
-case "$out" in (*"[CLOSED: dead-end]"*) ;; (*) echo "FAIL: closed feature not rendered"; exit 1;; esac
-echo "ok: status.sh renders empty, tiered, approved, and closed states"
+case "$out" in (*"[CLOSED:"*) echo "FAIL: archived feature leaked into the default run"; exit 1;; (*) ;; esac
+out=$("$kit/gates/status.sh" --all) || { echo "FAIL: status.sh crashed with --all"; exit 1; }
+case "$out" in (*"[CLOSED: dead-end]"*"(archived)"*) ;; (*) echo "FAIL: --all does not render archived features"; exit 1;; esac
+out=$("$kit/gates/status.sh" feat-a) || { echo "FAIL: status.sh crashed on an archived slug"; exit 1; }
+case "$out" in (*"[CLOSED: dead-end]"*) ;; (*) echo "FAIL: archived slug not found by name"; exit 1;; esac
+echo "ok: status.sh renders empty, tiered, approved, and archived states"
 
 # 14. no upstream chaining: editing intent after spec approval keeps the spec gate open
 "$kit/gates/check-gate.sh" spec .sdlc/work/feat-d/spec.md >/dev/null
@@ -210,5 +222,84 @@ printf 'lazymode: 2\n' > .sdlc/config.md
 if "$kit/gates/close.sh" feat-h dead-end "no lesson here" >/dev/null 2>&1; then
   echo "FAIL: lazymode 2 close allowed without a lesson"; exit 1; fi
 echo "ok: lazymode >=3 waives the lesson, below 3 still requires it"
+
+# 19. archived slugs are single-use: approve.sh refuses them
+mkdir -p .sdlc/work/feat-a && echo again > .sdlc/work/feat-a/intent.md   # feat-a archived in test 8
+if "$kit/gates/approve.sh" intent .sdlc/work/feat-a/intent.md >/dev/null 2>&1; then
+  echo "FAIL: approve accepted a slug that is already archived"; exit 1; fi
+rm -rf .sdlc/work/feat-a
+echo "ok: approve refuses an archived slug"
+
+# 20. interrupted close (CLOSED written, archive move failed) resumes, does not
+#     rewrite CLOSED, and skips the already-decided knowledge checks
+printf 'lazymode: 0\n' > .sdlc/config.md   # lesson WOULD be required on a fresh close
+mkdir -p .sdlc/work/feat-j
+printf 'state: abandoned\nreason: r\n' > .sdlc/work/feat-j/CLOSED
+out=$("$kit/gates/close.sh" feat-j abandoned "r") || { echo "FAIL: resume close failed"; exit 1; }
+case "$out" in (*"resuming"*) ;; (*) echo "FAIL: resume not announced"; exit 1;; esac
+[ -f .sdlc/archive/feat-j/CLOSED ] || { echo "FAIL: resume did not archive"; exit 1; }
+grep -q '^reason: r$' .sdlc/archive/feat-j/CLOSED || { echo "FAIL: resume rewrote CLOSED"; exit 1; }
+echo "ok: interrupted close resumes the archive step"
+
+# 21. map-first feature: next action points at map.md, not intent.md
+mkdir -p .sdlc/work/feat-k
+echo m > .sdlc/work/feat-k/map.md
+out=$("$kit/gates/status.sh" feat-k) || { echo "FAIL: status.sh crashed on a map-only feature"; exit 1; }
+case "$out" in (*"map.md"*) ;; (*) echo "FAIL: map-first next action missing"; exit 1;; esac
+echo "ok: map-first feature routes to the map, not intent.md"
+
+# 22. archive listings are bounded: --all caps at 20 with a pointer line,
+#     --all=<n> widens/narrows, stats.sh default notes the truncation
+for i in $(seq 1 20); do
+  d=".sdlc/archive/bulk-$i"; mkdir -p "$d"
+  printf 'state: shipped\nreason: r\n' > "$d/CLOSED"
+done   # + features archived by earlier tests → well over the cap
+out=$("$kit/gates/status.sh" --all)
+n=$(printf '%s\n' "$out" | grep -c '(archived)') || true
+[ "$n" -eq 20 ] || { echo "FAIL: --all showed $n archived, expected cap 20"; exit 1; }
+case "$out" in (*"more archived"*) ;; (*) echo "FAIL: --all missing the truncation pointer"; exit 1;; esac
+out=$("$kit/gates/status.sh" --all=3)
+n=$(printf '%s\n' "$out" | grep -c '(archived)') || true
+[ "$n" -eq 3 ] || { echo "FAIL: --all=3 showed $n archived"; exit 1; }
+out=$("$kit/gates/stats.sh")
+case "$out" in (*"most recently closed"*) ;; (*) echo "FAIL: stats.sh default not bounded/noted"; exit 1;; esac
+case "$out" in (*"included only with --all"*) ;; (*) echo "FAIL: stats.sh re-approval scope note missing"; exit 1;; esac
+echo "ok: archive listings bounded by default, widened only explicitly"
+
+# 23. micro track: status skips spec/plan, marks the feature, routes to build
+mkdir -p .sdlc/work/feat-m
+printf -- '- Track: micro — tripwire clean, single file\ngoal\n' > .sdlc/work/feat-m/intent.md
+"$kit/gates/approve.sh" intent .sdlc/work/feat-m/intent.md --delegated >/dev/null
+out=$("$kit/gates/status.sh" feat-m) || { echo "FAIL: status.sh crashed on a micro feature"; exit 1; }
+case "$out" in (*"(micro)"*) ;; (*) echo "FAIL: micro marker missing"; exit 1;; esac
+case "$out" in (*"spec"*) echo "FAIL: micro feature still shows a spec stage"; exit 1;; (*) ;; esac
+case "$out" in (*"write evidence.md"*) ;; (*) echo "FAIL: micro next action should be build/ship"; exit 1;; esac
+echo "ok: micro track skips spec/plan and routes intent → build/ship"
+echo s > .sdlc/work/feat-m/spec.md   # self-healing: spec.md on disk = full track
+out=$("$kit/gates/status.sh" feat-m) || { echo "FAIL: status.sh crashed on healed micro"; exit 1; }
+case "$out" in (*"(micro)"*) echo "FAIL: spec.md present but still rendered micro"; exit 1;; (*) ;; esac
+rm .sdlc/work/feat-m/spec.md
+mkdir -p .sdlc/work/feat-p   # 'microservice-…' must NOT read as micro
+printf -- '- Track: microservice-split\ngoal\n' > .sdlc/work/feat-p/intent.md
+out=$("$kit/gates/status.sh" feat-p) || { echo "FAIL: status.sh crashed on feat-p"; exit 1; }
+case "$out" in (*"(micro)"*) echo "FAIL: 'microservice…' misread as micro track"; exit 1;; (*) ;; esac
+echo "ok: micro detection self-heals on spec.md and rejects prefix look-alikes"
+
+# 24. unmerged harvest blocks close; merging (deleting) it unblocks
+mkdir -p .sdlc/work/feat-o
+echo goal > .sdlc/work/feat-o/intent.md
+echo "- [tag] candidate" > .sdlc/work/feat-o/harvest.md
+if "$kit/gates/close.sh" feat-o shipped "done" >/dev/null 2>&1; then
+  echo "FAIL: close allowed with an unmerged harvest.md"; exit 1; fi
+rm .sdlc/work/feat-o/harvest.md
+"$kit/gates/close.sh" feat-o shipped "done" >/dev/null
+echo "ok: close blocks on unmerged harvest, passes once merged"
+
+# 25. approvals stranded between the two archive mvs are swept on the next close attempt
+echo "stage: intent" > .sdlc/approvals/feat-o.intent.approval   # feat-o already archived in test 24
+out=$("$kit/gates/close.sh" feat-o shipped "again" 2>&1) && { echo "FAIL: double close of archived slug allowed"; exit 1; }
+case "$out" in (*"swept stranded approval"*) ;; (*) echo "FAIL: stranded approval not swept"; exit 1;; esac
+[ -f .sdlc/archive/feat-o/approvals/feat-o.intent.approval ] || { echo "FAIL: swept approval not in archive"; exit 1; }
+echo "ok: stranded approvals are swept into the archive"
 
 echo "SELFTEST PASS"

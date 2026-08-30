@@ -11,9 +11,10 @@ and proof. During this stage, read and run non-mutating commands only.
 ## Before you start
 
 1. Run `gates/check-gate.sh spec .sdlc/work/<slug>/spec.md`. STOP if closed.
-2. Read spec.md fully. Read `.sdlc/memory/INDEX.md` and
-   `.sdlc/memory/DOMAIN.md`; open lesson files whose tags match the current
-   task. Treat DOMAIN.md constraints as plan risks.
+2. Read spec.md fully. Read `.sdlc/memory/POLICY.md`,
+   `.sdlc/memory/INDEX.md`, and `.sdlc/memory/DOMAIN.md`; open lesson files
+   whose tags match the current task. Treat DOMAIN.md constraints and
+   POLICY.md rules as plan risks.
 3. **Read-only rule: in this stage you may read code and run non-mutating
    commands only. No edits, no writes outside `.sdlc/work/<slug>/`.**
 
@@ -37,7 +38,8 @@ exploration stays out of the main context. Then fill `templates/plan.md`:
   record the verdict in the template's **Gate tier** section, with reasons.
   Run `<kit>/tools/tripwire.sh .sdlc/work/<slug>/plan.md` and include its
   output in the adversary dispatch.
-- **Human summary.** Five short sentences or fewer at the top: what changes,
+- **Human summary.** Five short sentences or fewer at the top, in plain words
+  a non-technical reader can follow: what changes,
   the main risk, how it is proven. Write it last, place it first.
 
 Constraints the code does not show (ownership, forbidden areas, deploy

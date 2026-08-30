@@ -670,7 +670,7 @@
         </div>
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg><span data-i18n="l8-t">Every run gets an ending</span></dt>
-          <dd data-i18n="l8-d"><code>close.sh</code> records <code>shipped</code>, <code>abandoned</code>, <code>dead-end</code>, or <code>handed-off</code>. Failed work requires a lesson; handoffs require the external ticket or PR.</dd>
+          <dd data-i18n="l8-d"><code>close.sh</code> records <code>shipped</code>, <code>abandoned</code>, <code>dead-end</code>, or <code>handed-off</code>, then archives the feature and its approvals to <code>.sdlc/archive/</code>. Failed work requires a lesson; handoffs require the external ticket or PR.</dd>
         </div>
       </dl>
     </div>
@@ -789,7 +789,7 @@
     "l7-t": '규칙이 된 평문 원칙',
     "l7-d": '규칙 8: 사람에게 보내는 모든 메시지는 맥락으로 시작하고, 짧은 능동문을 유지하며, 마지막은 당신이 내려야 할 단 하나의 결정입니다.',
     "l8-t": '모든 실행에 끝 상태 기록',
-    "l8-d": '<code>close.sh</code>는 <code>shipped</code>, <code>abandoned</code>, <code>dead-end</code>, <code>handed-off</code> 중 하나를 기록합니다. 실패한 작업은 교훈을, 이관한 작업은 외부 티켓이나 PR을 남겨야 합니다.',
+    "l8-d": '<code>close.sh</code>는 <code>shipped</code>, <code>abandoned</code>, <code>dead-end</code>, <code>handed-off</code> 중 하나를 기록한 뒤 피처와 승인 기록을 <code>.sdlc/archive/</code>로 옮깁니다. 실패한 작업은 교훈을, 이관한 작업은 외부 티켓이나 PR을 남겨야 합니다.',
     "inst-h": '명령 세 줄, 그다음은 하네스에 맡김',
     "inst-lede": '설치 프로그램도 데몬도 없습니다. 키트 디렉터리는 프레임워크 전용으로 남고, 프로젝트에는 코드와 함께 버전 관리되는 <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code>가 생깁니다.',
     "st1-n": '머신당 한 번. 설치는 이것이 전부입니다. Windows에서는 이 명령과 이후 모든 키트 명령을 Git Bash나 WSL에서 실행하세요.',
