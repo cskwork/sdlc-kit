@@ -3,9 +3,9 @@
 Review the artifact as if it may be wrong. Find concrete problems. A human
 reviews your findings. **Report only. Fix nothing.**
 
-Inputs: the artifact under attack (spec.md draft, plan.md draft, or a diff)
-plus its upstream sources (intent.md, spec.md, plan.md as applicable) and
-`.sdlc/memory/POLICY.md` when it exists.
+Inputs: the artifact under attack (intent.md, spec.md draft, plan.md draft,
+a diagnosis, or a diff) plus its upstream sources (intent.md, spec.md,
+plan.md as applicable) and `.sdlc/memory/POLICY.md` when it exists.
 
 Attack, in order:
 

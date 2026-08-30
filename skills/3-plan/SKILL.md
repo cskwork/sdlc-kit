@@ -12,9 +12,9 @@ and proof. During this stage, read and run non-mutating commands only.
 
 1. Run `gates/check-gate.sh spec .sdlc/work/<slug>/spec.md`. STOP if closed.
 2. Read spec.md fully. Read `.sdlc/memory/POLICY.md`,
-   `.sdlc/memory/INDEX.md`, and `.sdlc/memory/DOMAIN.md`; open lesson files
-   whose tags match the current task. Treat DOMAIN.md constraints and
-   POLICY.md rules as plan risks.
+   `.sdlc/memory/INDEX.md`, `.sdlc/memory/DOMAIN.md`, and the feature's
+   `harvest.md` if present; open lesson files whose tags match the current
+   task. Treat DOMAIN.md constraints and POLICY.md rules as plan risks.
 3. **Read-only rule: in this stage you may read code and run non-mutating
    commands only. No edits, no writes outside `.sdlc/work/<slug>/`.**
 
@@ -44,7 +44,9 @@ exploration stays out of the main context. Then fill `templates/plan.md`:
 
 Constraints the code does not show (ownership, forbidden areas, deploy
 windows) are collected at the spec gate, not here. If a missing constraint
-blocks planning, return the question to the spec gate instead of improvising.
+blocks planning, return the question to the spec gate instead of
+improvising — this counts against the re-gate cap of two per stage
+(AGENTS.md rule 3; escalation: skills/4-build "Re-gate cap").
 
 ## Adversarial review (fresh context)
 
@@ -54,14 +56,16 @@ executes irreversibly, so a keyword scan is never its substitute
 adversary, not a verdict.
 
 Dispatch an adversary (`roles/adversary.md`) with ONLY: spec.md, draft
-plan.md, and `.sdlc/memory/DOMAIN.md`. It checks that every requirement has a
+plan.md, `.sdlc/memory/DOMAIN.md`, `.sdlc/memory/POLICY.md` if present, and
+the tripwire output. It checks that every requirement has a
 proof command, the file list and order are complete, risks are not
 understated, and the **Gate tier** verdict is correct. Fix findings; record
 each objection + resolution and the tier re-check in plan.md's
 **Adversarial review** section. If there were blocking findings, re-run the
 adversary over the fixed plan (max 2 rounds; then escalate remaining
 objections to the human as flagged concerns). If the code contradicts the spec,
-STOP and show the conflict to the human. The spec gate may need to reopen.
+STOP and show the conflict to the human. The spec gate may need to reopen —
+that reopen counts against the re-gate cap (AGENTS.md rule 3).
 Do not change the plan to hide a wrong spec.
 
 ## Gate (tiered, AGENTS.md rule 3)

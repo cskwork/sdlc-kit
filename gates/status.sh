@@ -79,7 +79,7 @@ for dir in .sdlc/work/*/; do
   echo "== $slug${micro:+   (micro)}"
   # incident evidence still outstanding? (see skills/6-maintain Evidence tracking)
   if [ -f "${dir}intent.md" ] && grep -q 'reproduction evidence: requested' "${dir}intent.md" \
-     && ! grep -qE 'reproduction evidence: .*(received|waived-by-human)' "${dir}intent.md"; then
+     && ! grep -qE 'reproduction evidence: .*(received|waived-by)' "${dir}intent.md"; then
     echo "   EVIDENCE OUTSTANDING: reproduction still 'requested' in intent.md"
   fi
   next_action=""

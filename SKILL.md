@@ -16,7 +16,7 @@ Read it completely on first contact with a project, then return here.
 | Request looks like | Do |
 |---|---|
 | "start SDLC for <idea/bug>" | New slug. Read `skills/1-intent/SKILL.md`. Trivial ticket → micro track (intent → build → ship); oversized → map first. |
-| ticket too big or foggy for one intent pass | `map.md` in the same slug dir first (skills/1-intent "Chart a map"); one Unknown resolved per session. |
+| ticket too big or foggy for one intent pass | `map.md` in the same slug dir first (skills/1-intent "Chart a map first"); one Unknown per session, six sessions max. |
 | "continue <slug>" / "what's next" | Run `gates/status.sh <slug>` from the project root. Its `next →` line names the stage skill or gate command. |
 | "where are we" / "sdlc status" | `gates/status.sh` (open features; `--all` adds the newest 20 archived) + `gates/stats.sh` (open + recent closed). Full-archive sweeps: `ls`/`grep .sdlc/archive/`, never the whole listing into context. |
 | gate request answered "approve" in chat | `gates/approve.sh <stage> <artifact> --delegated` per AGENTS.md rule 3. |
@@ -28,16 +28,16 @@ Read it completely on first contact with a project, then return here.
 
 Project rules control implementation details such as commands, branches, and
 style. The kit controls stages, gates, and memory. Quote conflicts to the human
-instead of resolving them silently. DOMAIN.md points at existing glossaries/ADRs instead of
-copying. Kit roles dispatch onto existing specialist agents when one fits.
+instead of resolving them silently. DOMAIN.md points at existing
+glossaries/ADRs instead of copying. Kit roles dispatch onto existing specialist agents when one fits.
 Monorepos: one `.sdlc/` per shipping unit.
 
 ## Invariants (full text in AGENTS.md)
 
 Before stages 2–4, check the gate. Dispatch stage work and verification to
 subagents; the orchestrator keeps only artifacts, summaries, and gate
-decisions (AGENTS.md rule 5). Read `memory/POLICY.md`, `memory/INDEX.md`, and
-`memory/DOMAIN.md` at every stage start; mid-loop memory candidates go to the
-feature's `harvest.md`, merged only at close (rule 4). Speak plainly to the
-human. Keep artifacts in the project. Store large evidence in scratch/ and
-cite only the deciding lines.
+decisions (AGENTS.md rule 5). Read `.sdlc/memory/POLICY.md`,
+`.sdlc/memory/INDEX.md`, and `.sdlc/memory/DOMAIN.md` at every stage start;
+mid-loop memory candidates go to the feature's `harvest.md`, merged only at
+close (rule 4). Speak plainly to the human. Keep artifacts in the project.
+Store large evidence in scratch/ and cite only the deciding lines.

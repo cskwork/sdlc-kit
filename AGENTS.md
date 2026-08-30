@@ -7,8 +7,9 @@ runtime hooks, no vendor-specific features.
 
 Six stages, one artifact each. An approval recorded by `gates/approve.sh`
 opens the next stage. Intent, spec, and ship approvals are human decisions
-unless the project's lazymode waives them; the plan gate is tiered (rule 3). A production issue in stage 6 writes the
-next `intent.md` and restarts the loop.
+unless the project's lazymode waives them; the plan gate is tiered (rule
+3). A production issue in stage 6 writes the next `intent.md` and restarts
+the loop.
 
 | # | Stage    | Read this skill first              | Artifact (in project `.sdlc/work/<feature>/`) | Gate to pass BEFORE starting |
 |---|----------|------------------------------------|-----------------------------------------------|------------------------------|
@@ -21,23 +22,20 @@ next `intent.md` and restarts the loop.
 
 Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>/spec.md`.
 
-**Micro track for trivial tickets.** The full track is the default; micro
-is the exception for genuinely trivial changes, and any doubt means full.
-Stage 1 may record `Track: micro` in
-intent.md only when the tripwire scan of intent.md is clean, the exact files
-and symbols are known, and success is checkable by an existing command
-(criteria: skills/1-intent). Micro features skip spec and plan entirely:
-intent (gate) → build → ship. Ship keeps its full adversary review — it is
-the only review the diff gets. Any surprise during build (new files, a
-trip-wire, growing scope) upgrades the feature to the full track: STOP,
-rewrite the Track line to `- Track: full — upgraded from micro (<reason>)`,
-and write spec.md.
+**Micro track for trivial tickets.** The full track is the default; any
+doubt means full. Stage 1 may record `Track: micro` only when every
+criterion in skills/1-intent holds: tripwire-clean intent.md, exact files
+and symbols known, success checkable by an existing command, no open
+questions. Micro skips spec and plan: intent (gate) → build → ship, and
+ship keeps its full adversary review — the only review the diff gets.
+Upgrade rule (any build surprise → full track): skills/1-intent.
 
 **Every feature ends in a terminal state**: `gates/close.sh <slug>
 <shipped|abandoned|dead-end|handed-off> "reason"` after the human decides
 (`--delegated` under rule 3). close.sh then archives the feature: the dir and
 its approval records move to `.sdlc/archive/<slug>/`, so `gates/status.sh`
-stays scoped to open work (`--all` lists archived features). Abandoned or dead-end requires a lesson first:
+stays scoped to open work (`--all` lists the newest 20 archived).
+Abandoned or dead-end requires a lesson first:
 what was tried, why it failed, what would unblock it (lazymode ≥3 waives the
 separate lesson file — the close reason is the record). Handed-off requires the
 external ticket/PR key or URL in the reason. Add durable facts to DOMAIN.md
@@ -54,14 +52,14 @@ when closing.
    Micro-track features have no spec or plan: build checks the `intent` gate.
    Anything but a printed `GATE OPEN` — including errors and silence — is
    closed: STOP and tell the human exactly what to approve. At a gate
-   lazymode waives (rule 3), the remedy is the stage's lazy review — the
-   adversary pass for plan and ship; a tripwire scan, adversary on a hit,
-   for intent and spec — plus `--lazy`, not a human ask.
+   lazymode waives (rule 3), run the lazy review of the stage whose gate is
+   closed — plan/ship: adversary pass; intent/spec: tripwire scan, then
+   adversary on any hit — then `approve.sh <that stage> … --lazy`, not a
+   human ask.
 3. **Intent, spec, and ship approvals are human decisions** (unless the
-   project's lazymode waives one — see the table below). On the micro track
-   there is no spec approval at all: the human authorized that when
-   approving the intent.md that carries the `Track: micro` verdict (see the
-   Micro track paragraph). Run
+   project's lazymode waives one — see the lazymode levels below). On the
+   micro track there is no spec approval at all: the human authorized that
+   by approving the intent.md that carries the `Track: micro` verdict. Run
    `gates/approve.sh <stage> <artifact> --delegated` only after the human
    explicitly approves that artifact in chat ("approve", "looks right", or
    equivalent). Never approve on silence, a general "continue", or your own
@@ -69,7 +67,10 @@ when closing.
    Approvals are committed once, at ship, with the code (skills/5-ship commit
    discipline); git history is the audit trail. Approvals do not
    bind file bytes: editing an approved artifact does not close its gate, but
-   a change that alters what the human approved deserves a fresh ask.
+   a change that alters what the human approved requires a new approval
+   (build-time procedure: skills/4-build deviations). Re-gates are capped:
+   two per stage, per feature, at any point in the loop — a third means
+   intent got the facts wrong (escalation: skills/4-build "Re-gate cap").
 
    **The plan gate is tiered.** Trip-wires: schema or data migration, data
    deletion or destructive backfill, public API or contract change,
@@ -102,28 +103,31 @@ when closing.
    stage's adversary review to pass first (intent defines no adversary — a
    hit on intent.md gets a fresh-context adversary). Approvals are still
    recorded, and every auto-approved gate still posts its Human summary
-   (and any trip-wire list) to the human as FYI. `approve.sh --lazy` refuses a stage the configured level keeps
-   human, and any `lazymode:` value outside 0-4 counts as 0.
+   (and any trip-wire list) to the human as FYI. `approve.sh --lazy`
+   refuses a stage the configured level keeps human, and any `lazymode:`
+   value outside 0-4 counts as 0.
 4. **Keep memory bounded.** At each stage start read
    `.sdlc/memory/POLICY.md` (human-declared hard rules),
    `.sdlc/memory/INDEX.md` (lessons; 50 lines max), `.sdlc/memory/DOMAIN.md`
    (terms, verified facts, constraints; 100 lines max), and the feature's
    own `harvest.md` if present, then open lesson files whose tags match the
-   task. Over a limit: split by subdomain and leave pointer lines.
+   task. DOMAIN over its limit: split by subdomain, leave pointer lines.
+   INDEX over its limit: merge near-duplicates, drop superseded entries,
+   remove entries already promoted (skills/6-maintain).
    **INDEX.md, DOMAIN.md, and lessons/ have one writer: the close step.**
-   Mid-loop, stages and
-   researchers append lesson and domain candidates to
-   `.sdlc/work/<slug>/harvest.md` (templates/harvest.md), never to INDEX.md
-   or DOMAIN.md — parallel loops would race or merge-conflict on the shared
-   files. At close, merge harvest into lessons/INDEX/DOMAIN and delete it;
-   `close.sh` blocks while harvest.md exists. Record each new mistake in the
-   skill 6 format, drafted in harvest.md.
+   Mid-loop, stages and researchers append candidates to
+   `.sdlc/work/<slug>/harvest.md` (templates/harvest.md), never to the
+   shared files. At close, merge harvest into lessons/INDEX/DOMAIN and
+   delete it; `close.sh` blocks while harvest.md exists.
+   **Recency wins on merge.** A candidate that contradicts an existing
+   entry means the source or the concept changed: replace the old entry
+   with the new one and a fresh `[verified: how — YYYY-MM-DD]`. Never keep
+   both. Date every fact.
    **POLICY.md is written only on the human's word** (the one shared-memory
    file outside the close-writer rule). When the human states a hard rule in
    chat, transcribe it with the date and their words; never add, soften, or
-   remove a rule on your own judgment. A mid-loop transcription is committed
-   with the next close. The adversary treats a policy violation as a
-   blocking finding.
+   remove a rule on your own judgment. A mid-loop transcription commits
+   with the next close. The adversary treats a violation as blocking.
    The archive is bounded the same way: `status.sh --all` and `stats.sh`
    default to the newest 20 closed features. Never read the whole
    `.sdlc/archive/` into a working context — answer archive questions with
@@ -142,10 +146,18 @@ when closing.
    subagent and die with it. This is what keeps the loop cheap: one long
    orchestrator context that read everything defeats the point.
 
+   **Caps survive dispatch.** Every capped loop (fix loop, adversary
+   rounds, re-gates, map sessions) writes its count into a feature artifact
+   — deviations.md for build loops, map.md's Sessions line, evidence.md for
+   ship rounds — the moment it increments. A re-dispatched subagent reads
+   the count from disk; context death never resets a cap.
+
    **Roles are contracts, not headcount.** Independent probes (git history,
    live UI, API, DB) may run in parallel under one role: fewest read-only
    workers, one writer per checkout. The dispatcher resolves contradictions
-   with primary evidence; a contradiction between probes is a finding.
+   with primary evidence; a contradiction between probes is a finding. At
+   most two fan-out rounds per question — after that the contradiction goes
+   to the human, not to more probes.
 
    **Dispatch contract.** Every dispatch names: goal, exact input paths,
    write authority, verification commands from `.sdlc/config.md`, success

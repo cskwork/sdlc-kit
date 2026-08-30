@@ -42,8 +42,10 @@ Report format (target: 60 lines or fewer):
 ```
 
 The dispatcher appends Domain candidates to the feature's
-`.sdlc/work/<slug>/harvest.md` (dedup against DOMAIN.md's existing entries).
-Shared memory files are written only at close (AGENTS.md rule 4).
+`.sdlc/work/<slug>/harvest.md`; INDEX.md, DOMAIN.md, and lessons/ are
+written only at close (AGENTS.md rule 4). A candidate that contradicts an
+existing DOMAIN.md entry supersedes it — mark it `supersedes: <old entry>`
+so the close merge replaces the old line instead of keeping both.
 
 Cite file:line for every reported fact. Say "not found" rather than guess.
 Abbreviate code. Never paste whole files into the report.

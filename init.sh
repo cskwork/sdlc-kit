@@ -55,7 +55,8 @@ EOF
 # subdomain into memory/domain/<area>.md and keep one pointer line here)
 # ONE writer: the close step. Mid-loop candidates stage in the feature's
 # work/<slug>/harvest.md and merge here at close (AGENTS.md rule 4).
-# Facts carry [verified: how] like intent claims.
+# Facts carry [verified: how — YYYY-MM-DD]. Recency wins: a merge candidate
+# that contradicts an entry REPLACES it — the source changed; never keep both.
 
 ## Terms (ubiquitous language)
 <!-- - term — meaning in this project -->

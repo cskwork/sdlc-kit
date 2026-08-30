@@ -7,7 +7,9 @@
      facts), then DELETE this file. close.sh blocks while it exists. -->
 
 ## Domain candidates
-<!-- - fact / term / constraint — [verified: how] -->
+<!-- - fact / term / constraint — [verified: how — YYYY-MM-DD]
+     Contradicts an existing DOMAIN.md entry? Add `supersedes: <old line>` —
+     the close merge REPLACES the old entry; recency wins, never keep both. -->
 
 ## Lesson candidates
 <!-- - [tags] the trap and the correct move; add `promote: skills/<n>` when a
