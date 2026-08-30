@@ -15,9 +15,9 @@ not only at the end.
    check `gates/check-gate.sh intent .sdlc/work/<slug>/intent.md` instead,
    and treat intent.md's success criteria as the plan.
 2. Read plan.md and spec.md (micro: intent.md). Read
-   `.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`, and
-   `.sdlc/memory/DOMAIN.md`; open lesson files whose tags match the current
-   task.
+   `.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`,
+   `.sdlc/memory/DOMAIN.md`, and the feature's `harvest.md` if present;
+   open lesson files whose tags match the current task.
 3. **Brownfield: capture the regression baseline before editing.** Run the
    baseline commands from plan.md and save output to
    `.sdlc/work/<slug>/baseline.txt`. Without a baseline, you cannot prove that
@@ -33,12 +33,20 @@ not only at the end.
   factual error in spec.md (wrong data shape, wrong AS-IS claim), re-gate the
   spec first — with the evidence — then the plan: an artifact that no longer
   says what the human approved needs a fresh ask (AGENTS.md rule 3).
-- **Re-gate cap: two per stage, per feature.** A third surprise in the same
-  stage means stage 1 got the facts wrong, not that the plan needs another
-  pass. STOP, show the human the trail (deviations.md + the re-approval
-  history), and let them choose: back to intent with the new facts, or close
-  dead-end with a lesson. Endless spec↔plan churn is a finding about intent,
-  never progress.
+- **Deviation cap: five small deviations per feature.** The sixth means the
+  plan no longer describes the work: re-gate the plan (counts against the
+  re-gate cap below) or STOP. Small deviations are individually cheap and
+  collectively a rewrite.
+- **Micro track:** any structural surprise upgrades to full — STOP, rewrite
+  the Track line, and write spec.md (skills/1-intent).
+- **Re-gate cap: two per stage, per feature.** A third re-gate request for
+  the same stage means stage 1 got the facts wrong, not that the plan needs
+  another pass. STOP, show the human the trail (deviations.md + the
+  re-approval history), and let them choose: back to intent with the new
+  facts, or close dead-end with a lesson. Log every re-gate as a line in
+  deviations.md the moment it happens — counters live on disk, not in
+  context (AGENTS.md rule 5 "Caps survive dispatch"). Endless spec↔plan
+  churn is a finding about intent, never progress.
 - A check that must fail the build must fail it synchronously (direct throw,
   sync IO, or top-level await). An unawaited promise is not a gate. It depends
   on environment behavior and may finish too late.
@@ -50,10 +58,10 @@ not only at the end.
   passes honestly (catch yourself reaching for the test file instead? record
   a lesson).
 - **Record each mistake immediately** in the feature's
-  `.sdlc/work/<slug>/harvest.md` (AGENTS.md rule 4 — shared memory files are
-  written only at close). This includes your mistakes, plan mistakes, and
-  surprises in the codebase. Use the skill 6 lesson format so a future run
-  can avoid it.
+  `.sdlc/work/<slug>/harvest.md` (INDEX.md, DOMAIN.md, and lessons/ are
+  written only at close — AGENTS.md rule 4). This includes your mistakes,
+  plan mistakes, and surprises in the codebase. Use the skill 6 lesson
+  format so a future run can avoid it.
 - Independent parallel work: use worktrees/subagents if your harness supports
   them, one writer per file set. Otherwise, sequential is fine.
 - Tools: you may use build/test/dev tools freely. You must NOT use deploy or
@@ -72,7 +80,8 @@ work in your own context.
 Verifier or adversary findings enter the **fix loop**:
 
 1. Mark every finding **accepted** or **declined**. Give a reason for each
-   declined finding. Record both lists in deviations.md or evidence.md.
+   declined finding. Record both lists — and the round number — in
+   deviations.md; ship copies them into evidence.md.
 2. Fix only accepted findings. Do not add unrelated scope. A
    finding that implies new scope goes to the human, not into the fix.
 3. Dispatch a new fresh-context checker with two questions. Is each named

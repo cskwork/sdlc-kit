@@ -15,8 +15,8 @@ This stage may start without a human through cron, a webhook, or a ticket. Run
 it stateless in a sandbox with scoped, read-only access to logs, metrics, and
 code. Do not provide standing production credentials or deploy tools. The
 agent may act only through gated routes: write an `intent.md`, open a review
-PR, or run a pre-approved runbook. A wrong diagnosis may produce a wrong document, but it must never
-change production. Handle rollback through the plan gate or the project's
+PR, or run a pre-approved runbook. A wrong diagnosis may produce a wrong
+document, but it must never change production. Handle rollback through the plan gate or the project's
 rehearsed rollback runbook. Never revert production directly from this stage.
 
 ## Intake (before any research or hypothesis)
@@ -53,10 +53,10 @@ explicitly (see Evidence tracking below).
    or reverted before, why, and whether it can be reproduced here.
 3. Reproduce the issue first. If it cannot be reproduced, say so and record
    what is known. Do not fix an issue you cannot reproduce.
-4. Trace the cause. Read `.sdlc/memory/INDEX.md` and
-   `.sdlc/memory/DOMAIN.md`, and `.sdlc/memory/POLICY.md`, then open lesson
-   files whose tags match the task.
-   Check whether this failure mode has occurred before. If a past lesson matches, cite it in the diagnosis.
+4. Trace the cause. Read `.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`,
+   and `.sdlc/memory/DOMAIN.md`, then open lesson files whose tags match
+   the task. Check whether this failure mode has occurred before; if a past
+   lesson matches, cite it in the diagnosis.
 5. Separate the claim before hunting: "it does not react" is a state/handler
    problem; "it looks wrong/disabled" is a RENDERING problem until proven
    otherwise. They have different checklists.
@@ -79,6 +79,10 @@ Make its state explicit in `intent.md`:
 
 A diagnosis that ships while evidence is `requested` must say so in its
 report and in any ticket it produces. Do not silently drop the request.
+Ask at most twice. After the second unanswered request, either proceed
+with `waived-by-agent <date> — unreproduced; diagnosis stays [assumed]`
+carried into every downstream artifact, or close the fix-slug handed-off
+with the reporter's ticket key. Never re-request a third time.
 If `.sdlc/config.md` has empty `test:`/`lint:` commands, record one line of
 verification debt in the artifact: what could not be run, and what manual
 check replaced it.
@@ -106,16 +110,26 @@ standing assignments — each has caught real errors:
 - **Compressed loop.** Use it only when one cause is reproduced, the changed
   file set is known, and affected behavior is limited. Create a new
   `.sdlc/work/<fix-slug>/` directory so prior approvals stay intact. Write a
-  mini `plan.md` with files and proof. Get plan approval, then build and verify
+  mini `plan.md` with files and proof. Pass the plan gate as usual (tiered /
+  lazymode, AGENTS.md rule 3), then build and verify
   under skill 4. Create `evidence.md` and stop at the ship gate.
 - **Full loop.** Use it for all other changes. Create
   `.sdlc/work/<new-slug>/intent.md` from `templates/intent.md`. Include the
   reproduction and diagnosis as verified evidence, then run Stage 1.
 
+**Recurrence cap: three fix loops for one symptom.** Before opening a
+fix-slug, grep INDEX.md for the symptom's tags. On the third match the
+defect is architectural, not a bug: STOP, write the promotion edit the tag
+already earned, and take it to the human as a design decision — not a
+fourth fix. Record the outcome in DOMAIN.md as a constraint at close.
+Per-feature caps do not bound a defect that mints a new slug per incident;
+this rule does.
+
 ## Record the lesson (every incident, no exceptions)
 
 Draft the lesson in the fix feature's `.sdlc/work/<fix-slug>/harvest.md`
-(shared memory files are written only at close — AGENTS.md rule 4). The
+(INDEX.md, DOMAIN.md, and lessons/ are written only at close — AGENTS.md
+rule 4). The
 close merge materializes it as `.sdlc/memory/lessons/YYYY-MM-DD-<slug>.md`
 via `templates/lesson.md` plus ONE line in `.sdlc/memory/INDEX.md`:
 
@@ -126,8 +140,10 @@ via `templates/lesson.md` plus ONE line in `.sdlc/memory/INDEX.md`:
 Memory discipline (context stays bounded):
 
 - Keep INDEX.md at 50 lines or fewer. If it grows past the limit, merge
-  near-duplicates and remove entries already promoted into a skill.
+  near-duplicates, drop superseded entries (their subject changed), and
+  remove entries already promoted into a skill.
 - When the same lesson recurs for a second time, propose the exact skill edit
-  that would prevent it.
+  that would prevent it. (Distinct from the 3× tag rule in skills/5-ship:
+  this fires on the same lesson, that one on the same tag.)
 - State the trap and the correct move in each lesson. Keep it short and
   specific enough to change behavior.

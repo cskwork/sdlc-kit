@@ -5,6 +5,7 @@
      is empty, write intent.md. The intent gate stays on intent.md, not this file. -->
 
 - Date started: YYYY-MM-DD
+- Sessions: 0   <!-- increment each session; cap 6, or 2 growing sessions in a row (skills/1-intent) -->
 
 ## Destination
 <What "arrived" looks like: a spec you could write, a decision made, a behavior shipped.>

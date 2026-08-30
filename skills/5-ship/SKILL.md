@@ -15,19 +15,24 @@ the context that built the code. Read plan.md, spec.md, deviations.md (if
 present), and the diff (`git diff` against the base branch). Micro-track
 features have no spec or plan: intent.md replaces both as the upstream
 source, and its success criteria are the requirements. Read
-`.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`, and
-`.sdlc/memory/DOMAIN.md`; open lesson files whose tags match the current task.
+`.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`, `.sdlc/memory/DOMAIN.md`,
+and the feature's `harvest.md`; open lesson files whose tags match the
+current task.
 
 ## Adversarial code review (fresh context)
 
 This review runs at every lazymode level — it is the last look at the diff
 before the push, and the only security pass (AGENTS.md rule 3).
 
-Dispatch an adversary (`roles/adversary.md`) with: spec.md, plan.md, the
-diff (micro: intent.md and the diff).
-It checks spec mismatch, missing untouched checks, security issues, tests that
-cannot fail, and complexity that hides bugs. Fix findings or
-record justified rejections.
+Dispatch an adversary (`roles/adversary.md`) with: spec.md, plan.md,
+`.sdlc/memory/POLICY.md` if present, and the diff (micro: intent.md and the
+diff). It checks spec mismatch, missing untouched checks, security issues,
+policy violations, tests that cannot fail, and complexity that hides bugs.
+Fix findings or record justified rejections, then re-run the adversary over
+the fixed diff — max 2 rounds, each logged in evidence.md's Adversary
+section. Blockers surviving round 2 go into evidence.md's not-verified list
+and block `--lazy`: ship is the irreversible edge, so an open blocker stops
+the loop and goes to the human even at lazymode 4.
 
 ## Assemble evidence
 
@@ -55,8 +60,8 @@ Review the feature history. Record what went wrong, what surprised you, and
 what would help the next agent — all into the feature's
 `.sdlc/work/<slug>/harvest.md` (lesson candidates in the skill 6 format;
 durable terms, verified facts, and constraints as domain candidates).
-Shared memory files are written only at close, by the closer (AGENTS.md
-rule 4). Domain facts describe the system; lessons describe mistakes. If a
+INDEX.md, DOMAIN.md, and lessons/ are written only at close, by the closer
+(AGENTS.md rule 4). Domain facts describe the system; lessons describe mistakes. If a
 stage skill should have prevented a mistake, add `promote: skills/<n>` to
 the lesson candidate. A tag that appears three or more times in INDEX.md
 must be promoted: propose the stage-skill change to the human (`close.sh`
@@ -86,8 +91,9 @@ yourself against the rules below, post it as FYI, and commit.
    (scratch/ is gitignored and stays on disk until step 3).
 2. Show the human the staged file list with `git status` and the proposed
    commit message. Describe the behavior change, not file names. Wait for the
-   human to approve the staged set. Evidence approval does not approve the
-   staged files.
+   human to approve the staged set (lazymode ≥3: verify it yourself against
+   step 1 and post as FYI, per the intro above). Evidence approval does not
+   approve the staged files.
 3. Commit and push following the **Release procedure** line in spec.md. Ask
    separately before pushing a protected or shared branch. After the push,
    delete `.sdlc/work/<slug>/scratch/` — the one cleanup of the loop. Nothing
