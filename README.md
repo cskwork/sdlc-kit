@@ -150,6 +150,7 @@ Per feature, inside the **target project**:
 │   ├── spec.md                       # Human summary · AS-IS → TO-BE · contract
 │   ├── plan.md                       # files · order · risks · proof
 │   ├── deviations.md                 # build-time differences; plan stays locked
+│   ├── progress.md                   # heartbeat: ONE live line, gitignored (rule 9)
 │   ├── baseline.txt                  # brownfield behavior before the change
 │   ├── harvest.md                    # mid-loop lesson/domain candidates; merged at close
 │   └── evidence.md                   # commands · outputs · observed behavior
@@ -158,7 +159,7 @@ Per feature, inside the **target project**:
     └── approvals/                    # the feature's approval records move with it
 ```
 
-`init.sh` also adds two lines to the project's `.gitignore` (scratch under `work/` and `archive/`): scratch evidence stays uncommitted, and stays on disk until ship's end-of-loop cleanup.
+`init.sh` also adds four lines to the project's `.gitignore`: scratch under `work/` and `archive/` (bulk evidence stays uncommitted, on disk until ship's end-of-loop cleanup), and `progress.md` under both (the heartbeat is a live signal, not a record). While a feature is open, `status.sh` shows the heartbeat as a `now →` line with its age — `watch -n5 cat .sdlc/work/<slug>/progress.md` follows it live.
 
 The public sdlc-kit repository stays framework-only. Domain artifacts live and version with the project they describe.
 

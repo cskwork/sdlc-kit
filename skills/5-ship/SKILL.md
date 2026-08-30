@@ -8,6 +8,10 @@ description: "Evidence assembly, adversarial review, ship gate, commit disciplin
 Goal: create `evidence.md` so a human can decide whether to release. Run agent
 reviews first. The human reviews findings about intent and risk.
 
+Heartbeat: on entry and at every sub-task change, overwrite
+`.sdlc/work/<slug>/progress.md` with one line —
+`ship · <doing what> · <ISO timestamp>` (AGENTS.md rule 9).
+
 ## Before you start
 
 Run as a dispatched subagent (AGENTS.md rule 5) — do not assemble evidence in

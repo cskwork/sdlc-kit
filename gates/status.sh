@@ -129,6 +129,22 @@ for dir in .sdlc/work/*/; do
     fi
     printf "  %-8s %s\n" "$stage" "$state"
   done
+  # heartbeat (AGENTS.md rule 9): the live one-liner plus its age, so silence
+  # and a dead loop look different. BSD stat first (macOS), then GNU.
+  if [ -s "${dir}progress.md" ]; then
+    hb=$(head -n1 "${dir}progress.md" | tr -d '\r')
+    mt=$(stat -f %m "${dir}progress.md" 2>/dev/null || stat -c %Y "${dir}progress.md" 2>/dev/null || true)
+    age=""
+    case "$mt" in (*[!0-9]*|'') mt="";; esac
+    if [ -n "$mt" ]; then
+      s=$(( $(date +%s) - mt )); [ "$s" -lt 0 ] && s=0
+      if [ "$s" -lt 60 ]; then age="${s}s ago"
+      elif [ "$s" -lt 3600 ]; then age="$((s / 60))m ago"
+      else age="$((s / 3600))h ago"; fi
+      [ "$s" -gt 1800 ] && age="$age — STALE"
+    fi
+    echo "  now   →  $hb${age:+  ($age)}"
+  fi
   if [ -z "$next_action" ]; then next_action="loop complete — next: $(next_hint ship)"; fi
   echo "  next  →  $next_action"
 done

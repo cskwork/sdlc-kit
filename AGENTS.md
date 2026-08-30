@@ -188,6 +188,17 @@ when closing.
    message is for), uses short active sentences and the project's own
    vocabulary, and ends with the one decision or action the reader must
    take.
+9. **Heartbeat.** `.sdlc/work/<slug>/progress.md` holds exactly one line —
+   `<stage>[ n/m] · <what is happening, ≤10 words> · <ISO timestamp>` —
+   overwritten (never appended) on stage entry and whenever the sub-task
+   changes; before a dispatch, the orchestrator writes the dispatch as the
+   line. A sub-task that runs long refreshes the line at each natural
+   checkpoint (a command finished, a file edited) even when the text does
+   not change, so a stale heartbeat means a dead loop, not a slow step.
+   It is a live signal for the human, not a record: gitignored
+   (init.sh), never quoted into artifacts, and `status.sh` shows it with
+   its age so silence and a dead loop look different. History stays where
+   it already lives (deviations.md, evidence.md, harvest.md).
 
 ## Greenfield vs brownfield
 
