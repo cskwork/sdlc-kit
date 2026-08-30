@@ -48,8 +48,9 @@ Fill `templates/evidence.md` → `.sdlc/work/<slug>/evidence.md`:
 - Adversary findings + resolutions.
 - State anything not verified, including environment limits and skipped checks.
   Record a gap instead of marking the check as passed.
-- For UI changes, the verifier must use a browser or QA tool when one is
-  available and the app is reachable. Otherwise record why the UI was not
+- For UI changes, the verifier must use the `qa:` tool from config.md — or,
+  when that line is empty or absent, any browser or QA tool available in the
+  harness — when the app is reachable. Otherwise record why the UI was not
   checked.
 - For every AS-IS to TO-BE pair, record the observed result and its command or
   browser evidence.
@@ -86,8 +87,8 @@ yourself against the rules below, post it as FYI, and commit.
 
 1. Stage named paths only: changed source files, `.sdlc/work/<slug>/`
    (harvest.md included), `.sdlc/approvals/`, and — when changed —
-   `.sdlc/memory/POLICY.md` and `.sdlc/config.md` (a lazymode edit must
-   reach the audit trail). Do not use `git add -A` or
+   `.sdlc/memory/POLICY.md` and `.sdlc/config.md` (lazymode, command, and
+   `qa:` edits must reach the audit trail). Do not use `git add -A` or
    `git add .` because they can include unrelated files and scratch output
    (scratch/ is gitignored and stays on disk until step 3).
 2. Show the human the staged file list with `git status` and the proposed

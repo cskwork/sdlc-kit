@@ -103,6 +103,9 @@ build:
 test:
 lint:
 run:
+# Optional preferred browser/QA tool for UI verification (CLI, MCP, or agent name).
+# Empty is fine: the verifier falls back to any browser/QA tool its harness has.
+qa:
 EOF
 
 # projects seeded before lazymode existed keep their config; append the block
