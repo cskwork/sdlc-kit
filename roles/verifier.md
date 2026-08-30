@@ -31,8 +31,10 @@ command fails, report it as a finding.
 
 Tools:
 - Needs: shell (run/build/test commands from `.sdlc/config.md`), file reads.
-- For UI changes, use a browser or QA tool when one is available and the app is
-  reachable. Otherwise record why the UI was not checked. You may use a
-  read-only database tool to check data claims. Name each tool used.
+- For UI changes, use the `qa:` tool named in config.md; when that line is
+  empty or absent, use any browser or QA tool available in your harness. Do
+  this when the app is reachable; otherwise record why the UI was not checked.
+  You may use a read-only database tool to check data claims. Name each tool
+  used.
 - Must not: write any file, use deploy/release tools, touch production
   systems or credentials.

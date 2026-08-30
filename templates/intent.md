@@ -6,6 +6,7 @@
 - Type: greenfield | brownfield
 - Track: full (default) | micro — <only when ALL criteria hold; evidence per skills/1-intent>
 - Requested by: <who>
+- Refs: <external ticket/PR/incident key or URL, e.g. A20-1234 — omit if none>
 
 ## Problem
 <What breaks or hurts today. Who encounters it, and how often. Do not describe the solution here.>
