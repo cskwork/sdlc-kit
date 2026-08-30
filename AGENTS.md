@@ -28,7 +28,9 @@ criterion in skills/1-intent holds: tripwire-clean intent.md, exact files
 and symbols known, success checkable by an existing command, no open
 questions. Micro skips spec and plan: intent (gate) → build → ship, and
 ship keeps its full adversary review — the only review the diff gets.
-Upgrade rule (any build surprise → full track): skills/1-intent.
+The intent approval freezes the Track verdict (approve.sh records it;
+status.sh flags a post-approval rewrite). Upgrade rule (any build
+surprise → full track): skills/1-intent.
 
 **Every feature ends in a terminal state**: `gates/close.sh <slug>
 <shipped|abandoned|dead-end|handed-off> "reason"` after the human decides
@@ -94,10 +96,14 @@ when closing.
    - 2 — intent and ship human; spec and plan auto
    - 3 — intent human; spec, plan, and ship auto
    - 4 — no human gates; the whole loop runs autonomously
+   The `lazymode:` line itself is a human decision: edit it only on
+   explicit instruction, and commit config.md so the level is audit-trailed.
    lazymode waives the human decision, nothing else. **Plan and ship keep
    their full adversary review before `--lazy`** — plan authorizes what
    build executes irreversibly, and ship's diff review is the last look
    before the push; a keyword scan must never be the only reviewer there.
+   **A blocker surviving its round cap blocks `--lazy` at every stage**:
+   the gate reverts to a human ask; at lazymode 4 the loop stops.
    For intent and spec (recoverable downstream), scan the artifact with
    `tools/tripwire.sh`: a clean scan approves directly; any hit requires the
    stage's adversary review to pass first (intent defines no adversary — a
@@ -119,10 +125,13 @@ when closing.
    `.sdlc/work/<slug>/harvest.md` (templates/harvest.md), never to the
    shared files. At close, merge harvest into lessons/INDEX/DOMAIN and
    delete it; `close.sh` blocks while harvest.md exists.
-   **Recency wins on merge.** A candidate that contradicts an existing
-   entry means the source or the concept changed: replace the old entry
-   with the new one and a fresh `[verified: how — YYYY-MM-DD]`. Never keep
-   both. Date every fact.
+   **Recency wins on merge, three guards.** A contradicting candidate
+   replaces the old entry with a fresh `[verified: how — YYYY-MM-DD]`;
+   date every fact. Guards: weaker evidence never supersedes stronger (a
+   code-read vs a production capture goes to the human); both-true-in-
+   different-scopes gets qualified, not replaced; a `supersedes:` target
+   already rewritten by a parallel close is reconciled by evidence, not
+   appended. Human-stated lines are never deleted on recency alone — ask.
    **POLICY.md is written only on the human's word** (the one shared-memory
    file outside the close-writer rule). When the human states a hard rule in
    chat, transcribe it with the date and their words; never add, soften, or
@@ -146,11 +155,12 @@ when closing.
    subagent and die with it. This is what keeps the loop cheap: one long
    orchestrator context that read everything defeats the point.
 
-   **Caps survive dispatch.** Every capped loop (fix loop, adversary
-   rounds, re-gates, map sessions) writes its count into a feature artifact
-   — deviations.md for build loops, map.md's Sessions line, evidence.md for
-   ship rounds — the moment it increments. A re-dispatched subagent reads
-   the count from disk; context death never resets a cap.
+   **Caps survive dispatch.** Write each count the moment it increments:
+   deviations, re-gates, fix-loop rounds → deviations.md (template); ship
+   adversary rounds → evidence.md; map sessions → map.md's Session log;
+   evidence requests → one intent.md line each; re-approvals →
+   `.approval.history` (approve.sh). Counters live on disk, not in context;
+   grill and fan-out caps are per-session and do not persist.
 
    **Roles are contracts, not headcount.** Independent probes (git history,
    live UI, API, DB) may run in parallel under one role: fewest read-only

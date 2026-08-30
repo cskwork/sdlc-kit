@@ -36,8 +36,14 @@ while IFS= read -r dir; do
     rec=".sdlc/approvals/${slug}.${stage}.approval"
     [ -f "$rec" ] || rec="${dir}approvals/${slug}.${stage}.approval"
     [ -f "$rec" ] || continue
-    at=$(grep '^approved_at: ' "$rec" | awk '{print $2}')
-    mode=$(grep -q '^mode: delegated' "$rec" && echo "delegated" || echo "direct")
+    # || true + skip: a malformed record (no approved_at) must not kill the
+    # whole report under pipefail
+    at=$(grep '^approved_at: ' "$rec" | awk '{print $2}' || true)
+    [ -n "$at" ] || continue
+    # every agent-run mode must read as itself — a lazy approval reported as
+    # "direct" would disguise an autonomous loop as four human decisions
+    mode=$(awk -F': ' '/^mode: /{print $2; exit}' "$rec" | awk '{print $1}')
+    [ -n "$mode" ] || mode="direct"
     delta="—"
     if [ -n "$prev" ]; then
       delta=$(awk "BEGIN{printf \"%.1f\", ($(to_epoch "$at") - $prev)/3600}")
@@ -53,26 +59,21 @@ if [ -z "$all" ] && [ "${narch:-0}" -gt "$recent" ]; then
 fi
 
 echo
-echo "re-approvals per gate (>1 = gate rejected at least once), from git history:"
-if git rev-parse --git-dir >/dev/null 2>&1; then
-  # one `git log --follow` per record: bounded by open-feature count by
-  # default; archived records join only under --all
-  set -- .sdlc/approvals/*.approval
-  [ -n "$all" ] && set -- "$@" .sdlc/archive/*/approvals/*.approval
-  for rec in "$@"; do
-    [ -f "$rec" ] || continue
-    # --follow tracks the work→archive rename; the move itself is 1 commit, so
-    # archived records read >2, not >1 (move + original approval).
-    # || true: git log exits 128 on a repo with no commits yet — that must
-    # read as "0 approvals in history", not kill the script under pipefail
-    n=$(git log --oneline --follow -- "$rec" 2>/dev/null | wc -l | tr -d ' ' || true)
-    case "$rec" in (.sdlc/archive/*) floor=2;; (*) floor=1;; esac
-    [ "${n:-0}" -gt "$floor" ] && echo "  $(basename "$rec" .approval): $((n - floor + 1)) approvals"
-  done
-  echo "  (none listed = every gate passed first try, or records not yet committed)"
-  if [ -z "$all" ] && [ "${narch:-0}" -gt 0 ]; then
-    echo "  (archived features included only with --all)"
+echo "re-approvals per gate (>1 = gate rejected at least once):"
+# counted from .approval.history files (approve.sh appends the superseded
+# record on every re-approval) — disk truth; git cannot see intra-feature
+# re-gates because approvals commit once, at ship
+set -- .sdlc/approvals/*.approval
+[ -n "$all" ] && set -- "$@" .sdlc/archive/*/approvals/*.approval
+for rec in "$@"; do
+  [ -f "$rec" ] || continue
+  n=1
+  if [ -f "${rec}.history" ]; then
+    n=$(( $(grep -c '^approved_at: ' "${rec}.history" || true) + 1 ))
   fi
-else
-  echo "  (not a git repo — history unavailable)"
+  [ "$n" -gt 1 ] && echo "  $(basename "$rec" .approval): $n approvals"
+done
+echo "  (none listed = every gate passed first try)"
+if [ -z "$all" ] && [ "${narch:-0}" -gt 0 ]; then
+  echo "  (archived features included only with --all)"
 fi

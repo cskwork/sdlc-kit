@@ -134,13 +134,16 @@ a single "maybe" on any criterion below means full. After drafting
 intent.md, it may skip spec and plan entirely (intent → build → ship) when
 ALL of these hold:
 
-- `tools/tripwire.sh` over intent.md is clean — nothing irreversible;
+- `tools/tripwire.sh` over intent.md is clean (necessary, not sufficient —
+  it matches keywords), AND you can name the single revert that undoes the
+  change;
 - the probes named the exact files and symbols to change;
 - success is checkable by an existing command from `.sdlc/config.md`;
 - intent.md has no open questions.
 
 Record the verdict in intent.md's `Track:` line with the reasons
-(`- Track: micro — tripwire clean, single file, test exists`). The intent
+(`- Track: micro — tripwire clean, single file, test exists`) BEFORE the
+intent gate — the approval freezes the verdict. The intent
 gate then authorizes build directly (`check-gate.sh intent …`); intent.md's
 success criteria serve as the plan, and ship keeps its full adversary
 review — the only review the diff gets. Any surprise during build (new

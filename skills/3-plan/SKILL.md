@@ -62,8 +62,10 @@ proof command, the file list and order are complete, risks are not
 understated, and the **Gate tier** verdict is correct. Fix findings; record
 each objection + resolution and the tier re-check in plan.md's
 **Adversarial review** section. If there were blocking findings, re-run the
-adversary over the fixed plan (max 2 rounds; then escalate remaining
-objections to the human as flagged concerns). If the code contradicts the spec,
+adversary over the fixed plan (max 2 rounds). Non-blocking leftovers become
+flagged concerns; a blocker surviving round 2 blocks `--lazy` — human ask
+at any lazymode (rule 3). Plan never opens over a live blocker.
+If the code contradicts the spec,
 STOP and show the conflict to the human. The spec gate may need to reopen —
 that reopen counts against the re-gate cap (AGENTS.md rule 3).
 Do not change the plan to hide a wrong spec.

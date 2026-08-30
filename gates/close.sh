@@ -17,9 +17,9 @@ dir=".sdlc/work/$slug"
 archive=".sdlc/archive/$slug"
 if [ -d "$archive" ]; then
   # sweep approvals stranded by an interruption between the two archive mvs
-  if ls .sdlc/approvals/"$slug".*.approval >/dev/null 2>&1; then
+  if ls .sdlc/approvals/"$slug".* >/dev/null 2>&1; then
     mkdir -p "$archive/approvals"
-    mv .sdlc/approvals/"$slug".*.approval "$archive/approvals/"
+    mv .sdlc/approvals/"$slug".* "$archive/approvals/"
     echo "note: swept stranded approval records into $archive/approvals/"
   fi
   echo "FAIL: already closed and archived: $(head -1 "$archive/CLOSED" 2>/dev/null || echo "$archive")"
@@ -29,19 +29,33 @@ fi
 [ -n "$reason" ] || { echo "FAIL: reason must not be empty"; exit 1; }
 
 # A CLOSED record with no archive dir is an interrupted close (the mv or a
-# check between failed). The decision is already recorded — resume the archive
-# step instead of failing forever on "already closed".
+# check between failed). Resume the archive step instead of failing forever —
+# but re-run every check below: CLOSED is an agent-writable file, so skipping
+# them on its mere presence would let a hand-written CLOSED bypass the lot.
+# A legitimate interrupted close passed them once and passes them again.
 resume=""
 if [ -f "$dir/CLOSED" ]; then
+  recorded=$(grep '^state: ' "$dir/CLOSED" | cut -d' ' -f2 || true)
+  if [ "$recorded" != "$state" ]; then
+    echo "FAIL: CLOSED records '$recorded' but you invoked '$state'."
+    echo "  Delete $dir/CLOSED and re-run if the record is wrong."
+    exit 1
+  fi
   echo "note: $slug already has a CLOSED record — resuming the interrupted archive step"
   resume=1
-  if [ -f "$dir/harvest.md" ]; then
-    echo "note: unmerged harvest.md is being archived — merge it into .sdlc/memory/ from $archive"
-  fi
+fi
+
+# shipped is the state the gates exist for: it requires the ship approval.
+# Anything less closes as abandoned, dead-end, or handed-off.
+if [ "$state" = "shipped" ] && [ ! -f ".sdlc/approvals/${slug}.ship.approval" ]; then
+  echo "BLOCKED: 'shipped' requires a ship approval record."
+  echo "  Pass the ship gate (gates/approve.sh ship .sdlc/work/$slug/evidence.md),"
+  echo "  or close as abandoned|dead-end|handed-off."
+  exit 1
 fi
 
 # handed-off closes must name the external reference in the reason
-if [ -z "$resume" ] && [ "$state" = "handed-off" ]; then
+if [ "$state" = "handed-off" ]; then
   if ! echo "$reason" | grep -qE '[A-Z][A-Z0-9]+-[0-9]+|https?://'; then
     echo "BLOCKED: handed-off requires the external ticket/PR reference in the reason"
     echo "  (a key like A20-1240 or a URL), so the trail does not dead-end here."
@@ -51,7 +65,7 @@ fi
 
 # shared memory has ONE writer — the close step (AGENTS.md rule 4). A leftover
 # harvest.md means lesson/domain candidates were never merged into memory/.
-if [ -z "$resume" ] && [ -f "$dir/harvest.md" ]; then
+if [ -f "$dir/harvest.md" ]; then
   echo "BLOCKED: unmerged harvest: $dir/harvest.md"
   echo "  Merge it into .sdlc/memory/ (lesson files + INDEX.md lines + DOMAIN.md"
   echo "  facts), delete the file, then re-run. Close is the single-writer moment."
@@ -61,7 +75,7 @@ fi
 # knowledge check: non-shipped closes must leave a lesson behind.
 # lazymode >=3 (AGENTS.md rule 3) waives the separate lesson file — the
 # mandatory reason line in CLOSED is the record.
-if [ -z "$resume" ] && [ "$state" != "shipped" ] && [ "$state" != "handed-off" ]; then
+if [ "$state" != "shipped" ] && [ "$state" != "handed-off" ]; then
   lm_raw=$(awk '/^lazymode: /{gsub(/\r/,""); print $2; exit}' .sdlc/config.md 2>/dev/null || true)
   lm="$lm_raw"
   case "$lm" in (''|*[!0-9]*) lm=0;; (*) [ "$lm" -le 4 ] || lm=0;; esac
@@ -116,9 +130,10 @@ if [ -d "$dir/scratch" ] && [ -n "$(ls -A "$dir/scratch" 2>/dev/null)" ]; then
   echo "note: scratch/ still has files — archived but gitignored; delete what the lesson does not cite"
 fi
 mv "$dir" "$archive"
-if ls .sdlc/approvals/"$slug".*.approval >/dev/null 2>&1; then
+# "$slug".* also catches .approval.history files (re-gate trail, approve.sh)
+if ls .sdlc/approvals/"$slug".* >/dev/null 2>&1; then
   mkdir -p "$archive/approvals"
-  mv .sdlc/approvals/"$slug".*.approval "$archive/approvals/"
+  mv .sdlc/approvals/"$slug".* "$archive/approvals/"
 fi
 echo "ARCHIVED: $dir → $archive (approvals included)"
 
@@ -143,6 +158,6 @@ if [ -n "$in_git" ]; then
   paths=""
   [ -n "$(git ls-files "$dir" 2>/dev/null)" ] && paths="\"$dir\" "
   echo "Then commit the close for the audit trail:"
-  echo "  git add $paths\"$archive\" .sdlc/approvals .sdlc/memory .gitignore"
+  echo "  git add $paths\"$archive\" .sdlc/approvals .sdlc/memory .sdlc/config.md .gitignore"
   echo "(git records the work/→archive/ move as a rename; history follows it)."
 fi
