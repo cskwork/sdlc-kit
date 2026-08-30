@@ -26,7 +26,9 @@ not only at the end.
 ## Execute
 
 - Follow plan.md's order. If reality differs, record a small deviation in
-  `.sdlc/work/<slug>/deviations.md` and continue. Create the file on first use.
+  `.sdlc/work/<slug>/deviations.md` and continue. Create the file from
+  `templates/deviations.md` on first use — its numbered lines are the cap
+  counters (AGENTS.md rule 5).
   Keep the approved plan.md byte-identical so its gate stays open. For a
   structural deviation such as different files or a different approach, STOP,
   tell the human, and re-gate the plan. When the deviation's root cause is a

@@ -56,13 +56,29 @@ case "$slug" in (.|/|"") echo "FAIL: artifact must live in a feature dir (.sdlc/
 [ -d ".sdlc/archive/$slug" ] && { echo "FAIL: slug '$slug' is already closed and archived (.sdlc/archive/$slug) — pick a new slug (skills/1-intent)"; exit 1; }
 
 mkdir -p .sdlc/approvals
+rec=".sdlc/approvals/${slug}.${stage}.approval"
+
+# Re-approvals must leave a trail: the re-gate cap (AGENTS.md rule 3) is
+# counted from disk, and "approvals are committed once, at ship" collapses
+# intra-feature re-gates into one commit — git history alone cannot count them.
+if [ -f "$rec" ]; then
+  { echo "--- superseded at $(date -u +%Y-%m-%dT%H:%M:%SZ)"; cat "$rec"; } >> "${rec}.history"
+fi
+
+# The intent approval freezes the Track verdict: status.sh flags a Track line
+# rewritten to micro AFTER approval (record, not lock — the trail stays honest).
+track=""
+if [ "$stage" = "intent" ]; then
+  if grep -qiE '^- track: micro([^a-z]|$)' "$artifact"; then track=micro; else track=full; fi
+fi
 
 {
   echo "stage: $stage"
   echo "artifact: $artifact"
   echo "approved_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  [ -n "$track" ] && echo "track: $track" || true
   [ -n "$mode" ] && echo "mode: $mode" || true
   [ -n "$mode" ] && echo "runner: agent" || true
-} > ".sdlc/approvals/${slug}.${stage}.approval"
+} > "$rec"
 echo "APPROVED: $stage of $slug ($artifact)"
 echo "Recorded. Approvals are committed once, at ship (skills/5-ship commit discipline)."

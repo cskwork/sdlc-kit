@@ -15,8 +15,11 @@
 - <claim> [verified: <command output, file:line, reproduction steps, or metric>]
 - <claim> [assumed: <why it could not be verified>]
 
-<For incidents — track requested evidence explicitly; do not let it evaporate:>
-- reproduction evidence: requested <date> (<what was asked for>) | received <date> | waived-by-human <date, why>
+<For incidents — track requested evidence explicitly; do not let it evaporate.
+One line per request, updated in place; max 2 requests, then waived-by-agent
+(skills/6-maintain):>
+- reproduction evidence: requested <date> (<what was asked for>)
+  <!-- update the line to: received <date> | waived-by-human <date, why> | waived-by-agent <date> — unreproduced, diagnosis stays [assumed] -->
 - verification debt: <what could not be run because config.md test/lint is empty, and what replaced it>
 
 ## Success criteria

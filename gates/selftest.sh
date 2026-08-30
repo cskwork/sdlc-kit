@@ -230,16 +230,20 @@ if "$kit/gates/approve.sh" intent .sdlc/work/feat-a/intent.md >/dev/null 2>&1; t
 rm -rf .sdlc/work/feat-a
 echo "ok: approve refuses an archived slug"
 
-# 20. interrupted close (CLOSED written, archive move failed) resumes, does not
-#     rewrite CLOSED, and skips the already-decided knowledge checks
-printf 'lazymode: 0\n' > .sdlc/config.md   # lesson WOULD be required on a fresh close
+# 20. interrupted close resumes without rewriting CLOSED, but re-runs the
+#     checks (CLOSED is agent-writable) and refuses a state mismatch
+printf 'lazymode: 0\n' > .sdlc/config.md
 mkdir -p .sdlc/work/feat-j
 printf 'state: abandoned\nreason: r\n' > .sdlc/work/feat-j/CLOSED
-out=$("$kit/gates/close.sh" feat-j abandoned "r") || { echo "FAIL: resume close failed"; exit 1; }
+if "$kit/gates/close.sh" feat-j dead-end "r" >/dev/null 2>&1; then
+  echo "FAIL: resume accepted a state that contradicts CLOSED"; exit 1; fi
+if "$kit/gates/close.sh" feat-j abandoned "r" >/dev/null 2>&1; then
+  echo "FAIL: resume skipped the lesson check"; exit 1; fi
+echo "lesson" > .sdlc/memory/lessons/2020-01-03-feat-j.md
+out=$("$kit/gates/close.sh" feat-j abandoned "r") || { echo "FAIL: legit resume failed"; exit 1; }
 case "$out" in (*"resuming"*) ;; (*) echo "FAIL: resume not announced"; exit 1;; esac
-[ -f .sdlc/archive/feat-j/CLOSED ] || { echo "FAIL: resume did not archive"; exit 1; }
 grep -q '^reason: r$' .sdlc/archive/feat-j/CLOSED || { echo "FAIL: resume rewrote CLOSED"; exit 1; }
-echo "ok: interrupted close resumes the archive step"
+echo "ok: resume archives, re-runs checks, refuses state mismatch"
 
 # 21. map-first feature: next action points at map.md, not intent.md
 mkdir -p .sdlc/work/feat-k
@@ -285,15 +289,19 @@ out=$("$kit/gates/status.sh" feat-p) || { echo "FAIL: status.sh crashed on feat-
 case "$out" in (*"(micro)"*) echo "FAIL: 'microservice…' misread as micro track"; exit 1;; (*) ;; esac
 echo "ok: micro detection self-heals on spec.md and rejects prefix look-alikes"
 
-# 24. unmerged harvest blocks close; merging (deleting) it unblocks
+# 24. shipped requires the ship approval; unmerged harvest blocks close
 mkdir -p .sdlc/work/feat-o
 echo goal > .sdlc/work/feat-o/intent.md
+echo evidence > .sdlc/work/feat-o/evidence.md
 echo "- [tag] candidate" > .sdlc/work/feat-o/harvest.md
+if "$kit/gates/close.sh" feat-o shipped "done" >/dev/null 2>&1; then
+  echo "FAIL: shipped close allowed without a ship approval"; exit 1; fi
+"$kit/gates/approve.sh" ship .sdlc/work/feat-o/evidence.md >/dev/null
 if "$kit/gates/close.sh" feat-o shipped "done" >/dev/null 2>&1; then
   echo "FAIL: close allowed with an unmerged harvest.md"; exit 1; fi
 rm .sdlc/work/feat-o/harvest.md
 "$kit/gates/close.sh" feat-o shipped "done" >/dev/null
-echo "ok: close blocks on unmerged harvest, passes once merged"
+echo "ok: shipped needs its approval; harvest blocks until merged"
 
 # 25. approvals stranded between the two archive mvs are swept on the next close attempt
 echo "stage: intent" > .sdlc/approvals/feat-o.intent.approval   # feat-o already archived in test 24
@@ -301,5 +309,27 @@ out=$("$kit/gates/close.sh" feat-o shipped "again" 2>&1) && { echo "FAIL: double
 case "$out" in (*"swept stranded approval"*) ;; (*) echo "FAIL: stranded approval not swept"; exit 1;; esac
 [ -f .sdlc/archive/feat-o/approvals/feat-o.intent.approval ] || { echo "FAIL: swept approval not in archive"; exit 1; }
 echo "ok: stranded approvals are swept into the archive"
+
+# 26. re-approval leaves a .history trail and stats counts it
+mkdir -p .sdlc/work/feat-q
+echo plan > .sdlc/work/feat-q/plan.md
+"$kit/gates/approve.sh" plan .sdlc/work/feat-q/plan.md --agent-adversary >/dev/null
+"$kit/gates/approve.sh" plan .sdlc/work/feat-q/plan.md --agent-adversary >/dev/null
+[ -f .sdlc/approvals/feat-q.plan.approval.history ] || { echo "FAIL: no .history on re-approval"; exit 1; }
+out=$("$kit/gates/stats.sh") || { echo "FAIL: stats.sh crashed"; exit 1; }
+case "$out" in (*"feat-q.plan: 2 approvals"*) ;; (*) echo "FAIL: stats missed the re-approval"; exit 1;; esac
+case "$out" in (*"agent-adversary"*) ;; (*) echo "FAIL: stats hides agent-run approval modes"; exit 1;; esac
+echo "ok: re-approvals leave a history trail; stats reports modes honestly"
+
+# 27. Track verdict frozen at approval: post-approval micro flip is flagged, not honored
+mkdir -p .sdlc/work/feat-r
+printf -- '- Track: full\ngoal\n' > .sdlc/work/feat-r/intent.md
+"$kit/gates/approve.sh" intent .sdlc/work/feat-r/intent.md --delegated >/dev/null
+grep -q '^track: full' .sdlc/approvals/feat-r.intent.approval || { echo "FAIL: track not recorded in approval"; exit 1; }
+printf -- '- Track: micro — flipped after approval\ngoal\n' > .sdlc/work/feat-r/intent.md
+out=$("$kit/gates/status.sh" feat-r) || { echo "FAIL: status crashed on track mismatch"; exit 1; }
+case "$out" in (*"(micro)"*) echo "FAIL: post-approval micro flip honored"; exit 1;; (*) ;; esac
+case "$out" in (*"re-approve intent"*) ;; (*) echo "FAIL: track mismatch not flagged"; exit 1;; esac
+echo "ok: intent approval freezes the Track verdict"
 
 echo "SELFTEST PASS"

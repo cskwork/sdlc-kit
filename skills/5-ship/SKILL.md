@@ -85,8 +85,9 @@ lazymode ≥3 the staged-set check is also autonomous: verify the staged list
 yourself against the rules below, post it as FYI, and commit.
 
 1. Stage named paths only: changed source files, `.sdlc/work/<slug>/`
-   (harvest.md included), `.sdlc/approvals/`, and `.sdlc/memory/POLICY.md`
-   when a mid-loop transcription changed it. Do not use `git add -A` or
+   (harvest.md included), `.sdlc/approvals/`, and — when changed —
+   `.sdlc/memory/POLICY.md` and `.sdlc/config.md` (a lazymode edit must
+   reach the audit trail). Do not use `git add -A` or
    `git add .` because they can include unrelated files and scratch output
    (scratch/ is gitignored and stays on disk until step 3).
 2. Show the human the staged file list with `git status` and the proposed

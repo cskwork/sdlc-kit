@@ -118,7 +118,9 @@ standing assignments — each has caught real errors:
   reproduction and diagnosis as verified evidence, then run Stage 1.
 
 **Recurrence cap: three fix loops for one symptom.** Before opening a
-fix-slug, grep INDEX.md for the symptom's tags. On the third match the
+fix-slug, grep the symptom's tags in INDEX.md AND open features' harvests
+(`grep -l <tag> .sdlc/work/*/harvest.md`) — in-flight lessons are not
+merged yet. On the third match the
 defect is architectural, not a bug: STOP, write the promotion edit the tag
 already earned, and take it to the human as a design decision — not a
 fourth fix. Record the outcome in DOMAIN.md as a constraint at close.
@@ -141,7 +143,8 @@ Memory discipline (context stays bounded):
 
 - Keep INDEX.md at 50 lines or fewer. If it grows past the limit, merge
   near-duplicates, drop superseded entries (their subject changed), and
-  remove entries already promoted into a skill.
+  replace promoted entries with one line — `- [tags] promoted →
+  skills/<n> (was 3×)` — so the recurrence count survives the prune.
 - When the same lesson recurs for a second time, propose the exact skill edit
   that would prevent it. (Distinct from the 3× tag rule in skills/5-ship:
   this fires on the same lesson, that one on the same tag.)

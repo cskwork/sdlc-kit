@@ -18,11 +18,12 @@
 - Test:  `<command>` → <verdict>
 - Lint:  `<command>` → <verdict>
 
-## Adversarial code review
-- <finding> → <fixed | rejected because <reason>>
+## Adversarial code review   <!-- max 2 rounds; the round lines ARE the counter (AGENTS.md rule 5) -->
+- round 1/2: <finding> → <fixed | rejected because <reason>>
+- round 2/2: <re-review verdict; blockers surviving here go to Not verified and block --lazy>
 
 ## Not verified
 <honest gaps: environment limits, skipped checks, and why>
 
-## Retro lessons
-- <lesson one-liner> → .sdlc/memory/lessons/<file>  [promote: skills/<n> if applicable]
+## Retro lessons   <!-- draft in harvest.md; the close merge writes memory/ -->
+- <lesson one-liner> → harvest.md  [promote: skills/<n> if applicable]

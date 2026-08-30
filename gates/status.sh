@@ -76,6 +76,13 @@ for dir in .sdlc/work/*/; do
   # self-healing: a spec.md on disk means the feature went full track,
   # whatever the Track line says (micro→full upgrades can forget the edit)
   if [ -f "${dir}spec.md" ]; then micro=""; fi
+  # the intent approval froze the Track verdict (approve.sh): a Track line
+  # rewritten to micro AFTER approval does not skip spec/plan
+  irec=".sdlc/approvals/${slug}.intent.approval"
+  if [ -n "$micro" ] && [ -f "$irec" ] && ! grep -q '^track: micro' "$irec"; then
+    micro=""
+    echo "note: $slug intent.md says micro but the intent approval was granted full-track — re-approve intent or revert the Track line"
+  fi
   echo "== $slug${micro:+   (micro)}"
   # incident evidence still outstanding? (see skills/6-maintain Evidence tracking)
   if [ -f "${dir}intent.md" ] && grep -q 'reproduction evidence: requested' "${dir}intent.md" \

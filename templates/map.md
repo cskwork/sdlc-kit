@@ -6,6 +6,7 @@
 
 - Date started: YYYY-MM-DD
 - Sessions: 0   <!-- increment each session; cap 6, or 2 growing sessions in a row (skills/1-intent) -->
+- Session log:   <!-- one "S<n>: unknowns <start>→<end>" line per session; the growth half of the cap needs both numbers -->
 
 ## Destination
 <What "arrived" looks like: a spec you could write, a decision made, a behavior shipped.>
