@@ -9,6 +9,10 @@ Goal: turn each bug report, incident, alert, or ticket into a diagnosed
 `intent.md`. Restart the process with evidence, not a vague complaint. People
 triage and review the work. They do not create the initial diagnosis.
 
+Heartbeat: as soon as `.sdlc/work/<slug>/` exists, and at every sub-task
+change, overwrite `.sdlc/work/<slug>/progress.md` with one line —
+`maintain · <doing what> · <ISO timestamp>` (AGENTS.md rule 9).
+
 ## Running headless? Sandbox first
 
 This stage may start without a human through cron, a webhook, or a ticket. Run

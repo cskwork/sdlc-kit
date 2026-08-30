@@ -8,6 +8,11 @@ description: "Read-only planning with a tiered gate: files, order, risks, proof.
 Goal: create `plan.md` before changing code. Name the files, work order, risks,
 and proof. During this stage, read and run non-mutating commands only.
 
+Heartbeat: on entry and at every sub-task change, overwrite
+`.sdlc/work/<slug>/progress.md` with one line —
+`plan · <doing what> · <ISO timestamp>` (AGENTS.md rule 9; writing inside
+`.sdlc/work/<slug>/` is allowed here, like the plan artifact itself).
+
 ## Before you start
 
 1. Run `gates/check-gate.sh spec .sdlc/work/<slug>/spec.md`. STOP if closed.

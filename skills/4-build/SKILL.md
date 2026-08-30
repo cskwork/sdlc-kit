@@ -8,6 +8,11 @@ description: "Plan execution with fresh-context verification and triaged fix loo
 Goal: execute the plan and verify each step. Run checks during implementation,
 not only at the end.
 
+Heartbeat: on entry, at every plan step, and at every fix-loop round,
+overwrite `.sdlc/work/<slug>/progress.md` with one line —
+`build <n>/<m> · <doing what> · <ISO timestamp>`, n/m counting plan.md's
+Order of work — and update it before each dispatch (AGENTS.md rule 9).
+
 ## Before you start
 
 1. Run `gates/check-gate.sh plan .sdlc/work/<slug>/plan.md`. STOP if closed.

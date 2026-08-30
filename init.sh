@@ -33,6 +33,11 @@ $line
 ensure_line .gitignore '.sdlc/work/*/scratch/'
 ensure_line .gitignore '.sdlc/archive/*/scratch/'
 
+# heartbeat one-liner (AGENTS.md rule 9): a live signal, not a record —
+# close.sh moves it into archive/ with the rest of the dir, still ignored
+ensure_line .gitignore '.sdlc/work/*/progress.md'
+ensure_line .gitignore '.sdlc/archive/*/progress.md'
+
 [ -f .sdlc/memory/INDEX.md ] || cat > .sdlc/memory/INDEX.md <<'EOF'
 # Lessons index — one line per lesson: [tags] summary → lessons/<file>
 # Agents: read THIS file only (≤50 lines); open a lesson file only when its tags match your task.

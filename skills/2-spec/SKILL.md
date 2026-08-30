@@ -9,6 +9,10 @@ Goal: create `spec.md` from `intent.md` so engineering work has a clear
 contract. The agent writes the spec, and the human reviews it. Automate checks
 where possible. Keep human attention on gate decisions.
 
+Heartbeat: on entry and at every sub-task change, overwrite
+`.sdlc/work/<slug>/progress.md` with one line —
+`spec · <doing what> · <ISO timestamp>` (AGENTS.md rule 9).
+
 ## Before you start
 
 1. Run `gates/check-gate.sh intent .sdlc/work/<slug>/intent.md`. STOP if closed.

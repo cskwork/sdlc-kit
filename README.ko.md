@@ -150,6 +150,7 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
 │   ├── spec.md                       # Human summary · AS-IS → TO-BE · 계약
 │   ├── plan.md                       # 파일 · 순서 · 리스크 · 증명
 │   ├── deviations.md                 # 빌드 중 편차 기록, plan은 잠긴 채 유지
+│   ├── progress.md                   # 하트비트: 살아있는 한 줄, gitignore 대상 (규칙 9)
 │   ├── baseline.txt                  # 브라운필드의 변경 전 동작
 │   ├── harvest.md                    # 루프 중 교훈·도메인 후보, close에서 병합
 │   └── evidence.md                   # 명령 · 출력 · 관찰된 동작
@@ -158,7 +159,7 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
     └── approvals/                    # 피처의 승인 기록도 함께 이동
 ```
 
-`init.sh`는 프로젝트 `.gitignore`에 두 줄을 추가합니다(`work/`와 `archive/`의 scratch). scratch 증거는 커밋되지 않고, ship의 루프 종료 정리 전까지 디스크에 남습니다.
+`init.sh`는 프로젝트 `.gitignore`에 네 줄을 추가합니다: `work/`와 `archive/`의 scratch(증거는 커밋되지 않고 ship의 루프 종료 정리 전까지 디스크에 남음), 그리고 양쪽의 `progress.md`(하트비트는 기록이 아니라 살아있는 신호). 피처가 열려 있는 동안 `status.sh`가 하트비트를 나이와 함께 `now →` 줄로 보여주며, `watch -n5 cat .sdlc/work/<slug>/progress.md`로 실시간 추적할 수 있습니다.
 
 공개 sdlc-kit 저장소는 프레임워크만 담습니다. 도메인 산출물은 그것이 설명하는 프로젝트 안에서 함께 버전 관리됩니다.
 

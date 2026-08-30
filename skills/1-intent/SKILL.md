@@ -9,6 +9,10 @@ Goal: create an `intent.md` precise enough to plan without guessing. Verify
 the problem, cause, and requested outcome before moving on. Stage 1 is the
 least costly place to correct a wrong assumption.
 
+Heartbeat: as soon as `.sdlc/work/<slug>/` exists, and at every sub-task
+change, overwrite `.sdlc/work/<slug>/progress.md` with one line —
+`intent · <doing what> · <ISO timestamp>` (AGENTS.md rule 9).
+
 ## Before you start
 
 1. Read `.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`, and
