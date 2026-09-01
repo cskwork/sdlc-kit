@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # init.sh [target-dir] — seed .sdlc/ into a project (greenfield or brownfield).
-# Artifacts live in the TARGET repo so they version with the code.
+# Artifacts live in the TARGET repo. The decision record (intent, plan, map,
+# CLOSED, memory, config) versions with the code; evidence and approvals are
+# gitignored below and stay in the working copy.
 set -euo pipefail
 kit="$(cd "$(dirname "$0")" && pwd)"
 target="${1:-.}"
@@ -27,6 +29,11 @@ $line
   echo "$line" >> "$f"
 }
 
+# What git keeps is the decision record: intent.md, plan.md, map.md, CLOSED,
+# memory/, and config.md. Everything below is evidence or working residue —
+# read at the gate, kept on disk, never committed. Each pattern is listed for
+# work/ (feature open) and archive/ (close.sh moved the dir there unchanged).
+
 # bulk evidence (screenshots, probe logs) is read+quoted, kept until ship
 # cleanup, never committed — in work/ while open, in archive/ after close.sh
 # moves a feature there with scratch still present
@@ -37,6 +44,20 @@ ensure_line .gitignore '.sdlc/archive/*/scratch/'
 # close.sh moves it into archive/ with the rest of the dir, still ignored
 ensure_line .gitignore '.sdlc/work/*/progress.md'
 ensure_line .gitignore '.sdlc/archive/*/progress.md'
+
+# approval records: check-gate.sh and stats.sh read them from disk, so gates
+# and re-gate counting are unaffected. The trail is the working copy, not git
+# history — a fresh clone mid-feature has no approvals and must re-gate.
+ensure_line .gitignore '.sdlc/approvals/'
+ensure_line .gitignore '.sdlc/archive/*/approvals/'
+
+# per-feature evidence and working artifacts. spec.md is here because it
+# restates intent.md against the code; intent.md and plan.md carry the
+# decisions and stay committed.
+for artifact in baseline.txt deviations.md evidence.md harvest.md spec.md; do
+  ensure_line .gitignore ".sdlc/work/*/$artifact"
+  ensure_line .gitignore ".sdlc/archive/*/$artifact"
+done
 
 [ -f .sdlc/memory/INDEX.md ] || cat > .sdlc/memory/INDEX.md <<'EOF'
 # Lessons index — one line per lesson: [tags] summary → lessons/<file>
@@ -121,6 +142,25 @@ if ! grep -q '^lazymode:' .sdlc/config.md; then
 fi
 
 echo "Seeded .sdlc/ in $(pwd)"
+
+# .gitignore never untracks: a project seeded by an older kit keeps committing
+# the paths above. Report them and let the human run the removal — rewriting
+# someone else's index is not this script's call.
+# awk, not head: head exits early, and under pipefail that SIGPIPEs the
+# producer and aborts the script (same trap ensure_line documents).
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  tracked=$(git ls-files -c -i --exclude-standard -- .sdlc 2>/dev/null || true)
+  if [ -n "$tracked" ]; then
+    n=$(printf '%s\n' "$tracked" | wc -l | tr -d ' ')
+    echo
+    echo "note: $n tracked file(s) now match .gitignore:"
+    printf '%s\n' "$tracked" | awk 'NR<=10 { print "        " $0 }'
+    if [ "$n" -gt 10 ]; then echo "        … and $((n - 10)) more"; fi
+    echo "      Untrack them (files stay on disk), then commit the removal:"
+    echo "        git ls-files -ci --exclude-standard -- .sdlc | tr '\\n' '\\0' | xargs -0 git rm --cached --"
+  fi
+fi
+
 echo "Next: 1) fill .sdlc/config.md verification commands"
 echo "      2) AGENT: ask the human which lazymode level to use (0-4; default 1 is already set in .sdlc/config.md)"
 echo "      3) point your harness at $kit/AGENTS.md (see README)"

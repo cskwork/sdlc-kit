@@ -71,9 +71,9 @@ Mid-loop, lesson and domain candidates stage in the feature's own `harvest.md`; 
 |---|---|
 | Starts coding from the first request | Explores history, code, feasibility, browser, API, or DB before grilling the user |
 | Treats the user's diagnosis as truth | Marks claims `[verified: evidence]` or `[assumed: reason]` |
-| Keeps the plan inside one chat | Commits `intent.md`, `spec.md`, `plan.md`, and `evidence.md` with the code |
+| Keeps the plan inside one chat | Commits `intent.md` and `plan.md` with the code; `spec.md` and `evidence.md` stay on disk |
 | Author runs its own checks | A fresh-context verifier and adversary review the work without the author's context |
-| Approval is a chat message that disappears | Approval records name the stage, artifact, time, and mode, and commit with the code |
+| Approval is a chat message that disappears | Approval records name the stage, artifact, time, and mode, and stay on disk in `.sdlc/approvals/` |
 | Failed attempt becomes forgotten context | Lessons go to a bounded index; durable facts go to `DOMAIN.md` |
 | One generic worker does everything | Roles map onto local QA, reviewer, browser, API, or DB specialists when available |
 | "Done" is ambiguous | Every run closes as `shipped`, `abandoned`, `dead-end`, or `handed-off` |
@@ -138,7 +138,7 @@ Per feature, inside the **target project**:
 ```text
 .sdlc/
 ├── config.md                         # real build/test/lint/run commands
-├── approvals/
+├── approvals/                        # gitignored
 │   └── <slug>.<stage>.approval       # stage · when · mode
 ├── memory/
 │   ├── POLICY.md                     # human-declared hard rules; agents transcribe only
@@ -147,21 +147,21 @@ Per feature, inside the **target project**:
 │   └── lessons/<date>-<lesson>.md
 ├── work/<slug>/                      # OPEN features only
 │   ├── intent.md                     # problem · proof · success · scope
-│   ├── spec.md                       # Human summary · AS-IS → TO-BE · contract
+│   ├── spec.md                       # Human summary · AS-IS → TO-BE · contract — gitignored
 │   ├── plan.md                       # files · order · risks · proof
-│   ├── deviations.md                 # build-time differences; plan stays locked
+│   ├── deviations.md                 # build-time differences; plan stays locked — gitignored
 │   ├── progress.md                   # heartbeat: ONE live line, gitignored (rule 9)
-│   ├── baseline.txt                  # brownfield behavior before the change
-│   ├── harvest.md                    # mid-loop lesson/domain candidates; merged at close
-│   └── evidence.md                   # commands · outputs · observed behavior
+│   ├── baseline.txt                  # brownfield behavior before the change — gitignored
+│   ├── harvest.md                    # mid-loop lesson/domain candidates; merged at close — gitignored
+│   └── evidence.md                   # commands · outputs · observed behavior — gitignored
 └── archive/<slug>/                   # closed features; close.sh moves them here
     ├── CLOSED                        # shipped · abandoned · dead-end · handed-off
-    └── approvals/                    # the feature's approval records move with it
+    └── approvals/                    # moves with the feature, still gitignored
 ```
 
-`init.sh` also adds four lines to the project's `.gitignore`: scratch under `work/` and `archive/` (bulk evidence stays uncommitted, on disk until ship's end-of-loop cleanup), and `progress.md` under both (the heartbeat is a live signal, not a record). While a feature is open, `status.sh` shows the heartbeat as a `now →` line with its age — `watch -n5 cat .sdlc/work/<slug>/progress.md` follows it live.
+`init.sh` also adds sixteen lines to the project's `.gitignore`, covering `work/` and `archive/` alike: `approvals/`, `spec.md`, `baseline.txt`, `deviations.md`, `evidence.md`, `harvest.md`, `scratch/`, and `progress.md`. Git keeps the decision record — `config.md`, `memory/`, and per feature `intent.md`, `plan.md`, `map.md`, and the archived `CLOSED`. The rest is evidence and working residue: it stays on disk, where the scripts read it, instead of bloating every commit. While a feature is open, `status.sh` shows the heartbeat as a `now →` line with its age — `watch -n5 cat .sdlc/work/<slug>/progress.md` follows it live.
 
-The public sdlc-kit repository stays framework-only. Domain artifacts live and version with the project they describe.
+The public sdlc-kit repository stays framework-only. The committed artifacts — intent, plan, map, memory — live and version with the project they describe. The ignored ones live only in the working copy that produced them.
 
 ## The safety model
 
@@ -177,7 +177,7 @@ The approval record stays explicit. Silence and generic "continue" are not appro
 
 ### A record, not a lock
 
-`approve.sh` writes a plain marker: stage, artifact, time, and mode. `check-gate.sh` only checks that the marker and the artifact exist — editing an approved file does not close its gate. The honesty of the trail comes from agent rules plus the git history of `.sdlc/approvals/` (for closed features, continued under `.sdlc/archive/<slug>/approvals/`), committed with the code.
+`approve.sh` writes a plain marker: stage, artifact, time, and mode. `check-gate.sh` only checks that the marker and the artifact exist — editing an approved file does not close its gate. The markers are gitignored, so the trail is the `.sdlc/approvals/` directory on disk (for closed features, `.sdlc/archive/<slug>/approvals/`), not git history. `status.sh` and `stats.sh` read those files, so gate state and re-approval counts are unaffected. What changes is durability: a fresh clone carries no approvals, so re-cloning mid-feature means approving again. The honesty of the trail comes from agent rules plus those on-disk records.
 
 ### Fresh-context review
 

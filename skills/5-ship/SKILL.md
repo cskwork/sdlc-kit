@@ -89,12 +89,16 @@ The ship approval and the commit check are two different human checks. At
 lazymode ≥3 the staged-set check is also autonomous: verify the staged list
 yourself against the rules below, post it as FYI, and commit.
 
-1. Stage named paths only: changed source files, `.sdlc/work/<slug>/`
-   (harvest.md included), `.sdlc/approvals/`, and — when changed —
-   `.sdlc/memory/POLICY.md` and `.sdlc/config.md` (lazymode, command, and
-   `qa:` edits must reach the audit trail). Do not use `git add -A` or
-   `git add .` because they can include unrelated files and scratch output
-   (scratch/ is gitignored and stays on disk until step 3).
+1. Stage named paths only: changed source files, `.sdlc/work/<slug>/`, and
+   — when changed — `.sdlc/memory/POLICY.md` and `.sdlc/config.md`
+   (lazymode, command, and `qa:` edits must reach the audit trail). Do not
+   use `git add -A` or `git add .` because they can include unrelated files.
+   Staging `.sdlc/work/<slug>/` yields only `intent.md`, `plan.md`, and
+   `map.md`; approvals, spec.md, evidence.md, harvest.md, deviations.md,
+   baseline.txt, progress.md, and scratch/ are gitignored (init.sh) and stay
+   on disk. If any of them appears in the staged list, the project's
+   `.gitignore` predates the kit version in `.sdlc/config.md` — re-run
+   `init.sh` and follow its untrack note before committing.
 2. Show the human the staged file list with `git status` and the proposed
    commit message. Describe the behavior change, not file names. Wait for the
    human to approve the staged set (lazymode ≥3: verify it yourself against

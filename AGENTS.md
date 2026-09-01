@@ -66,9 +66,10 @@ when closing.
    explicitly approves that artifact in chat ("approve", "looks right", or
    equivalent). Never approve on silence, a general "continue", or your own
    judgment. Never write to `.sdlc/approvals/` directly.
-   Approvals are committed once, at ship, with the code (skills/5-ship commit
-   discipline); git history is the audit trail. Approvals do not
-   bind file bytes: editing an approved artifact does not close its gate, but
+   Approval records are gitignored (init.sh): they live in the working copy,
+   not in git history, so `.sdlc/approvals/` and its `.approval.history`
+   files ARE the audit trail — a fresh clone mid-feature has none and must
+   re-gate. Approvals do not bind file bytes: editing an approved artifact does not close its gate, but
    a change that alters what the human approved requires a new approval
    (build-time procedure: skills/4-build deviations). Re-gates are capped:
    two per stage, per feature, at any point in the loop — a third means
@@ -181,8 +182,14 @@ when closing.
 6. **Proof over claims.** Every "done" claim carries command output, using
    the real commands in `.sdlc/config.md`.
 7. **Artifacts live in the project repo** under `.sdlc/work/<feature>/`
-   while open and `.sdlc/archive/<feature>/` after close, committed with the
-   code. The kit directory stays framework-only.
+   while open and `.sdlc/archive/<feature>/` after close. Git keeps the
+   decision record — `intent.md`, `plan.md`, `map.md`, `CLOSED`,
+   `memory/`, `config.md`. The rest is gitignored evidence and working
+   residue (`approvals/`, `spec.md`, `baseline.txt`, `deviations.md`,
+   `evidence.md`, `harvest.md`, `progress.md`, `scratch/`): present on disk
+   for every gate, absent from history. Write them as if they were
+   permanent — durability is what changed, not the standard. The kit
+   directory stays framework-only.
 8. **Speak plainly.** Every report, gate request, and question starts with
    one short context paragraph (which stage, what happened before, what this
    message is for), uses short active sentences and the project's own

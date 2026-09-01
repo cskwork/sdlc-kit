@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# stats.sh [--all] — measurement: time per stage and approval counts, from
-# approval records + git history. Leading indicators per the AI-native SDLC
-# playbook. Default output is BOUNDED: open features + the 20 most recently
-# closed, and re-approval git history for open features only. --all reads every
-# archived feature and its git history — output and git calls grow with the
-# archive, so run it deliberately, not from an agent loop that only needs
-# current timings. Run from the project root (needs .sdlc/).
+# stats.sh [--all] — measurement: time per stage and approval counts, read
+# entirely from the on-disk approval records (this script calls no git; the
+# records are gitignored and git could not see them anyway). Leading
+# indicators per the AI-native SDLC playbook. Default output is BOUNDED:
+# open features + the 20 most recently closed. --all reads every archived
+# feature, so output grows with the archive — run it deliberately, not from
+# an agent loop that only needs current timings. Run from the project root
+# (needs .sdlc/).
 set -euo pipefail
 [ -d .sdlc ] || { echo "FAIL: no .sdlc/ here. Run from the project root."; exit 1; }
 all=""
@@ -61,8 +62,8 @@ fi
 echo
 echo "re-approvals per gate (>1 = gate rejected at least once):"
 # counted from .approval.history files (approve.sh appends the superseded
-# record on every re-approval) — disk truth; git cannot see intra-feature
-# re-gates because approvals commit once, at ship
+# record on every re-approval) — disk truth, and the only truth: approval
+# records are gitignored (init.sh), so git sees no re-gates at all
 set -- .sdlc/approvals/*.approval
 [ -n "$all" ] && set -- "$@" .sdlc/archive/*/approvals/*.approval
 for rec in "$@"; do

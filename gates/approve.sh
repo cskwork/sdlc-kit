@@ -7,7 +7,8 @@
 # auto-approval for a gate that `lazymode:` in .sdlc/config.md waives (rule 3);
 # it is refused for any gate the configured level keeps human.
 # The record is a plain marker: stage + when + mode. The audit trail is rule 3
-# plus the git history of .sdlc/approvals/.
+# plus the on-disk .sdlc/approvals/ tree — the records are gitignored, so it
+# lives in the working copy and does not survive a fresh clone.
 set -euo pipefail
 
 usage() { echo "usage: approve.sh <stage> <artifact-path> [--delegated | --agent-adversary | --lazy]   (run from the project root)"; exit 1; }
@@ -58,9 +59,9 @@ case "$slug" in (.|/|"") echo "FAIL: artifact must live in a feature dir (.sdlc/
 mkdir -p .sdlc/approvals
 rec=".sdlc/approvals/${slug}.${stage}.approval"
 
-# Re-approvals must leave a trail: the re-gate cap (AGENTS.md rule 3) is
-# counted from disk, and "approvals are committed once, at ship" collapses
-# intra-feature re-gates into one commit — git history alone cannot count them.
+# Re-approvals must leave a trail: approval records are gitignored (init.sh),
+# so git history holds no approvals at all and the re-gate cap (AGENTS.md
+# rule 3) is counted from disk — this .history file is the only trail there is.
 if [ -f "$rec" ]; then
   { echo "--- superseded at $(date -u +%Y-%m-%dT%H:%M:%SZ)"; cat "$rec"; } >> "${rec}.history"
 fi
@@ -81,4 +82,4 @@ fi
   [ -n "$mode" ] && echo "runner: agent" || true
 } > "$rec"
 echo "APPROVED: $stage of $slug ($artifact)"
-echo "Recorded. Approvals are committed once, at ship (skills/5-ship commit discipline)."
+echo "Recorded on disk. Approval records are gitignored — the trail is .sdlc/approvals/, not git history."

@@ -332,4 +332,38 @@ case "$out" in (*"(micro)"*) echo "FAIL: post-approval micro flip honored"; exit
 case "$out" in (*"re-approve intent"*) ;; (*) echo "FAIL: track mismatch not flagged"; exit 1;; esac
 echo "ok: intent approval freezes the Track verdict"
 
+# 28. init.sh seeds the full ignore set, keeps the decision record committable,
+#     is idempotent, and flags paths a previous kit version already tracked
+(
+  mkdir -p "$tmp/init-probe"; cd "$tmp/init-probe"; git init -q .
+  mkdir -p .sdlc/work/feat-x
+  echo e > .sdlc/work/feat-x/evidence.md
+  git add -A
+  out=$("$kit/init.sh" .)
+  for line in '.sdlc/approvals/' '.sdlc/archive/*/approvals/' \
+              '.sdlc/work/*/spec.md' '.sdlc/archive/*/spec.md' \
+              '.sdlc/work/*/evidence.md' '.sdlc/archive/*/evidence.md' \
+              '.sdlc/work/*/harvest.md' '.sdlc/work/*/deviations.md' \
+              '.sdlc/work/*/baseline.txt'; do
+    grep -qxF "$line" .gitignore || { echo "FAIL: init.sh does not ignore $line"; exit 1; }
+  done
+  case "$out" in (*"tracked file(s) now match"*) ;;
+    (*) echo "FAIL: init.sh did not flag the already-tracked evidence.md"; exit 1;; esac
+  before=$(wc -l < .gitignore)
+  "$kit/init.sh" . >/dev/null
+  [ "$(wc -l < .gitignore)" = "$before" ] || { echo "FAIL: init.sh .gitignore is not idempotent"; exit 1; }
+  # --no-index: check-ignore skips paths already in the index, and evidence.md
+  # was staged above on purpose — we are testing the rules, not the index
+  # the decision record must survive: ignoring it would erase the audit trail
+  for keep in intent.md plan.md map.md; do
+    if git check-ignore --no-index -q ".sdlc/work/feat-x/$keep"; then
+      echo "FAIL: $keep is gitignored — the decision record must stay committable"; exit 1; fi
+  done
+  if ! git check-ignore --no-index -q .sdlc/work/feat-x/evidence.md; then
+    echo "FAIL: evidence.md is not gitignored"; exit 1; fi
+  if ! git check-ignore --no-index -q .sdlc/approvals/feat-x.intent.approval; then
+    echo "FAIL: approval records are not gitignored"; exit 1; fi
+) || exit 1
+echo "ok: init.sh ignores evidence, keeps the decision record, is idempotent"
+
 echo "SELFTEST PASS"

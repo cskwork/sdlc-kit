@@ -71,9 +71,9 @@ Intent → spec → plan → build → evidence → maintain. 사람 승인 게�
 |---|---|
 | 첫 요청부터 코딩 시작 | 히스토리, 코드, 실현 가능성, 브라우저, API, DB를 먼저 뒤진 뒤에 사용자를 심문 |
 | 사용자의 진단을 사실로 취급 | 주장마다 `[verified: 증거]` 또는 `[assumed: 이유]` 라벨 |
-| 계획이 채팅 안에만 존재 | `intent.md`, `spec.md`, `plan.md`, `evidence.md`를 코드와 함께 커밋 |
+| 계획이 채팅 안에만 존재 | `intent.md`와 `plan.md`는 코드와 함께 커밋, `spec.md`와 `evidence.md`는 디스크에 보존 |
 | 작성자가 자기 검사를 직접 실행 | 작성자 컨텍스트가 없는 verifier와 adversary가 리뷰 |
-| 승인이 사라지는 채팅 메시지 | 승인 기록이 단계, 산출물, 시각, 모드를 담고 코드와 함께 커밋됨 |
+| 승인이 사라지는 채팅 메시지 | 승인 기록이 단계, 산출물, 시각, 모드를 담고 `.sdlc/approvals/`에 파일로 남음 |
 | 실패한 시도는 잊힌 컨텍스트가 됨 | 교훈은 상한 있는 인덱스로, 확인된 사실은 `DOMAIN.md`로 |
 | 만능 워커 하나가 전부 수행 | 로컬 QA, 리뷰어, 브라우저, API, DB 전문 에이전트가 있으면 역할 계약을 그쪽에 위임 |
 | "끝났다"가 모호함 | 모든 실행이 `shipped`, `abandoned`, `dead-end`, `handed-off` 중 하나로 종결 |
@@ -138,7 +138,7 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
 ```text
 .sdlc/
 ├── config.md                         # 실제 build/test/lint/run 명령
-├── approvals/
+├── approvals/                        # gitignore 대상
 │   └── <slug>.<stage>.approval       # 단계 · 시각 · 모드
 ├── memory/
 │   ├── POLICY.md                     # 사람이 선언한 하드 룰, 에이전트는 전사만
@@ -147,21 +147,21 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
 │   └── lessons/<date>-<lesson>.md
 ├── work/<slug>/                      # 열린 피처만
 │   ├── intent.md                     # 문제 · 증명 · 성공 기준 · 범위
-│   ├── spec.md                       # Human summary · AS-IS → TO-BE · 계약
+│   ├── spec.md                       # Human summary · AS-IS → TO-BE · 계약 — gitignore 대상
 │   ├── plan.md                       # 파일 · 순서 · 리스크 · 증명
-│   ├── deviations.md                 # 빌드 중 편차 기록, plan은 잠긴 채 유지
+│   ├── deviations.md                 # 빌드 중 편차 기록, plan은 잠긴 채 유지 — gitignore 대상
 │   ├── progress.md                   # 하트비트: 살아있는 한 줄, gitignore 대상 (규칙 9)
-│   ├── baseline.txt                  # 브라운필드의 변경 전 동작
-│   ├── harvest.md                    # 루프 중 교훈·도메인 후보, close에서 병합
-│   └── evidence.md                   # 명령 · 출력 · 관찰된 동작
+│   ├── baseline.txt                  # 브라운필드의 변경 전 동작 — gitignore 대상
+│   ├── harvest.md                    # 루프 중 교훈·도메인 후보, close에서 병합 — gitignore 대상
+│   └── evidence.md                   # 명령 · 출력 · 관찰된 동작 — gitignore 대상
 └── archive/<slug>/                   # 닫힌 피처, close.sh가 여기로 옮김
     ├── CLOSED                        # shipped · abandoned · dead-end · handed-off
-    └── approvals/                    # 피처의 승인 기록도 함께 이동
+    └── approvals/                    # 피처의 승인 기록도 함께 이동, 여전히 gitignore 대상
 ```
 
-`init.sh`는 프로젝트 `.gitignore`에 네 줄을 추가합니다: `work/`와 `archive/`의 scratch(증거는 커밋되지 않고 ship의 루프 종료 정리 전까지 디스크에 남음), 그리고 양쪽의 `progress.md`(하트비트는 기록이 아니라 살아있는 신호). 피처가 열려 있는 동안 `status.sh`가 하트비트를 나이와 함께 `now →` 줄로 보여주며, `watch -n5 cat .sdlc/work/<slug>/progress.md`로 실시간 추적할 수 있습니다.
+`init.sh`는 프로젝트 `.gitignore`에 열여섯 줄을 추가합니다. `work/`와 `archive/` 양쪽의 `approvals/`, `spec.md`, `baseline.txt`, `deviations.md`, `evidence.md`, `harvest.md`, `scratch/`, `progress.md`입니다. git에 남는 것은 결정 기록입니다. `config.md`, `memory/`, 그리고 피처마다 `intent.md`, `plan.md`, `map.md`, 아카이브의 `CLOSED`. 나머지는 증거와 작업 잔여물이라 커밋을 부풀리는 대신 스크립트가 읽는 디스크에만 남습니다. 피처가 열려 있는 동안 `status.sh`가 하트비트를 나이와 함께 `now →` 줄로 보여주며, `watch -n5 cat .sdlc/work/<slug>/progress.md`로 실시간 추적할 수 있습니다.
 
-공개 sdlc-kit 저장소는 프레임워크만 담습니다. 도메인 산출물은 그것이 설명하는 프로젝트 안에서 함께 버전 관리됩니다.
+공개 sdlc-kit 저장소는 프레임워크만 담습니다. 커밋되는 산출물(intent, plan, map, memory)은 그것이 설명하는 프로젝트 안에서 함께 버전 관리됩니다. 무시되는 나머지는 그것을 만든 작업 사본 안에만 남습니다.
 
 ## 안전 모델
 
@@ -177,7 +177,7 @@ gates/approve.sh <stage> .sdlc/work/<slug>/<artifact> --delegated
 
 ### 잠금장치가 아니라 기록
 
-`approve.sh`는 단계, 산출물, 시각, 모드를 평문으로 씁니다. `check-gate.sh`는 기록과 산출물이 존재하는지만 봅니다. 승인된 파일을 수정해도 게이트는 닫히지 않습니다. 추적의 정직함은 에이전트 규칙과, 코드와 함께 커밋되는 `.sdlc/approvals/`(닫힌 피처는 `.sdlc/archive/<slug>/approvals/`로 이어짐)의 git 히스토리에서 나옵니다.
+`approve.sh`는 단계, 산출물, 시각, 모드를 평문으로 씁니다. `check-gate.sh`는 기록과 산출물이 존재하는지만 봅니다. 승인된 파일을 수정해도 게이트는 닫히지 않습니다. 이 기록은 gitignore 대상이라, 추적은 git 히스토리가 아니라 디스크의 `.sdlc/approvals/` 디렉토리(닫힌 피처는 `.sdlc/archive/<slug>/approvals/`로 이어짐)입니다. `status.sh`와 `stats.sh`는 그 파일을 직접 읽으므로 게이트 상태와 재승인 횟수는 그대로 나옵니다. 달라지는 것은 지속성입니다. 새로 클론하면 승인 기록이 따라오지 않아, 피처를 진행하던 중에 다시 클론하면 승인을 다시 받아야 합니다. 추적의 정직함은 에이전트 규칙과 디스크에 남은 그 기록에서 나옵니다.
 
 ### 새 컨텍스트 리뷰
 
