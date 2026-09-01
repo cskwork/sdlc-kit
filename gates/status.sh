@@ -27,6 +27,7 @@ if [ -n "$seeded" ]; then
   [ -n "$curver" ] || curver=$(cat "$kitdir/VERSION" 2>/dev/null || true)
   if [ -n "$curver" ] && [ "$curver" != "$seeded" ]; then
     echo "note: kit is $curver; this project was seeded with $seeded — gates may behave differently mid-feature"
+    echo "      re-run $kitdir/init.sh for the current .gitignore set; it lists what to untrack"
   fi
 fi
 

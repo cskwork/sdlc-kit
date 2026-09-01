@@ -565,7 +565,7 @@
 
       <div class="term" role="img" aria-label="Terminal transcript: an unapproved stage prints GATE CLOSED; after the human's approval is recorded, the gate opens." data-i18n-aria="term-aria">
         <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>your-project / zsh</span></div>
-        <pre class="term-body"><span class="ln" style="--i:0"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh spec .sdlc/work/payments/spec.md</span></span><span class="ln" style="--i:1"><span class="bad">GATE CLOSED:</span><span class="o"> no approval for 'spec' of 'payments'.</span></span><span class="ln" style="--i:2"><span class="o">Needed: gates/approve.sh spec … (human decision — AGENTS.md rule 3)</span></span><span class="ln" style="--i:3"> </span><span class="ln" style="--i:4"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/approve.sh spec .sdlc/work/payments/spec.md --delegated</span>  <span class="dim"># after "approve" in chat</span></span><span class="ln" style="--i:5"><span class="ok">APPROVED:</span><span class="o"> spec of payments (.sdlc/work/payments/spec.md)</span></span><span class="ln" style="--i:6"><span class="o">Recorded. Approvals are committed once, at ship.</span></span><span class="ln" style="--i:7"> </span><span class="ln" style="--i:8"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh spec .sdlc/work/payments/spec.md</span></span><span class="ln caret" style="--i:9"><span class="ok">GATE OPEN:</span><span class="o"> spec (approved @ 2026-08-30T09:12:44Z)</span></span></pre>
+        <pre class="term-body"><span class="ln" style="--i:0"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh spec .sdlc/work/payments/spec.md</span></span><span class="ln" style="--i:1"><span class="bad">GATE CLOSED:</span><span class="o"> no approval for 'spec' of 'payments'.</span></span><span class="ln" style="--i:2"><span class="o">Needed: gates/approve.sh spec … (human decision — AGENTS.md rule 3)</span></span><span class="ln" style="--i:3"> </span><span class="ln" style="--i:4"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/approve.sh spec .sdlc/work/payments/spec.md --delegated</span>  <span class="dim"># after "approve" in chat</span></span><span class="ln" style="--i:5"><span class="ok">APPROVED:</span><span class="o"> spec of payments (.sdlc/work/payments/spec.md)</span></span><span class="ln" style="--i:6"><span class="o">Recorded on disk. Approval records are gitignored — the trail is .sdlc/approvals/, not git history.</span></span><span class="ln" style="--i:7"> </span><span class="ln" style="--i:8"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh spec .sdlc/work/payments/spec.md</span></span><span class="ln caret" style="--i:9"><span class="ok">GATE OPEN:</span><span class="o"> spec (approved @ 2026-08-30T09:12:44Z)</span></span></pre>
       </div>
     </div>
   </section>
@@ -646,7 +646,7 @@
         </div>
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M9 12h6M12 9v6"/></svg><span data-i18n="l2-t">Approvals on the record</span></dt>
-          <dd data-i18n="l2-d"><code>approve.sh</code> writes a plain record — stage, artifact, time, mode — committed with the code; <code>check-gate.sh</code> prints <code>GATE CLOSED</code> until it exists.</dd>
+          <dd data-i18n="l2-d"><code>approve.sh</code> writes a plain record — stage, artifact, time, mode — kept on disk in <code>.sdlc/approvals/</code>; <code>check-gate.sh</code> prints <code>GATE CLOSED</code> until it exists.</dd>
         </div>
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-4.2-7.6"/><path d="M21 3v5h-5"/></svg><span data-i18n="l3-t">Delegation stays visible</span></dt>
@@ -680,7 +680,7 @@
   <section class="band" id="install" aria-labelledby="install-h">
     <div class="wrap">
       <h2 id="install-h" data-i18n="inst-h">Three commands, then hand it your harness</h2>
-      <p class="section-lede" data-i18n="inst-lede">No installer, no daemon. The kit directory stays framework-only; your project gets a <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code> whose artifacts version with your code.</p>
+      <p class="section-lede" data-i18n="inst-lede">No installer, no daemon. The kit directory stays framework-only; your project gets a <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code> whose intent, plan, and memory version with your code.</p>
 
       <ol class="steps">
         <li>
@@ -690,7 +690,7 @@
         <li>
           <span class="cmd">cd /path/to/project
 ~/sdlc-kit/init.sh</span>
-          <p class="note" data-i18n="st2-n">Seeds <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code> (work, approvals, memory, config). Then fill in your real build, test, and lint commands in <code style="font-family:var(--mono);font-size:.9em">.sdlc/config.md</code>.</p>
+          <p class="note" data-i18n="st2-n">Seeds <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code> (work, approvals, memory, config) and adds the approval and evidence paths to your <code style="font-family:var(--mono);font-size:.9em">.gitignore</code>. Then fill in your real build, test, and lint commands in <code style="font-family:var(--mono);font-size:.9em">.sdlc/config.md</code>.</p>
         </li>
         <li>
           <span class="cmd">tell your harness:
@@ -725,7 +725,7 @@
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
           <span data-i18n="lim-h">Honest limit: a record, not a lock</span>
         </h2>
-        <p data-i18n="lim-p">Approval records are plain markers. They do not detect later edits and do not prevent a process from forging records. Agent rules and the git history of the approvals provide the audit trail. Commit approvals with the code.</p>
+        <p data-i18n="lim-p">Approval records are plain markers. They do not detect later edits and do not prevent a process from forging records. They are gitignored, so the audit trail is the <code>.sdlc/approvals/</code> files on disk plus the agent rules, not git history. A fresh clone carries none of them; re-cloning mid-feature means approving again.</p>
       </div>
     </div>
   </section>
@@ -777,7 +777,7 @@
     "l1-t": '의도 심문',
     "l1-d": '1단계는 묻기 전에 먼저 탐색하고, <code>intent.md</code>의 모든 주장에 근거가 있으면 <code>[verified]</code>, 근거가 없으면 그 이유와 함께 <code>[assumed]</code>로 표시합니다. 사용자도 틀릴 수 있습니다. 가장 저렴하게 확인할 수 있는 단계가 바로 여기입니다.',
     "l2-t": '기록으로 남는 승인',
-    "l2-d": '<code>approve.sh</code>는 단계·산출물·시각·모드를 담은 평문 기록을 남기고 코드와 함께 커밋합니다. 기록이 없으면 <code>check-gate.sh</code>가 <code>GATE CLOSED</code>를 출력합니다.',
+    "l2-d": '<code>approve.sh</code>는 단계·산출물·시각·모드를 담은 평문 기록을 <code>.sdlc/approvals/</code> 아래 디스크에 남깁니다. 기록이 없으면 <code>check-gate.sh</code>가 <code>GATE CLOSED</code>를 출력합니다.',
     "l3-t": '위임도 기록에 남음',
     "l3-d": '사람 게이트에서 에이전트가 승인을 실행할 수 있는 때는 채팅에서 당신이 명시적으로 지시했을 때뿐이며, 기록에는 <code>mode: delegated-chat</code>이 남습니다. 적대적 검토로 승인된 plan에는 <code>mode: agent-adversary</code>가 남습니다. 어느 쪽이든 승인이 조용히 이루어지는 일은 없습니다.',
     "l4-t": '신선한 컨텍스트 검토',
@@ -791,9 +791,9 @@
     "l8-t": '모든 실행에 끝 상태 기록',
     "l8-d": '<code>close.sh</code>는 <code>shipped</code>, <code>abandoned</code>, <code>dead-end</code>, <code>handed-off</code> 중 하나를 기록한 뒤 피처와 승인 기록을 <code>.sdlc/archive/</code>로 옮깁니다. 실패한 작업은 교훈을, 이관한 작업은 외부 티켓이나 PR을 남겨야 합니다.',
     "inst-h": '명령 세 줄, 그다음은 하네스에 맡김',
-    "inst-lede": '설치 프로그램도 데몬도 없습니다. 키트 디렉터리는 프레임워크 전용으로 남고, 프로젝트에는 코드와 함께 버전 관리되는 <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code>가 생깁니다.',
+    "inst-lede": '설치 프로그램도 데몬도 없습니다. 키트 디렉터리는 프레임워크 전용으로 남고, 프로젝트에는 intent·plan·memory가 코드와 함께 버전 관리되는 <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code>가 생깁니다.',
     "st1-n": '머신당 한 번. 설치는 이것이 전부입니다. Windows에서는 이 명령과 이후 모든 키트 명령을 Git Bash나 WSL에서 실행하세요.',
-    "st2-n": '<code style="font-family:var(--mono);font-size:.9em">.sdlc/</code>를 생성합니다(work, approvals, memory, config). 이어서 <code style="font-family:var(--mono);font-size:.9em">.sdlc/config.md</code>에 실제 빌드·테스트·린트 명령을 채워 넣으세요.',
+    "st2-n": '<code style="font-family:var(--mono);font-size:.9em">.sdlc/</code>를 생성하고(work, approvals, memory, config), 승인 기록과 증거 경로를 <code style="font-family:var(--mono);font-size:.9em">.gitignore</code>에 추가합니다. 이어서 <code style="font-family:var(--mono);font-size:.9em">.sdlc/config.md</code>에 실제 빌드·테스트·린트 명령을 채워 넣으세요.',
     "st3-n": '프로젝트의 에이전트 파일에 포인터 한 줄이면 끝입니다. 아래 표에서 하네스를 고르세요.',
     "how-cap": '하네스를 라우팅 계약에 연결하기',
     "how-h1": '하네스',
@@ -804,7 +804,7 @@
     "r-gm": '<code>GEMINI.md</code>에 같은 한 줄을 추가합니다.',
     "r-else": '세션에 <code>AGENTS.md</code>를 붙여 넣으세요. 계약은 파일 + 스크립트이며 하네스 기능이 아닙니다.',
     "lim-h": '정직한 한계: 기록이지 잠금장치가 아님',
-    "lim-p": '승인 기록은 평문 마커입니다. 승인 뒤의 편집을 감지하지 않고, 프로세스가 기록을 위조하는 일도 막지 못합니다. 감사 추적은 에이전트 규칙과 승인 기록의 git 히스토리가 담당합니다. 승인 기록은 코드와 함께 커밋합니다.',
+    "lim-p": '승인 기록은 평문 마커입니다. 승인 뒤의 편집을 감지하지 않고, 프로세스가 기록을 위조하는 일도 막지 못합니다. 이 기록은 gitignore 대상이라, 감사 추적은 git 히스토리가 아니라 디스크에 있는 <code>.sdlc/approvals/</code> 파일과 에이전트 규칙이 담당합니다. 새로 클론하면 이 기록은 따라오지 않아, 피처를 진행하던 중에 다시 클론하면 승인을 다시 받아야 합니다.',
     "foot-p": 'sdlc-kit: 평문 파일 + 셸. 훅 없음, 런타임 없음, 종속성 없음.',
     "foot-gh": 'GitHub 저장소',
     "foot-pb": 'Anthropic의 플레이북',

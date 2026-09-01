@@ -106,25 +106,30 @@ fi
 mkdir -p .sdlc/archive
 in_git=""
 git rev-parse --git-dir >/dev/null 2>&1 && in_git=1
-# scratch/ is gitignored under work/ but NOT under archive/ — without this
-# line a leftover scratch dir (abandoned/dead-end closes skip ship cleanup)
-# would be committed with the archive. Read via tr -d '\r' (a CRLF .gitignore
-# would never match) and match with case, not grep -q (init.sh ensure_line
-# explains the pipefail/SIGPIPE trap).
+# Everything ignored under work/ must be ignored under archive/ too: the mv
+# below moves the dir verbatim, so an unlisted pattern (a leftover scratch dir
+# from an abandoned close, or the evidence of a project seeded by an older
+# kit) would be committed with the archive. Read via tr -d '\r' (a CRLF
+# .gitignore would never match) and match with case, not grep -q (init.sh
+# ensure_line explains the pipefail/SIGPIPE trap).
 if [ -n "$in_git" ]; then
-  line='.sdlc/archive/*/scratch/'
-  have=""
-  [ -f .gitignore ] && have=$(tr -d '\r' < .gitignore)
-  case "
+  for line in '.sdlc/archive/*/scratch/' '.sdlc/archive/*/progress.md' \
+              '.sdlc/archive/*/approvals/' '.sdlc/archive/*/baseline.txt' \
+              '.sdlc/archive/*/deviations.md' '.sdlc/archive/*/evidence.md' \
+              '.sdlc/archive/*/harvest.md' '.sdlc/archive/*/spec.md'; do
+    have=""
+    if [ -f .gitignore ]; then have=$(tr -d '\r' < .gitignore); fi
+    case "
 $have
 " in
-    *"
+      *"
 $line
 "*) ;;
-    *)
-      if [ -s .gitignore ] && [ -n "$(tail -c 1 .gitignore)" ]; then echo >> .gitignore; fi
-      printf '%s\n' "$line" >> .gitignore ;;
-  esac
+      *)
+        if [ -s .gitignore ] && [ -n "$(tail -c 1 .gitignore)" ]; then echo >> .gitignore; fi
+        printf '%s\n' "$line" >> .gitignore ;;
+    esac
+  done
 fi
 if [ -d "$dir/scratch" ] && [ -n "$(ls -A "$dir/scratch" 2>/dev/null)" ]; then
   echo "note: scratch/ still has files — archived but gitignored; delete what the lesson does not cite"
@@ -157,7 +162,11 @@ if [ -n "$in_git" ]; then
   # clone would resurrect the feature as OPEN (dir without its CLOSED).
   paths=""
   [ -n "$(git ls-files "$dir" 2>/dev/null)" ] && paths="\"$dir\" "
-  echo "Then commit the close for the audit trail:"
-  echo "  git add $paths\"$archive\" .sdlc/approvals .sdlc/memory .sdlc/config.md .gitignore"
+  # approvals are gitignored now, but a project seeded by an older kit still
+  # tracks them and the mv above deleted those paths — stage the deletion or
+  # it lingers in HEAD forever
+  [ -n "$(git ls-files .sdlc/approvals 2>/dev/null)" ] && paths="$paths.sdlc/approvals "
+  echo "Then commit the close (decisions + lessons; evidence stays local):"
+  echo "  git add $paths\"$archive\" .sdlc/memory .sdlc/config.md .gitignore"
   echo "(git records the work/→archive/ move as a rename; history follows it)."
 fi
