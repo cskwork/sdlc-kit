@@ -34,7 +34,7 @@ Order of work — and update it before each dispatch (AGENTS.md rule 9).
   `.sdlc/work/<slug>/deviations.md` and continue. Create the file from
   `templates/deviations.md` on first use — its numbered lines are the cap
   counters (AGENTS.md rule 5).
-  Keep the approved plan.md byte-identical so its gate stays open. For a
+  Preserve the approved plan’s meaning; gate records do not bind file bytes (AGENTS.md rule 3). For a
   structural deviation such as different files or a different approach, STOP,
   tell the human, and re-gate the plan. When the deviation's root cause is a
   factual error in spec.md (wrong data shape, wrong AS-IS claim), re-gate the
