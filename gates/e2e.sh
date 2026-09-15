@@ -53,6 +53,13 @@ assert_exit() { local d="$1" e="$2"; shift 2; local o rc; o=$("$@" 2>&1); rc=$?
 assert_file()   { [ -f "$1" ] && pass "$2" || fail "$2 (missing file $1)"; }
 assert_nofile() { [ -e "$1" ] && fail "$2 (unexpected $1)" || pass "$2"; }
 assert_grep()   { grep -q "$2" "$1" 2>/dev/null && pass "$3" || fail "$3 (no /$2/ in $1)"; }
+# mklink <target> <link> — a fixture that claims to be a symlink must BE one.
+# Git Bash's default MSYS mode makes `ln -s` COPY instead of link, which would
+# turn a symlink assertion into a false PASS; CI sets
+# MSYS=winsymlinks:nativestrict. A link we cannot create stops the suite: it is
+# a setup failure, not a soft assertion.
+mklink() { ln -s "$1" "$2" 2>/dev/null
+  [ -L "$2" ] || { fail "setup: $2 is not a real symlink (Windows: MSYS=winsymlinks:nativestrict)"; exit 1; }; }
 
 # Every fixture repo is local, disposable, and deterministic: a fixed identity, a
 # fixed initial branch name (older git defaults to master), no signing hook.
@@ -459,10 +466,10 @@ assert_fail_msg "C3b artifact outside .sdlc/work refused" "must live in" \
   sdlc approve.sh intent "$FIX/outside/neg-three/intent.md" --delegated
 assert_fail_msg "C3c traversal to an existing file outside the project refused" "must live in" \
   sdlc approve.sh intent .sdlc/work/../../../outside/neg-three/intent.md --delegated
-ln -s "$FIX/outside/neg-three" .sdlc/work/neg-link 2>/dev/null
+mklink "$FIX/outside/neg-three" .sdlc/work/neg-link
 assert_fail_msg "C3d symlinked feature dir refused (resolved physically)" "must live in" \
   sdlc approve.sh intent .sdlc/work/neg-link/intent.md --delegated
-ln -s ../neg-three/intent.md .sdlc/work/neg-three/link.md 2>/dev/null
+mklink ../neg-three/intent.md .sdlc/work/neg-three/link.md
 assert_fail_msg "C3e symlinked artifact refused" "symlink" \
   sdlc approve.sh intent .sdlc/work/neg-three/link.md --delegated
 rm -f .sdlc/work/neg-link .sdlc/work/neg-three/link.md
@@ -547,7 +554,7 @@ assert_fail_msg "C4e a chmod after the review blocks 'shipped'" "the source chan
 chmod -x gone.sh
 # C4f replacing a file with a symlink is drift (same content through the link)
 mv gone.sh gone.real
-ln -s gone.real gone.sh
+mklink gone.real gone.sh
 assert_fail_msg "C4f a file replaced by a symlink blocks 'shipped'" "the source changed after the ship review" \
   sdlc close.sh neg-add shipped "done"
 rm -f gone.sh gone.real
@@ -859,17 +866,17 @@ assert_ok_msg "C16l the unchanged reviewed worktree still closes locally" "deliv
 mkdir -p .sdlc/work/neg-dash
 echo goal > .sdlc/work/neg-dash/intent.md
 echo ev > .sdlc/work/neg-dash/evidence.md
-ln -s app.sh ./-link
+mklink app.sh ./-link
 git add -A .; git commit -qm "feat: -link -> app.sh"
 DASH_SHA=$(git rev-parse HEAD)
 assert_ok "C17 ship approval with a root '-link' symlink" sdlc approve.sh ship .sdlc/work/neg-dash/evidence.md --delegated
 printf '%s' app.sh > "$FIX/target.txt"
 assert_grep .sdlc/approvals/neg-dash.ship.source "^l - $(sha256of "$FIX/target.txt") -link\$" \
   "C17b the '-link' entry hashes its real target string (app.sh), not a readlink error"
-rm -f ./-link; ln -s gone.sh ./-link          # retarget: same name, different target
+rm -f ./-link; mklink gone.sh ./-link        # retarget: same name, different target
 assert_fail_msg "C17c retargeting '-link' after the review is drift" "the source changed after the ship review" \
   sdlc check-gate.sh ship .sdlc/work/neg-dash/evidence.md
-rm -f ./-link; ln -s app.sh ./-link           # back to the reviewed target
+rm -f ./-link; mklink app.sh ./-link         # back to the reviewed target
 assert_ok_msg "C17d the restored target reopens the ship gate" "GATE OPEN" \
   sdlc check-gate.sh ship .sdlc/work/neg-dash/evidence.md
 cat > .sdlc/work/neg-dash/delivery.md <<EOF

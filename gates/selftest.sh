@@ -6,6 +6,17 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"; mkdir -p .sdlc/work/feat-a
 git init -q .   # close.sh's .gitignore handling is git-repo-only
 
+# mklink <target> <link> — a fixture that claims to be a symlink must BE one.
+# Git Bash's default MSYS mode makes `ln -s` COPY instead of link, which would
+# turn a security assertion into a false PASS; CI sets
+# MSYS=winsymlinks:nativestrict. A link we cannot create is a setup failure.
+mklink() {
+  ln -s "$1" "$2" || {
+    echo "FAIL: setup — cannot create symlink $2 -> $1 (Windows: MSYS=winsymlinks:nativestrict)"; exit 1; }
+  [ -L "$2" ] || {
+    echo "FAIL: setup — $2 is a copy, not a symlink (Windows: MSYS=winsymlinks:nativestrict)"; exit 1; }
+}
+
 a=.sdlc/work/feat-a/intent.md
 echo "goal: test" > "$a"
 
@@ -450,13 +461,12 @@ if "$kit/gates/approve.sh" intent elsewhere/marker/intent.md >/dev/null 2>&1; th
 # a traversal that escapes is not
 if "$kit/gates/check-gate.sh" intent .sdlc/work/../../elsewhere/marker/intent.md >/dev/null 2>&1; then
   echo "FAIL: traversal out of the project accepted"; exit 1; fi
-if ln -s "$tmp/elsewhere/marker" .sdlc/work/linked 2>/dev/null; then
-  if "$kit/gates/approve.sh" intent .sdlc/work/linked/intent.md >/dev/null 2>&1; then
-    echo "FAIL: symlinked feature dir accepted"; exit 1; fi
-  rm -f .sdlc/work/linked
-fi
-ln -sf ../marker/intent.md .sdlc/work/marker/link.md 2>/dev/null || true
-if [ -L .sdlc/work/marker/link.md ] && "$kit/gates/approve.sh" intent .sdlc/work/marker/link.md >/dev/null 2>&1; then
+mklink "$tmp/elsewhere/marker" .sdlc/work/linked
+if "$kit/gates/approve.sh" intent .sdlc/work/linked/intent.md >/dev/null 2>&1; then
+  echo "FAIL: symlinked feature dir accepted"; exit 1; fi
+rm -f .sdlc/work/linked
+mklink ../marker/intent.md .sdlc/work/marker/link.md
+if "$kit/gates/approve.sh" intent .sdlc/work/marker/link.md >/dev/null 2>&1; then
   echo "FAIL: symlinked artifact accepted"; exit 1; fi
 rm -f .sdlc/work/marker/link.md
 echo "ok: approvals bind a canonical path; cross-path, traversal, and symlinks refused"
