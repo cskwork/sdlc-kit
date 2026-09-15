@@ -5,9 +5,28 @@
 # Terminal state for a feature. Human decision; --delegated per AGENTS.md rule 3.
 # A dead-ended feature must leave MORE knowledge behind than it consumed:
 # closing requires a lesson (dead-end/abandoned) and a DOMAIN.md harvest check.
+# `shipped` requires a DELIVERY: the ship approval must still bind the reviewed
+# evidence AND the reviewed source snapshot, and delivery.md must record a
+# confirmed result whose Source is that source — a commit that contains it, or
+# the current worktree identity for a local target.
 set -euo pipefail
+kit="$(cd "$(dirname "$0")/.." && pwd)"
+. "$kit/gates/_common.sh"
 
-usage() { echo "usage: close.sh <slug> <shipped|abandoned|dead-end|handed-off> \"<reason>\" [--delegated]"; exit 1; }
+usage() {
+  cat >&2 <<'EOF'
+usage: close.sh <slug> <shipped|abandoned|dead-end|handed-off> "<reason>" [--delegated]
+  shipped     needs the ship approval (still matching its evidence and the
+              reviewed source) AND .sdlc/work/<slug>/delivery.md with a confirmed
+              result whose Source contains that reviewed source
+  abandoned   needs a lesson (lazymode >=3: the reason line is the record)
+  dead-end    same as abandoned
+  handed-off  the reason must name the external ticket key or URL
+Closing archives the feature and its approvals to .sdlc/archive/<slug>/, and is
+where scratch/ is pruned — keep whatever evidence.md, delivery.md, or a lesson cites.
+EOF
+  exit 1
+}
 delegated=""
 if [ $# -eq 4 ] && [ "$4" = "--delegated" ]; then delegated=1; set -- "$1" "$2" "$3"; fi
 [ $# -eq 3 ] || usage
@@ -45,13 +64,150 @@ if [ -f "$dir/CLOSED" ]; then
   resume=1
 fi
 
-# shipped is the state the gates exist for: it requires the ship approval.
-# Anything less closes as abandoned, dead-end, or handed-off.
-if [ "$state" = "shipped" ] && [ ! -f ".sdlc/approvals/${slug}.ship.approval" ]; then
-  echo "BLOCKED: 'shipped' requires a ship approval record."
-  echo "  Pass the ship gate (gates/approve.sh ship .sdlc/work/$slug/evidence.md),"
-  echo "  or close as abandoned|dead-end|handed-off."
-  exit 1
+# shipped is the state the gates exist for: it requires the ship approval AND a
+# delivery that actually happened. Anything less closes as abandoned, dead-end,
+# or handed-off.
+if [ "$state" = "shipped" ]; then
+  srec=".sdlc/approvals/${slug}.ship.approval"
+  del="$dir/delivery.md"
+  ev="$dir/evidence.md"
+  if [ ! -f "$srec" ]; then
+    echo "BLOCKED: 'shipped' requires a ship approval record."
+    echo "  Pass the ship gate (gates/approve.sh ship .sdlc/work/$slug/evidence.md),"
+    echo "  or close as abandoned|dead-end|handed-off."
+    exit 1
+  fi
+  # re-check the ship gate here: the approval may predate content binding, and
+  # evidence.md may have been rewritten after the human approved it
+  want_ev=$(sdlc_field "$srec" artifact_sha256 || true)
+  if [ -z "$want_ev" ]; then
+    echo "BLOCKED: the ship approval for '$slug' predates content binding (no artifact_sha256)."
+    echo "  Re-approve it: gates/approve.sh ship .sdlc/work/$slug/evidence.md"
+    exit 1
+  fi
+  [ -f "$ev" ] || { echo "BLOCKED: approved evidence.md is missing: $ev"; exit 1; }
+  if [ "$(sdlc_sha256_file "$ev")" != "$want_ev" ]; then
+    echo "BLOCKED: $ev changed after the ship approval — the approved evidence is not the evidence on disk."
+    echo "  Show the human what changed, then: gates/approve.sh ship $ev"
+    exit 1
+  fi
+  # --- the reviewed source (_common.sh sdlc_source_state: one shared verdict
+  # for status.sh, check-gate.sh and here) ------------------------------------
+  snap="${srec%.approval}.source"
+  src_state=""; want_code=""; now_code=""
+  read -r src_state want_code now_code <<EOF
+$(sdlc_source_state "$srec")
+EOF
+  case "$src_state" in
+    legacy)
+      echo "BLOCKED: the ship approval for '$slug' was written by an older kit."
+      echo "  It bound only the files that were uncommitted at review time — nothing at all"
+      echo "  when the work was already committed — so it cannot prove the source is unchanged."
+      echo "  Re-run the ship review over the current source, then: gates/approve.sh ship $ev"
+      exit 1;;
+    nosnapshot)
+      echo "BLOCKED: the source snapshot of the ship approval is missing ($snap)."
+      echo "  Without it the recorded digest cannot be checked against the source on disk."
+      echo "  Re-approve after a fresh ship review: gates/approve.sh ship $ev"
+      exit 1;;
+    drift)
+      echo "BLOCKED: the source changed after the ship review (reviewed ${want_code%"${want_code#????????}"}…, now ${now_code%"${now_code#????????}"}…)."
+      echo "  Staging or committing the reviewed bytes does NOT trip this; an edit, a new"
+      echo "  file, a deletion, a chmod, or a symlink swap does."
+      echo "  Changed since the review:"
+      cur=$(mktemp "${TMPDIR:-/tmp}/sdlc-src.XXXXXX")
+      sdlc_source_snapshot > "$cur" 2>/dev/null || true   # listing only: the verdict above already stands
+      diffs=$(sdlc_source_drift_list "$snap" "$cur")
+      rm -f "$cur"
+      printf '%s\n' "$diffs" | head -n 20
+      n=$(printf '%s\n' "$diffs" | awk 'NF' | wc -l | tr -d ' ')
+      if [ "$n" -gt 20 ]; then echo "    … and $((n - 20)) more"; fi
+      echo "  Re-run the ship review over the new diff, then: gates/approve.sh ship $ev"
+      exit 1;;
+    invalid)
+      echo "BLOCKED: the source has a path name this kit cannot bind (git quotes it: a tab,"
+      echo "  newline, double quote, or backslash in the name), so the ship binding cannot be checked:"
+      { sdlc_source_snapshot 2>/dev/null || true; cat "$snap"; } | sdlc_source_unsupported_list | LC_ALL=C sort -u | awk 'NR <= 20'
+      echo "  Rename or ignore that file, re-run the ship review, then: gates/approve.sh ship $ev"
+      exit 1;;
+    error)
+      echo "BLOCKED: the current source snapshot could not be taken (a file or symlink could"
+      echo "  not be read or hashed), so the ship binding cannot be checked:"
+      { sdlc_source_snapshot 2>&1 >/dev/null || true; } | awk 'NR <= 20 { print "    " $0 }'
+      echo "  Fix that, then close again."
+      exit 1;;
+    ok) ;;
+    unbound)
+      echo "note: no git repository here — the ship approval bound no source identity."
+      echo "      The delivery below is recorded as NOT VERIFIED for its source.";;
+    *)
+      echo "BLOCKED: the ship source binding is in an unknown state ('${src_state:-empty}') — closed by default."
+      exit 1;;
+  esac
+  # --- the upstream artifacts the ship review was granted on top of ------------
+  # On the full route the ship approval binds intent.md, spec.md and plan.md as
+  # they stood at review time (_common.sh sdlc_upstream_stages). They live under
+  # .sdlc/, which the source snapshot excludes, so this is the only check that
+  # sees them. Compact features have no spec.md or plan.md: nothing is demanded.
+  for up in $(sdlc_upstream_stages ship); do
+    upart="$dir/$(sdlc_stage_artifact "$up")"
+    upw=$(sdlc_field "$srec" "upstream_$up" || true)
+    [ -n "$upw" ] || continue
+    if [ ! -f "$upart" ]; then
+      echo "BLOCKED: $upart was part of the approved ship basis and is now missing."
+      echo "  Restore it, or re-run the ship review over what is actually there:"
+      echo "  gates/approve.sh ship $ev"
+      exit 1
+    fi
+    if [ "$(sdlc_sha256_file "$upart")" != "$upw" ]; then
+      echo "BLOCKED: $upart changed after the ship review — the approval no longer covers what the human approved."
+      echo "  Show the human what changed, re-approve $up, then: gates/approve.sh ship $ev"
+      exit 1
+    fi
+  done
+  unbound_up=$(sdlc_upstream_unbound "$srec" "$slug")
+  if [ -n "$unbound_up" ]; then
+    echo "BLOCKED: the ship approval for '$slug' binds no digest for$(for u in $unbound_up; do printf ' %s' "$(sdlc_stage_artifact "$u")"; done)."
+    echo "  Those artifacts exist but were never part of the approved basis (an older"
+    echo "  kit's record, or written after the approval), so a rewrite would ride along."
+    echo "  Re-run the ship review, then: gates/approve.sh ship $ev"
+    exit 1
+  fi
+  # --- the delivery record (templates/delivery.md) -----------------------------
+  if [ ! -f "$del" ]; then
+    echo "BLOCKED: 'shipped' requires a delivery record: $del"
+    echo "  Copy $kit/templates/delivery.md and fill in what was actually delivered"
+    echo "  (target, source, the command you verified it with, its output)."
+    echo "  Not delivered yet? Close as handed-off|abandoned|dead-end instead."
+    exit 1
+  fi
+  issue=$(sdlc_delivery_issue "$del" "$src_state" "$want_code" "$now_code")
+  token=${issue%% *}; detail=${issue#* }
+  d_target=$(sdlc_delivery_field "$del" Target | awk '{print tolower($1)}')
+  d_by=$(sdlc_delivery_field "$del" Verified-by)
+  case "$token" in
+    ok) ;;
+    unbound) echo "NOT VERIFIED: $detail";;
+    *)
+      echo "BLOCKED: delivery.md $detail."
+      case "$token" in
+        unconfirmed)      echo "  Verify the result with a real command and record it, or close as handed-off.";;
+        worktree-remote)  echo "  Record the delivered commit sha in delivery.md's Source line.";;
+        source-mismatch)  echo "  Re-verify the delivery and record the current source identity.";;
+        source-not-commit) echo "  Record the sha you actually delivered (git rev-parse HEAD after the push).";;
+        source-content)
+          echo "  The commit exists, but its tree is not the source the ship review saw."
+          echo "  Commit the reviewed source (or deliver the commit that has it) and record THAT sha.";;
+        source-unsupported)
+          echo "  That commit has a path name git quotes (tab, newline, double quote, or backslash);"
+          echo "  the kit cannot bind it. Rename the file, re-review, re-approve, and deliver again.";;
+        source-error)     echo "  Check that the commit's objects are readable (git fsck) and try again.";;
+        target|placeholder) echo "  Fill the record in from $kit/templates/delivery.md.";;
+        source)           echo "  Re-approve ship over the current source, then re-record the delivery.";;
+      esac
+      exit 1;;
+  esac
+  echo "delivery: $d_target — verified by '$d_by'"
 fi
 
 # handed-off closes must name the external reference in the reason
@@ -108,15 +264,15 @@ in_git=""
 git rev-parse --git-dir >/dev/null 2>&1 && in_git=1
 # Everything ignored under work/ must be ignored under archive/ too: the mv
 # below moves the dir verbatim, so an unlisted pattern (a leftover scratch dir
-# from an abandoned close, or the evidence of a project seeded by an older
-# kit) would be committed with the archive. Read via tr -d '\r' (a CRLF
+# from an abandoned close) would be committed with the archive. spec.md,
+# evidence.md, and delivery.md are NOT here: the decision record and the final
+# proof are durable (AGENTS.md rule 7). Read via tr -d '\r' (a CRLF
 # .gitignore would never match) and match with case, not grep -q (init.sh
 # ensure_line explains the pipefail/SIGPIPE trap).
 if [ -n "$in_git" ]; then
   for line in '.sdlc/archive/*/scratch/' '.sdlc/archive/*/progress.md' \
               '.sdlc/archive/*/approvals/' '.sdlc/archive/*/baseline.txt' \
-              '.sdlc/archive/*/deviations.md' '.sdlc/archive/*/evidence.md' \
-              '.sdlc/archive/*/harvest.md' '.sdlc/archive/*/spec.md'; do
+              '.sdlc/archive/*/deviations.md' '.sdlc/archive/*/harvest.md'; do
     have=""
     if [ -f .gitignore ]; then have=$(tr -d '\r' < .gitignore); fi
     case "
@@ -132,7 +288,10 @@ $line
   done
 fi
 if [ -d "$dir/scratch" ] && [ -n "$(ls -A "$dir/scratch" 2>/dev/null)" ]; then
-  echo "note: scratch/ still has files — archived but gitignored; delete what the lesson does not cite"
+  echo "note: scratch/ still has files — archived with the feature but gitignored."
+  echo "      Scratch lifecycle (AGENTS.md rule 5): it survives the push and is pruned HERE."
+  echo "      Delete what nothing cites; KEEP anything evidence.md, delivery.md, or a lesson"
+  echo "      points at, and say so in the lesson so the next reader knows it is load-bearing."
 fi
 mv "$dir" "$archive"
 # "$slug".* also catches .approval.history files (re-gate trail, approve.sh)
@@ -166,7 +325,7 @@ if [ -n "$in_git" ]; then
   # tracks them and the mv above deleted those paths — stage the deletion or
   # it lingers in HEAD forever
   [ -n "$(git ls-files .sdlc/approvals 2>/dev/null)" ] && paths="$paths.sdlc/approvals "
-  echo "Then commit the close (decisions + lessons; evidence stays local):"
+  echo "Then commit the close (decisions, evidence, delivery, lessons; scratch stays local):"
   echo "  git add $paths\"$archive\" .sdlc/memory .sdlc/config.md .gitignore"
   echo "(git records the work/→archive/ move as a rename; history follows it)."
 fi
