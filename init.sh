@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # init.sh [target-dir] — seed .sdlc/ into a project (greenfield or brownfield).
-# Artifacts live in the TARGET repo. The decision record (intent, plan, map,
-# CLOSED, memory, config) versions with the code; evidence and approvals are
-# gitignored below and stay in the working copy.
+# Artifacts live in the TARGET repo. The durable record (intent, spec, plan,
+# map, evidence, delivery, CLOSED, memory, config) versions with the code;
+# approvals, bulk scratch, and working residue are gitignored below and stay in
+# the working copy. Re-running is safe: it adds missing ignores and removes the
+# exact ignore lines older kit versions issued for now-durable artifacts. It
+# never touches the git index.
 set -euo pipefail
 kit="$(cd "$(dirname "$0")" && pwd)"
 target="${1:-.}"
@@ -51,12 +54,29 @@ ensure_line .gitignore '.sdlc/archive/*/progress.md'
 ensure_line .gitignore '.sdlc/approvals/'
 ensure_line .gitignore '.sdlc/archive/*/approvals/'
 
-# per-feature evidence and working artifacts. spec.md is here because it
-# restates intent.md against the code; intent.md and plan.md carry the
-# decisions and stay committed.
-for artifact in baseline.txt deviations.md evidence.md harvest.md spec.md; do
+# per-feature working residue. The durable record is intent.md, spec.md,
+# plan.md, map.md, delivery.md, evidence.md, CLOSED — they are the reason the
+# feature can be understood a year later, so they stay committed (AGENTS.md
+# rule 7). Only the bulky, machine-regenerable residue is ignored.
+for artifact in baseline.txt deviations.md harvest.md; do
   ensure_line .gitignore ".sdlc/work/*/$artifact"
   ensure_line .gitignore ".sdlc/archive/*/$artifact"
+done
+
+# Kit-owned ignores this kit no longer issues. Removing the exact line is safe
+# and reversible; the file stays on disk and the git index is NOT touched —
+# untracking or adding is the human's call, as below.
+drop_line() { # <file> <exact-line>
+  local f="$1" line="$2" tmpf
+  [ -f "$f" ] || return 0
+  grep -qxF "$line" "$f" 2>/dev/null || return 0
+  tmpf="$f.sdlc-tmp.$$"
+  grep -vxF "$line" "$f" > "$tmpf" && mv "$tmpf" "$f"
+  echo "note: removed obsolete kit ignore '$line' from $f (durable now: AGENTS.md rule 7)"
+}
+for obsolete in '.sdlc/work/*/spec.md' '.sdlc/archive/*/spec.md' \
+                '.sdlc/work/*/evidence.md' '.sdlc/archive/*/evidence.md'; do
+  drop_line .gitignore "$obsolete"
 done
 
 [ -f .sdlc/memory/INDEX.md ] || cat > .sdlc/memory/INDEX.md <<'EOF'
@@ -132,6 +152,11 @@ run:
 # Optional preferred browser/QA tool for UI verification (CLI, MCP, or agent name).
 # Empty is fine: the verifier falls back to any browser/QA tool its harness has.
 qa:
+# Optional: the project's own end-to-end command, scoped per run where possible
+# (e.g. npx playwright test --grep <tag>). Empty or absent is fine — the verifier
+# then finds the project's own e2e entry point, and records NOT VERIFIED when
+# there is no runnable environment (roles/verifier.md). Never a new dependency.
+e2e:
 EOF
 
 # projects seeded before lazymode existed keep their config; append the block

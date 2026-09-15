@@ -60,9 +60,11 @@ Fill `templates/spec.md`. Rules:
 
 ## Adversarial verification (automated, before the human)
 
-Lazy shortcut: at lazymode ≥2 (AGENTS.md rule 3), run `tools/tripwire.sh`
-over the draft spec.md first — a clean scan skips this review; any hit runs
-it in full.
+At lazymode ≥2 (AGENTS.md rule 3) this review is still the reviewer — what
+changes is who decides at the gate. `tools/tripwire.sh` over the draft is a
+supplemental input: a hit means the review runs in full AND the risky work
+needs recorded authorization. A clean scan shortens nothing on its own; judge
+by what the spec actually changes, in any language it is written in.
 
 Dispatch a fresh-context adversary (`roles/adversary.md`) with ONLY:
 intent.md, draft spec.md, `.sdlc/memory/POLICY.md` if present, and the
@@ -80,11 +82,11 @@ violations.
 
 ## Gate
 
-At lazymode ≥2 (AGENTS.md rule 3): after a clean tripwire scan or a passed
-adversary review (see the lazy shortcut above), run
-`<kit>/gates/approve.sh spec .sdlc/work/<slug>/spec.md --lazy`, post the
-Human summary and Flagged concerns as FYI, and dispatch plan
-(`skills/3-plan`) as a subagent task (AGENTS.md rule 5). Otherwise:
+At lazymode ≥2 (AGENTS.md rule 3): after the adversary review above passes,
+run `<kit>/gates/approve.sh spec .sdlc/work/<slug>/spec.md --lazy --review
+"<what the review covered>"` (add `--risk-authorized "<the human's words>"`
+for risky work), post the Human summary and Flagged concerns as FYI, and
+continue to plan (`skills/3-plan`). Otherwise:
 
 > Review `.sdlc/work/<slug>/spec.md`, especially **Flagged concerns**.
 > Then: `<kit>/gates/approve.sh spec .sdlc/work/<slug>/spec.md`

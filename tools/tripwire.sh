@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# tripwire.sh <artifact> — heuristic scan for trip-wires (AGENTS.md rule 3).
-# Input to the adversary's tier re-check, and the pre-scan for lazymode-waived
-# intent/spec gates (plan and ship always get the adversary). It does not
-# replace judgment: a hit is a question, not a conviction.
+# tripwire.sh <artifact> — SUPPLEMENTAL keyword scan for trip-wires
+# (AGENTS.md rule 3). It reads English keywords in one Markdown file, so it
+# misses risky work described in any other language, in a paraphrase, or only
+# in the code the artifact points at.
+# One-directional by design: a hit ADDS a requirement (risk authorization,
+# adversary review); a clean scan REMOVES nothing and authorizes nothing. The
+# risk review is a read of the affected code and behavior, never this output.
 set -euo pipefail
 { [ $# -eq 1 ] && [ -f "$1" ]; } || { echo "usage: tripwire.sh <plan.md>"; exit 1; }
 plan="$1"
@@ -22,5 +25,7 @@ scan "public API"         'public API|breaking change|API contract|openapi|swagg
 scan "security paths"     'auth|secret|credential|password|token|permission|session'
 scan "infra/config"       'Dockerfile|docker-compose|[.]github/workflows|terraform|helm|kubernetes|k8s|nginx|systemd|deploy'
 if [ "$hits" -eq 0 ]; then
-  echo "no trip-wire candidates found (heuristic only; the adversary must still judge)"
+  echo "no trip-wire candidates found"
+  echo "  This is an English keyword scan of one file, not a risk verdict: it cannot"
+  echo "  clear a change. Judge the risk by reading the affected code and behavior."
 fi
