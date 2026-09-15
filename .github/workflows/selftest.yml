@@ -1,9 +1,17 @@
 name: selftest
 on:
+  # branch work is tested once, on its PR; push covers the delivery targets
+  # (main and version tags) that no PR run precedes
   push:
+    branches: [main]
+    tags: ['v*']
   pull_request:
 permissions:
   contents: read
+env:
+  # Git Bash otherwise COPIES on `ln -s`, which would make the symlink gate
+  # fixtures pass for the wrong reason; ignored on macOS/Linux
+  MSYS: winsymlinks:nativestrict
 jobs:
   selftest:
     strategy:
@@ -19,6 +27,8 @@ jobs:
         run: |
           git config --global user.email ci@sdlc-kit.invalid
           git config --global user.name "sdlc-kit CI"
+          # fixture repos must record symlinks as links, not as their contents
+          git config --global core.symlinks true
         shell: bash
       - name: selftest (gate mechanics)
         run: bash gates/selftest.sh
