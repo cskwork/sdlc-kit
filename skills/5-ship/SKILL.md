@@ -5,8 +5,9 @@ description: "Evidence assembly, adversarial review, ship gate, commit disciplin
 
 # Stage 5: Ship
 
-Goal: create `evidence.md` so a human can decide whether to release. Run agent
-reviews first. The human reviews findings about intent and risk.
+Goal: create `evidence.md` so a human can decide whether to release, then
+deliver and record what was delivered in `delivery.md`. Run agent reviews
+first. The human reviews findings about intent and risk.
 
 Heartbeat: on entry and at every sub-task change, overwrite
 `.sdlc/work/<slug>/progress.md` with one line —
@@ -14,11 +15,12 @@ Heartbeat: on entry and at every sub-task change, overwrite
 
 ## Before you start
 
-Run as a dispatched subagent (AGENTS.md rule 5) — do not assemble evidence in
-the context that built the code. Read plan.md, spec.md, deviations.md (if
-present), and the diff (`git diff` against the base branch). Micro-track
+The adversarial code review below must run in a fresh context (AGENTS.md
+rule 5); assembling the evidence itself may stay with the implementer. Read plan.md, spec.md, deviations.md (if
+present), and the diff (`git diff` against the base branch). Compact-route
 features have no spec or plan: intent.md replaces both as the upstream
-source, and its success criteria are the requirements. Read
+source, and its Compact route section and success criteria are the
+requirements. Read
 `.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`, `.sdlc/memory/DOMAIN.md`,
 and the feature's `harvest.md`; open lesson files whose tags match the
 current task.
@@ -29,8 +31,8 @@ This review runs at every lazymode level — it is the last look at the diff
 before the push, and the only security pass (AGENTS.md rule 3).
 
 Dispatch an adversary (`roles/adversary.md`) with: spec.md, plan.md,
-`.sdlc/memory/POLICY.md` if present, and the diff (micro: intent.md and the
-diff). It checks spec mismatch, missing untouched checks, security issues,
+`.sdlc/memory/POLICY.md` if present, and the diff (compact route: intent.md
+and the diff). It checks spec mismatch, missing untouched checks, security issues,
 policy violations, tests that cannot fail, and complexity that hides bugs.
 Fix findings or record justified rejections, then re-run the adversary over
 the fixed diff — max 2 rounds, each logged in evidence.md's Adversary
@@ -52,17 +54,35 @@ Fill `templates/evidence.md` → `.sdlc/work/<slug>/evidence.md`:
 - Adversary findings + resolutions.
 - State anything not verified, including environment limits and skipped checks.
   Record a gap instead of marking the check as passed.
-- For UI changes, the verifier must use the `qa:` tool from config.md — or,
-  when that line is empty or absent, any browser or QA tool available in the
-  harness — when the app is reachable. Otherwise record why the UI was not
-  checked.
+- **The real end-to-end run, scoped to this change** (roles/verifier.md): the
+  changed behavior exercised through the interface a user or caller actually
+  meets — the real screen for a UI change (the `qa:` tool from config.md, or
+  any browser/QA tool in the harness), a real request or command against a
+  running instance for an API/CLI/job change, and for a bug fix the SAME
+  failing flow before and after plus the neighbouring flows that share the
+  changed code. Record command or tool · environment · scenario · observed
+  result. Reuse the project's own commands; do not build a parallel harness,
+  and do not re-run the project's entire E2E suite as a ritual.
+  **A missing environment means NOT VERIFIED** — name what is missing and say
+  so here. Unit tests never stand in for the real run, and a green suite is
+  not a substitute. Delivering anyway is possible only as an explicit known
+  gap the human accepted, recorded in this file.
 - For every AS-IS to TO-BE pair, record the observed result and its command or
   browser evidence.
+- **Bug fixes: the proof chain** (AGENTS.md rule 6), in evidence.md's Bug
+  proof section — the failure observed BEFORE the fix, the causal mechanism
+  that explains it, the SAME reproduction passing after, and the adjacent
+  flows through the changed code. An intermittent defect may substitute
+  logs, traces, or an isolated deterministic reproduction, with its
+  limitation named. A chain with a missing link is a diagnosis, not a
+  confirmed fix: label it that way here and in the report.
 
-## Retrospective (mandatory)
+## Retrospective
 
 Review the feature history. Record what went wrong, what surprised you, and
-what would help the next agent — all into the feature's
+what would help the next agent — but only what a future run could REUSE
+(skills/6-maintain "Record the lesson"); a clean feature legitimately leaves
+no lesson. Write what there is into the feature's
 `.sdlc/work/<slug>/harvest.md` (lesson candidates in the skill 6 format;
 durable terms, verified facts, and constraints as domain candidates).
 INDEX.md, DOMAIN.md, and lessons/ are written only at close, by the closer
@@ -75,36 +95,66 @@ prints these).
 ## Gate
 
 At lazymode ≥3 (AGENTS.md rule 3): after the adversary pass, run
-`<kit>/gates/approve.sh ship .sdlc/work/<slug>/evidence.md --lazy`, post the
-evidence summary as FYI, and continue to commit discipline. Otherwise:
+`<kit>/gates/approve.sh ship .sdlc/work/<slug>/evidence.md --lazy --review
+"<the diff review you ran>"` (add `--risk-authorized "<the human's words>"`
+for risky work), post the evidence summary as FYI, and continue to commit
+discipline. Otherwise:
 
 > Review `.sdlc/work/<slug>/evidence.md`, then:
 > `<kit>/gates/approve.sh ship .sdlc/work/<slug>/evidence.md`
 
 STOP after requesting approval.
 
-## After approval: commit discipline
+## After approval: one authorization, then deliver
 
-The ship approval and the commit check are two different human checks. At
-lazymode ≥3 the staged-set check is also autonomous: verify the staged list
-yourself against the rules below, post it as FYI, and commit.
+The ship approval decides *that* this is released. What is still open is *what
+exactly* goes out. Ask it ONCE, as a single concrete authorization — never as a
+sequence of "may I ship?", "may I stage these?", "may I push?" for the same
+work:
+
+> Ready to deliver <slug>:
+> - staged files: <list from `git status --short`>
+> - final diff: <stat line + the deciding hunks, or the scratch file that holds it>
+> - commit message: <subject line + body>
+> - delivery target: <local | pr | deploy, from spec.md's Release procedure>
+> Approve this delivery?
+
+If the human already authorized this scope — "ship it when it's green", "push
+to the PR" — that IS the authorization: proceed, post the same four items as
+FYI, and do not ask again. At lazymode ≥3 the whole check is autonomous:
+verify the four items yourself against the rules below and post them as FYI.
+A change outside the authorized scope (a different branch, an extra file, a
+deploy where a PR was agreed) is a new decision and goes back to the human.
 
 1. Stage named paths only: changed source files, `.sdlc/work/<slug>/`, and
    — when changed — `.sdlc/memory/POLICY.md` and `.sdlc/config.md`
    (lazymode, command, and `qa:` edits must reach the audit trail). Do not
    use `git add -A` or `git add .` because they can include unrelated files.
-   Staging `.sdlc/work/<slug>/` yields only `intent.md`, `plan.md`, and
-   `map.md`; approvals, spec.md, evidence.md, harvest.md, deviations.md,
-   baseline.txt, progress.md, and scratch/ are gitignored (init.sh) and stay
-   on disk. If any of them appears in the staged list, the project's
-   `.gitignore` predates the kit version in `.sdlc/config.md` — re-run
-   `init.sh` and follow its untrack note before committing.
-2. Show the human the staged file list with `git status` and the proposed
-   commit message. Describe the behavior change, not file names. Wait for the
-   human to approve the staged set (lazymode ≥3: verify it yourself against
-   step 1 and post as FYI, per the intro above). Evidence approval does not
-   approve the staged files.
-3. Commit and push following the **Release procedure** line in spec.md. Ask
-   separately before pushing a protected or shared branch. After the push,
-   delete `.sdlc/work/<slug>/scratch/` — the one cleanup of the loop. Nothing
-   is deleted before this point.
+   Staging `.sdlc/work/<slug>/` yields the durable record — `intent.md`,
+   `spec.md`, `plan.md`, `map.md`, `evidence.md`, `delivery.md`; approvals,
+   harvest.md, deviations.md, baseline.txt, progress.md, and scratch/ are
+   gitignored (init.sh) and stay on disk. If any of THOSE appears in the
+   staged list, the project's `.gitignore` predates the kit version in
+   `.sdlc/config.md` — re-run `init.sh` and follow its notes before
+   committing.
+2. Commit and push following the **Release procedure** line in spec.md
+   (compact route: intent.md's Delivery target). The ship approval binds the
+   project's whole source snapshot as the review saw it (AGENTS.md rule 6):
+   staging and committing those exact bytes change nothing, but any edit, new
+   file, deletion, chmod, or symlink swap afterwards — including in a file the
+   review did not name — closes the gate, and close.sh names the files.
+   Re-run the review and re-approve rather than working around it.
+3. **Record the delivery.** Fill `templates/delivery.md` →
+   `.sdlc/work/<slug>/delivery.md`: the target, the delivered source (for a PR
+   or deploy the commit sha, which must CONTAIN the reviewed source — close.sh
+   compares that commit's tree against it), the command or project tool you actually ran to
+   check the result, and its verbatim deciding output. Examples of a real
+   check: `gh pr view <n> --json state,mergeStateStatus`, the deploy tool's
+   status output, `git log origin/<branch> -1` after a push. For a local
+   target, the passing final suite over the delivered source is the result.
+   Never write a result you did not observe — an unverified delivery is
+   `Confirmed: no`, and the feature closes as handed-off, not shipped.
+4. Hand it to close: `gates/close.sh <slug> shipped "<reason>"`. It re-checks
+   the ship approval and the delivery record. `scratch/` stays until then —
+   the pruning happens at close, and anything evidence.md, delivery.md, or a
+   lesson cites is kept (AGENTS.md rule 5).

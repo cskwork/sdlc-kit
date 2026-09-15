@@ -17,24 +17,39 @@ the loop.
 | 2 | Spec     | `skills/2-spec/SKILL.md`           | `spec.md`                                     | `intent`                     |
 | 3 | Plan     | `skills/3-plan/SKILL.md`           | `plan.md`                                     | `spec`                       |
 | 4 | Build    | `skills/4-build/SKILL.md`          | code + tests                                  | `plan` (tiered, rule 3)      |
-| 5 | Ship     | `skills/5-ship/SKILL.md`           | `evidence.md`                                 | none; build done and checks pass |
+| 5 | Ship     | `skills/5-ship/SKILL.md`           | `evidence.md` + `delivery.md`                 | none; build done and checks pass |
 | 6 | Maintain | `skills/6-maintain/SKILL.md`       | new `intent.md` + lesson                      | none; triggered by incident |
 
 Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>/spec.md`.
 
-**Micro track for trivial tickets.** The full track is the default; any
-doubt means full. Stage 1 may record `Track: micro` only when every
-criterion in skills/1-intent holds: tripwire-clean intent.md, exact files
-and symbols known, success checkable by an existing command, no open
-questions. Micro skips spec and plan: intent (gate) → build → ship, and
-ship keeps its full adversary review — the only review the diff gets.
-The intent approval freezes the Track verdict (approve.sh records it;
-status.sh flags a post-approval rewrite). Upgrade rule (any build
-surprise → full track): skills/1-intent.
+**Two routes, one contract.** Every feature runs the FULL route unless it is
+small and well understood, in which case it runs the COMPACT route. There is
+no third shape: what skills/6-maintain used to call the "compressed loop" is
+this same compact route.
+
+- **Compact** — `intent.md` is the single work artifact and carries the files
+  to change, the proof, the risk, and the delivery target (templates/intent.md).
+  Flow: intent (gate) → build → ship (evidence + delivery) → close. No spec,
+  no plan, and none is ever demanded of it. Ship keeps its full adversary
+  review — the only review that diff gets. Criteria: skills/1-intent.
+- **Full** — all six stages, for anything ambiguous, broad, or risky. Any
+  doubt means full.
+
+Stage 1 records the verdict as `- Track: compact` or `- Track: full`
+(`micro` is the older spelling of `compact` and still parses everywhere).
+The intent approval freezes it: `approve.sh` records the track, `status.sh`
+flags a post-approval rewrite, and `approve.sh spec|plan` refuses a
+compact-track slug outright. **A track upgrade revalidates the approvals it
+changes**: rewrite the Track line to `full — upgraded from compact (<reason>)`
+and re-approve intent before any spec or plan gate. Work started under the
+older compressed loop (a `plan.md` with no `intent.md`) is not stranded and
+its gates are not waived — status.sh prints the continuation path
+(skills/6-maintain "Continuing older compressed work").
 
 **Every feature ends in a terminal state**: `gates/close.sh <slug>
 <shipped|abandoned|dead-end|handed-off> "reason"` after the human decides
-(`--delegated` under rule 3). close.sh then archives the feature: the dir and
+(`--delegated` under rule 3). **`shipped` means delivered** — see rule 6:
+close.sh re-checks the ship approval and reads `delivery.md`. close.sh then archives the feature: the dir and
 its approval records move to `.sdlc/archive/<slug>/`, so `gates/status.sh`
 stays scoped to open work (`--all` lists the newest 20 archived).
 Abandoned or dead-end requires a lesson first:
@@ -51,17 +66,25 @@ when closing.
    path as `kit_windows:` when one is needed.
 2. **Check the gate first** for stages 2-4 (stages 1, 5, and 6 have none):
    `gates/check-gate.sh <prev-stage> <artifact>` from the project root.
-   Micro-track features have no spec or plan: build checks the `intent` gate.
+   Compact-route features have no spec or plan: build checks the `intent` gate.
    Anything but a printed `GATE OPEN` — including errors and silence — is
    closed: STOP and tell the human exactly what to approve. At a gate
-   lazymode waives (rule 3), run the lazy review of the stage whose gate is
-   closed — plan/ship: adversary pass; intent/spec: tripwire scan, then
-   adversary on any hit — then `approve.sh <that stage> … --lazy`, not a
-   human ask.
+   lazymode waives (rule 3), run that stage's review of the affected code and
+   behavior, then `approve.sh <that stage> … --lazy --review "<what you
+   reviewed>"`, not a human ask.
+   **What a gate binds**: the approval record names the canonical
+   `.sdlc/work/<slug>/<artifact>` path, the artifact's sha256, and the
+   digests of the upstream artifacts it was granted on top of. Editing the
+   approved artifact, or materially editing an upstream one, closes the gate
+   with the exact re-approval command — a downstream gate never outlives the
+   text it was granted for. The digest is CHANGE DETECTION, not
+   authentication: it proves the bytes are the ones approved, never who
+   approved them. Records written by an older kit carry no digest and fail
+   closed, saying so.
 3. **Intent, spec, and ship approvals are human decisions** (unless the
    project's lazymode waives one — see the lazymode levels below). On the
-   micro track there is no spec approval at all: the human authorized that
-   by approving the intent.md that carries the `Track: micro` verdict. Run
+   compact route there is no spec approval at all: the human authorized that
+   by approving the intent.md that carries the `Track: compact` verdict. Run
    `gates/approve.sh <stage> <artifact> --delegated` only after the human
    explicitly approves that artifact in chat ("approve", "looks right", or
    equivalent). Never approve on silence, a general "continue", or your own
@@ -69,11 +92,28 @@ when closing.
    Approval records are gitignored (init.sh): they live in the working copy,
    not in git history, so `.sdlc/approvals/` and its `.approval.history`
    files ARE the audit trail — a fresh clone mid-feature has none and must
-   re-gate. Approvals do not bind file bytes: editing an approved artifact does not close its gate, but
-   a change that alters what the human approved requires a new approval
-   (build-time procedure: skills/4-build deviations). Re-gates are capped:
+   re-gate. Approvals bind a path and content (rule 2): a rewritten artifact
+   needs a new approval (build-time procedure: skills/4-build deviations).
+   Re-gates are capped:
    two per stage, per feature, at any point in the loop — a third means
    intent got the facts wrong (escalation: skills/4-build "Re-gate cap").
+
+   **Autonomy is not authority.** Two separate questions, never merged:
+   - *Who decides?* — lazymode. It moves human checkpoints to the agent.
+   - *May this be done at all?* — authorization. Risky operations need the
+     human's prior word, whatever the lazymode: data loss or destructive
+     backfill, public API or contract change, security-sensitive paths
+     (auth, secrets, permissions), schema or data migration, and external
+     delivery (push to a shared branch, deploy, anything leaving this repo).
+   Inside a scope the human already authorized, do not ask again — that is
+   the point of the authorization. A red flag OUTSIDE that scope stops the
+   loop and goes to the human as a decision, at every lazymode level.
+   `approve.sh --lazy` records both: `--review "<what you actually reviewed>"`
+   is mandatory, and `--risk-authorized "<the human's words>"` is required
+   when the artifact shows risky work. **`tools/tripwire.sh` is supplemental**:
+   it scans English keywords in one file, so a hit can ADD the authorization
+   requirement, but a clean scan clears nothing and authorizes nothing. The
+   review that matters is a read of the affected code and behavior.
 
    **The plan gate is tiered.** Trip-wires: schema or data migration, data
    deletion or destructive backfill, public API or contract change,
@@ -90,7 +130,7 @@ when closing.
    `.sdlc/config.md` names which gates stay HUMAN; init.sh seeds 1 and the
    agent asks the human which level they want at init. Each level keeps
    these gates human and auto-approves the rest with `gates/approve.sh
-   <stage> <artifact> --lazy`:
+   <stage> <artifact> --lazy --review "<what you reviewed>"`:
    - 0 — intent, spec, ship human; plan tiered (exactly the rules above)
    - 1 (default) — intent, spec, ship human; plan always auto,
      trip-wires included
@@ -99,20 +139,21 @@ when closing.
    - 4 — no human gates; the whole loop runs autonomously
    The `lazymode:` line itself is a human decision: edit it only on
    explicit instruction, and commit config.md so the level is audit-trailed.
-   lazymode waives the human decision, nothing else. **Plan and ship keep
-   their full adversary review before `--lazy`** — plan authorizes what
-   build executes irreversibly, and ship's diff review is the last look
-   before the push; a keyword scan must never be the only reviewer there.
+   lazymode waives the human decision, nothing else. **Every `--lazy`
+   approval still carries a real review of the affected code and behavior**,
+   recorded in `--review`: plan authorizes what build executes irreversibly,
+   ship's diff review is the last look before delivery, and intent/spec are
+   reviewed for what the change actually does, not for which words it uses.
+   Run `tools/tripwire.sh` as one input among others; a hit means the
+   stage's adversary review runs and the risk authorization must exist
+   (intent defines no adversary — a hit on intent.md gets a fresh-context
+   adversary).
    **A blocker surviving its round cap blocks `--lazy` at every stage**:
    the gate reverts to a human ask; at lazymode 4 the loop stops.
-   For intent and spec (recoverable downstream), scan the artifact with
-   `tools/tripwire.sh`: a clean scan approves directly; any hit requires the
-   stage's adversary review to pass first (intent defines no adversary — a
-   hit on intent.md gets a fresh-context adversary). Approvals are still
-   recorded, and every auto-approved gate still posts its Human summary
-   (and any trip-wire list) to the human as FYI. `approve.sh --lazy`
-   refuses a stage the configured level keeps human, and any `lazymode:`
-   value outside 0-4 counts as 0.
+   Approvals are still recorded, and every auto-approved gate still posts its
+   Human summary (and any trip-wire list) to the human as FYI. `approve.sh
+   --lazy` refuses a stage the configured level keeps human, and any
+   `lazymode:` value outside 0-4 counts as 0.
 4. **Keep memory bounded.** At each stage start read
    `.sdlc/memory/POLICY.md` (human-declared hard rules),
    `.sdlc/memory/INDEX.md` (lessons; 50 lines max), `.sdlc/memory/DOMAIN.md`
@@ -148,13 +189,16 @@ when closing.
    artifact paths — never in the context that authored the artifact. Give
    the verifier and adversary the strongest model available.
 
-   **Stages are dispatches too.** When the harness has subagents, run each
-   stage's work — spec draft, plan, build, evidence assembly — as a subagent
-   given the stage skill path and the artifact paths. The orchestrator (the
-   session talking to the human) routes, checks gates, and holds only
-   summaries and decisions; raw exploration and file contents stay in the
-   subagent and die with it. This is what keeps the loop cheap: one long
-   orchestrator context that read everything defeats the point.
+   **One delegate is the default.** A single implementer carries the loop.
+   Do NOT dispatch a subagent per stage as a matter of course — the handoffs
+   cost more than they save on ordinary work. Scope a dispatch when it
+   genuinely helps: a large read-only exploration whose raw output should not
+   enter the main context, independent probes that can run in parallel, or a
+   sub-task with a crisp contract. Verification and adversarial review are
+   the exception that always stands: they run in a fresh context, because
+   the author cannot review their own work. If the harness cannot give them
+   one, say so in the artifact as an explicit gap ("no independent
+   verification available: <reason>") instead of self-reviewing quietly.
 
    **Caps survive dispatch.** Write each count the moment it increments:
    deviations, re-gates, fix-loop rounds → deviations.md (template); ship
@@ -177,19 +221,74 @@ when closing.
 
    **Bulk rule.** Screenshots, probe logs, traces, and large command dumps
    go to the gitignored `.sdlc/work/<feature>/scratch/`; quote the deciding
-   lines in the stage artifact and keep the file. Cleanup happens once, at
-   the end of ship (skills/5-ship), never mid-loop.
+   lines in the stage artifact and keep the file. A bare `scratch/…` citation
+   does not survive a fresh clone — cite it only beside the quoted lines, or
+   point at a durable home (the PR body, an artifact URL). Scratch survives the push:
+   it is pruned once, at close, and anything evidence.md, delivery.md, or a
+   lesson cites is KEPT and named as load-bearing there. Nothing is deleted
+   mid-loop, and nothing referenced is deleted at all.
 6. **Proof over claims.** Every "done" claim carries command output, using
    the real commands in `.sdlc/config.md`.
+
+   **Verification runs the real thing.** Before a feature ships, the changed
+   behavior is exercised end to end through the interface a user or caller
+   actually meets — the real screen for a UI change, a real request or command
+   against a running instance for an API/CLI/job change, and for a bug fix the
+   SAME failing flow before and after plus the neighbouring flows that share
+   the changed code. It is scoped to the change, reuses the project's own
+   commands (`.sdlc/config.md`: `e2e:`, `qa:`, `run:`), and never means
+   re-running the whole product suite as a ritual. Record command or tool,
+   environment, scenario, and the observed result. **No environment to run it
+   in = NOT VERIFIED**: say what is missing, in evidence.md. A passing unit
+   suite is never a silent substitute, and a delivery over a known gap is
+   allowed only when the human accepts that gap explicitly.
+
+   **"Shipped" means delivered.** The ship approval is a decision to
+   deliver; it is not a delivery. A feature closes as `shipped` only when
+   the agreed target — local implementation, PR, or deploy — is proven to
+   have happened, in `.sdlc/work/<slug>/delivery.md` (templates/delivery.md):
+   target, the source identity that was reviewed, the command or project
+   tool actually run, and its verbatim deciding output. Remote facts (PR
+   state, deploy result) are established with the project's own tools, never
+   by asserting them in prose; a `pr` or `deploy` delivery must name the
+   delivered commit, and that commit must CONTAIN the reviewed source —
+   close.sh compares its tree against the reviewed snapshot, so a commit that
+   merely exists is refused. Local work needs no production step — `local` is
+   a first-class target. close.sh re-checks the ship approval (evidence
+   unchanged, source unchanged since the review) and refuses an absent,
+   mismatching, or unconfirmed delivery.
+   **What the ship approval binds is the project's whole source snapshot** as
+   the review saw it: every tracked file plus every untracked file git does
+   not ignore, minus `.sdlc/`, by path, content, and executable bit. Staging
+   or committing those exact bytes keeps the binding valid — work committed
+   BEFORE the review is bound too. An edit, a new file, a deletion, a chmod,
+   or a symlink swap afterwards breaks it, including in a file the review did
+   not name: a source change nobody reviewed never closes silently. check-gate,
+   status, and close say the same thing in the same words, and name the files
+   that changed. Approvals written by an older kit bound only the uncommitted
+   diff and fail closed, saying so. (Submodule contents are not bound.) A
+   path name git C-quotes — tab, newline, double quote, or backslash in the
+   name — cannot be bound: approve.sh refuses it by name, and one that
+   appears after the review closes the gate as an invalid source.
+
+   **A bug fix carries its own proof chain** (skills/6-maintain): the
+   failure observed before the fix, the causal mechanism, the SAME
+   reproduction passing after, and the adjacent flows that share the changed
+   code. An intermittent defect may substitute logs, traces, or an isolated
+   deterministic reproduction, with its limitation stated. Without that
+   chain the work is a diagnosis or an instrumentation change — say so; do
+   not call it a confirmed fix.
 7. **Artifacts live in the project repo** under `.sdlc/work/<feature>/`
    while open and `.sdlc/archive/<feature>/` after close. Git keeps the
-   decision record — `intent.md`, `plan.md`, `map.md`, `CLOSED`,
-   `memory/`, `config.md`. The rest is gitignored evidence and working
-   residue (`approvals/`, `spec.md`, `baseline.txt`, `deviations.md`,
-   `evidence.md`, `harvest.md`, `progress.md`, `scratch/`): present on disk
-   for every gate, absent from history. Write them as if they were
-   permanent — durability is what changed, not the standard. The kit
-   directory stays framework-only.
+   durable record — `intent.md`, `spec.md`, `plan.md`, `map.md`,
+   `evidence.md`, `delivery.md`, `CLOSED`, `memory/`, `config.md`: the
+   decisions and the final proof, readable a year later without the working
+   copy. Gitignored working residue stays local (`approvals/`,
+   `baseline.txt`, `deviations.md`, `harvest.md`, `progress.md`,
+   `scratch/`). Bulk evidence lives in `scratch/`; evidence.md quotes the
+   deciding lines and cites the file, so the durable record stays small. A
+   PR body that carries the same evidence is an acceptable durable home —
+   link it from evidence.md. The kit directory stays framework-only.
 8. **Speak plainly.** Every report, gate request, and question starts with
    one short context paragraph (which stage, what happened before, what this
    message is for), uses short active sentences and the project's own
