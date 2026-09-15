@@ -6,6 +6,17 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"; mkdir -p .sdlc/work/feat-a
 git init -q .   # close.sh's .gitignore handling is git-repo-only
 
+# mklink <target> <link> — a fixture that claims to be a symlink must BE one.
+# Git Bash's default MSYS mode makes `ln -s` COPY instead of link, which would
+# turn a security assertion into a false PASS; CI sets
+# MSYS=winsymlinks:nativestrict. A link we cannot create is a setup failure.
+mklink() {
+  ln -s "$1" "$2" || {
+    echo "FAIL: setup — cannot create symlink $2 -> $1 (Windows: MSYS=winsymlinks:nativestrict)"; exit 1; }
+  [ -L "$2" ] || {
+    echo "FAIL: setup — $2 is a copy, not a symlink (Windows: MSYS=winsymlinks:nativestrict)"; exit 1; }
+}
+
 a=.sdlc/work/feat-a/intent.md
 echo "goal: test" > "$a"
 
@@ -19,10 +30,14 @@ echo "ok: gate closed before approval"
 "$kit/gates/check-gate.sh" intent "$a" >/dev/null
 echo "ok: gate open after approval"
 
-# 3. edit after approval → gate STAYS open (approvals are markers, not hashes)
+# 3. edit after approval → gate CLOSES (the approval binds the artifact's content)
+cp "$a" "$a.orig"
 echo "later edit" >> "$a"
-"$kit/gates/check-gate.sh" intent "$a" >/dev/null || { echo "FAIL: gate closed by a post-approval edit"; exit 1; }
-echo "ok: post-approval edit does not close the gate"
+out=$("$kit/gates/check-gate.sh" intent "$a" 2>&1) && { echo "FAIL: gate stayed open after the approved artifact changed"; exit 1; }
+case "$out" in (*"changed after it was approved"*) ;; (*) echo "FAIL: content-drift message missing: $out"; exit 1;; esac
+cp "$a.orig" "$a"; rm -f "$a.orig"
+"$kit/gates/check-gate.sh" intent "$a" >/dev/null || { echo "FAIL: gate not open again for the approved content"; exit 1; }
+echo "ok: post-approval edit closes the gate; approved content reopens it"
 
 # 4. stage name injection rejected
 if "$kit/gates/approve.sh" "../../etc/pwn" "$a" >/dev/null 2>&1; then
@@ -42,13 +57,20 @@ case "$out" in (*"GATE CLOSED"*) echo "ok: missing artifact closed with message"
   (*) echo "FAIL: missing artifact closed SILENTLY"; exit 1;; esac
 mv "$a.bak" "$a"
 
-# 7. --delegated: works at any stage, always recorded (with the agent runner)
+# 7. --delegated: works at every gated stage, always recorded (with the agent runner)
 "$kit/gates/approve.sh" intent "$a" --delegated >/dev/null
 grep -q '^mode: delegated-chat' .sdlc/approvals/feat-a.intent.approval || { echo "FAIL: delegated mode not recorded"; exit 1; }
 grep -q '^runner: agent' .sdlc/approvals/feat-a.intent.approval || { echo "FAIL: agent runner not recorded for delegated"; exit 1; }
-"$kit/gates/approve.sh" spec "$a" --delegated >/dev/null
+grep -q '^artifact_sha256: [0-9a-f]\{64\}$' .sdlc/approvals/feat-a.intent.approval || { echo "FAIL: approval does not bind the artifact digest"; exit 1; }
+grep -qx 'artifact: .sdlc/work/feat-a/intent.md' .sdlc/approvals/feat-a.intent.approval || { echo "FAIL: approval does not bind the canonical path"; exit 1; }
+echo "spec body" > .sdlc/work/feat-a/spec.md
+"$kit/gates/approve.sh" spec .sdlc/work/feat-a/spec.md --delegated >/dev/null
 grep -q '^mode: delegated-chat' .sdlc/approvals/feat-a.spec.approval || { echo "FAIL: delegated mode not recorded for spec"; exit 1; }
-echo "ok: delegated approval recorded at any stage"
+grep -q '^upstream_intent: [0-9a-f]\{64\}$' .sdlc/approvals/feat-a.spec.approval || { echo "FAIL: spec approval does not bind the upstream intent"; exit 1; }
+# the gate binds ONE artifact per stage: a spec approval over intent.md is refused
+if "$kit/gates/approve.sh" spec "$a" --delegated >/dev/null 2>&1; then
+  echo "FAIL: spec gate accepted intent.md as its artifact"; exit 1; fi
+echo "ok: delegated approval recorded, path/digest/upstream bound, artifact allowlisted"
 
 # 8. close mechanism: dead-end blocked without lesson, allowed with, idempotent-refused,
 #    and the feature + its approvals archive out of work/
@@ -154,11 +176,15 @@ out=$("$kit/gates/status.sh" feat-a) || { echo "FAIL: status.sh crashed on an ar
 case "$out" in (*"[CLOSED: dead-end]"*) ;; (*) echo "FAIL: archived slug not found by name"; exit 1;; esac
 echo "ok: status.sh renders empty, tiered, approved, and archived states"
 
-# 14. no upstream chaining: editing intent after spec approval keeps the spec gate open
+# 14. upstream chaining: editing intent after spec approval CLOSES the spec gate
 "$kit/gates/check-gate.sh" spec .sdlc/work/feat-d/spec.md >/dev/null
+cp .sdlc/work/feat-d/intent.md .sdlc/work/feat-d/intent.md.orig
 echo "tweak" >> .sdlc/work/feat-d/intent.md
-"$kit/gates/check-gate.sh" spec .sdlc/work/feat-d/spec.md >/dev/null || { echo "FAIL: spec gate closed by an upstream edit"; exit 1; }
-echo "ok: upstream edit does not close the downstream gate"
+out=$("$kit/gates/check-gate.sh" spec .sdlc/work/feat-d/spec.md 2>&1) && { echo "FAIL: spec gate survived an upstream intent rewrite"; exit 1; }
+case "$out" in (*"intent.md changed after"*) ;; (*) echo "FAIL: upstream-drift message missing: $out"; exit 1;; esac
+mv .sdlc/work/feat-d/intent.md.orig .sdlc/work/feat-d/intent.md
+"$kit/gates/check-gate.sh" spec .sdlc/work/feat-d/spec.md >/dev/null || { echo "FAIL: spec gate not open after the upstream was restored"; exit 1; }
+echo "ok: upstream edit closes the downstream gate"
 
 # 15. tripwire.sh: flags risky plans, stays quiet on clean ones
 tw=.sdlc/work/feat-d/tw.md
@@ -188,29 +214,32 @@ mkdir -p .sdlc/work/feat-f
 fi2=.sdlc/work/feat-f/intent.md; fs=.sdlc/work/feat-f/spec.md; fp=.sdlc/work/feat-f/plan.md
 echo "goal" > "$fi2"; echo "spec" > "$fs"; echo "plan" > "$fp"
 rm -f .sdlc/config.md
-if "$kit/gates/approve.sh" plan "$fp" --lazy >/dev/null 2>&1; then
+if "$kit/gates/approve.sh" plan "$fp" --lazy --review "read the diff" >/dev/null 2>&1; then
   echo "FAIL: lazy approval accepted without lazymode in config"; exit 1; fi
 printf 'lazymode: 1\n' > .sdlc/config.md
-if "$kit/gates/approve.sh" spec "$fs" --lazy >/dev/null 2>&1; then
+if "$kit/gates/approve.sh" spec "$fs" --lazy --review "read the spec" >/dev/null 2>&1; then
   echo "FAIL: lazy spec approval accepted at lazymode 1"; exit 1; fi
-"$kit/gates/approve.sh" plan "$fp" --lazy >/dev/null
+if "$kit/gates/approve.sh" plan "$fp" --lazy >/dev/null 2>&1; then
+  echo "FAIL: lazy approval accepted without --review"; exit 1; fi
+"$kit/gates/approve.sh" plan "$fp" --lazy --review "read plan and the code it touches" >/dev/null
+grep -q '^review: read plan and the code it touches$' .sdlc/approvals/feat-f.plan.approval || { echo "FAIL: review note not recorded"; exit 1; }
 grep -q '^mode: lazy' .sdlc/approvals/feat-f.plan.approval || { echo "FAIL: lazy mode not recorded"; exit 1; }
 grep -q '^runner: agent' .sdlc/approvals/feat-f.plan.approval || { echo "FAIL: agent runner not recorded for lazy"; exit 1; }
 printf 'lazymode: 4\n' > .sdlc/config.md
-"$kit/gates/approve.sh" intent "$fi2" --lazy >/dev/null
-"$kit/gates/approve.sh" spec "$fs" --lazy >/dev/null
+"$kit/gates/approve.sh" intent "$fi2" --lazy --review "read the handler and its callers" >/dev/null
+"$kit/gates/approve.sh" spec "$fs" --lazy --review "read the spec against the code" >/dev/null
 echo "evidence" > .sdlc/work/feat-f/evidence.md   # ship PENDING so status must hint --lazy
 out=$("$kit/gates/status.sh" feat-f) || { echo "FAIL: status.sh crashed with lazymode set"; exit 1; }
 case "$out" in (*"lazymode: 4"*) ;; (*) echo "FAIL: lazymode not shown in status"; exit 1;; esac
 case "$out" in (*"· lazy"*) ;; (*) echo "FAIL: lazy approval mode not shown in status"; exit 1;; esac
 case "$out" in (*"--lazy"*) ;; (*) echo "FAIL: pending ship gate should hint --lazy at lazymode 4"; exit 1;; esac
-if "$kit/gates/approve.sh" build "$fp" --lazy >/dev/null 2>&1; then
+if "$kit/gates/approve.sh" build "$fp" --lazy --review r >/dev/null 2>&1; then
   echo "FAIL: --lazy accepted for an unknown stage"; exit 1; fi
 printf 'lazymode: 10\n' > .sdlc/config.md   # out of range must fail CLOSED
-if "$kit/gates/approve.sh" ship .sdlc/work/feat-f/evidence.md --lazy >/dev/null 2>&1; then
+if "$kit/gates/approve.sh" ship .sdlc/work/feat-f/evidence.md --lazy --review r >/dev/null 2>&1; then
   echo "FAIL: out-of-range lazymode failed OPEN"; exit 1; fi
 printf 'lazymode: 4\r\n' > .sdlc/config.md  # CRLF-saved config must still parse
-"$kit/gates/approve.sh" ship .sdlc/work/feat-f/evidence.md --lazy >/dev/null || { echo "FAIL: CRLF lazymode config not parsed"; exit 1; }
+"$kit/gates/approve.sh" ship .sdlc/work/feat-f/evidence.md --lazy --review "diff reviewed" >/dev/null || { echo "FAIL: CRLF lazymode config not parsed"; exit 1; }
 echo "ok: lazy approval enforces the lazymode level, range, and CRLF, is recorded, and shows in status"
 
 # 18. lazymode >=3 waives the lesson requirement on non-shipped closes; below 3 keeps it
@@ -270,26 +299,41 @@ case "$out" in (*"most recently closed"*) ;; (*) echo "FAIL: stats.sh default no
 case "$out" in (*"included only with --all"*) ;; (*) echo "FAIL: stats.sh re-approval scope note missing"; exit 1;; esac
 echo "ok: archive listings bounded by default, widened only explicitly"
 
-# 23. micro track: status skips spec/plan, marks the feature, routes to build
+# 23. compact route: status skips spec/plan, marks the feature, routes to build;
+#     'micro' still parses as the older spelling of the same verdict
 mkdir -p .sdlc/work/feat-m
-printf -- '- Track: micro — tripwire clean, single file\ngoal\n' > .sdlc/work/feat-m/intent.md
+printf -- '- Track: compact — two known files, existing test\ngoal\n' > .sdlc/work/feat-m/intent.md
 "$kit/gates/approve.sh" intent .sdlc/work/feat-m/intent.md --delegated >/dev/null
-out=$("$kit/gates/status.sh" feat-m) || { echo "FAIL: status.sh crashed on a micro feature"; exit 1; }
-case "$out" in (*"(micro)"*) ;; (*) echo "FAIL: micro marker missing"; exit 1;; esac
-case "$out" in (*"spec"*) echo "FAIL: micro feature still shows a spec stage"; exit 1;; (*) ;; esac
-case "$out" in (*"write evidence.md"*) ;; (*) echo "FAIL: micro next action should be build/ship"; exit 1;; esac
-echo "ok: micro track skips spec/plan and routes intent → build/ship"
-echo s > .sdlc/work/feat-m/spec.md   # self-healing: spec.md on disk = full track
-out=$("$kit/gates/status.sh" feat-m) || { echo "FAIL: status.sh crashed on healed micro"; exit 1; }
-case "$out" in (*"(micro)"*) echo "FAIL: spec.md present but still rendered micro"; exit 1;; (*) ;; esac
+grep -q '^track: compact' .sdlc/approvals/feat-m.intent.approval || { echo "FAIL: compact track not recorded"; exit 1; }
+out=$("$kit/gates/status.sh" feat-m) || { echo "FAIL: status.sh crashed on a compact feature"; exit 1; }
+case "$out" in (*"(compact)"*) ;; (*) echo "FAIL: compact marker missing"; exit 1;; esac
+case "$out" in (*"  spec "*) echo "FAIL: compact feature still shows a spec stage"; exit 1;; (*) ;; esac
+case "$out" in (*"write evidence.md"*) ;; (*) echo "FAIL: compact next action should be build/ship"; exit 1;; esac
+# a compact slug has no spec or plan gate: approving one demands the upgrade first
+echo s > .sdlc/work/feat-m/spec.md
+out=$("$kit/gates/approve.sh" spec .sdlc/work/feat-m/spec.md --delegated 2>&1) && { echo "FAIL: spec approved on a compact-track slug"; exit 1; }
+case "$out" in (*"upgraded from compact"*) ;; (*) echo "FAIL: no upgrade instruction on the refused spec approval"; exit 1;; esac
+# upgrade: re-approve intent as full, then the spec gate is available again
+printf -- '- Track: full — upgraded from compact (scope grew)\ngoal\n' > .sdlc/work/feat-m/intent.md
+"$kit/gates/approve.sh" intent .sdlc/work/feat-m/intent.md --delegated >/dev/null
+"$kit/gates/approve.sh" spec .sdlc/work/feat-m/spec.md --delegated >/dev/null || { echo "FAIL: spec approval still refused after the track upgrade"; exit 1; }
+out=$("$kit/gates/status.sh" feat-m) || { echo "FAIL: status.sh crashed on healed compact"; exit 1; }
+case "$out" in (*"(compact)"*) echo "FAIL: spec.md present but still rendered compact"; exit 1;; (*) ;; esac
 rm .sdlc/work/feat-m/spec.md
-mkdir -p .sdlc/work/feat-p   # 'microservice-…' must NOT read as micro
+mkdir -p .sdlc/work/feat-p   # 'microservice-…' must NOT read as the compact track
 printf -- '- Track: microservice-split\ngoal\n' > .sdlc/work/feat-p/intent.md
 out=$("$kit/gates/status.sh" feat-p) || { echo "FAIL: status.sh crashed on feat-p"; exit 1; }
-case "$out" in (*"(micro)"*) echo "FAIL: 'microservice…' misread as micro track"; exit 1;; (*) ;; esac
-echo "ok: micro detection self-heals on spec.md and rejects prefix look-alikes"
+case "$out" in (*"(compact)"*) echo "FAIL: 'microservice…' misread as the compact track"; exit 1;; (*) ;; esac
+mkdir -p .sdlc/work/feat-mi   # older spelling still parses
+printf -- '- Track: micro — legacy spelling\ngoal\n' > .sdlc/work/feat-mi/intent.md
+"$kit/gates/approve.sh" intent .sdlc/work/feat-mi/intent.md --delegated >/dev/null
+grep -q '^track_spelling: micro' .sdlc/approvals/feat-mi.intent.approval || { echo "FAIL: legacy micro spelling not recorded"; exit 1; }
+out=$("$kit/gates/status.sh" feat-mi) || { echo "FAIL: status.sh crashed on a legacy micro feature"; exit 1; }
+case "$out" in (*"(compact)"*) ;; (*) echo "FAIL: legacy micro spelling not treated as compact"; exit 1;; esac
+echo "ok: compact route skips spec/plan, upgrade revalidates intent, 'micro' still parses"
 
-# 24. shipped requires the ship approval; unmerged harvest blocks close
+# 24. shipped requires the ship approval AND a confirmed delivery record;
+#     unmerged harvest blocks close
 mkdir -p .sdlc/work/feat-o
 echo goal > .sdlc/work/feat-o/intent.md
 echo evidence > .sdlc/work/feat-o/evidence.md
@@ -300,8 +344,28 @@ if "$kit/gates/close.sh" feat-o shipped "done" >/dev/null 2>&1; then
 if "$kit/gates/close.sh" feat-o shipped "done" >/dev/null 2>&1; then
   echo "FAIL: close allowed with an unmerged harvest.md"; exit 1; fi
 rm .sdlc/work/feat-o/harvest.md
-"$kit/gates/close.sh" feat-o shipped "done" >/dev/null
-echo "ok: shipped needs its approval; harvest blocks until merged"
+out=$("$kit/gates/close.sh" feat-o shipped "done" 2>&1) && { echo "FAIL: shipped close allowed with no delivery record"; exit 1; }
+case "$out" in (*"requires a delivery record"*) ;; (*) echo "FAIL: missing-delivery message wrong: $out"; exit 1;; esac
+codeid=$(awk '/^code_digest: /{print $2}' .sdlc/approvals/feat-o.ship.approval)
+cat > .sdlc/work/feat-o/delivery.md <<EOF
+# Delivery: feat-o
+- Target: local
+- Source: worktree:$codeid
+- Verified-by: bash gates/selftest.sh
+- Evidence: SELFTEST PASS
+- Confirmed: no
+EOF
+out=$("$kit/gates/close.sh" feat-o shipped "done" 2>&1) && { echo "FAIL: unconfirmed delivery accepted as shipped"; exit 1; }
+case "$out" in (*"Confirmed"*) ;; (*) echo "FAIL: unconfirmed-delivery message wrong: $out"; exit 1;; esac
+sed 's/^- Confirmed: no/- Confirmed: yes/; s|^- Source: .*|- Source: worktree:deadbeef|' .sdlc/work/feat-o/delivery.md > .sdlc/work/feat-o/delivery.tmp
+mv .sdlc/work/feat-o/delivery.tmp .sdlc/work/feat-o/delivery.md
+out=$("$kit/gates/close.sh" feat-o shipped "done" 2>&1) && { echo "FAIL: delivery with a mismatched source accepted"; exit 1; }
+case "$out" in (*"Source does not match the current source identity"*) ;; (*) echo "FAIL: source-mismatch message wrong: $out"; exit 1;; esac
+sed "s|^- Source: .*|- Source: worktree:$codeid|" .sdlc/work/feat-o/delivery.md > .sdlc/work/feat-o/delivery.tmp
+mv .sdlc/work/feat-o/delivery.tmp .sdlc/work/feat-o/delivery.md
+out=$("$kit/gates/close.sh" feat-o shipped "done") || { echo "FAIL: valid delivery still rejected"; exit 1; }
+case "$out" in (*"delivery: local"*) ;; (*) echo "FAIL: delivery not reported at close"; exit 1;; esac
+echo "ok: shipped needs approval + confirmed, source-matching delivery; harvest blocks until merged"
 
 # 25. approvals stranded between the two archive mvs are swept on the next close attempt
 echo "stage: intent" > .sdlc/approvals/feat-o.intent.approval   # feat-o already archived in test 24
@@ -326,9 +390,9 @@ mkdir -p .sdlc/work/feat-r
 printf -- '- Track: full\ngoal\n' > .sdlc/work/feat-r/intent.md
 "$kit/gates/approve.sh" intent .sdlc/work/feat-r/intent.md --delegated >/dev/null
 grep -q '^track: full' .sdlc/approvals/feat-r.intent.approval || { echo "FAIL: track not recorded in approval"; exit 1; }
-printf -- '- Track: micro — flipped after approval\ngoal\n' > .sdlc/work/feat-r/intent.md
+printf -- '- Track: compact — flipped after approval\ngoal\n' > .sdlc/work/feat-r/intent.md
 out=$("$kit/gates/status.sh" feat-r) || { echo "FAIL: status crashed on track mismatch"; exit 1; }
-case "$out" in (*"(micro)"*) echo "FAIL: post-approval micro flip honored"; exit 1;; (*) ;; esac
+case "$out" in (*"(compact)"*) echo "FAIL: post-approval compact flip honored"; exit 1;; (*) ;; esac
 case "$out" in (*"re-approve intent"*) ;; (*) echo "FAIL: track mismatch not flagged"; exit 1;; esac
 echo "ok: intent approval freezes the Track verdict"
 
@@ -339,31 +403,343 @@ echo "ok: intent approval freezes the Track verdict"
   mkdir -p .sdlc/work/feat-x
   echo e > .sdlc/work/feat-x/evidence.md
   git add -A
+  printf '%s\n' '.sdlc/work/*/spec.md' '.sdlc/archive/*/evidence.md' > .gitignore  # seeded by an older kit
   out=$("$kit/init.sh" .)
   for line in '.sdlc/approvals/' '.sdlc/archive/*/approvals/' \
-              '.sdlc/work/*/spec.md' '.sdlc/archive/*/spec.md' \
-              '.sdlc/work/*/evidence.md' '.sdlc/archive/*/evidence.md' \
               '.sdlc/work/*/harvest.md' '.sdlc/work/*/deviations.md' \
-              '.sdlc/work/*/baseline.txt'; do
+              '.sdlc/work/*/baseline.txt' '.sdlc/work/*/scratch/'; do
     grep -qxF "$line" .gitignore || { echo "FAIL: init.sh does not ignore $line"; exit 1; }
   done
-  case "$out" in (*"tracked file(s) now match"*) ;;
-    (*) echo "FAIL: init.sh did not flag the already-tracked evidence.md"; exit 1;; esac
+  # the durable record is committable: obsolete kit-owned ignores are removed,
+  # and never re-added
+  for line in '.sdlc/work/*/spec.md' '.sdlc/archive/*/spec.md' \
+              '.sdlc/work/*/evidence.md' '.sdlc/archive/*/evidence.md'; do
+    grep -qxF "$line" .gitignore && { echo "FAIL: init.sh still ignores the durable $line"; exit 1; }
+  done
+  case "$out" in (*"removed obsolete kit ignore"*) ;;
+    (*) echo "FAIL: init.sh did not report removing the obsolete ignores"; exit 1;; esac
   before=$(wc -l < .gitignore)
   "$kit/init.sh" . >/dev/null
   [ "$(wc -l < .gitignore)" = "$before" ] || { echo "FAIL: init.sh .gitignore is not idempotent"; exit 1; }
   # --no-index: check-ignore skips paths already in the index, and evidence.md
   # was staged above on purpose — we are testing the rules, not the index
-  # the decision record must survive: ignoring it would erase the audit trail
-  for keep in intent.md plan.md map.md; do
+  # the durable record must survive: ignoring it would erase the audit trail
+  for keep in intent.md spec.md plan.md map.md evidence.md delivery.md; do
     if git check-ignore --no-index -q ".sdlc/work/feat-x/$keep"; then
-      echo "FAIL: $keep is gitignored — the decision record must stay committable"; exit 1; fi
+      echo "FAIL: $keep is gitignored — the durable record must stay committable"; exit 1; fi
   done
-  if ! git check-ignore --no-index -q .sdlc/work/feat-x/evidence.md; then
-    echo "FAIL: evidence.md is not gitignored"; exit 1; fi
+  for drop in harvest.md deviations.md baseline.txt progress.md; do
+    if ! git check-ignore --no-index -q ".sdlc/work/feat-x/$drop"; then
+      echo "FAIL: $drop is not gitignored"; exit 1; fi
+  done
+  if ! git check-ignore --no-index -q .sdlc/work/feat-x/scratch/dump.log; then
+    echo "FAIL: scratch/ is not gitignored"; exit 1; fi
   if ! git check-ignore --no-index -q .sdlc/approvals/feat-x.intent.approval; then
     echo "FAIL: approval records are not gitignored"; exit 1; fi
+  # init.sh must never touch the git index: evidence.md was staged before the
+  # run and must still be staged after it (untracking is the human's call)
+  git ls-files | grep -q '^\.sdlc/work/feat-x/evidence\.md$' || {
+    echo "FAIL: init.sh mutated the git index"; exit 1; }
 ) || exit 1
-echo "ok: init.sh ignores evidence, keeps the decision record, is idempotent"
+echo "ok: init.sh keeps the durable record committable, ignores residue, is idempotent"
+
+# 29. approvals are bound to a PATH, not a bare slug: a same-slug feature dir
+#     somewhere else cannot reuse the approval, and a symlinked dir is refused
+mkdir -p .sdlc/work/marker
+echo "goal" > .sdlc/work/marker/intent.md
+"$kit/gates/approve.sh" intent .sdlc/work/marker/intent.md >/dev/null
+"$kit/gates/check-gate.sh" intent .sdlc/work/marker/intent.md >/dev/null
+mkdir -p elsewhere/marker
+cp .sdlc/work/marker/intent.md elsewhere/marker/intent.md
+if "$kit/gates/check-gate.sh" intent elsewhere/marker/intent.md >/dev/null 2>&1; then
+  echo "FAIL: an approval opened the gate for a same-slug dir outside .sdlc/work/"; exit 1; fi
+if "$kit/gates/approve.sh" intent elsewhere/marker/intent.md >/dev/null 2>&1; then
+  echo "FAIL: approve accepted an artifact outside .sdlc/work/"; exit 1; fi
+# a traversal that resolves to the SAME canonical file is fine, not a hole
+"$kit/gates/check-gate.sh" intent .sdlc/work/../work/marker/intent.md >/dev/null \
+  || { echo "FAIL: canonical path rejected when reached via .."; exit 1; }
+# a traversal that escapes is not
+if "$kit/gates/check-gate.sh" intent .sdlc/work/../../elsewhere/marker/intent.md >/dev/null 2>&1; then
+  echo "FAIL: traversal out of the project accepted"; exit 1; fi
+mklink "$tmp/elsewhere/marker" .sdlc/work/linked
+if "$kit/gates/approve.sh" intent .sdlc/work/linked/intent.md >/dev/null 2>&1; then
+  echo "FAIL: symlinked feature dir accepted"; exit 1; fi
+rm -f .sdlc/work/linked
+mklink ../marker/intent.md .sdlc/work/marker/link.md
+if "$kit/gates/approve.sh" intent .sdlc/work/marker/link.md >/dev/null 2>&1; then
+  echo "FAIL: symlinked artifact accepted"; exit 1; fi
+rm -f .sdlc/work/marker/link.md
+echo "ok: approvals bind a canonical path; cross-path, traversal, and symlinks refused"
+
+# 30. an approval record written by an older kit (no content binding) fails CLOSED
+printf 'stage: intent\nartifact: .sdlc/work/marker/intent.md\napproved_at: 2020-01-01T00:00:00Z\n' \
+  > .sdlc/approvals/marker.intent.approval
+out=$("$kit/gates/check-gate.sh" intent .sdlc/work/marker/intent.md 2>&1) && {
+  echo "FAIL: legacy approval marker still opens the gate"; exit 1; }
+case "$out" in (*"predates content binding"*"approve.sh intent"*) ;;
+  (*) echo "FAIL: legacy marker message is not actionable: $out"; exit 1;; esac
+out=$("$kit/gates/status.sh" marker) || { echo "FAIL: status crashed on a legacy marker"; exit 1; }
+case "$out" in (*"STALE"*) ;; (*) echo "FAIL: status does not flag the stale approval"; exit 1;; esac
+"$kit/gates/approve.sh" intent .sdlc/work/marker/intent.md >/dev/null
+"$kit/gates/check-gate.sh" intent .sdlc/work/marker/intent.md >/dev/null
+echo "ok: pre-binding approval records fail closed with the re-approval command"
+
+# 31. lazymode moves the checkpoint, not the review: --review is mandatory, and
+#     risky work needs recorded authorization. A clean keyword scan clears nothing.
+mkdir -p .sdlc/work/feat-risk
+ri=.sdlc/work/feat-risk/intent.md
+printf 'goal: drop the password check for admin sessions\n' > "$ri"
+printf 'lazymode: 4\n' > .sdlc/config.md
+if "$kit/gates/approve.sh" intent "$ri" --lazy --review "read the session code" >/dev/null 2>&1; then
+  echo "FAIL: risky intent lazily approved without recorded authorization"; exit 1; fi
+"$kit/gates/approve.sh" intent "$ri" --lazy --review "read auth/session.js and its callers" \
+  --risk-authorized "human 2026-09-15: yes, remove that check" >/dev/null
+grep -q '^risk_authority: human 2026-09-15' .sdlc/approvals/feat-risk.intent.approval || {
+  echo "FAIL: risk authorization not recorded"; exit 1; }
+# non-English risky text: the scan finds nothing, and that clears NOTHING —
+# the review requirement is unchanged, which is what the record must show
+mkdir -p .sdlc/work/feat-ko
+ki=.sdlc/work/feat-ko/intent.md
+printf '목표: 로그인 검증을 제거하고 모든 사용자에게 관리자 권한을 부여한다\n' > "$ki"
+out=$("$kit/tools/tripwire.sh" "$ki")
+case "$out" in (*"no trip-wire candidates"*) ;; (*) echo "FAIL: tripwire fixture changed"; exit 1;; esac
+case "$out" in (*"not a risk verdict"*) ;; (*) echo "FAIL: tripwire clean output does not disclaim authority"; exit 1;; esac
+if "$kit/gates/approve.sh" intent "$ki" --lazy >/dev/null 2>&1; then
+  echo "FAIL: clean keyword scan let a lazy approval skip the review"; exit 1; fi
+"$kit/gates/approve.sh" intent "$ki" --lazy --review "read the auth middleware; change is scoped to the test fixture" >/dev/null
+grep -q '^review: ' .sdlc/approvals/feat-ko.intent.approval || { echo "FAIL: review note not recorded"; exit 1; }
+echo "ok: --lazy records a real review; risky work needs authorization; a clean scan authorizes nothing"
+
+# 32. a feature from the OLD compressed loop (plan.md, no intent.md) gets a
+#     documented continuation path instead of a silently lost gate
+mkdir -p .sdlc/work/feat-legacy
+echo "mini plan" > .sdlc/work/feat-legacy/plan.md
+"$kit/gates/approve.sh" plan .sdlc/work/feat-legacy/plan.md --agent-adversary >/dev/null
+out=$("$kit/gates/status.sh" feat-legacy) || { echo "FAIL: status crashed on a legacy compressed feature"; exit 1; }
+case "$out" in (*"LEGACY COMPRESSED"*) ;; (*) echo "FAIL: legacy compressed feature not detected"; exit 1;; esac
+case "$out" in (*"write intent.md"*) ;; (*) echo "FAIL: no continuation path for legacy compressed work"; exit 1;; esac
+echo "ok: pre-compact compressed work keeps an explicit continuation path"
+
+# 33. refcheck.sh: a matching HEAD proves nothing about the files on disk
+(
+  mkdir -p "$tmp/refprobe"; cd "$tmp/refprobe"; git init -q .
+  git config user.email t@example.com; git config user.name t
+  echo "v1" > app.txt; echo "cfg" > cfg.txt
+  git add app.txt cfg.txt; git commit -qm init
+  git branch deploy-ref
+  # clean tree, HEAD == ref → OK
+  out=$("$kit/tools/refcheck.sh" deploy-ref --no-fetch) || { echo "FAIL: clean tree reported as drift"; exit 1; }
+  case "$out" in (*"OK:"*) ;; (*) echo "FAIL: clean tree not OK: $out"; exit 1;; esac
+  case "$out" in (*"deployed revision: UNKNOWN"*) ;;
+    (*) echo "FAIL: refcheck claims to know the deployed revision without evidence"; exit 1;; esac
+  # unstaged edit, HEAD still == ref → DRIFT (this is the bug that shipped in 0.8.0)
+  echo "hotfix" >> app.txt
+  out=$("$kit/tools/refcheck.sh" deploy-ref --no-fetch 2>&1) && {
+    echo "FAIL: dirty working tree reported as matching the deploy ref"; exit 1; }
+  case "$out" in (*"DRIFT"*app.txt*) ;; (*) echo "FAIL: drifted file not named: $out"; exit 1;; esac
+  # staged, not committed → still drift
+  git add app.txt
+  "$kit/tools/refcheck.sh" deploy-ref --no-fetch >/dev/null 2>&1 && {
+    echo "FAIL: staged-only change reported as matching"; exit 1; }
+  git commit -qm hotfix
+  # committed → HEAD moved; the named path really differs from the ref
+  out=$("$kit/tools/refcheck.sh" deploy-ref --no-fetch app.txt 2>&1) && {
+    echo "FAIL: committed divergence reported as matching"; exit 1; }
+  case "$out" in (*"~ app.txt"*) ;; (*) echo "FAIL: content comparison missing for app.txt: $out"; exit 1;; esac
+  # a path that did NOT change is reported clean by CONTENT, not by commit count
+  out=$("$kit/tools/refcheck.sh" deploy-ref --no-fetch cfg.txt) || {
+    echo "FAIL: unchanged path reported as drift"; exit 1; }
+  case "$out" in (*"OK:"*cfg.txt*) ;; (*) echo "FAIL: unchanged path not confirmed by content: $out"; exit 1;; esac
+  # untracked new file counts as drift for the paths it covers
+  echo new > extra.txt
+  "$kit/tools/refcheck.sh" deploy-ref --no-fetch >/dev/null 2>&1 && {
+    echo "FAIL: untracked file ignored"; exit 1; }
+  rm extra.txt
+  # unknown ref and an unknown deployed sha are UNKNOWN (exit 2), never a claim
+  out=$("$kit/tools/refcheck.sh" no-such-ref --no-fetch 2>&1); rc=$?
+  [ "$rc" = 2 ] || { echo "FAIL: unknown ref exit $rc, expected 2"; exit 1; }
+  case "$out" in (*"UNKNOWN"*) ;; (*) echo "FAIL: unknown ref not reported as unknown"; exit 1;; esac
+  out=$("$kit/tools/refcheck.sh" deploy-ref --no-fetch --deployed-sha 0123456789012345678901234567890123456789 2>&1); rc=$?
+  [ "$rc" = 2 ] || { echo "FAIL: unknown deployed sha exit $rc, expected 2"; exit 1; }
+  # a supplied deployed sha is what gets compared, and it is labelled as such
+  sha=$(git rev-parse HEAD)
+  out=$("$kit/tools/refcheck.sh" deploy-ref --no-fetch --deployed-sha "$sha" cfg.txt) || {
+    echo "FAIL: comparison against the supplied deployed sha failed"; exit 1; }
+  case "$out" in (*"deployed revision: $sha"*) ;; (*) echo "FAIL: deployed sha not reported: $out"; exit 1;; esac
+) || exit 1
+echo "ok: refcheck compares worktree content, separates ref from deployment, fails to UNKNOWN"
+
+# 34. workflow scenario: a compact bug fix from intent to a delivered close,
+#     in a repo with real commits — staging and committing must NOT invalidate
+#     the ship approval, but an edit after the review must.
+(
+  mkdir -p "$tmp/flow"; cd "$tmp/flow"; git init -q .
+  git config user.email t@example.com; git config user.name t
+  printf 'def login(user):\n    return user.valid\n' > app.py
+  git add app.py; git commit -qm init
+  "$kit/init.sh" . >/dev/null
+  mkdir -p .sdlc/work/fix-login .sdlc/memory/lessons
+  cat > .sdlc/work/fix-login/intent.md <<'EOF'
+# Intent: fix-login
+- Goal: users with a trailing space in their name can log in again.
+- Track: compact — one file, existing test covers it
+## Compact route
+- Files: app.py (login)
+- Proof: python3 -c "import app"
+- Risk: login path only; single revert
+- Delivery target: local
+EOF
+  # gate first: build is not authorized before the intent gate
+  "$kit/gates/check-gate.sh" intent .sdlc/work/fix-login/intent.md >/dev/null 2>&1 && {
+    echo "FAIL: compact build gate open before approval"; exit 1; }
+  "$kit/gates/approve.sh" intent .sdlc/work/fix-login/intent.md --delegated >/dev/null
+  "$kit/gates/check-gate.sh" intent .sdlc/work/fix-login/intent.md >/dev/null || {
+    echo "FAIL: intent gate closed after approval"; exit 1; }
+  out=$("$kit/gates/status.sh" fix-login)
+  case "$out" in (*"(compact)"*) ;; (*) echo "FAIL: scenario feature not on the compact route"; exit 1;; esac
+  case "$out" in (*"  spec "*) echo "FAIL: compact scenario still lists a spec stage"; exit 1;; (*) ;; esac
+  # build
+  printf 'def login(user):\n    return user.valid and user.name.strip() != ""\n' > app.py
+  cat > .sdlc/work/fix-login/evidence.md <<'EOF'
+# Evidence: fix-login
+## Bug proof
+- Before: repro → AttributeError
+- Mechanism: name was compared unstripped
+- After: same repro → pass
+- Adjacent flows: signup → pass
+EOF
+  "$kit/gates/approve.sh" ship .sdlc/work/fix-login/evidence.md --delegated >/dev/null
+  codeid=$(awk '/^code_digest: /{print $2}' .sdlc/approvals/fix-login.ship.approval)
+  grep -q '^code_scope: project' .sdlc/approvals/fix-login.ship.approval || {
+    echo "FAIL: ship approval did not record the source scope"; exit 1; }
+  grep -q ' app.py$' .sdlc/approvals/fix-login.ship.source || {
+    echo "FAIL: ship source snapshot does not contain the reviewed file"; exit 1; }
+  out=$("$kit/gates/status.sh" fix-login)
+  case "$out" in (*"no delivery.md"*) ;; (*) echo "FAIL: status does not ask for the delivery record"; exit 1;; esac
+  # staging + committing the REVIEWED content keeps the approval valid
+  git add app.py .sdlc/work/fix-login .gitignore
+  git commit -qm "fix(login): strip the name before validating"
+  sha=$(git rev-parse HEAD)
+  cat > .sdlc/work/fix-login/delivery.md <<EOF
+# Delivery: fix-login
+- Target: local
+- Source: $sha
+- Verified-by: python3 -c "import app"
+- Evidence: exit 0
+- Confirmed: yes
+EOF
+  "$kit/gates/close.sh" fix-login shipped "login fix delivered locally" >/dev/null || {
+    echo "FAIL: committing the reviewed content invalidated the delivery"; exit 1; }
+  [ -f .sdlc/archive/fix-login/CLOSED ] || { echo "FAIL: scenario feature not archived"; exit 1; }
+  # second feature: an edit AFTER the ship review must block the close
+  mkdir -p .sdlc/work/fix-two
+  echo "goal" > .sdlc/work/fix-two/intent.md
+  echo "evidence" > .sdlc/work/fix-two/evidence.md
+  printf 'def helper():\n    return 1\n' > helper.py
+  "$kit/gates/approve.sh" ship .sdlc/work/fix-two/evidence.md --delegated >/dev/null
+  printf 'def helper():\n    return 2   # sneaked in after the review\n' > helper.py
+  cat > .sdlc/work/fix-two/delivery.md <<EOF
+# Delivery: fix-two
+- Target: local
+- Source: worktree:$(awk '/^code_digest: /{print $2}' .sdlc/approvals/fix-two.ship.approval)
+- Verified-by: python3 -c "import helper"
+- Evidence: exit 0
+- Confirmed: yes
+EOF
+  out=$("$kit/gates/close.sh" fix-two shipped "done" 2>&1) && {
+    echo "FAIL: close accepted code edited after the ship review"; exit 1; }
+  case "$out" in (*"the source changed after the ship review"*) ;; (*) echo "FAIL: post-review edit message wrong: $out"; exit 1;; esac
+  case "$out" in (*"~ helper.py"*) ;; (*) echo "FAIL: drift report does not name the changed file: $out"; exit 1;; esac
+  # rewriting evidence.md after its approval is caught too
+  mkdir -p .sdlc/work/fix-three
+  echo "goal" > .sdlc/work/fix-three/intent.md
+  echo "evidence" > .sdlc/work/fix-three/evidence.md
+  "$kit/gates/approve.sh" ship .sdlc/work/fix-three/evidence.md --delegated >/dev/null
+  echo "rewritten after approval" >> .sdlc/work/fix-three/evidence.md
+  cat > .sdlc/work/fix-three/delivery.md <<EOF
+# Delivery: fix-three
+- Target: local
+- Source: worktree:$(awk '/^code_digest: /{print $2}' .sdlc/approvals/fix-three.ship.approval)
+- Verified-by: true
+- Evidence: ok
+- Confirmed: yes
+EOF
+  out=$("$kit/gates/close.sh" fix-three shipped "done" 2>&1) && {
+    echo "FAIL: close accepted evidence rewritten after its approval"; exit 1; }
+  case "$out" in (*"changed after the ship approval"*) ;; (*) echo "FAIL: evidence-drift message wrong: $out"; exit 1;; esac
+  # a remote target may not be delivered from an uncommitted worktree
+  sed 's/^- Target: local/- Target: pr/' .sdlc/work/fix-three/delivery.md > .sdlc/work/fix-three/d.tmp
+  mv .sdlc/work/fix-three/d.tmp .sdlc/work/fix-three/delivery.md
+  out=$("$kit/gates/close.sh" fix-three shipped "done" 2>&1) && {
+    echo "FAIL: a pr delivery from an uncommitted worktree was accepted"; exit 1; }
+  case "$out" in (*"changed after the ship approval"*|*"cannot come from an uncommitted worktree"*) ;;
+    (*) echo "FAIL: pr-from-worktree message wrong: $out"; exit 1;; esac
+) || exit 1
+echo "ok: compact scenario ships through delivery; commits keep, edits break, the ship binding"
+
+# 35. the ship binding covers work that was COMMITTED BEFORE the review, and a
+#     pr/deploy Source commit must CONTAIN the reviewed source, not merely exist.
+(
+  mkdir -p "$tmp/committed"; cd "$tmp/committed"; git init -q .
+  git config user.email t@example.com; git config user.name t
+  printf 'echo v1\n' > late.sh
+  git add late.sh; git commit -qm base
+  old=$(git rev-parse HEAD)
+  "$kit/init.sh" . >/dev/null
+  mkdir -p .sdlc/work/committed-first
+  echo goal > .sdlc/work/committed-first/intent.md
+  printf 'echo v2\n' > late.sh
+  echo "- Command: sh late.sh -> v2" > .sdlc/work/committed-first/evidence.md
+  git add -A .; git commit -qm "feat: v2 (committed BEFORE the ship review)"
+  head=$(git rev-parse HEAD)
+  "$kit/gates/approve.sh" ship .sdlc/work/committed-first/evidence.md --delegated >/dev/null
+  n=$(awk '/^code_files: /{print $2}' .sdlc/approvals/committed-first.ship.approval)
+  [ "${n:-0}" -ge 1 ] || { echo "FAIL: ship approval bound an empty source set after a commit"; exit 1; }
+  # a Source commit that predates the reviewed source is refused
+  cat > .sdlc/work/committed-first/delivery.md <<EOF
+# Delivery: committed-first
+- Target: pr
+- Source: $old
+- Verified-by: sh late.sh
+- Evidence: v2
+- Confirmed: yes
+EOF
+  out=$("$kit/gates/close.sh" committed-first shipped "done" 2>&1) && {
+    echo "FAIL: close accepted a Source commit that does not contain the reviewed source"; exit 1; }
+  case "$out" in (*"does not CONTAIN the reviewed source"*) ;;
+    (*) echo "FAIL: stale-source-commit message wrong: $out"; exit 1;; esac
+  # the commit that does contain it closes
+  sed "s|^- Source: .*|- Source: $head|" .sdlc/work/committed-first/delivery.md > d.tmp
+  mv d.tmp .sdlc/work/committed-first/delivery.md
+  "$kit/gates/close.sh" committed-first shipped "delivered" >/dev/null || {
+    echo "FAIL: the commit that contains the reviewed source was refused"; exit 1; }
+  # second feature: an edit after the review of ALREADY COMMITTED work is drift
+  mkdir -p .sdlc/work/committed-two
+  echo goal > .sdlc/work/committed-two/intent.md
+  echo ev > .sdlc/work/committed-two/evidence.md
+  git add -A .; git commit -qm "chore: archive + next feature"
+  "$kit/gates/approve.sh" ship .sdlc/work/committed-two/evidence.md --delegated >/dev/null
+  printf 'echo HACKED\n' > late.sh          # never reviewed by anyone
+  sha=$(git rev-parse HEAD)
+  cat > .sdlc/work/committed-two/delivery.md <<EOF
+# Delivery: committed-two
+- Target: local
+- Source: $sha
+- Verified-by: sh late.sh
+- Evidence: v2
+- Confirmed: yes
+EOF
+  out=$("$kit/gates/close.sh" committed-two shipped "done" 2>&1) && {
+    echo "FAIL: post-review edit of committed work closed as shipped (B1)"; exit 1; }
+  case "$out" in (*"the source changed after the ship review"*) ;;
+    (*) echo "FAIL: committed-work drift message wrong: $out"; exit 1;; esac
+  out=$("$kit/gates/status.sh" committed-two 2>&1)
+  case "$out" in (*"SOURCE DRIFT"*) ;; (*) echo "FAIL: status hides the source drift: $out"; exit 1;; esac
+  case "$out" in (*"NOT CLOSEABLE"*) ;; (*) echo "FAIL: status calls an uncloseable delivery closeable: $out"; exit 1;; esac
+  out=$("$kit/gates/check-gate.sh" ship .sdlc/work/committed-two/evidence.md 2>&1) && {
+    echo "FAIL: ship gate stayed open over drifted source"; exit 1; }
+  case "$out" in (*"GATE CLOSED"*) ;; (*) echo "FAIL: ship gate drift message wrong: $out"; exit 1;; esac
+) || exit 1
+echo "ok: work committed before the review is bound; a Source commit must contain it; status agrees"
 
 echo "SELFTEST PASS"
