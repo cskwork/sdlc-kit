@@ -29,6 +29,8 @@ jobs:
           git config --global user.name "sdlc-kit CI"
           # fixture repos must record symlinks as links, not as their contents
           git config --global core.symlinks true
+          # Fixtures write LF bytes; do not convert their committed snapshots.
+          git config --global core.autocrlf false
         shell: bash
       - name: selftest (gate mechanics)
         run: bash gates/selftest.sh
