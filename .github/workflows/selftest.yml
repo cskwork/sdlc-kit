@@ -1,6 +1,7 @@
 name: selftest
 on:
   push:
+  pull_request:
 permissions:
   contents: read
 jobs:
@@ -13,5 +14,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - run: bash gates/selftest.sh
+      # the fixtures commit, so every runner needs an identity of its own
+      - name: git identity for the throwaway fixtures
+        run: |
+          git config --global user.email ci@sdlc-kit.invalid
+          git config --global user.name "sdlc-kit CI"
+        shell: bash
+      - name: selftest (gate mechanics)
+        run: bash gates/selftest.sh
+        shell: bash
+      - name: e2e (the loop end to end, local fixtures only)
+        run: bash gates/e2e.sh
         shell: bash

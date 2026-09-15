@@ -57,11 +57,11 @@ Intent → spec → plan → build → evidence → maintain. 사람 승인 게�
 
 각 단계는 리뷰 가능한 산출물 하나를 만듭니다. intent, spec, ship 게이트는 사람의 결정입니다. 채팅에서 승인하면 에이전트가 승인 명령을 대신 실행할 수 있고, 기록에는 `mode: delegated-chat`으로 남습니다. plan 게이트는 층이 나뉩니다. 새 컨텍스트 adversary가 모든 계획을 리뷰하고, 평범한 계획은 자동 승인되며(`mode: agent-adversary`), 트립와이어에 걸리는 계획은 사람 게이트가 됩니다. 트립와이어는 마이그레이션, 데이터 삭제, 공개 API, 보안 경로, 인프라와 설정, 스펙 밖 범위입니다.
 
-`lazymode`는 그 사람/자동 경계를 옮깁니다. `init.sh`가 `.sdlc/config.md`에 `lazymode: 1`을 심고, 에이전트가 원하는 레벨을 물어봅니다. 레벨별로 사람이 쥐는 게이트는 이렇습니다. **0** intent, spec, plan 트립와이어, ship(설계 그대로 전부) · **1**(기본) intent, spec, ship · **2** intent, ship · **3** intent · **4** 없음, 루프가 자율로 돕니다. 면제된 게이트는 `gates/approve.sh <stage> <artifact> --lazy`로 자동 승인되고 `mode: lazy`로 기록됩니다. plan과 ship은 lazymode와 무관하게 adversary 리뷰를 항상 먼저 통과해야 합니다. plan은 비가역 작업을 승인하는 지점이고, ship은 푸시 전 마지막 리뷰이기 때문입니다. intent와 spec은 `tripwire.sh` 스캔이 깨끗하면 리뷰를 건너뛸 수 있습니다. 승인은 여전히 기록되고, `approve.sh --lazy`는 설정 레벨이 사람에게 남긴 게이트를 거부합니다.
+`lazymode`는 그 사람/자동 경계를 옮깁니다. `init.sh`가 `.sdlc/config.md`에 `lazymode: 1`을 심고, 에이전트가 원하는 레벨을 물어봅니다. 레벨별로 사람이 쥐는 게이트는 이렇습니다. **0** intent, spec, plan 트립와이어, ship(설계 그대로 전부) · **1**(기본) intent, spec, ship · **2** intent, ship · **3** intent · **4** 없음, 루프가 자율로 돕니다. 면제된 게이트는 `gates/approve.sh <stage> <artifact> --lazy --review "<무엇을 리뷰했는지>"`로 자동 승인되고, `mode: lazy`와 리뷰 기록이 함께 남습니다. **lazymode가 옮기는 것은 "누가 결정하는가"뿐입니다.** 리뷰 자체나 권한은 면제되지 않습니다. 면제된 게이트도 영향 받는 코드와 동작을 실제로 리뷰해야 하고, 위험한 작업(데이터 손실, 공개 API, 보안 경로, 마이그레이션, 외부 배포)은 어느 레벨에서든 사람이 미리 허가한 사실이 `--risk-authorized`로 기록되어야 합니다. `tripwire.sh`는 영어 키워드 스캔이라 보조 수단일 뿐입니다. 걸리면 요구 조건이 늘어나지만, 깨끗하다고 해서 아무것도 면제되지 않습니다. 승인은 여전히 기록되고, `approve.sh --lazy`는 설정 레벨이 사람에게 남긴 게이트를 거부합니다.
 
 배포된 변경이 실패하면 Maintain 단계가 진단하고 다음 `intent.md`를 씁니다.
 
-모든 티켓이 6단계를 다 도는 것은 아닙니다. 사소한 티켓 — 트립와이어 클린, 수정할 파일 확정, 기존 명령으로 성공 검증 가능 — 은 **마이크로 트랙**을 탑니다. intent(게이트) → build → ship로 바로 가고, ship의 adversary 리뷰가 diff의 유일한 리뷰가 됩니다(intent.md에 `Track: micro`, 기준은 `skills/1-intent`). 반대로 한 번에 파악이 안 되는 티켓은 **map**(`map.md`: 목적지 · 정한 것 · 모르는 것 · 안 할 것)부터 만들고, 세션마다 미결 하나씩 풀어 intent.md를 쓸 수 있을 때까지 진행합니다.
+모든 티켓이 6단계를 다 도는 것은 아닙니다. 작고 파악이 끝난 변경 — 수정할 파일과 심볼 확정, 기존 명령으로 성공 검증 가능, 미결 질문 없음, 이미 허가받은 범위 안 — 은 **컴팩트 루트**를 탑니다. 작업 산출물은 `intent.md` 하나이고(파일 · 증명 · 위험 · 전달 목표를 함께 담습니다), intent(게이트) → build → ship로 바로 가며, ship의 adversary 리뷰가 diff의 유일한 리뷰가 됩니다(intent.md에 `Track: compact`, 예전 표기 `micro`도 그대로 인식, 기준은 `skills/1-intent`). 장애 대응도 같은 컴팩트 루트를 씁니다. 별도의 압축 루프는 없습니다. 모호하거나 범위가 넓거나 위험한 일은 풀 루트로 가고, 도중에 승격하면 지름길을 허가했던 intent 승인을 다시 받습니다. 반대로 한 번에 파악이 안 되는 티켓은 **map**(`map.md`: 목적지 · 정한 것 · 모르는 것 · 안 할 것)부터 만들고, 세션마다 미결 하나씩 풀어 intent.md를 쓸 수 있을 때까지 진행합니다.
 
 루프 도중의 교훈·도메인 후보는 피처 자신의 `harvest.md`에만 쌓입니다. 공유 메모리(`INDEX.md`, `DOMAIN.md`, `lessons/`)를 쓰는 주체는 close 단계 하나뿐이라 병렬 루프가 충돌하지 않습니다. 채팅에서 선언한 하드 룰은 — 사람의 말이 있을 때만, 날짜와 함께 — `.sdlc/memory/POLICY.md`에 전사되고, adversary는 위반을 차단 사유로 처리합니다.
 
@@ -71,12 +71,12 @@ Intent → spec → plan → build → evidence → maintain. 사람 승인 게�
 |---|---|
 | 첫 요청부터 코딩 시작 | 히스토리, 코드, 실현 가능성, 브라우저, API, DB를 먼저 뒤진 뒤에 사용자를 심문 |
 | 사용자의 진단을 사실로 취급 | 주장마다 `[verified: 증거]` 또는 `[assumed: 이유]` 라벨 |
-| 계획이 채팅 안에만 존재 | `intent.md`와 `plan.md`는 코드와 함께 커밋, `spec.md`와 `evidence.md`는 디스크에 보존 |
+| 계획이 채팅 안에만 존재 | 지속 기록(`intent.md`, `spec.md`, `plan.md`, `evidence.md`, `delivery.md`)을 코드와 함께 커밋, 대용량 로그는 `scratch/`에 보존 |
 | 작성자가 자기 검사를 직접 실행 | 작성자 컨텍스트가 없는 verifier와 adversary가 리뷰 |
 | 승인이 사라지는 채팅 메시지 | 승인 기록이 단계, 산출물, 시각, 모드를 담고 `.sdlc/approvals/`에 파일로 남음 |
 | 실패한 시도는 잊힌 컨텍스트가 됨 | 교훈은 상한 있는 인덱스로, 확인된 사실은 `DOMAIN.md`로 |
 | 만능 워커 하나가 전부 수행 | 로컬 QA, 리뷰어, 브라우저, API, DB 전문 에이전트가 있으면 역할 계약을 그쪽에 위임 |
-| "끝났다"가 모호함 | 모든 실행이 `shipped`, `abandoned`, `dead-end`, `handed-off` 중 하나로 종결 |
+| "끝났다"가 모호함 | 모든 실행이 `shipped`, `abandoned`, `dead-end`, `handed-off` 중 하나로 종결되고, `shipped`는 승인만으로는 부족하며 검증된 전달 기록을 요구 |
 
 ## 빠른 시작
 
@@ -126,7 +126,7 @@ you    approve
 agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
        mode: delegated-chat
 
-       2단계는 승인된 산출물만 들고 서브에이전트로 돕니다.
+       2단계는 승인된 산출물에서 이어집니다.
 ```
 
 숨은 상태가 없습니다. 벤더 전용 훅도 필요 없습니다. 파일이 곧 프로토콜입니다.
@@ -147,19 +147,21 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
 │   └── lessons/<date>-<lesson>.md
 ├── work/<slug>/                      # 열린 피처만
 │   ├── intent.md                     # 문제 · 증명 · 성공 기준 · 범위
-│   ├── spec.md                       # Human summary · AS-IS → TO-BE · 계약 — gitignore 대상
+│   ├── spec.md                       # Human summary · AS-IS → TO-BE · 계약
 │   ├── plan.md                       # 파일 · 순서 · 리스크 · 증명
-│   ├── deviations.md                 # 빌드 중 편차 기록, plan은 잠긴 채 유지 — gitignore 대상
+│   ├── evidence.md                   # 명령 · 출력 · 관찰된 동작
+│   ├── delivery.md                   # 전달 목표 · 전달한 소스 · 검증 방법
+│   ├── deviations.md                 # 빌드 중 편차 기록 — gitignore 대상
 │   ├── progress.md                   # 하트비트: 살아있는 한 줄, gitignore 대상 (규칙 9)
 │   ├── baseline.txt                  # 브라운필드의 변경 전 동작 — gitignore 대상
 │   ├── harvest.md                    # 루프 중 교훈·도메인 후보, close에서 병합 — gitignore 대상
-│   └── evidence.md                   # 명령 · 출력 · 관찰된 동작 — gitignore 대상
+│   └── scratch/                      # 대용량 로그 · 캡처 · 트레이스 — gitignore 대상
 └── archive/<slug>/                   # 닫힌 피처, close.sh가 여기로 옮김
     ├── CLOSED                        # shipped · abandoned · dead-end · handed-off
     └── approvals/                    # 피처의 승인 기록도 함께 이동, 여전히 gitignore 대상
 ```
 
-`init.sh`는 프로젝트 `.gitignore`에 열여섯 줄을 추가합니다. `work/`와 `archive/` 양쪽의 `approvals/`, `spec.md`, `baseline.txt`, `deviations.md`, `evidence.md`, `harvest.md`, `scratch/`, `progress.md`입니다. git에 남는 것은 결정 기록입니다. `config.md`, `memory/`, 그리고 피처마다 `intent.md`, `plan.md`, `map.md`, 아카이브의 `CLOSED`. 나머지는 증거와 작업 잔여물이라 커밋을 부풀리는 대신 스크립트가 읽는 디스크에만 남습니다. 피처가 열려 있는 동안 `status.sh`가 하트비트를 나이와 함께 `now →` 줄로 보여주며, `watch -n5 cat .sdlc/work/<slug>/progress.md`로 실시간 추적할 수 있습니다.
+`init.sh`는 프로젝트 `.gitignore`에 열두 줄을 추가합니다. `work/`와 `archive/` 양쪽의 `approvals/`, `baseline.txt`, `deviations.md`, `harvest.md`, `scratch/`, `progress.md`입니다. git에 남는 것은 지속 기록입니다. `config.md`, `memory/`, 그리고 피처마다 `intent.md`, `spec.md`, `plan.md`, `map.md`, `evidence.md`, `delivery.md`, 아카이브의 `CLOSED`. 결정과 최종 증거는 작업 사본 없이도 1년 뒤에 읽을 수 있어야 하기 때문입니다. 대용량 출력은 `scratch/`에 남고 evidence.md는 결정적인 줄만 인용합니다. 예전 킷으로 심은 프로젝트에서 `init.sh`를 다시 돌리면 그때 추가했던 `spec.md`·`evidence.md` 무시 줄을 제거하며, git 인덱스는 건드리지 않습니다. 피처가 열려 있는 동안 `status.sh`가 하트비트를 나이와 함께 `now →` 줄로 보여주며, `watch -n5 cat .sdlc/work/<slug>/progress.md`로 실시간 추적할 수 있습니다.
 
 공개 sdlc-kit 저장소는 프레임워크만 담습니다. 커밋되는 산출물(intent, plan, map, memory)은 그것이 설명하는 프로젝트 안에서 함께 버전 관리됩니다. 무시되는 나머지는 그것을 만든 작업 사본 안에만 남습니다.
 
@@ -175,13 +177,21 @@ gates/approve.sh <stage> .sdlc/work/<slug>/<artifact> --delegated
 
 승인 기록은 명시적으로 남습니다. 침묵과 막연한 "계속해"는 승인이 아닙니다. lazymode 면제는 사람이 미리 설정해 둔 승인이고, 기록에 그렇게 적힙니다.
 
-### 잠금장치가 아니라 기록
+### 승인한 그 내용에 묶인다
 
-`approve.sh`는 단계, 산출물, 시각, 모드를 평문으로 씁니다. `check-gate.sh`는 기록과 산출물이 존재하는지만 봅니다. 승인된 파일을 수정해도 게이트는 닫히지 않습니다. 이 기록은 gitignore 대상이라, 추적은 git 히스토리가 아니라 디스크의 `.sdlc/approvals/` 디렉토리(닫힌 피처는 `.sdlc/archive/<slug>/approvals/`로 이어짐)입니다. `status.sh`와 `stats.sh`는 그 파일을 직접 읽으므로 게이트 상태와 재승인 횟수는 그대로 나옵니다. 달라지는 것은 지속성입니다. 새로 클론하면 승인 기록이 따라오지 않아, 피처를 진행하던 중에 다시 클론하면 승인을 다시 받아야 합니다. 추적의 정직함은 에이전트 규칙과 디스크에 남은 그 기록에서 나옵니다.
+`approve.sh`는 단계, 정규화된 `.sdlc/work/<slug>/<artifact>` 경로, 그 산출물의 sha256, 승인 근거가 된 상위 산출물들의 다이제스트, 시각, 모드를 기록하고, ship 단계에서는 리뷰한 소스 스냅샷까지 함께 묶습니다(기록 옆 `<slug>.ship.source`에 남습니다). `check-gate.sh`는 그 전부가 그대로일 때만 게이트를 엽니다. 승인된 산출물을 고치거나 상위 산출물을 실질적으로 다시 쓰면 게이트가 닫히고, 재승인 명령이 그대로 출력됩니다. 해시는 변경 감지일 뿐 인증이 아닙니다. 바이트가 승인된 그것인지는 증명하지만, 누가 승인했는지는 증명하지 않습니다. 다이제스트가 없는 예전 킷의 기록은 같은 안내와 함께 닫힌 상태로 실패합니다. 이 기록은 gitignore 대상이라, 추적은 git 히스토리가 아니라 디스크의 `.sdlc/approvals/` 디렉토리(닫힌 피처는 `.sdlc/archive/<slug>/approvals/`로 이어짐)입니다. `status.sh`와 `stats.sh`는 그 파일을 직접 읽으므로 게이트 상태와 재승인 횟수는 그대로 나옵니다. 달라지는 것은 지속성입니다. 새로 클론하면 승인 기록이 따라오지 않아, 피처를 진행하던 중에 다시 클론하면 승인을 다시 받아야 합니다. 추적의 정직함은 에이전트 규칙과 디스크에 남은 그 기록에서 나옵니다.
 
 ### 새 컨텍스트 리뷰
 
-산출물을 쓴 컨텍스트가 그 산출물을 검증하지 않습니다. 독립적인 워커는 병렬로 돌아도 됩니다. 체크아웃 하나당 쓰기 담당은 하나입니다.
+루프는 기본적으로 위임자 한 명이 끌고 갑니다. 단계마다 서브에이전트를 띄우는 것은 의무가 아니고, 이득이 분명할 때만 씁니다. 대신 절대 생략하지 않는 것이 있습니다. 검증과 adversary 리뷰는 새 컨텍스트에서 돌아야 합니다. 작성자가 자기 작업을 리뷰할 수는 없기 때문입니다. 하네스가 새 컨텍스트를 줄 수 없으면, 조용히 자기 리뷰를 하는 대신 증거에 공백으로 명시합니다. 독립적인 워커는 병렬로 돌아도 됩니다. 체크아웃 하나당 쓰기 담당은 하나입니다.
+
+### `shipped`는 전달을 뜻한다
+
+ship 승인은 배포하겠다는 결정이지 배포 자체가 아닙니다. `shipped`로 종결하려면 `delivery.md`가 필요합니다. 합의한 목표(`local`, `pr`, `deploy`), 전달한 소스, 결과를 확인하려고 실제로 실행한 명령이나 프로젝트 도구, 그리고 그 출력 원문입니다. `close.sh`는 ship 승인을 다시 확인하고(승인된 증거 그대로, 리뷰한 소스 그대로) 없거나 어긋나거나 확인되지 않은 전달을 거부합니다. `pr`이나 `deploy`의 `Source`는 리뷰한 소스를 실제로 담고 있는 커밋이어야 합니다. close가 그 커밋의 트리를 리뷰 스냅샷과 비교하므로, 그냥 존재하기만 하는 커밋은 거부됩니다. 로컬 작업에는 프로덕션 단계가 필요 없습니다.
+
+ship 승인이 묶는 것은 리뷰가 본 프로젝트 소스 전체 스냅샷입니다. 추적 중인 모든 파일과 git이 무시하지 않는 모든 미추적 파일에서 `.sdlc/`를 뺀 집합을, 경로·내용·실행 권한 비트까지 함께 묶습니다. 그 바이트 그대로 스테이징하거나 커밋하는 것은 묶음을 깨지 않고, 리뷰 시점에 이미 커밋되어 있던 작업도 함께 묶입니다. 반면 리뷰 후의 수정, 새 파일 추가, 삭제, chmod, 심볼릭 링크 교체는 묶음을 깹니다. 리뷰가 이름을 대지 않은 파일이라도 마찬가지입니다. `check-gate.sh`, `status.sh`, `close.sh`가 같은 표현으로 알리고 바뀐 파일을 지목합니다. 예전 킷이 남긴 ship 승인은 커밋되지 않은 diff만 묶었으므로, 그 사실을 밝히며 닫힌 상태로 실패합니다. 서브모듈 내용은 묶이지 않습니다. git이 C-quote로 감싸 출력하는 경로명 — 탭, 개행, 큰따옴표, 백슬래시가 든 이름 — 은 묶을 수 없습니다. `approve.sh ship`은 그 이름을 지목하며 승인을 거부하고, 리뷰 뒤에 그런 파일이 생기면 이름을 바꾸거나 무시 목록에 넣을 때까지 게이트를 invalid source로 닫습니다. 유니코드와 공백이 든 이름은 정상 동작합니다.
+
+그 전에 검증은 실제 동작을 돌립니다. 바뀐 동작을 사용자나 호출자가 실제로 만나는 인터페이스로 끝까지 실행하되, 변경 범위에 맞춰 프로젝트 자신의 명령(`.sdlc/config.md`의 `e2e:`, `qa:`, `run:`)을 씁니다. 실행할 환경이 없으면 NOT VERIFIED이며 evidence.md에 그렇게 적습니다. 통과한 단위 테스트가 조용한 대체물이 되는 일은 없습니다.
 
 ### 실패한 실행도 지식을 남긴다
 
@@ -193,7 +203,7 @@ abandoned나 dead-end는 교훈이 없으면 닫히지 않습니다(lazymode 3 �
 
 ### 장애 진단은 싼 프로브부터
 
-6단계는 에이전트를 대량으로 풀지 않습니다. 배포된 ref를 먼저 확인하고, 어떤 통제가 뚫렸는지 묻고, 요청한 재현 증거를 추적하고, `skills/6-maintain/probes.md`의 짧은 프로브를 돌립니다.
+6단계는 에이전트를 대량으로 풀지 않습니다. 배포된 소스를 먼저 확인합니다. `refcheck.sh`는 작업 트리의 내용을 스테이징·비스테이징·미추적까지 모두 대상 리비전과 비교하고, 릴리스 시스템이 알려주는 실제 배포 SHA가 있으면 `--deployed-sha`로 받고, ref나 fetch가 실패하면 추측 대신 UNKNOWN을 보고합니다. 그다음 어떤 통제가 뚫렸는지 묻고, 요청한 재현 증거를 추적하고, `skills/6-maintain/probes.md`의 짧은 프로브를 돌립니다.
 
 프로브는 수정 계획에 도달하기 전에 흔한 진단 실수 네 가지를 잡습니다.
 
@@ -210,6 +220,7 @@ abandoned나 dead-end는 교훈이 없으면 닫히지 않습니다(lazymode 3 �
 gates/status.sh [--all[=n]] [slug]  # 열린 피처 + 다음 액션 하나, --all은 최신 아카이브 20건 포함
 gates/stats.sh [--all]              # 단계별 소요 시간 + 재승인 횟수, 기본은 열린 피처 + 최근 종결 20건
 gates/selftest.sh        # 게이트, 종결, 인젝션, lazymode, status 렌더, YAML 무결성
+gates/e2e.sh [kit]       # 일회용 git 픽스처에서 루프 전체를 검사(로컬 전용, 원격 호출 없음)
 ```
 
 예시:
@@ -267,18 +278,21 @@ init.sh          멱등 프로젝트 시드
 .gitattributes   LF 고정, Windows 클론에서도 스크립트 생존
 skills/1-6/      단계별 지시서
 roles/           verifier · adversary · researcher 계약
-gates/           approve · check · close · status · stats · selftest
-templates/       intent · spec · plan · evidence · lesson
+gates/           approve · check · close · status · stats · selftest · e2e (공용 헬퍼 _common.sh 포함)
+templates/       intent · spec · plan · evidence · delivery · lesson
 docs/index.html  EN/KO 랜딩 페이지
 ```
 
 ## 킷 검증
 
 ```bash
-./gates/selftest.sh
+./gates/selftest.sh   # 게이트 동작
+./gates/e2e.sh        # 자체 일회용 픽스처에서 루프 전체
 ```
 
-셀프테스트는 게이트 상태, 단계명 인젝션, 경로 이탈 거부, delegated와 lazy 승인, 종결 시 교훈 요구, 이중 종결 거부, 종결 시 아카이브(승인 기록 이동과 status 범위 포함), YAML 프런트매터 파싱, 전체 스크립트의 LF 줄 끝을 검사합니다.
+셀프테스트는 게이트 상태와 경로·내용 결합(다른 경로 재사용, 경로 이탈, 심볼릭 링크, 결합 이전 기록은 모두 닫힌 상태로 실패), 단계명 인젝션, 경로 이탈 거부, delegated와 lazy 승인 및 그 리뷰·위험 허가 기록, 컴팩트 루트와 승격 시 재승인, 전달 기록을 요구하는 `shipped` 종결, `refcheck.sh`의 드리프트 감지, 종결 시 교훈 요구, 이중 종결 거부, 종결 시 아카이브(승인 기록 이동과 status 범위 포함), YAML 프런트매터 파싱, 전체 스크립트의 LF 줄 끝을 검사합니다. 여기에 엔드투엔드 워크플로 픽스처 두 가지 — 컴팩트 버그 수정의 intent부터 전달 종결까지, 그리고 그 주변 실패 경로 — 가 함께 돌고, 리뷰 전에 이미 커밋된 작업의 소스 결합과 `pr` 전달의 커밋 포함 여부 검사도 포함됩니다.
+
+`gates/e2e.sh`는 그 위의 통합 스위트입니다. 자체 임시 디렉토리에 일회용 git 프로젝트를 만들어 실제 스크립트로 컴팩트 루트, 풀 루트, 그리고 모든 부정 시나리오를 돌립니다. 리뷰 후 수정, 파일 추가, chmod와 심볼릭 링크 교체, 전달 소스로 지목된 엉뚱한 옛 커밋, 예전 킷의 ship 결합, ship 리뷰 이후 수정되거나 삭제된 풀 루트의 spec·plan, 그리고 `status.sh`·`check-gate.sh`·`close.sh`가 같은 판정을 내는지까지 검사합니다. 픽스처 밖에는 아무것도 쓰지 않고 네트워크·원격·`gh` 호출도 하지 않습니다. `pr`과 `deploy` 전달은 로컬에서만 재현하며, 그것이 `close.sh`가 실제로 확인하는 전부입니다. 셀프테스트를 내부에서 다시 실행하지는 않습니다 — 두 스위트는 독립입니다. CI는 Ubuntu, macOS, Windows(Git Bash)에서 둘 다 실행합니다.
 
 ## 이것이 아닌 것
 

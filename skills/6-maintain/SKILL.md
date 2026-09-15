@@ -44,19 +44,27 @@ explicitly (see Evidence tracking below).
 
 ## Diagnose
 
-0. **Check the deployed ref first.** Run `tools/refcheck.sh
-   origin/<deploy-branch> <suspected paths>` from the repo root. On DRIFT,
-   read every file via `git show <ref>:<path>` and name the ref for each
-   fact in every report. A diagnosis of the working tree may describe code
-   nobody is running.
+0. **Check the deployed source first.** Run `tools/refcheck.sh
+   origin/<deploy-branch> [--deployed-sha <sha from the release system or
+   runtime>] <suspected paths>` from the repo root. Exit 1 (drift): read
+   every listed file via `git show <rev>:<path>` and name the revision behind
+   each fact. Exit 2 (unknown ref, failed fetch, no repo): you know nothing
+   about the running code — say exactly that; do not read the working tree
+   as if it were live. Without `--deployed-sha` the deployed revision is
+   UNKNOWN and the branch ref is a stand-in, never deployment evidence.
 1. Run the cheap probes in `probes.md` (same directory) that match the
    symptom BEFORE dispatching researcher fan-out. Probes cost seconds and
    set direction; fan-out is for breadth the probes cannot cover.
 2. Before forming a hypothesis or offering options, run fresh-context history
    and feasibility research under skill 1. Check whether this failure was fixed
    or reverted before, why, and whether it can be reproduced here.
-3. Reproduce the issue first. If it cannot be reproduced, say so and record
-   what is known. Do not fix an issue you cannot reproduce.
+3. Reproduce the issue first. **A fix needs the proof chain of AGENTS.md
+   rule 6**: the failure before, the mechanism, the same reproduction passing
+   after, the adjacent flows. If it cannot be reproduced, the honest outputs
+   are a diagnosis, instrumentation, or a defensive change labelled as
+   unconfirmed — never "fixed". An intermittent defect may stand on logs,
+   traces, or an isolated deterministic reproduction, with the limitation
+   stated.
 4. Trace the cause. Read `.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`,
    and `.sdlc/memory/DOMAIN.md`, then open lesson files whose tags match
    the task. Check whether this failure mode has occurred before; if a past
@@ -87,6 +95,12 @@ Ask at most twice. After the second unanswered request, either proceed
 with `waived-by-agent <date> — unreproduced; diagnosis stays [assumed]`
 carried into every downstream artifact, or close the fix-slug handed-off
 with the reporter's ticket key. Never re-request a third time.
+**A waiver waives the REQUEST, never the proof.** It says "stop asking the
+reporter", not "this is reproduced". Work that continues under a waiver is
+unconfirmed by definition: it may ship as instrumentation, a defensive
+change, or a documented hypothesis, and it says so in evidence.md's Bug
+proof section. If it is later reproduced, the chain of AGENTS.md rule 6
+applies in full before anything is called fixed.
 If `.sdlc/config.md` has empty `test:`/`lint:` commands, record one line of
 verification debt in the artifact: what could not be run, and what manual
 check replaced it.
@@ -111,29 +125,55 @@ standing assignments — each has caught real errors:
 
 ## Route by size
 
-- **Compressed loop.** Use it only when one cause is reproduced, the changed
-  file set is known, and affected behavior is limited. Create a new
-  `.sdlc/work/<fix-slug>/` directory so prior approvals stay intact. Write a
-  mini `plan.md` with files and proof. Pass the plan gate as usual (tiered /
-  lazymode, AGENTS.md rule 3), then build and verify
-  under skill 4. Create `evidence.md` and stop at the ship gate.
-- **Full loop.** Use it for all other changes. Create
-  `.sdlc/work/<new-slug>/intent.md` from `templates/intent.md`. Include the
-  reproduction and diagnosis as verified evidence, then run Stage 1.
+Incidents use the same two routes as everything else (AGENTS.md "Two routes,
+one contract"). There is no separate compressed loop.
+
+- **Compact route.** Use it when one cause is reproduced, the changed file
+  set is known, and affected behavior is limited. Create a new
+  `.sdlc/work/<fix-slug>/` directory so prior approvals stay intact, and
+  write ONE work artifact: `intent.md` with `- Track: compact`, carrying the
+  reproduction and diagnosis as verified evidence plus the Compact route
+  section (Files · Proof · Risk · Delivery target). Pass the intent gate,
+  then build and verify under skill 4, then ship. No spec.md, no plan.md, and
+  nothing downstream asks for one.
+- **Full route.** Use it for everything else — an unclear cause, a wide blast
+  radius, or risky ground. Create `.sdlc/work/<new-slug>/intent.md` from
+  `templates/intent.md` with `- Track: full` and run Stage 1.
+
+### Continuing older compressed work
+
+A fix slug created by an older kit has a `plan.md` (perhaps an approved one)
+and no `intent.md`. Nothing is lost and no gate is waived: write `intent.md`
+with `- Track: compact`, carry the plan's files and proof into its Compact
+route section, and pass the intent gate. The old plan approval stays on
+record as history — it does not open build, because build on the compact
+route checks the intent gate. `status.sh` prints this path for any such
+feature. If the work turned out to be wider than compact allows, write
+spec.md and run the full route instead; the intent gate still comes first.
 
 **Recurrence cap: three fix loops for one symptom.** Before opening a
 fix-slug, grep the symptom's tags in INDEX.md AND open features' harvests
 (`grep -l <tag> .sdlc/work/*/harvest.md`) — in-flight lessons are not
-merged yet. On the third match the
-defect is architectural, not a bug: STOP, write the promotion edit the tag
-already earned, and take it to the human as a design decision — not a
-fourth fix. Record the outcome in DOMAIN.md as a constraint at close.
+merged yet. On the third match, stop fixing and start investigating: the repetition is
+evidence that the cause found so far is not the cause. Widen the
+investigation — what the three incidents share, which invariant keeps
+breaking, what the earlier fixes actually changed — and take the finding to
+the human as a design decision, with the promotion edit the tag has earned.
+"It is architectural" is a conclusion the widened investigation may reach,
+not a verdict to assert in place of one. Record the outcome in DOMAIN.md as a constraint at close.
 Per-feature caps do not bound a defect that mints a new slug per incident;
 this rule does.
 
-## Record the lesson (every incident, no exceptions)
+## Record the lesson (only when it is reusable)
 
-Draft the lesson in the fix feature's `.sdlc/work/<fix-slug>/harvest.md`
+A lesson earns its place by changing what a future run does: a trap, a
+non-obvious constraint, a wrong assumption that cost time. An incident whose
+cause was local and obvious leaves no lesson, and "no lesson from this one"
+is a valid, complete answer — INDEX.md is a 50-line budget, and filler
+crowds out the entries that matter. Durable facts about the system are
+domain candidates, not lessons.
+
+When there is one, draft it in the fix feature's `.sdlc/work/<fix-slug>/harvest.md`
 (INDEX.md, DOMAIN.md, and lessons/ are written only at close — AGENTS.md
 rule 4). The
 close merge materializes it as `.sdlc/memory/lessons/YYYY-MM-DD-<slug>.md`

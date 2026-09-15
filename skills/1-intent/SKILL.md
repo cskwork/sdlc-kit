@@ -1,6 +1,6 @@
 ---
 name: sdlc-intent
-description: "Explore-first grilling until intent is exact and evidenced. Triggers: new SDLC feature, fix, or change."
+description: "Explore-first grilling until intent is exact and evidenced. Triggers: any feature, fix, or change request in a project with .sdlc/, however it is worded."
 ---
 
 # Stage 1: Intent
@@ -129,50 +129,70 @@ The `Goal:` line is the reporting sentence: one plain-language sentence — no
 code identifiers, no jargon — that a non-technical reader understands and can
 copy verbatim into a status report ("teachers can re-order quiz questions").
 
-## Too small for the full loop? Micro track
+## Which route: compact or full
 
-**The full track is the default.** This skill is normally invoked for real
-bug fixes and features — those run all six stages. Micro is the exception
-for genuinely trivial changes (a typo, a copy change, a one-line guard);
-a single "maybe" on any criterion below means full. After drafting
-intent.md, it may skip spec and plan entirely (intent → build → ship) when
-ALL of these hold:
+Two routes, one contract (AGENTS.md "Two routes, one contract"). Features
+and bug fixes both use them; incidents use the same compact route, not a
+separate compressed loop.
 
-- `tools/tripwire.sh` over intent.md is clean (necessary, not sufficient —
-  it matches keywords), AND you can name the single revert that undoes the
-  change;
+**Compact** — for a small, well-understood, bounded change: intent (gate) →
+build → ship → close, with intent.md as the single work artifact. No spec,
+no plan, and nothing downstream may demand one. Take it only when ALL hold:
+
+- the change is bounded and you can name the single revert that undoes it;
 - the probes named the exact files and symbols to change;
 - success is checkable by an existing command from `.sdlc/config.md`;
-- intent.md has no open questions.
+- intent.md has no open questions;
+- the work is inside what the human has already authorized — no data loss,
+  public API change, security path, or migration outside that scope
+  (AGENTS.md rule 3 "Autonomy is not authority"). A clean `tools/tripwire.sh`
+  run does not establish this; reading the affected code does.
 
-Record the verdict in intent.md's `Track:` line with the reasons
-(`- Track: micro — tripwire clean, single file, test exists`) BEFORE the
-intent gate — the approval freezes the verdict. The intent
-gate then authorizes build directly (`check-gate.sh intent …`); intent.md's
-success criteria serve as the plan, and ship keeps its full adversary
-review — the only review the diff gets. Any surprise during build (new
-files, a trip-wire, growing scope) upgrades to the full track: STOP,
-rewrite the Track line to `- Track: full — upgraded from micro (<reason>)`,
-and write spec.md. Incidents have their own version of this — the
-compressed loop in skills/6-maintain.
+A single "maybe" means **full**. Ambiguity, breadth, and risk are exactly
+what the spec and plan gates exist for.
+
+A compact intent.md carries what spec and plan would have carried, in four
+extra lines (templates/intent.md): **Files** to change, **Proof** command,
+**Risk** and its blast radius, **Delivery target** (local | pr | deploy).
+Without those four it is not compact-ready — write them or go full.
+
+Record the verdict in the `Track:` line with the reasons
+(`- Track: compact — two known files, existing test covers it`) BEFORE the
+intent gate; the approval freezes it (`micro` is the older spelling and
+still parses). Ship keeps its full adversary review — the only review that
+diff gets.
+
+**Upgrade (any build surprise → full):** STOP, rewrite the Track line to
+`- Track: full — upgraded from compact (<reason>)`, re-approve intent, then
+write spec.md. The re-approval is not a formality: the human approved a
+route with no spec or plan gate, and that verdict has changed. `approve.sh`
+refuses a spec or plan approval until intent is re-approved as full.
 
 ## Gate
 
-At lazymode 4 (AGENTS.md rule 3): run `tools/tripwire.sh` over intent.md. On
-a clean scan, approve directly; on any hit, dispatch a fresh-context
-adversary (`roles/adversary.md`) over intent.md — this stage has no other
-adversary pass. Max 2 adversary rounds: blockers surviving round 2 mean the
-intent is unclearable — `close.sh <slug> dead-end "intent blockers: <list>"`
-with a lesson, and report them. When the scan is clean or the adversary
-raises no blocking objection, run
-`<kit>/gates/approve.sh intent .sdlc/work/<slug>/intent.md --lazy`, post the
-intent summary and any objections to the human as FYI, and dispatch Stage 2
-as a subagent task. Otherwise tell the user:
+At lazymode 4 (AGENTS.md rule 3): review the change itself — the code the
+intent points at and the behavior it would alter. `tools/tripwire.sh` over
+intent.md is one supplemental input: any hit means a fresh-context adversary
+(`roles/adversary.md`) reviews intent.md — this stage has no other adversary
+pass — and the risky work needs recorded authorization. A clean scan clears
+nothing on its own. Max 2 adversary rounds: blockers surviving round 2 mean
+the intent is unclearable — `close.sh <slug> dead-end "intent blockers:
+<list>"` with a lesson, and report them. When your review finds no blocking
+objection, run:
+
+```
+<kit>/gates/approve.sh intent .sdlc/work/<slug>/intent.md --lazy \
+  --review "<what you actually reviewed>" [--risk-authorized "<the human's words>"]
+```
+
+Post the intent summary and any objections to the human as FYI, then
+continue. Otherwise tell the user:
 
 > Review `.sdlc/work/<slug>/intent.md`. If it says exactly what you want, run:
 > `<kit>/gates/approve.sh intent .sdlc/work/<slug>/intent.md`
 
-STOP. After approval, dispatch Stage 2 as a subagent task (AGENTS.md rule 5):
-give it `skills/2-spec/SKILL.md` and the approved intent.md path — the
-artifact, not this conversation, is its input. The orchestrator stays for
-routing and gates.
+STOP. After approval, continue to stage 2 (`skills/2-spec/SKILL.md`) — or, on
+the compact route, straight to build (`skills/4-build/SKILL.md`) with the
+intent gate as its gate. Dispatch that work to a subagent only when it buys
+something concrete (AGENTS.md rule 5); the approved artifact, not the
+conversation, is the input either way.
