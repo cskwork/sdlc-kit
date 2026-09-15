@@ -6,10 +6,15 @@ dispatch researchers only for the questions probes cannot answer.
 
 ## 1. Deployed-ref drift (always, for any bug on deployed code)
 
-    tools/refcheck.sh origin/<deploy-branch> <suspected paths>
+    tools/refcheck.sh origin/<deploy-branch> [--deployed-sha <sha>] <suspected paths>
 
-Non-zero exit means the working tree is NOT the running code. All reads then
-go through `git show <ref>:<path>`, and every report names its ref.
+Exit 1 means the working tree is NOT that source — the listed files differ,
+including staged, unstaged, and untracked ones. All reads then go through
+`git show <rev>:<path>`, and every report names its revision. Exit 2 means
+UNKNOWN (bad ref, failed fetch): no claim about the running code is available
+at all. Pass `--deployed-sha` whenever the release system or the running app
+reports one; a branch ref is a pointer in this clone, not deployment
+evidence.
 
 ## 2. Sibling-query filter diff (when one method issues 2+ queries on one entity)
 

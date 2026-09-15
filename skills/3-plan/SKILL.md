@@ -78,8 +78,12 @@ Do not change the plan to hide a wrong spec.
 ## Gate (tiered, AGENTS.md rule 3)
 
 At lazymode ≥1: after the adversary review above passes, run
-`<kit>/gates/approve.sh plan .sdlc/work/<slug>/plan.md --lazy`, post the
-Human summary and any trip-wire list as FYI, and continue to build.
+`<kit>/gates/approve.sh plan .sdlc/work/<slug>/plan.md --lazy --review
+"<what the adversary checked>"`, post the Human summary and any trip-wire
+list as FYI, and continue to build. A plan whose **Gate tier** is `human`, or
+whose artifact trips the scan, also needs `--risk-authorized "<the human's
+words>"`: lazymode moves the checkpoint, it does not grant authority for
+irreversible work (AGENTS.md rule 3).
 
 At lazymode 0:
 
