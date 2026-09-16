@@ -101,7 +101,7 @@ echo "ok: handed-off requires and records external reference"
 
 # 10. shell scripts are LF-only — a CRLF checkout (Git for Windows default
 #     core.autocrlf=true, without .gitattributes) makes bash reject every script
-crlf=$(find "$kit" -name '*.sh' -not -path '*/.git/*' -exec awk '/\r/{print FILENAME}' {} + | sort -u)
+crlf=$(find "$kit" \( -name '*.sh' -o -name '*.py' \) -not -path '*/.git/*' -exec awk '/\r/{print FILENAME}' {} + | sort -u)
 [ -z "$crlf" ] || { echo "FAIL: CRLF line endings — bash on Windows cannot run these:"; echo "$crlf"; exit 1; }
 echo "ok: shell scripts are LF-only"
 
