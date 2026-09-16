@@ -25,12 +25,26 @@ cleanup() { case "$FIX" in */sdlc-auto.*) rm -rf "$FIX";; esac; }
 [ -n "${AUTOTEST_KEEP:-}" ] || trap cleanup EXIT
 echo "fixture: $FIX"
 echo "kit:     $KIT"
+# Which sha256 tool this platform actually resolved. A fixture that hardcodes
+# one the platform does not have writes a digest the kit never would, and the
+# case then fails for a reason that has nothing to do with what it asserts.
+echo "sha256:  $(command -v shasum || command -v sha256sum || command -v openssl || echo NONE)"
 echo
 
 PASSED=0; FAILED=0; FAILLIST=""
 pass() { PASSED=$((PASSED + 1)); printf 'PASS  %s\n' "$1"; }
+# The whole output of a failing case is printed, line by line and unmangled. It
+# used to be squashed onto one 300-character line, which on Windows cut every
+# python traceback off at its first frame and hid the exception that caused the
+# failure. A runaway log is bounded by lines, not by bytes, so the message that
+# matters is never the part that is dropped.
 fail() { FAILED=$((FAILED + 1)); FAILLIST="$FAILLIST
-  - $1"; printf 'FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf '      output: %s\n' "$(printf '%s' "$2" | tr '\n' '|' | cut -c1-300)"; return 0; }
+  - $1"; printf 'FAIL  %s\n' "$1"
+  if [ -n "${2:-}" ]; then
+    printf '      output:\n'
+    printf '%s\n' "$2" | head -n 200 | sed 's/^/      | /'
+    [ "$(printf '%s\n' "$2" | wc -l)" -gt 200 ] && printf '      | … (output truncated at 200 lines)\n'
+  fi; return 0; }
 assert_exit() { local d="$1" e="$2"; shift 2; local o rc; o=$("$@" 2>&1); rc=$?
   [ "$rc" = "$e" ] && pass "$d" || fail "$d (exit $rc, expected $e)" "$o"; }
 assert_msg() { local d="$1" n="$2"; shift 2; local o; o=$("$@" 2>&1)
@@ -507,15 +521,34 @@ P="$FIX/a11b"; mkproj "$P" 4; cd "$P"
 write_intent "$P" feat-a11b
 gate approve.sh intent .sdlc/work/feat-a11b/intent.md --lazy --review "read app.sh" >/dev/null
 mkdir -p .sdlc/work/feat-a11b/scratch
+# The launched runtime must still be up for the doctor's FIRST attempt and gone
+# for the one that answers. A fixed `sleep` raced that window (python's own
+# start-up cost alone is most of a second on the Windows runner), so the doctor
+# ends the launch itself and waits for it to be really gone: same proof, no
+# clock in it.
+cat > launch.sh <<'SH'
+#!/bin/sh
+d=.sdlc/work/feat-a11b/scratch
+: > "$d/up"
+i=0
+while [ ! -f "$d/stop" ] && [ "$i" -lt 300 ]; do sleep 0.2; i=$((i + 1)); done
+rm -f "$d/up"
+SH
 cat > doctor.sh <<'SH'
 #!/bin/sh
-# answers only from the second attempt on — by then the launch is dead
+# answers only from the second attempt on — and by then the launch IS dead,
+# because this is what stops it
 d=.sdlc/work/feat-a11b/scratch
-if [ -f "$d/tick" ]; then exit 0; fi
-: > "$d/tick"; exit 1
+if [ ! -f "$d/tick" ]; then : > "$d/tick"; exit 1; fi
+: > "$d/stop"
+i=0
+while [ -f "$d/up" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+[ -f "$d/up" ] && exit 1     # the launch never went away: assert nothing
+sleep 1                      # let the shell that wrote it finish exiting
+exit 0
 SH
 { echo "profile: strict"
-  echo "launch: sleep 1"
+  echo "launch: sh launch.sh"
   echo "doctor: sh doctor.sh"
   echo "doctor_timeout: 20"
   echo "check: R1 | e2e | true"
@@ -596,7 +629,26 @@ assert_exit_msg "A14b a receipt citing a log that is not there is invalid" 1 "do
 mv .sdlc/work/feat-a14/scratch/verify/R1.log.bak .sdlc/work/feat-a14/scratch/verify/R1.log
 echo "and everything else passed too" >> .sdlc/work/feat-a14/scratch/verify/R1.log
 assert_exit_msg "A14c a log edited after the run is invalid" 1 "changed after it was recorded" verify check feat-a14
-# a hand-written receipt that cites logs nobody wrote
+# The digests a receipt binds are raw bytes of the artifact, whichever sha256
+# tool the platform actually has (shasum, sha256sum, openssl — Git Bash does not
+# necessarily ship the first). A tool that read in TEXT mode would hash a CRLF
+# file and its LF twin to the same value, i.e. change detection would stop
+# detecting a change; python3 (already required by tools/verify.sh) is the
+# independent reading of those bytes.
+if command -v python3 >/dev/null 2>&1; then
+  want=$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' .sdlc/verify.md)
+  got=$(bash -c '. "'"$KIT"'/gates/_common.sh"; . "'"$KIT"'/gates/_auto.sh"; sdlc_verify_recipe_digest')
+  [ "$want" = "$got" ] && pass "A14a2 the recipe digest is the sha256 of the recipe's actual bytes" \
+    || fail "A14a2 the recipe digest is not the sha256 of the recipe's actual bytes" "bytes: $want
+helper: $got
+sha tool: $(command -v shasum || command -v sha256sum || command -v openssl || echo none)"
+fi
+# a hand-written receipt that cites logs nobody wrote. Its digests come from the
+# kit's OWN helpers (as the source_digest lines above already did): hardcoding
+# `shasum` here made the fixture, not the product, the thing under test — and on
+# Git Bash it produced a digest the kit never would, so this case failed as
+# `stale` (wrong recipe digest) long before it could reach the missing logs it
+# is actually about.
 P="$FIX/a14b"; mkproj "$P" 4; cd "$P"
 write_intent "$P" feat-a14b
 gate approve.sh intent .sdlc/work/feat-a14b/intent.md --lazy --review "read app.sh" >/dev/null
@@ -606,7 +658,7 @@ receipt_schema: sdlc-kit/verify-receipt@1
 slug: feat-a14b
 source_digest_before: $(cd "$P" && bash -c '. "'"$KIT"'/gates/_common.sh"; sdlc_source_digest')
 source_digest_after: $(cd "$P" && bash -c '. "'"$KIT"'/gates/_common.sh"; sdlc_source_digest')
-recipe_digest: $(shasum -a 256 .sdlc/verify.md 2>/dev/null | awk '{print $1}')
+recipe_digest: $(cd "$P" && bash -c '. "'"$KIT"'/gates/_common.sh"; . "'"$KIT"'/gates/_auto.sh"; sdlc_verify_recipe_digest')
 profile: strict
 doctor: pass
 runtime_evidence: yes
@@ -924,21 +976,123 @@ elapsed=$(( $(date +%s) - start ))
 [ ! -f .sdlc/work/feat-a22/verify-receipt.md ] && pass "A22f no receipt claims a verdict for this source" \
   || fail "A22f an interrupted run left a receipt"
 r1pid=$(cat "$S/r1.pid" 2>/dev/null || echo "")
-case "$(uname -s)" in
-  MINGW*|MSYS*|CYGWIN*)
-    # MSYS `kill` reaches a native python3 with TerminateProcess, so the helper
-    # cannot run its own handler and hand the kill down to the check's group.
-    # The interruption itself (above) is asserted on every platform; the group
-    # teardown is asserted where process groups exist.
-    pass "A22g skipped on Windows/Git Bash: no POSIX process group to assert";;
-  *)
-    if [ -n "$r1pid" ]; then
-      sleep 1
-      kill -0 "$r1pid" 2>/dev/null && { fail "A22g LEAK: the check's process ($r1pid) survived"; kill -9 "$r1pid" 2>/dev/null; } \
-        || pass "A22g the check's own process group is gone"
-    fi;;
-esac
+# Asserted on every platform now. MSYS `kill` reaches the native python3 helper
+# with TerminateProcess, so it cannot run its own handler and hand the kill
+# down; on Windows the helper therefore holds its check in a job object that
+# dies with it, which is what makes this true there too.
+if [ -n "$r1pid" ]; then
+  sleep 1
+  kill -0 "$r1pid" 2>/dev/null && { fail "A22g LEAK: the check's process ($r1pid) survived"; kill -9 "$r1pid" 2>/dev/null; } \
+    || pass "A22g the check's own process group is gone"
+fi
+# A surviving check also keeps its log file OPEN, which on Windows is not a
+# cosmetic leak: the file cannot be removed while a handle is on it ("Device or
+# resource busy"), so the interrupted run leaves its own scratch directory
+# undeletable. Removing the log is the portable way to ask whether anything is
+# still holding it.
+rm -f "$S/verify/R1.log" 2>/dev/null
+[ ! -e "$S/verify/R1.log" ] && pass "A22i the interrupted run holds no handle on its own log" \
+  || fail "A22i the check's log is still held open after the interruption" "$(ls -l "$S/verify" 2>&1)"
 assert_msg "A22h the run says what it stopped" "INTERRUPTED" cat "$S/run.log"
+
+# =====================================================================
+# A23 tools/_run.py's Windows primitives, driven PORTABLY with stand-ins for
+#     kernel32 and tasklist. The real Win32 calls only happen on Windows CI;
+#     what is asserted here is the behaviour around them, which is where the
+#     two defects were: a job-object failure that returned False and said
+#     NOTHING (so the helper kept promising a containment it did not have),
+#     and a tasklist fallback that matched the pid as a SUBSTRING of the whole
+#     line, so pid 5 read as alive off somebody else's `5,432 K` memory column.
+# =====================================================================
+if command -v python3 >/dev/null 2>&1; then
+  P="$FIX/a23"; mkdir -p "$P"; cd "$P"
+  cat > probe.py <<'PY'
+import os, sys, types
+kit = sys.argv[1]; log = sys.argv[2]
+sys.path.insert(0, os.path.join(kit, "tools"))
+import _run
+
+_run.WINDOWS = True                      # the Windows branches, on this machine
+err = {"code": 5}                        # ERROR_ACCESS_DENIED
+# kernel32, its constants and its structures exist only on Windows, so the ones
+# the job-object path touches are stood in for here. Nothing about the FAILURE
+# handling under test depends on their real contents.
+_run.ctypes = types.SimpleNamespace(get_last_error=lambda: err["code"],
+                                    byref=lambda x: x, sizeof=lambda x: 144)
+class _Basic: LimitFlags = 0
+class _Limits:
+    def __init__(self): self.BasicLimitInformation = _Basic()
+_run._JOB_EXTENDED_LIMITS = _Limits
+_run.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+_run.JobObjectExtendedLimitInformation = 9
+
+class NoJob:                             # CreateJobObjectW refuses
+    def CreateJobObjectW(self, a, b): return 0
+_run._WIN = NoJob()
+print("CREATE:", _run._win_bind_tree(None))
+
+class NoAssign:                          # ... and the later call refuses
+    def CreateJobObjectW(self, a, b): return 7
+    def SetInformationJobObject(self, *a): return 1
+    def AssignProcessToJobObject(self, *a): return 0
+    def CloseHandle(self, h):
+        err["code"] = 6                  # closing a handle overwrites last error
+        return 1
+_run._WIN = NoAssign()
+print("ASSIGN:", _run._win_bind_tree(types.SimpleNamespace(_handle=3)))
+
+# the real spawn path: it must REPORT and still hand back a usable child
+_run._WIN = NoJob(); err["code"] = 5
+p = _run._spawn("echo child ran", log, new_group=False, bind_tree=True)
+print("CHILDRC:", p.wait())
+print("LOG:", open(log).read().replace("\n", " | "))
+
+# tasklist fallback: the pid is a FIELD, never a substring of the line
+_run._WIN = None
+real = _run.subprocess
+csv_out = ('"other.exe","5432","Console","1","5,432 K"\r\n'
+           '"helper.exe","1234","Console","1","432 K"\r\n')
+class Shim:
+    PIPE = real.PIPE; DEVNULL = real.DEVNULL
+    @staticmethod
+    def run(*a, **k): return types.SimpleNamespace(stdout=csv_out.encode())
+_run.subprocess = Shim
+print("ALIVE5:", _run._win_alive(5), "ALIVE432:", _run._win_alive(432),
+      "ALIVE1234:", _run._win_alive(1234), "ALIVE5432:", _run._win_alive(5432))
+_run.subprocess = real
+PY
+  out=$(python3 probe.py "$KIT" "$P/check.log" 2>&1); prc=$?
+  [ "$prc" = 0 ] || fail "A23 the portable _run.py probe itself failed (exit $prc)" "$out"
+  if [ "$prc" = 0 ]; then
+    case "$out" in
+      *"CREATE: CreateJobObjectW, Win32 error 5"*) pass "A23a a refused job object names the call and the Win32 error";;
+      *) fail "A23a the binding failure does not name CreateJobObjectW/error" "$out";;
+    esac
+    case "$out" in
+      *"ASSIGN: AssignProcessToJobObject, Win32 error 5"*) pass "A23b the error is read before CloseHandle overwrites it";;
+      *) fail "A23b the reported Win32 error is not the one that refused" "$out";;
+    esac
+    case "$out" in
+      *"[sdlc-kit] windows: process tree NOT bound"*) pass "A23c the failure is announced on stderr instead of being silent";;
+      *) fail "A23c a binding failure is still silent on stderr" "$out";;
+    esac
+    case "$out" in
+      *"LOG:"*"process tree NOT bound"*) pass "A23d and the run's own check log records it too";;
+      *) fail "A23d the check log has no record of the unbound tree" "$out";;
+    esac
+    case "$out" in
+      *"CHILDRC: 0"*"child ran"*) pass "A23e the check still runs: the diagnostic replaces silence, not the run";;
+      *) fail "A23e the check did not run after a binding failure" "$out";;
+    esac
+    case "$out" in
+      *"ALIVE5: False ALIVE432: False ALIVE1234: True ALIVE5432: True"*)
+        pass "A23f the tasklist fallback matches the PID field, not the memory column";;
+      *) fail "A23f a dead pid still reads as alive off another process's line" "$out";;
+    esac
+  fi
+else
+  pass "A23 not applicable: tools/_run.py cannot run at all without python3"
+fi
 
 echo
 echo "================================================================"
