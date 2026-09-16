@@ -9,10 +9,22 @@
 set -euo pipefail
 { [ $# -eq 1 ] && [ -f "$1" ]; } || { echo "usage: tripwire.sh <plan.md>"; exit 1; }
 plan="$1"
+# The kit's own `- Scope authorization:` line (templates/intent.md) names WHO
+# authorized the work; the label itself is not evidence of security-sensitive
+# work, and matching "auth" in it would make every intent.md trip the security
+# wire. Only the LABEL is neutralized — the human's words after the colon are
+# scanned like any other text, and line numbers stay the file's own.
+scanfile="$plan"
+tmpscan=""
+if grep -qiE '^- *scope authorization:' "$plan" 2>/dev/null; then
+  tmpscan=$(mktemp) && trap 'rm -f "$tmpscan"' EXIT
+  sed 's/^\(- *[Ss]cope \)[Aa]uthorization:/\1mandate:/' "$plan" > "$tmpscan"
+  scanfile="$tmpscan"
+fi
 hits=0
 scan() { # <label> <extended-regex>
   local m
-  m=$(grep -inE "$2" "$plan" | head -3 || true)
+  m=$(grep -inE "$2" "$scanfile" | head -3 || true)
   if [ -n "$m" ]; then
     hits=1
     echo "TRIP-WIRE? $1"

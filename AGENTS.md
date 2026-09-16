@@ -148,6 +148,30 @@ when closing.
    stage's adversary review runs and the risk authorization must exist
    (intent defines no adversary — a hit on intent.md gets a fresh-context
    adversary).
+   **A waived gate is not a stop.** A stage skill's "tell the human, then
+   STOP" applies to the gates the project's lazymode keeps HUMAN. Where the
+   level waives one, the agent runs that stage's review, records the approval
+   with `--lazy --review`, posts the summary as FYI, and CONTINUES — it does
+   not ask, and it does not wait. Exactly four things still stop a waived
+   loop, at every level including 4: work outside the authorized scope, an
+   unresolved MATERIAL question in intent.md, a blocker surviving its round
+   cap, and external delivery beyond a review branch (merge, deploy). Ask each
+   of them ONCE, as one concrete decision; a question already answered for
+   this scope is not asked again.
+
+   **The full-auto intent contract.** An unattended run may act on an
+   `intent.md` only when it states an actionable outcome, its scope and
+   non-goals, acceptance criteria, labelled evidence, a `Scope authorization`
+   line (the human's words), and a `## Material questions` section with
+   nothing unresolved in it. Known facts from the ticket, the code, and
+   DOMAIN.md come first; what remains are the questions. A question is
+   MATERIAL when a wrong answer would change what gets built, break something,
+   or exceed the authorized scope — it goes to the human, and is never guessed
+   away to make progress. Optional uncertainty is decided from evidence or
+   carried as `[assumed: why]` under `## Open questions`, and blocks nothing.
+   Missing required evidence or an unauthorized risk blocks the same way.
+   `tools/auto.sh intent-check <slug>` reports the verdict.
+
    **A blocker surviving its round cap blocks `--lazy` at every stage**:
    the gate reverts to a human ask; at lazymode 4 the loop stops.
    Approvals are still recorded, and every auto-approved gate still posts its
@@ -243,6 +267,23 @@ when closing.
    suite is never a silent substitute, and a delivery over a known gap is
    allowed only when the human accepts that gap explicitly.
 
+   **A receipt makes a missing proof detectable** (optional, and the loop
+   works without it). A project that fills `.sdlc/verify.md`
+   (templates/verify.md) maps each requirement to its own real command, plus
+   the launch, doctor, and cleanup commands around them; `tools/verify.sh run
+   <slug>` executes EVERY one of them, bounded and isolated, and records a
+   receipt bound to the source snapshot before and after the run, the recipe,
+   and each command's and output's digest. Editing the code, the commands, or
+   the recipe makes the receipt `stale`; a cited log that is missing or was
+   edited, or checks that do not add up, make it `invalid`. Under
+   `profile: strict` a feature is not review-ready without a passing `runtime`
+   or `e2e` check against a runtime that run actually launched, and a doctor
+   that never comes up is NOT VERIFIED — never "the unit suite is green".
+   A receipt is CHANGE DETECTION, not authentication: it makes "this never
+   ran" and "this was edited afterwards" visible, and says nothing about who
+   produced it. It does not replace the independent fresh-context verifier
+   (rule 5).
+
    **"Shipped" means delivered.** The ship approval is a decision to
    deliver; it is not a delivery. A feature closes as `shipped` only when
    the agreed target — local implementation, PR, or deploy — is proven to
@@ -270,6 +311,18 @@ when closing.
    path name git C-quotes — tab, newline, double quote, or backslash in the
    name — cannot be bound: approve.sh refuses it by name, and one that
    appears after the review closes the gate as an invalid source.
+
+   **Review-ready is not merged, and not deployed.** A loop's own exit is a
+   FEATURE BRANCH pushed for a human to review: `tools/handoff.sh push <slug>
+   --authorized "<the human's words>"` refuses without that authorization,
+   refuses protected or shared branches, never force-pushes, refuses a commit
+   whose tree does not CONTAIN the reviewed source, and repeats no push that
+   already happened. `tools/handoff.sh check <slug>` establishes the remote
+   branch's SHA with git, never in prose. Merging that branch or deploying it
+   is a separate human approval, recorded as `Authorized-by:` in delivery.md at
+   every lazymode level. delivery.md's `Remote`, `Branch`, `Handoff` and
+   `Authorized-by` lines are optional and backward-compatible: an older record
+   closes exactly as it did.
 
    **A bug fix carries its own proof chain** (skills/6-maintain): the
    failure observed before the fix, the causal mechanism, the SAME
@@ -305,6 +358,23 @@ when closing.
    (init.sh), never quoted into artifacts, and `status.sh` shows it with
    its age so silence and a dead loop look different. History stays where
    it already lives (deviations.md, evidence.md, harvest.md).
+
+## Driving the loop from a host (no daemon, no scheduler)
+
+`gates/status.sh --json` (= `tools/auto.sh status --json`, schema
+`sdlc-kit/auto-status@1`) is the machine view: per feature the stage, a
+`status` of `ready | needs-human | blocked | complete`, the next action, the
+blockers, the source identity, the verification and delivery state, and the
+`exit_condition` (`review-ready` ≠ `deployed`). `tools/auto.sh next <slug>`
+prints one line and exits 0 / 10 / 20 / 30 for those four states. Every verdict
+comes from `gates/_common.sh`, so the machine view is never more permissive
+than the gates.
+
+These scripts REPORT and RECORD. They run no model and perform no stage: a
+`ready` status means the next action is one the project's lazymode lets an
+agent take, and the agent still takes it under the stage skill. The drive /
+resume procedure, the verification recipe, the handoff boundary, the checkpoint
+and its retry classes are documented in `docs/automation.md`.
 
 ## Greenfield vs brownfield
 

@@ -207,6 +207,48 @@ EOF
       esac
       exit 1;;
   esac
+  # --- the automated review handoff (v0.10 fields), OPT-IN ---------------------
+  # A pre-0.10 delivery.md has no Handoff line and closes exactly as it always
+  # did: `Verified-by` is the human's record of a check a human ran. But a record
+  # that CLAIMS the automation's exit condition ("Handoff: review-ready") must
+  # survive the automation's own check — otherwise a line an agent wrote would
+  # be the only evidence that a reviewer has anything to read (AGENTS.md rule 6:
+  # facts are established, never asserted in prose).
+  d_handoff=$(sdlc_delivery_field "$del" Handoff | awk '{print tolower($1)}')
+  case "$d_handoff" in
+    review-ready|merged|deployed)
+      d_remote=$(sdlc_delivery_field "$del" Remote)
+      d_branch=$(sdlc_delivery_field "$del" Branch)
+      d_source=$(sdlc_delivery_field "$del" Source)
+      if [ -z "$d_remote" ] || [ -z "$d_branch" ]; then
+        echo "BLOCKED: delivery.md says 'Handoff: $d_handoff' but names no Remote/Branch,"
+        echo "  so the branch a reviewer would read cannot be identified, let alone checked."
+        echo "  Add '- Remote: <remote>' and '- Branch: <feature branch>', or drop the Handoff"
+        echo "  line and close this as the ordinary delivery it is."
+        exit 1
+      fi
+      d_remote_sha=$(git ls-remote "$d_remote" "refs/heads/$d_branch" 2>/dev/null | awk 'NR==1{print $1}')
+      d_local_sha=$(git rev-parse --verify --quiet "${d_source}^{commit}" 2>/dev/null || echo none)
+      if [ -z "$d_remote_sha" ]; then
+        echo "BLOCKED: $d_remote/$d_branch does not exist on the remote."
+        echo "  'Handoff: $d_handoff' claims a reviewer has something to read; they have not."
+        echo "  Push it (tools/handoff.sh push $slug --authorized \"<the human's words>\"), or"
+        echo "  correct delivery.md."
+        exit 1
+      fi
+      if [ "$d_remote_sha" != "$d_local_sha" ]; then
+        echo "BLOCKED: $d_remote/$d_branch is at $d_remote_sha, the delivered Source is $d_local_sha."
+        echo "  The reviewer would read other code than this feature delivered."
+        exit 1
+      fi
+      echo "handoff: $d_handoff — $d_remote/$d_branch @ $d_remote_sha (checked with git ls-remote)"
+      case "$d_handoff" in
+        merged|deployed)
+          echo "  NOTE: that the branch was $d_handoff is NOT verified here — a feature ref on a"
+          echo "  remote is not a merge commit and not a deployment. delivery.md's Verified-by"
+          echo "  ('$d_by') is the human's record of that step, not a check this kit ran.";;
+      esac;;
+  esac
   echo "delivery: $d_target — verified by '$d_by'"
 fi
 

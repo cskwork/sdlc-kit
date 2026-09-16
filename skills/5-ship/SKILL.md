@@ -98,12 +98,15 @@ At lazymode ≥3 (AGENTS.md rule 3): after the adversary pass, run
 `<kit>/gates/approve.sh ship .sdlc/work/<slug>/evidence.md --lazy --review
 "<the diff review you ran>"` (add `--risk-authorized "<the human's words>"`
 for risky work), post the evidence summary as FYI, and continue to commit
-discipline. Otherwise:
+discipline in the same run: a waived gate is not a stop (AGENTS.md rule 3).
+A blocker surviving round 2 of the adversary still stops the loop here.
+
+Below lazymode 3 the ship gate is the human's:
 
 > Review `.sdlc/work/<slug>/evidence.md`, then:
 > `<kit>/gates/approve.sh ship .sdlc/work/<slug>/evidence.md`
 
-STOP after requesting approval.
+STOP after requesting approval — and ask once, not once per artifact.
 
 ## After approval: one authorization, then deliver
 
@@ -120,11 +123,21 @@ work:
 > Approve this delivery?
 
 If the human already authorized this scope — "ship it when it's green", "push
-to the PR" — that IS the authorization: proceed, post the same four items as
-FYI, and do not ask again. At lazymode ≥3 the whole check is autonomous:
-verify the four items yourself against the rules below and post them as FYI.
-A change outside the authorized scope (a different branch, an extra file, a
-deploy where a PR was agreed) is a new decision and goes back to the human.
+to the PR", the `- Scope authorization:` line in intent.md — that IS the
+authorization: proceed, post the same four items as FYI, and do not ask again.
+At lazymode ≥3 the whole check is autonomous: verify the four items yourself
+against the rules below and post them as FYI. A change outside the authorized
+scope (a different branch, an extra file, a deploy where a PR was agreed) is a
+new decision and goes back to the human.
+
+**Where the unattended loop ends: a pushed feature branch.** Pushing the
+reviewed commit to the ticket's own branch is the review handoff, and
+`tools/handoff.sh push <slug> --authorized "<the human's words>"` is the safe
+way to do it: it refuses protected or shared branches, never force-pushes,
+refuses a commit whose tree does not CONTAIN the reviewed source, and repeats
+no push that already happened. Merging that branch or deploying it is a
+separate human approval, recorded as delivery.md's `Authorized-by:` — the ship
+approval is not that authorization.
 
 1. Stage named paths only: changed source files, `.sdlc/work/<slug>/`, and
    — when changed — `.sdlc/memory/POLICY.md` and `.sdlc/config.md`
@@ -150,7 +163,11 @@ deploy where a PR was agreed) is a new decision and goes back to the human.
    compares that commit's tree against it), the command or project tool you actually ran to
    check the result, and its verbatim deciding output. Examples of a real
    check: `gh pr view <n> --json state,mergeStateStatus`, the deploy tool's
-   status output, `git log origin/<branch> -1` after a push. For a local
+   status output, `git log origin/<branch> -1` after a push, or
+   `tools/handoff.sh check <slug>`, which reads the remote branch's SHA with
+   `git ls-remote` and prints the exit condition (review-ready vs merged or
+   deployed). Record `Remote`, `Branch` and `Handoff` beside the usual fields
+   when the target is a review branch. For a local
    target, the passing final suite over the delivered source is the result.
    Never write a result you did not observe — an unverified delivery is
    `Confirmed: no`, and the feature closes as handed-off, not shipped.
