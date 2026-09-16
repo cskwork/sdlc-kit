@@ -548,10 +548,19 @@ else case "$out" in *"+ extra.sh"*) pass "C4d a file added after the review bloc
   *) fail "C4d added file not reported" "$out";; esac; fi
 rm -f extra.sh
 # C4e an executable-bit flip is drift (same bytes, different program)
-chmod +x gone.sh
+if [ "$(git config --bool core.filemode)" = false ]; then
+  git add -- gone.sh
+  git update-index --chmod=+x -- gone.sh
+else
+  chmod +x gone.sh
+fi
 assert_fail_msg "C4e a chmod after the review blocks 'shipped'" "the source changed after the ship review" \
   sdlc close.sh neg-add shipped "done"
-chmod -x gone.sh
+if [ "$(git config --bool core.filemode)" = false ]; then
+  git update-index --chmod=-x -- gone.sh
+else
+  chmod -x gone.sh
+fi
 # C4f replacing a file with a symlink is drift (same content through the link)
 mv gone.sh gone.real
 mklink gone.real gone.sh
@@ -804,8 +813,12 @@ QT=$(printf 'tab\tname.txt'); QN=$(printf 'new\nline.txt'); QQ='we"ird.txt'; QB=
 mkdir -p .sdlc/work/neg-quoted
 echo goal > .sdlc/work/neg-quoted/intent.md
 echo ev > .sdlc/work/neg-quoted/evidence.md
+# Win32 cannot represent these names literally; MSYS rewrites them. Keep the
+# real filesystem cases on POSIX, and test an actual quoted Git tree everywhere.
+quoted_worktree=true
+case "$(uname -s)" in MINGW*|MSYS*) quoted_worktree=false;; esac
+if $quoted_worktree; then
 printf 'v1\n' > "$QT"; printf 'v1\n' > "$QN"; printf 'v1\n' > "$QQ"; printf 'v1\n' > "$QB"
-printf 'plain\n' > '한글 and space.txt'
 out=$(sdlc approve.sh ship .sdlc/work/neg-quoted/evidence.md --delegated 2>&1); rc=$?
 if [ $rc -eq 0 ]; then fail "C16 ship approval bound a snapshot with git-quoted path names" "$out"
 else
@@ -819,6 +832,10 @@ fi
 assert_nofile .sdlc/approvals/neg-quoted.ship.approval "C16c no ship record is written when the snapshot is refused"
 assert_nofile .sdlc/approvals/neg-quoted.ship.source "C16d no partial source snapshot is left behind"
 rm -f "$QT" "$QN" "$QQ" "$QB"
+else
+  echo "SKIP  C16-C16d literal quoted filenames are not representable on Win32"
+fi
+printf 'plain\n' > '한글 and space.txt'
 assert_ok_msg "C16e with those names gone the same source binds (Unicode + space path kept)" "APPROVED" \
   sdlc approve.sh ship .sdlc/work/neg-quoted/evidence.md --delegated
 assert_grep .sdlc/approvals/neg-quoted.ship.source '^f - [0-9a-f]* 한글 and space.txt$' "C16f the Unicode/space path is bound by content, not quoted"
@@ -831,6 +848,7 @@ cat > .sdlc/work/neg-quoted/delivery.md <<EOF
 - Evidence: ok
 - Confirmed: yes
 EOF
+if $quoted_worktree; then
 printf 'v2 EVIL\n' > "$QQ"     # an unsupported name ADDED after the review
 assert_fail_msg "C16g a git-quoted file added after the review closes the ship gate as invalid source" \
   "cannot bind" sdlc check-gate.sh ship .sdlc/work/neg-quoted/evidence.md
@@ -844,11 +862,17 @@ if [ $rc -eq 0 ]; then fail "C16j close accepted 'shipped' with an unbindable pa
 else case "$out" in *"cannot bind"*'"we\"ird.txt"'*) pass "C16j close blocks and names the unsupported path";;
   *) fail "C16j close blocked, but did not name the unsupported path" "$out";; esac; fi
 rm -f "$QQ"
+else
+  echo "SKIP  C16g-C16j literal quoted filenames are not representable on Win32"
+fi
 # C16k a pr Source commit whose TREE has a git-quoted path is refused with its
 # own reason (not compared against a shorter list, not called 'does not CONTAIN')
-printf 'v1\n' > "$QQ"; git add -A .; git commit -qm "feat: a quoted name lands in a commit"
-QCOMMIT=$(git rev-parse HEAD)
-git rm -q --cached "$QQ"; rm -f "$QQ"; git commit -qm "chore: and is removed again"
+# Build the tree directly, without asking the host filesystem to store the name.
+git add -A .; git commit -qm "feat: Unicode source fixture"
+QBASE=$(git rev-parse HEAD)
+QBLOB=$(printf 'v1\n' | git hash-object -w --stdin)
+QTREE=$({ git ls-tree -z HEAD; printf '100644 blob %s\t%s\0' "$QBLOB" "$QQ"; } | git mktree -z)
+QCOMMIT=$(printf 'quoted path fixture\n' | git commit-tree "$QTREE" -p "$QBASE")
 sed "s|^- Target: .*|- Target: pr|; s|^- Source: .*|- Source: $QCOMMIT|" .sdlc/work/neg-quoted/delivery.md > d.tmp
 mv d.tmp .sdlc/work/neg-quoted/delivery.md
 assert_fail_msg "C16k a delivered commit containing a git-quoted path is refused explicitly" \
@@ -898,6 +922,51 @@ if git reset -q --hard HEAD && git checkout -q "$BASE_BRANCH"; then
 else
   fail "C14 fixture could not return to $BASE_BRANCH"
 fi
+
+# C18 reproduce Windows mode semantics on every runner. The filesystem's -x
+# result must not override Git's index when core.filemode=false.
+MODE_PROJECT="$FIX/proj-filemode"; mkdir -p "$MODE_PROJECT"; cd "$MODE_PROJECT"
+gitinit
+git config core.filemode false
+printf '#!/bin/sh\necho ok\n' > 'new [script].sh'
+chmod +x 'new [script].sh'
+printf 'tracked\n' > 'tracked script.sh'
+git add -- 'tracked script.sh'
+git update-index --chmod=+x -- 'tracked script.sh'
+git commit -qm "init: explicit executable index mode"
+# On POSIX, force the opposite filesystem mode to prove the index is used.
+chmod -x 'tracked script.sh'
+mkdir -p .sdlc/work/modes
+printf 'goal\n' > .sdlc/work/modes/intent.md
+printf 'evidence\n' > .sdlc/work/modes/evidence.md
+assert_ok "C18 non-POSIX mode source binds" sdlc approve.sh ship .sdlc/work/modes/evidence.md --delegated
+assert_grep .sdlc/approvals/modes.ship.source '^f - .* new \[script\].sh$' "C18a untracked executable defaults to Git mode 100644"
+assert_grep .sdlc/approvals/modes.ship.source '^f x .* tracked script.sh$' "C18b tracked executable uses index mode 100755"
+git add -- 'new [script].sh'
+assert_ok_msg "C18c staging the same source keeps the gate open" "GATE OPEN" \
+  sdlc check-gate.sh ship .sdlc/work/modes/evidence.md
+git update-index --chmod=+x -- 'new [script].sh'
+assert_fail_msg "C18d changing the index executable bit is drift" "the source changed after the ship review" \
+  sdlc check-gate.sh ship .sdlc/work/modes/evidence.md
+git update-index --chmod=-x -- 'new [script].sh'
+printf 'edited\n' >> 'tracked script.sh'
+assert_fail_msg "C18e content drift is still rejected with core.filemode=false" "the source changed after the ship review" \
+  sdlc check-gate.sh ship .sdlc/work/modes/evidence.md
+printf 'tracked\n' > 'tracked script.sh'
+git commit -qm "feat: reviewed script"
+MODE_SHA=$(git rev-parse HEAD)
+assert_ok_msg "C18f committing the same source keeps the gate open" "GATE OPEN" \
+  sdlc check-gate.sh ship .sdlc/work/modes/evidence.md
+cat > .sdlc/work/modes/delivery.md <<EOF
+# Delivery: modes
+- Target: pr
+- Source: $MODE_SHA
+- Verified-by: sh 'new [script].sh'
+- Evidence: ok
+- Confirmed: yes
+EOF
+assert_ok_msg "C18g the commit contains the reviewed non-POSIX source" "delivery: pr" \
+  sdlc close.sh modes shipped "reviewed source delivered"
 
 echo
 echo "================================================================"
