@@ -52,7 +52,7 @@ Local, on macOS (Bash 3.2) — darwin 25.6.0, arm64 — with git 2.54.0:
 
 - `bash gates/selftest.sh` → `SELFTEST PASS`, exit 0.
 - `bash gates/e2e.sh` → `E2E PASS`, 141 assertions, 0 failures, exit 0.
-- `bash gates/autotest.sh` → `AUTOTEST PASS`, 175 assertions, 0 failures, exit 0. It drives real temp git repos, LOCAL bare remotes and a real launched runtime (process-group leak included), and signals a real running verification to prove the interrupt path; every reported finding above has a case that fails without its fix.
+- `bash gates/autotest.sh` → `AUTOTEST PASS`, 183 assertions, 0 failures, exit 0. It drives real temp git repos, LOCAL bare remotes and a real launched runtime (process-group leak included), and signals a real running verification to prove the interrupt path; every reported finding above has a case that fails without its fix.
 - `bash -n` over every shell script in the repository: clean.
 
 The remote CI matrix (Ubuntu, macOS, Windows/Git Bash) runs all three suites on the PR and merged commit; its checks must pass before publication.
