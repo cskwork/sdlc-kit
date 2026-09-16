@@ -220,9 +220,11 @@ When the incident cannot be reproduced, fresh-context adversaries recount the sc
 
 ```bash
 gates/status.sh [--all[=n]] [slug]  # open features + one next action; --all adds the newest 20 archived
+gates/status.sh --json [slug]       # the same state, machine-readable (tools/auto.sh)
 gates/stats.sh [--all]              # time per stage + re-approval counts; default open + 20 recent closed
 gates/selftest.sh        # gate, close, injection, lazymode, status render, YAML integrity
 gates/e2e.sh [kit]       # the loop end to end in throwaway git fixtures (local only, no remotes)
+gates/autotest.sh [kit]  # the automation layer in its own fixtures (local bare remotes, no network)
 ```
 
 Example:
@@ -235,6 +237,49 @@ Example:
   ship     —  (no artifact)
   next  →  plan gate (tiered): gates/approve.sh plan ...
 ```
+
+## Drive it from a host (v0.10.0)
+
+A scheduler, a webhook, or a multi-agent runtime can drive the loop without
+reading prose. Four small scripts, no daemon, no database, no new dependency:
+
+```bash
+tools/auto.sh next <slug>              # one line; exit 0 ready · 10 needs-human · 20 blocked · 30 complete
+tools/auto.sh status --json [slug]     # schema sdlc-kit/auto-status@1
+tools/auto.sh intent-check <slug>      # is this intent.md safe to run unattended?
+tools/auto.sh checkpoint <slug> …      # pending step, bounded attempts, completed effects
+tools/verify.sh run|check <slug>       # run the project's verification recipe (needs python3); receipt bound to the source
+tools/handoff.sh push|check <slug>     # the review branch, proven to be on the remote
+```
+
+The host wakes an agent; the agent reads `next`, performs that ONE stage action
+under the stage skill, and loops. These scripts report and record — they run no
+model and perform no stage. `ready` means the next action is one this project's
+lazymode lets an agent take, not that a shell script reviewed anything.
+
+Three boundaries are explicit and do not move:
+
+- **A material question stops the loop.** An unattended run never guesses away a
+  question whose wrong answer would change what gets built or exceed the scope
+  the human authorized.
+- **Runtime proof is executed, not asserted.** `.sdlc/verify.md` maps each
+  requirement to the project's own command; `tools/verify.sh` runs every one of
+  them — bounded, stdin closed, each in its own process group — and binds the
+  result to the source before and after the run, the recipe, and each command's
+  output. Change the code and it goes `stale`; edit a log it cites and it goes
+  `invalid`. Under `profile: strict`, no passing runtime/e2e check against a
+  runtime that run launched means not review-ready — a green unit suite is never
+  a stand-in. The receipt is change detection, not authentication: it makes a
+  missing or edited proof visible, and never says who produced it.
+- **The loop ends at a pushed feature branch.** `tools/handoff.sh push` re-runs
+  the complete ship gate and the verification immediately before it pushes, and
+  requires that the scope `intent.md` records actually names a publication — an
+  agent cannot authorize an external effect for itself. Merging that branch or
+  deploying it is a separate human approval, recorded in `delivery.md`, at every
+  lazymode level; neither is something this kit can verify from here.
+
+Full contract, drive/resume procedure, and a Symphony example:
+[`docs/automation.md`](docs/automation.md).
 
 ## Works in complex codebases
 
@@ -280,9 +325,11 @@ init.sh          idempotent project seed
 .gitattributes   pins LF endings so scripts survive a Windows clone
 skills/1-6/      stage instructions
 roles/           verifier · adversary · researcher contracts
-gates/           approve · check · close · status · stats · selftest · e2e (+ _common.sh helpers)
-templates/       intent · spec · plan · evidence · delivery · lesson
+gates/           approve · check · close · status · stats · selftest · e2e · autotest (+ _common.sh, _auto.sh)
+tools/           auto (machine status) · verify (receipts, needs python3) · handoff (review branch) · _run.py (bounded execution) · tripwire · refcheck
+templates/       intent · spec · plan · evidence · delivery · verify · lesson
 docs/index.html  bilingual EN/KO landing page
+docs/automation.md  the machine contract: status JSON, receipts, handoff, checkpoint
 ```
 
 ## Verify the kit
@@ -290,9 +337,24 @@ docs/index.html  bilingual EN/KO landing page
 ```bash
 ./gates/selftest.sh   # gate mechanics
 ./gates/e2e.sh        # the whole loop, in its own throwaway fixtures
+./gates/autotest.sh   # the automation layer, in its own throwaway fixtures
 ```
 
 The selftest covers gate state and its path/content binding (cross-path reuse, traversal, symlinks, and pre-binding records all fail closed), stage-name injection, bare-path rejection, delegated and lazy approvals with their recorded review and risk authorization, the compact route and its upgrade revalidation, delivery-backed `shipped` closes, `refcheck.sh` drift detection, lesson requirements for closing, double-close rejection, archive-on-close (with approval records and status scoping), YAML frontmatter parsing, and LF line endings in every script. It also runs two end-to-end workflow fixtures: a compact bug fix from intent to a delivered close, and the failure paths around it — plus the source binding over work that was committed BEFORE the review and the commit-containment check on a `pr` delivery.
+
+`gates/autotest.sh` covers the automation layer on the same principle: the
+full-auto intent contract (a material question blocks, a resolved one releases),
+verification receipts (a failing check, a missing receipt, a strict profile with
+no runtime evidence, and stale code, commands, or recipe all block), the review
+handoff against a local bare remote (unauthorized, protected-branch, force, and
+non-containing pushes refused; a second push repeats nothing; a remote SHA that
+differs blocks review-ready; merge and deploy need `Authorized-by:`), bounded
+retries and resume, and the lazymode-0 and source-binding behavior unchanged.
+It also carries a regression case for every finding of the first independent
+review: material questions written without bullets, a check that reads stdin, a
+launched runtime that must not leak its children, an unowned runtime answering
+the doctor, a hung check, a push over a closed ship gate, a `pr` feature that
+was never pushed, and a local target that must never be pushed at all.
 
 `gates/e2e.sh` is the integration suite on top of that: it builds throwaway git projects in its own temp fixture and drives the real scripts through the compact route, the full route, and every negative case — including post-review edits, added files, chmod and symlink swaps, an old commit named as the delivered source, legacy ship bindings, a full-route spec or plan rewritten or deleted after the ship review, and the agreement between `status.sh`, `check-gate.sh`, and `close.sh`. It writes nothing outside its fixture and makes no network, remote, or `gh` call; `pr` and `deploy` deliveries are exercised locally, which is all `close.sh` inspects. It does not run the selftest inside itself — the two suites are independent. CI runs both on Ubuntu, macOS, and Windows (Git Bash).
 
