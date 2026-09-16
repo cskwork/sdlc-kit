@@ -227,7 +227,12 @@ Consequences, all of them deliberate:
   run's current child and that child's process group, run the cleanup, and exit
   non-zero with no receipt; no further check starts. Nothing the run did not
   launch is signalled. (Windows/Git Bash: the same path, through
-  `tools/_run.py` and `taskkill /T`.)
+  `tools/_run.py` and `taskkill /T`, plus a job object that takes the running
+  check down even when MSYS `kill` terminates the helper outright. If that job
+  object cannot be created, `tools/_run.py` prints a `process tree NOT bound`
+  line naming the Win32 call that refused — on stderr and in the check's log —
+  instead of claiming a containment it does not have; the run still exits
+  non-zero with no receipt, but the interrupted command may survive it.)
 - **A source change during the run is `inconclusive`, not a pass.** A check that
   writes into the tree (coverage output, a generated fixture) makes the result
   belong to no single snapshot. Saying so beats returning 0 and then reporting
