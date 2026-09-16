@@ -124,7 +124,23 @@ carries the fact to every later feature.
 ## Write the artifact
 
 Fill `templates/intent.md` → `.sdlc/work/<slug>/intent.md`. Every claim
-labeled. Every open question is carried forward explicitly in its own section.
+labeled. Questions are carried forward in two sections, and the split matters:
+
+- **`## Material questions`** — a wrong answer would change what gets built,
+  break something, or exceed the authorized scope. These BLOCK: they go to the
+  human and are never guessed away to make progress. Resolve a line in place
+  (`— resolved: <answer, and where it came from>`) so the trail survives. The
+  marker is anchored to that position: "not resolved: …" is not a resolution.
+- **`## Open questions`** — optional uncertainty, decidable from evidence
+  during the work or carried as `[assumed: why]`. These block nothing.
+
+`- Scope authorization:` records the scope the human already authorized, in
+their words. It is authority, not a gate approval (AGENTS.md rule 3): inside it
+do not ask again; outside it the loop stops at every lazymode.
+`tools/auto.sh intent-check <slug>` checks this contract — actionable Goal,
+scope authorization, acceptance criteria, non-goals, labelled evidence, no
+unresolved material question — and an unattended run may not act on an intent
+that fails it.
 The `Goal:` line is the reporting sentence: one plain-language sentence — no
 code identifiers, no jargon — that a non-technical reader understands and can
 copy verbatim into a status report ("teachers can re-order quiz questions").
@@ -185,13 +201,17 @@ objection, run:
   --review "<what you actually reviewed>" [--risk-authorized "<the human's words>"]
 ```
 
-Post the intent summary and any objections to the human as FYI, then
-continue. Otherwise tell the user:
+Post the intent summary and any objections to the human as FYI, then continue
+to the next stage in the same run — a waived gate is not a stop (AGENTS.md
+rule 3). An unresolved MATERIAL question is the exception: it stops the loop
+here, at every level.
+
+Below lazymode 4 the intent gate is the human's. Tell the user:
 
 > Review `.sdlc/work/<slug>/intent.md`. If it says exactly what you want, run:
 > `<kit>/gates/approve.sh intent .sdlc/work/<slug>/intent.md`
 
-STOP. After approval, continue to stage 2 (`skills/2-spec/SKILL.md`) — or, on
+and STOP there. After approval, continue to stage 2 (`skills/2-spec/SKILL.md`) — or, on
 the compact route, straight to build (`skills/4-build/SKILL.md`) with the
 intent gate as its gate. Dispatch that work to a subagent only when it buys
 something concrete (AGENTS.md rule 5); the approved artifact, not the

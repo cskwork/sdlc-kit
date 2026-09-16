@@ -15,6 +15,27 @@
 - Confirmed: yes | no          <!-- no ⇒ not shipped: close as handed-off or keep working -->
 - Verified-at: YYYY-MM-DDTHH:MM:SSZ
 
+<!-- OPTIONAL review-handoff fields (v0.10.0). Older delivery records without
+     them behave exactly as before; close.sh does not require them. They are
+     OPT-IN, and opting in means being checked: once `Handoff:` names a remote
+     handoff, close.sh itself runs `git ls-remote` and REFUSES the shipped close
+     unless Remote/Branch are named and really hold the delivered commit. Write
+     them when it was really pushed; leave them out for an ordinary delivery. -->
+- Remote: <the git remote the review branch was pushed to, e.g. origin>
+- Branch: <the feature branch a human reviews, never a shared/protected branch>
+- Handoff: review-ready | merged | deployed
+  <!-- review-ready = pushed and PR-ready, human review pending. This is where
+       an unattended loop STOPS.
+       merged / deployed: the kit checks only that the branch is on the remote
+       at the delivered commit. A feature ref is NOT a merge commit and NOT a
+       deployment — that proof is external, and Verified-by/Evidence below are
+       the human's (or the deployment system's) record of it, not a kit check. -->
+- Authorized-by: <REQUIRED for merged/deployed: the human's own words authorizing
+  the merge or deploy. The ship approval is not that authorization. This line is
+  a RECORD of what a human said, not an authentication of it (docs/automation.md
+  limitation L2): the authority it refers to lives in intent.md's Scope
+  authorization, which is what tools/handoff.sh push checks before it pushes.>
+
 ## Notes
 <!-- Anything the result does not show by itself: which environment, which
      reviewer, what is still pending (a merged PR that is not deployed yet is a

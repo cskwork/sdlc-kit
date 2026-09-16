@@ -669,6 +669,10 @@
           <dd data-i18n="l7-d">Rule&nbsp;8: every message to a human starts with context, keeps to short active sentences, and ends with the one decision you owe.</dd>
         </div>
         <div>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span data-i18n="l9-t">Drivable by a host</span></dt>
+          <dd data-i18n="l9-d"><code>gates/status.sh --json</code> reports stage, <code>ready | needs-human | blocked | complete</code>, the next action, and the blockers, so a scheduler never parses prose. <code>tools/verify.sh</code> executes every check in the project's own verification recipe — bounded, isolated, stdin closed — and binds the receipt to the source it ran over, so a check that never ran or a log edited afterwards is detectable (change detection, not authentication). <code>tools/handoff.sh</code> re-runs the whole ship gate immediately before it pushes, and proves the review branch is on the remote. The loop ends at a pushed feature branch: merging or deploying stays a separate human approval, and neither is something the kit can verify from here.</dd>
+        </div>
+        <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg><span data-i18n="l8-t">Every run gets an ending</span></dt>
           <dd data-i18n="l8-d"><code>close.sh</code> records <code>shipped</code>, <code>abandoned</code>, <code>dead-end</code>, or <code>handed-off</code>, then archives the feature and its approvals to <code>.sdlc/archive/</code>. <code>shipped</code> requires a verified delivery record; failed work requires a lesson; handoffs require the external ticket or PR.</dd>
         </div>
@@ -788,6 +792,8 @@
     "l6-d": '실수는 ≤50줄짜리 <code>INDEX.md</code>에 기록합니다. 같은 실수를 막을 수 있을 때 교훈을 스킬로 승격합니다.',
     "l7-t": '규칙이 된 평문 원칙',
     "l7-d": '규칙 8: 사람에게 보내는 모든 메시지는 맥락으로 시작하고, 짧은 능동문을 유지하며, 마지막은 당신이 내려야 할 단 하나의 결정입니다.',
+    "l9-t": '호스트가 구동할 수 있음',
+    "l9-d": '<code>gates/status.sh --json</code>이 단계, <code>ready | needs-human | blocked | complete</code>, 다음 액션, 차단 사유를 보고하므로 스케줄러가 산문을 파싱할 일이 없습니다. <code>tools/verify.sh</code>는 프로젝트 자신의 검증 레시피에 설정된 모든 검사를 시간 제한과 프로세스 그룹 격리 아래 실행하고 그 영수증을 실행 대상 소스에 결합합니다 — 실행되지 않은 검사나 나중에 수정된 로그가 드러납니다(인증이 아니라 변경 탐지입니다). <code>tools/handoff.sh</code>는 푸시 직전에 ship 게이트 전체를 다시 실행하고 리뷰용 브랜치가 원격에 있음을 증명합니다. 루프는 푸시된 피처 브랜치에서 끝납니다. 머지와 배포는 별도의 사람 승인이며, 킷이 여기서 검증할 수 있는 사실도 아닙니다.',
     "l8-t": '모든 실행에 끝 상태 기록',
     "l8-d": '<code>close.sh</code>는 <code>shipped</code>, <code>abandoned</code>, <code>dead-end</code>, <code>handed-off</code> 중 하나를 기록한 뒤 피처와 승인 기록을 <code>.sdlc/archive/</code>로 옮깁니다. <code>shipped</code>는 검증된 전달 기록을 요구하고, 실패한 작업은 교훈을, 이관한 작업은 외부 티켓이나 PR을 남겨야 합니다.',
     "inst-h": '명령 세 줄, 그다음은 하네스에 맡김',

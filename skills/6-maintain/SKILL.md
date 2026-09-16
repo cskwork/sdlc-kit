@@ -29,6 +29,15 @@ Ask the reporter these five questions in one message. Skip any already
 answered. Each answer kills hypothesis classes for free; a researcher
 fan-out dispatched before these answers wastes most of its budget.
 
+**Headless, or no reachable reporter?** Do not stall on an interview nobody
+will answer. Answer every question you can from the ticket text, the logs, the
+deploy record, and the code — that is where most of these answers already
+live — label each one `[verified: how]` or `[assumed: why]` in intent.md, and
+carry only what is left. What remains is material only if a wrong answer would
+change what gets built or exceed the authorized scope: those go to the human
+as `## Material questions` and the loop stops for them (AGENTS.md rule 3).
+Everything else is an `[assumed]` line and the diagnosis continues.
+
 1. Which exact control did you use? (button label / menu item / gesture)
 2. What did you see immediately after? (nothing at all, a popup, an error,
    a partial change) — "nothing at all" and "something wrong appeared" are

@@ -8,7 +8,10 @@ Inputs you receive: paths to `plan.md`, `spec.md`, the changed-file list, and
 Do:
 
 1. Run the build, test, and lint commands from config.md. Record exact commands
-   and verdict output.
+   and verdict output. If the project has a `.sdlc/verify.md` recipe, run
+   `tools/verify.sh run <slug>`: it executes the configured commands and writes
+   a receipt bound to this source. The receipt records what ran; YOUR report is
+   still the judgement, and a receipt never substitutes for it.
 2. **Exercise the change for real, end to end** — the section below. Unit tests
    are not a substitute for it and never stand in for it silently.
 3. Check each `plan.md` **Proof** item (compact route: intent.md's Proof
