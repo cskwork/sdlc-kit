@@ -134,7 +134,18 @@ sdlc_source_entries() { # paths on stdin → entry lines (sorted); non-zero on a
   return $rc
 }
 sdlc__entries_unsorted() { # helper of sdlc_source_entries
-  local f h t rc=0
+  local f h t mode filemode indexed_exec="" raw rc=0
+  filemode=$(git config --bool core.filemode 2>/dev/null) || filemode=true
+  if [ "$filemode" = false ]; then
+    # Git Bash's -x result is not the mode Git will commit. Follow the index
+    # on filesystems where Git does not trust executable bits; new files are
+    # non-executable until explicitly staged with --chmod=+x.
+    raw=$(git -c core.quotepath=off ls-files --stage 2>/dev/null) || {
+      echo "FAIL: git ls-files could not read source modes" >&2; return 1; }
+    indexed_exec="
+$(printf '%s\n' "$raw" | awk '$1 == "100755" { sub(/^[^\t]*\t/, ""); print }')
+"
+  fi
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     case "$f" in (\"*) printf 'unsupported - - %s\n' "$f"; continue;; esac   # git C-quoted it
@@ -146,8 +157,13 @@ sdlc__entries_unsorted() { # helper of sdlc_source_entries
       printf 'submodule - - %s\n' "$f"
     elif [ -f "./$f" ]; then
       if h=$(sdlc_sha256_file "./$f") && [ -n "$h" ]; then
-        if [ -x "./$f" ]; then printf 'f x %s %s\n' "$h" "$f"
-        else printf 'f - %s %s\n' "$h" "$f"; fi
+        mode=-
+        if [ "$filemode" = false ]; then
+          case "$indexed_exec" in (*"
+$f
+"*) mode=x;; esac
+        elif [ -x "./$f" ]; then mode=x; fi
+        printf 'f %s %s %s\n' "$mode" "$h" "$f"
       else echo "FAIL: cannot hash file: $f" >&2; rc=1; fi
     else
       printf 'missing - - %s\n' "$f"
