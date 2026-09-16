@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# status.sh [--all[=<n>]] [slug] — cockpit: where is each OPEN feature in the
+# status.sh [--json] [--all[=<n>]] [slug] — cockpit: where is each OPEN feature in the
 # loop, what is the next action. Closed features live in .sdlc/archive/
 # (close.sh moves them); --all lists the newest 20, --all=<n> widens that.
 # A slug argument finds archived features without --all. Run from the project
@@ -7,7 +7,18 @@
 set -euo pipefail
 kit_self="$(cd "$(dirname "$0")/.." && pwd)"
 . "$kit_self/gates/_common.sh"
+. "$kit_self/gates/_auto.sh"
 [ -d .sdlc ] || { echo "FAIL: no .sdlc/ here. Run init.sh first, from the project root."; exit 1; }
+# --json is the MACHINE view of the same state (tools/auto.sh, schema
+# sdlc-kit/auto-status@1): stage · status · next action · blockers · source
+# identity, for a driver that must not parse the prose below. One
+# implementation, shared through gates/_common.sh, so the two cannot disagree.
+# It covers OPEN features only; --all is a prose-only flag, and a closed feature
+# is answered by tools/auto.sh next <slug>.
+if [ "${1:-}" = --json ]; then
+  shift
+  exec "$kit_self/tools/auto.sh" status --json "$@"
+fi
 # --all is BOUNDED by default (newest 20) so an agent that runs it does not
 # pull thousands of archive lines into its context; --all=<n> widens it.
 all=""; cap=20
@@ -63,6 +74,14 @@ found=0
 for dir in .sdlc/work/*/; do
   [ -d "$dir" ] || continue
   slug=$(basename "$dir")
+  # a directory name that is not a usable slug is reported as itself: it names
+  # no feature, and nothing here should paste it into a command
+  if ! sdlc_auto_valid_slug "$slug"; then
+    found=1
+    echo "== $slug"
+    echo "   UNUSABLE NAME: a feature directory must be [a-zA-Z0-9._-]+ — rename it; no gate is evaluated for this directory"
+    continue
+  fi
   [ $# -ge 1 ] && [ "$slug" != "$1" ] && continue
   found=1
   if [ -f "${dir}CLOSED" ]; then
@@ -203,6 +222,28 @@ EOF
     fi
     printf "  %-8s %s\n" "$stage" "$state"
   done
+  # The full-auto intent contract (gates/_auto.sh), in the SAME words the
+  # machine view uses. This is the screen an agent actually reads: if it showed
+  # "record the intent approval" while tools/auto.sh said "a human owes an
+  # answer", the cockpit would walk the loop straight over an open material
+  # question. It overrides the next action rather than queueing behind it.
+  if [ -f "${dir}intent.md" ] && [ ! -f ".sdlc/approvals/${slug}.intent.approval" ]; then
+    ist=$(sdlc_auto_intent_contract "$slug")
+    case "${ist%%|*}" in
+      material)
+        printf "  %-8s %s — %s\n" "intent" "MATERIAL QUESTION OPEN" "${ist#*|}"
+        # at lazymode 4 the intent gate is the agent's to record, so this is the
+        # only thing standing between an open question and an approval
+        if [ "$lazy" -ge 4 ]; then
+          next_action="a MATERIAL question in ${dir}intent.md is unanswered: take it to the human. The intent gate is NOT recorded until it is answered, lazymode 4 included (AGENTS.md rule 3a)"
+        fi;;
+      incomplete)
+        printf "  %-8s %s — %s\n" "intent" "CONTRACT INCOMPLETE" "${ist#*|}"
+        if [ "$lazy" -ge 4 ]; then
+          next_action="complete ${dir}intent.md before the intent gate: ${ist#*|}"
+        fi;;
+    esac
+  fi
   # shipped means delivered (AGENTS.md rule 6): after the ship gate the feature
   # still owes a delivery record before close.sh will accept 'shipped'.
   if [ -f ".sdlc/approvals/${slug}.ship.approval" ]; then
@@ -223,10 +264,36 @@ EOF
           printf "  %-8s %s\n" "delivery" "recorded (${dtarget:-?}) — NOT CLOSEABLE: $ddetail"
           [ -z "$next_action" ] && next_action="fix the delivery record (${dir}delivery.md): $ddetail";;
       esac
+      # A delivery.md that CLAIMS the automation's exit condition is checked
+      # against the remote by close.sh and by tools/auto.sh. This view does not
+      # touch the network, so it reports the claim as a claim — never as a
+      # delivery that has been confirmed to be where a reviewer can read it.
+      dhandoff=$(sdlc_delivery_field "${dir}delivery.md" Handoff | awk '{print tolower($1)}')
+      case "$dhandoff" in
+        review-ready|merged|deployed)
+          dremote=$(sdlc_delivery_field "${dir}delivery.md" Remote)
+          dbranch=$(sdlc_delivery_field "${dir}delivery.md" Branch)
+          if [ -z "$dremote" ] || [ -z "$dbranch" ]; then
+            printf "  %-8s %s\n" "handoff" "claims '$dhandoff' but names no Remote/Branch — NOT CLOSEABLE"
+            [ -z "$next_action" ] && next_action="add '- Remote:' and '- Branch:' to ${dir}delivery.md, or drop the Handoff line"
+          else
+            printf "  %-8s %s\n" "handoff" "claims '$dhandoff' on ${dremote}/${dbranch} — NOT CHECKED HERE (no network): tools/handoff.sh check $slug"
+          fi;;
+      esac
     else
       printf "  %-8s %s\n" "delivery" "—  (no delivery.md)"
       [ -z "$next_action" ] && next_action="deliver, then record it in ${dir}delivery.md (templates/delivery.md) before close.sh <slug> shipped"
     fi
+  fi
+  # verification receipt (tools/verify.sh): the same verdict the machine view
+  # reports, so a feature never looks review-ready here and blocked there.
+  if [ -f .sdlc/verify.md ]; then
+    vst=$(sdlc_verify_state "$slug")
+    printf "  %-8s %s — %s\n" "verify" "${vst%%|*}" "${vst#*|}"
+    case "${vst%%|*}" in
+      fail|stale|missing|blocked)
+        [ -z "$next_action" ] && next_action="verification: ${vst#*|}";;
+    esac
   fi
   # heartbeat (AGENTS.md rule 9): the live one-liner plus its age, so silence
   # and a dead loop look different. BSD stat first (macOS), then GNU.

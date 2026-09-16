@@ -220,9 +220,11 @@ abandoned나 dead-end는 교훈이 없으면 닫히지 않습니다(lazymode 3 �
 
 ```bash
 gates/status.sh [--all[=n]] [slug]  # 열린 피처 + 다음 액션 하나, --all은 최신 아카이브 20건 포함
+gates/status.sh --json [slug]       # 같은 상태를 기계가 읽는 형식으로(tools/auto.sh)
 gates/stats.sh [--all]              # 단계별 소요 시간 + 재승인 횟수, 기본은 열린 피처 + 최근 종결 20건
 gates/selftest.sh        # 게이트, 종결, 인젝션, lazymode, status 렌더, YAML 무결성
 gates/e2e.sh [kit]       # 일회용 git 픽스처에서 루프 전체를 검사(로컬 전용, 원격 호출 없음)
+gates/autotest.sh [kit]  # 자동화 계층을 자체 픽스처에서 검사(로컬 bare 원격, 네트워크 없음)
 ```
 
 예시:
@@ -235,6 +237,47 @@ gates/e2e.sh [kit]       # 일회용 git 픽스처에서 루프 전체를 검사
   ship     —  (no artifact)
   next  →  plan gate (tiered): gates/approve.sh plan ...
 ```
+
+## 호스트에서 루프 돌리기 (v0.10.0)
+
+스케줄러, 웹훅, 멀티 에이전트 런타임이 산문을 파싱하지 않고 루프를 구동할 수 있습니다.
+데몬도, 데이터베이스도, 새 의존성도 없는 작은 스크립트 네 개입니다.
+
+```bash
+tools/auto.sh next <slug>              # 한 줄 출력, 종료 코드 0 ready · 10 needs-human · 20 blocked · 30 complete
+tools/auto.sh status --json [slug]     # 스키마 sdlc-kit/auto-status@1
+tools/auto.sh intent-check <slug>      # 이 intent.md를 무인으로 실행해도 되는가
+tools/auto.sh checkpoint <slug> …      # 대기 중인 단계, 제한된 재시도, 완료된 외부 효과
+tools/verify.sh run|check <slug>       # 프로젝트의 검증 레시피 실행(python3 필요), 소스에 결합된 영수증 기록
+tools/handoff.sh push|check <slug>     # 리뷰용 브랜치가 원격에 실제로 있음을 증명
+```
+
+호스트가 에이전트를 깨우면, 에이전트는 `next`를 읽고 단계 지시서에 따라 그 액션 하나를
+수행한 뒤 다시 반복합니다. 이 스크립트들은 보고하고 기록할 뿐, 모델을 돌리거나 단계를
+수행하지 않습니다. `ready`는 "다음 액션이 이 프로젝트의 lazymode가 에이전트에게 허용한
+것"이라는 뜻이지, 셸 스크립트가 코드를 리뷰했다는 뜻이 아닙니다.
+
+움직이지 않는 경계가 셋 있습니다.
+
+- **중대한 질문은 루프를 멈춥니다.** 틀린 답이 만들 물건을 바꾸거나 사람이 허가한 범위를
+  벗어나게 하는 질문을, 무인 실행이 진도를 위해 추측으로 넘기지 않습니다.
+- **런타임 증명은 주장하는 것이 아니라 실행하는 것입니다.** `.sdlc/verify.md`가 요구사항마다
+  프로젝트 자신의 명령을 지정하고, `tools/verify.sh`가 설정된 모든 검사를 실행합니다 —
+  시간 제한이 걸린 채, stdin은 닫힌 채, 각각 자기 프로세스 그룹에서. 영수증은 결과를
+  실행 전후의 소스·레시피·각 명령의 출력 해시에 묶습니다. 코드가 바뀌면 `stale`,
+  인용한 로그가 사라지거나 수정되면 `invalid`가 됩니다. `profile: strict`에서는 그 실행이
+  직접 띄운 런타임에 대한 runtime/e2e 검사가 통과하지 않으면 리뷰 준비 완료가 아니며,
+  유닛 테스트 통과가 그 자리를 대신하지 않습니다. 영수증은 **변경 탐지**이지 인증이
+  아닙니다: 실행되지 않았거나 나중에 고쳐진 증거를 드러낼 뿐, 누가 만들었는지는 말하지
+  않습니다.
+- **루프는 푸시된 피처 브랜치에서 끝납니다.** `tools/handoff.sh push`는 푸시 직전에
+  ship 게이트 전체(`gates/check-gate.sh ship`)와 검증을 다시 실행하고, `intent.md`에
+  기록된 승인 범위가 브랜치 공개를 실제로 명시할 때만 진행합니다 — 에이전트가 스스로에게
+  외부 효과를 허가할 수는 없습니다. 그 브랜치를 머지하거나 배포하는 것은 lazymode와
+  무관하게 별도의 사람 승인이며 `delivery.md`에 기록되고, 킷이 여기서 검증할 수 있는
+  사실이 아닙니다.
+
+전체 계약, 구동·재개 절차, Symphony 예시: [`docs/automation.md`](docs/automation.md).
 
 ## 복잡한 코드베이스에서도
 
@@ -280,9 +323,11 @@ init.sh          멱등 프로젝트 시드
 .gitattributes   LF 고정, Windows 클론에서도 스크립트 생존
 skills/1-6/      단계별 지시서
 roles/           verifier · adversary · researcher 계약
-gates/           approve · check · close · status · stats · selftest · e2e (공용 헬퍼 _common.sh 포함)
-templates/       intent · spec · plan · evidence · delivery · lesson
+gates/           approve · check · close · status · stats · selftest · e2e · autotest (공용 헬퍼 _common.sh, _auto.sh 포함)
+tools/           auto(기계 상태) · verify(영수증, python3 필요) · handoff(리뷰 브랜치) · _run.py(제한된 실행) · tripwire · refcheck
+templates/       intent · spec · plan · evidence · delivery · verify · lesson
 docs/index.html  EN/KO 랜딩 페이지
+docs/automation.md  기계 계약: status JSON, 영수증, 핸드오프, 체크포인트
 ```
 
 ## 킷 검증
@@ -290,11 +335,19 @@ docs/index.html  EN/KO 랜딩 페이지
 ```bash
 ./gates/selftest.sh   # 게이트 동작
 ./gates/e2e.sh        # 자체 일회용 픽스처에서 루프 전체
+./gates/autotest.sh   # 자체 일회용 픽스처에서 자동화 계층
 ```
 
 셀프테스트는 게이트 상태와 경로·내용 결합(다른 경로 재사용, 경로 이탈, 심볼릭 링크, 결합 이전 기록은 모두 닫힌 상태로 실패), 단계명 인젝션, 경로 이탈 거부, delegated와 lazy 승인 및 그 리뷰·위험 허가 기록, 컴팩트 루트와 승격 시 재승인, 전달 기록을 요구하는 `shipped` 종결, `refcheck.sh`의 드리프트 감지, 종결 시 교훈 요구, 이중 종결 거부, 종결 시 아카이브(승인 기록 이동과 status 범위 포함), YAML 프런트매터 파싱, 전체 스크립트의 LF 줄 끝을 검사합니다. 여기에 엔드투엔드 워크플로 픽스처 두 가지 — 컴팩트 버그 수정의 intent부터 전달 종결까지, 그리고 그 주변 실패 경로 — 가 함께 돌고, 리뷰 전에 이미 커밋된 작업의 소스 결합과 `pr` 전달의 커밋 포함 여부 검사도 포함됩니다.
 
-`gates/e2e.sh`는 그 위의 통합 스위트입니다. 자체 임시 디렉토리에 일회용 git 프로젝트를 만들어 실제 스크립트로 컴팩트 루트, 풀 루트, 그리고 모든 부정 시나리오를 돌립니다. 리뷰 후 수정, 파일 추가, chmod와 심볼릭 링크 교체, 전달 소스로 지목된 엉뚱한 옛 커밋, 예전 킷의 ship 결합, ship 리뷰 이후 수정되거나 삭제된 풀 루트의 spec·plan, 그리고 `status.sh`·`check-gate.sh`·`close.sh`가 같은 판정을 내는지까지 검사합니다. 픽스처 밖에는 아무것도 쓰지 않고 네트워크·원격·`gh` 호출도 하지 않습니다. `pr`과 `deploy` 전달은 로컬에서만 재현하며, 그것이 `close.sh`가 실제로 확인하는 전부입니다. 셀프테스트를 내부에서 다시 실행하지는 않습니다 — 두 스위트는 독립입니다. CI는 Ubuntu, macOS, Windows(Git Bash)에서 둘 다 실행합니다.
+`gates/autotest.sh`는 같은 원칙으로 자동화 계층을 검사합니다. 풀오토 intent 계약(중대한 질문은
+막고, 해결되면 풀린다), 검증 영수증(검사 실패, 영수증 없음, runtime 증거 없는 strict 프로파일,
+코드·명령·레시피가 바뀐 경우 모두 차단), 로컬 bare 원격을 상대로 한 리뷰 핸드오프(허가 없는 푸시,
+보호 브랜치, force, 리뷰된 소스를 담지 않은 커밋은 거부, 두 번째 푸시는 아무 효과도 반복하지 않음,
+원격 SHA가 다르면 리뷰 준비 완료가 차단, 머지·배포는 `Authorized-by:` 필요), 제한된 재시도와 재개,
+그리고 lazymode 0 동작과 소스 결합이 그대로임을 확인합니다.
+
+`gates/e2e.sh`는 그 위의 통합 스위트입니다. 자체 임시 디렉토리에 일회용 git 프로젝트를 만들어 실제 스크립트로 컴팩트 루트, 풀 루트, 그리고 모든 부정 시나리오를 돌립니다. 리뷰 후 수정, 파일 추가, chmod와 심볼릭 링크 교체, 전달 소스로 지목된 엉뚱한 옛 커밋, 예전 킷의 ship 결합, ship 리뷰 이후 수정되거나 삭제된 풀 루트의 spec·plan, 그리고 `status.sh`·`check-gate.sh`·`close.sh`가 같은 판정을 내는지까지 검사합니다. 픽스처 밖에는 아무것도 쓰지 않고 네트워크·원격·`gh` 호출도 하지 않습니다. `pr`과 `deploy` 전달은 로컬에서만 재현하며, 그것이 `close.sh`가 실제로 확인하는 전부입니다. 셀프테스트를 내부에서 다시 실행하지는 않습니다 — 두 스위트는 독립입니다. CI는 Ubuntu, macOS, Windows(Git Bash)에서 세 스위트를 모두 실행합니다.
 
 ## 이것이 아닌 것
 

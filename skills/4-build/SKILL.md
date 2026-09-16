@@ -111,6 +111,16 @@ the configured unit suite is not a stand-in for it. The verifier changes no
 source and no artifact, but it may produce build/test output, logs, and its
 own disposable fixtures.
 
+When the project has a `.sdlc/verify.md` recipe (templates/verify.md), run
+`tools/verify.sh run <slug>` as part of that pass: it launches what the checks
+need, waits for the doctor, runs the configured build/unit/lint/runtime/e2e
+commands, and records a receipt bound to this source, the recipe, and each
+command's and output's digest. The receipt makes a check that never ran, a log
+edited afterwards, or a result that belongs to other code DETECTABLE — it is
+change detection, not authentication, not the verifier's judgement, and no
+substitute for the fresh context. Quote its deciding lines in evidence.md; a code or recipe change
+makes it `stale` and it must be re-run.
+
 For a bug fix, the verifier's job includes the proof chain (AGENTS.md rule 6):
 the failure reproduced before the fix, the causal mechanism, the SAME
 reproduction passing after, and the neighbouring flows through the changed

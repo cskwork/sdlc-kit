@@ -57,8 +57,11 @@ ensure_line .gitignore '.sdlc/archive/*/approvals/'
 # per-feature working residue. The durable record is intent.md, spec.md,
 # plan.md, map.md, delivery.md, evidence.md, CLOSED — they are the reason the
 # feature can be understood a year later, so they stay committed (AGENTS.md
-# rule 7). Only the bulky, machine-regenerable residue is ignored.
-for artifact in baseline.txt deviations.md harvest.md; do
+# rule 7). Only the bulky, machine-regenerable residue is ignored — including
+# the automation layer's two working files: checkpoint.md (pending execution
+# metadata; the artifacts stay the authority) and verify-receipt.md (regenerated
+# by tools/verify.sh from the source it was run against).
+for artifact in baseline.txt deviations.md harvest.md checkpoint.md verify-receipt.md; do
   ensure_line .gitignore ".sdlc/work/*/$artifact"
   ensure_line .gitignore ".sdlc/archive/*/$artifact"
 done
@@ -186,7 +189,10 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   fi
 fi
 
-echo "Next: 1) fill .sdlc/config.md verification commands"
+echo "Next: 0) OPTIONAL (required for unattended runs): copy $kit/templates/verify.md to"
+echo "         .sdlc/verify.md and map each requirement to the real command that proves it;"
+echo "         tools/verify.sh then records a receipt bound to the source it ran against"
+echo "      1) fill .sdlc/config.md verification commands"
 echo "      2) AGENT: ask the human which lazymode level to use (0-4; default 1 is already set in .sdlc/config.md)"
 echo "      3) point your harness at $kit/AGENTS.md (see README)"
 echo "      4) start a feature: agent reads $kit/skills/1-intent/SKILL.md"

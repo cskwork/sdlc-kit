@@ -32,9 +32,18 @@ jobs:
           # Fixtures write LF bytes; do not convert their committed snapshots.
           git config --global core.autocrlf false
         shell: bash
+      # tools/verify.sh bounds each command and kills whole process groups
+      # through tools/_run.py; every GitHub runner image ships python3, and the
+      # automation suite asserts that path. Fail loudly if one ever does not.
+      - name: python3 is available (tools/verify.sh bounded execution)
+        run: python3 -c "import sys; print(sys.version)"
+        shell: bash
       - name: selftest (gate mechanics)
         run: bash gates/selftest.sh
         shell: bash
       - name: e2e (the loop end to end, local fixtures only)
         run: bash gates/e2e.sh
+        shell: bash
+      - name: autotest (the automation layer, local fixtures only)
+        run: bash gates/autotest.sh
         shell: bash
