@@ -117,7 +117,7 @@ if [ -n "$py" ]; then
 import sys, glob, os
 failed = []
 for p in glob.glob(os.path.join(sys.argv[1], '**/SKILL.md'), recursive=True):
-    text = open(p).read()
+    text = open(p, encoding='utf-8').read()   # SKILL.md is UTF-8; Windows defaults to cp1252
     if not text.startswith('---'):
         failed.append(f'{p}: no frontmatter'); continue
     fm = text.split('---')[1]
