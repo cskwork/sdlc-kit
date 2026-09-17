@@ -123,6 +123,14 @@ carries the fact to every later feature.
 
 ## Write the artifact
 
+When the request has an origin — a ticket, a 기획서, an incident — snapshot
+it FIRST as `.sdlc/work/<slug>/origin.md` (templates/origin.md): the intent
+approval binds it, so it is written before the gate, and an edit afterwards
+closes the gates by design (an edited ticket is a new decision). Number the
+success criteria `O1..On` in the origin's words (else the human's): spec
+R-items cite them and the verifier's Intent match lens counts Covered/Missing
+over them.
+
 Fill `templates/intent.md` → `.sdlc/work/<slug>/intent.md`. Every claim
 labeled. Questions are carried forward in two sections, and the split matters:
 

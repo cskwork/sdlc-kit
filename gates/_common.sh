@@ -26,6 +26,16 @@ sdlc_stage_artifact() { # <stage> → expected basename, or empty for an unknown
     *) return 1;;
   esac
 }
+# Everything an upstream loop may bind: the gated artifacts plus origin.md, the
+# snapshot of the ticket / 기획서 the request came from (templates/origin.md).
+# The intent approval binds it, and so does every gate downstream; it is never
+# a gate of its own — `origin` re-gates through intent.
+sdlc_artifact_of() { case "$1" in origin) echo origin.md;; *) sdlc_stage_artifact "$1";; esac; }
+sdlc_regate_of() { case "$1" in origin) echo intent;; *) echo "$1";; esac; }
+sdlc_regate_hint() { # <upstream> <stage> → "re-approve X, then Y" (just X when they coincide)
+  local r; r=$(sdlc_regate_of "$1")
+  if [ "$r" = "$2" ]; then echo "re-approve $r"; else echo "re-approve $r, then $2"; fi
+}
 # Upstream artifacts whose content the gate also binds (AGENTS.md rule 3): a
 # material edit upstream must not leave a downstream gate reusable. These are
 # CANDIDATES: approve.sh binds the ones that exist at approval time, so the
@@ -33,7 +43,7 @@ sdlc_stage_artifact() { # <stage> → expected basename, or empty for an unknown
 # and is never asked for an artifact it does not have.
 sdlc_upstream_stages() { # <stage> → stages listed oldest-first
   case "$1" in
-    intent) echo "";; spec) echo "intent";; plan) echo "intent spec";; ship) echo "intent spec plan";;
+    intent) echo "origin";; spec) echo "origin intent";; plan) echo "origin intent spec";; ship) echo "origin intent spec plan";;
     *) echo "";;
   esac
 }
@@ -46,7 +56,7 @@ sdlc_upstream_unbound() { # <record> <slug> → stage names, space-separated (ma
   stage=$(sdlc_field "$rec" stage || true)
   [ -n "$stage" ] || return 0
   for up in $(sdlc_upstream_stages "$stage"); do
-    upart=".sdlc/work/$slug/$(sdlc_stage_artifact "$up")"
+    upart=".sdlc/work/$slug/$(sdlc_artifact_of "$up")"
     [ -f "$upart" ] || continue
     [ -n "$(sdlc_field "$rec" "upstream_$up" || true)" ] && continue
     out="$out $up"
