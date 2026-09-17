@@ -91,52 +91,48 @@ Order of work — and update it before each dispatch (AGENTS.md rule 9).
   Stage 5, not the build step. When your harness can restrict subagent tools, copy
   each role's "Must not" list into the dispatch.
 
-## Verify (fresh context, every time)
+## Verify (fresh context, three lenses in parallel)
 
 When all steps are done and the full configured suite is green over the final
-state, dispatch a fresh-context verifier (`roles/verifier.md`) with: plan.md,
-spec.md (compact route: intent.md), the changed-file list, and
-`.sdlc/config.md` commands (full dispatch contract per AGENTS.md rule 5). It
-runs the app/tests itself and reports evidence. You do not verify your own
-work in your own context. If the harness cannot give it a fresh context, say
-so as an explicit gap in evidence.md ("no independent verification available:
-<reason>") — never a quiet self-review.
+state, dispatch `roles/verifier.md` three times — one lens each, fresh context
+each, in parallel where the harness allows (AGENTS.md rule 5; full dispatch
+contract) — with intent.md and its `Refs:` origin, plan.md and spec.md (compact
+route: intent.md only), the changed-file list, `.sdlc/config.md`, and
+`baseline.txt` when it exists:
 
-The verifier's job includes the **real end-to-end check** (AGENTS.md rule 6):
-the changed behavior driven through the real screen, request, or command —
-scoped to this change, with the project's own commands (`.sdlc/config.md`
-`e2e:`, `qa:`, `run:`) — recorded as command/tool · environment · scenario ·
-observed result. No runnable environment means NOT VERIFIED, named as such;
-the configured unit suite is not a stand-in for it. The verifier changes no
-source and no artifact, but it may produce build/test output, logs, and its
-own disposable fixtures.
+1. **E2E** — the change works through the real interface; a bug fix carries
+   its proof chain (AGENTS.md rule 6).
+2. **Side effects** — AS-IS → TO-BE beyond the requirement: baseline, untouched
+   items, data consistency across every producer and consumer of the shapes
+   the diff touches.
+3. **Intent match** — the build read back against the ticket or 기획서 the
+   request came from: covered, missing, beyond.
 
-When the project has a `.sdlc/verify.md` recipe (templates/verify.md), run
-`tools/verify.sh run <slug>` as part of that pass: it launches what the checks
-need, waits for the doctor, runs the configured build/unit/lint/runtime/e2e
-commands, and records a receipt bound to this source, the recipe, and each
-command's and output's digest. The receipt makes a check that never ran, a log
-edited afterwards, or a result that belongs to other code DETECTABLE — it is
-change detection, not authentication, not the verifier's judgement, and no
-substitute for the fresh context. Quote its deciding lines in evidence.md; a code or recipe change
-makes it `stale` and it must be re-run.
+You do not verify your own work in your own context; a harness that cannot
+give a fresh context records the gap in evidence.md ("no independent
+verification available: <reason>"). A lens with no environment reports NOT
+VERIFIED, never a pass. With a `.sdlc/verify.md` recipe the E2E lens runs
+`tools/verify.sh run <slug>`; quote the receipt's deciding lines in evidence.md
+and re-run it after any code or recipe change (it goes `stale`).
 
-For a bug fix, the verifier's job includes the proof chain (AGENTS.md rule 6):
-the failure reproduced before the fix, the causal mechanism, the SAME
-reproduction passing after, and the neighbouring flows through the changed
-code.
+A finding from any lens — a failing flow, a data skew, a missing origin
+detail — enters the **fix loop**:
 
-Verifier or adversary findings enter the **fix loop**:
-
-1. Mark every finding **accepted** or **declined**. Give a reason for each
-   declined finding. Record both lists — and the round number — in
-   deviations.md; ship copies them into evidence.md.
-2. Fix only accepted findings. Do not add unrelated scope. A
-   finding that implies new scope goes to the human, not into the fix.
-3. Dispatch a new fresh-context checker with two questions. Is each named
-   finding resolved? Did the fix create a defect in affected code?
-4. Stop after three rounds. If round 3 still fails, show the evidence to the
-   human. Do not run a fourth round without new information.
+1. Mark every finding **accepted** or **declined**, with a reason for each
+   declined one. Write the round line in deviations.md now — lens, both lists,
+   `re-check: pending` (templates/deviations.md); ship copies it into
+   evidence.md.
+2. Fix only accepted findings. A finding that implies new scope — an origin
+   detail intent.md never carried, a data model change — goes to the human as
+   a decision, not into the fix.
+3. Re-dispatch the lenses that had findings, plus E2E whenever code changed,
+   with two questions: is each named finding resolved, and did the fix create
+   a defect in affected code? Update the round line's `re-check:` in place:
+   `resolved`, or `open: <what>` and the next round begins.
+4. **Cap: three rounds.** A round-3 re-check still `open` STOPs the loop:
+   show the human the evidence and the deviations.md trail. No round 4 —
+   `tools/auto.sh` reads the round lines and reports either as
+   `fixloop.exhausted`, needs-human at every lazymode.
 
 ## Exit
 

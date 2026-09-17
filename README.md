@@ -26,7 +26,7 @@ A common agent workflow starts with implementation. The agent receives a prompt,
 - Claims in `intent.md` are labeled `[verified]` or `[assumed]`.
 - A fresh-context adversary reviews the spec before you approve it.
 - A routine plan auto-approves after a clean adversary review; migrations, deletions, API, security, and infra changes escalate to you.
-- A different verifier checks the implementation against the approved artifacts.
+- A different verifier checks the implementation three ways in parallel: end to end, for side effects and data consistency, and against the ticket or spec document the request came from.
 - Failed attempts leave lessons and domain knowledge for the next run.
 
 It is adapted from [Anthropic's AI-Native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook), but it does not depend on Claude Code. The implementation is plain Markdown plus shell scripts. Any harness that can read files and run commands can use it.
@@ -146,6 +146,7 @@ Per feature, inside the **target project**:
 │   ├── DOMAIN.md                     # terms · verified facts · constraints
 │   └── lessons/<date>-<lesson>.md
 ├── work/<slug>/                      # OPEN features only
+│   ├── origin.md                     # the ticket / 기획서 as requested — bound by the intent gate
 │   ├── intent.md                     # problem · proof · success · scope
 │   ├── spec.md                       # Human summary · AS-IS → TO-BE · contract
 │   ├── plan.md                       # files · order · risks · proof
@@ -161,7 +162,7 @@ Per feature, inside the **target project**:
     └── approvals/                    # moves with the feature, still gitignored
 ```
 
-`init.sh` also adds twelve lines to the project's `.gitignore`, covering `work/` and `archive/` alike: `approvals/`, `baseline.txt`, `deviations.md`, `harvest.md`, `scratch/`, and `progress.md`. Git keeps the durable record — `config.md`, `memory/`, and per feature `intent.md`, `spec.md`, `plan.md`, `map.md`, `evidence.md`, `delivery.md`, and the archived `CLOSED` — so the decisions and the final proof survive without the working copy. Bulk output stays in `scratch/`, cited by the deciding lines quoted in evidence.md. Re-running `init.sh` on a project seeded by an older kit removes the ignore lines it once issued for `spec.md` and `evidence.md`; it never touches the git index. While a feature is open, `status.sh` shows the heartbeat as a `now →` line with its age — `watch -n5 cat .sdlc/work/<slug>/progress.md` follows it live.
+`init.sh` also adds twelve lines to the project's `.gitignore`, covering `work/` and `archive/` alike: `approvals/`, `baseline.txt`, `deviations.md`, `harvest.md`, `scratch/`, and `progress.md`. Git keeps the durable record — `config.md`, `memory/`, and per feature `origin.md`, `intent.md`, `spec.md`, `plan.md`, `map.md`, `evidence.md`, `delivery.md`, and the archived `CLOSED` — so the decisions and the final proof survive without the working copy. Bulk output stays in `scratch/`, cited by the deciding lines quoted in evidence.md. Re-running `init.sh` on a project seeded by an older kit removes the ignore lines it once issued for `spec.md` and `evidence.md`; it never touches the git index. While a feature is open, `status.sh` shows the heartbeat as a `now →` line with its age — `watch -n5 cat .sdlc/work/<slug>/progress.md` follows it live.
 
 The public sdlc-kit repository stays framework-only. The committed artifacts — intent, plan, map, memory — live and version with the project they describe. The ignored ones live only in the working copy that produced them.
 
@@ -193,7 +194,7 @@ The ship approval binds the project's whole source snapshot as the review saw it
 
 Executable bits follow Git's `core.filemode` setting. When it is `false`, as on Git Bash for Windows, the snapshot uses the index mode for tracked files and treats new files as non-executable. Use `git add --chmod=+x` or `git update-index --chmod=+x` before review to mark an executable; changing that index mode after review invalidates approval. With `core.filemode=true`, filesystem chmod changes are checked directly.
 
-Before any of that, verification runs the real thing: the changed behavior exercised end to end through the interface a user or caller actually meets, scoped to the change, with the project's own commands (`e2e:`, `qa:`, `run:` in `.sdlc/config.md`). No environment to run it in means NOT VERIFIED, stated as such in evidence.md — a green unit suite is never a silent substitute.
+Before any of that, verification runs the real thing: the changed behavior exercised end to end through the interface a user or caller actually meets, scoped to the change, with the project's own commands (`e2e:`, `qa:`, `run:` in `.sdlc/config.md`). No environment to run it in means NOT VERIFIED, stated as such in evidence.md — a green unit suite is never a silent substitute. Two more lenses run beside it in parallel: **side effects** — the baseline, the untouched items, and the consistency of every data shape the change touches across its other producers and consumers — and **intent match** — the build read back, per numbered success criterion, against `origin.md`, the snapshot of the ticket or 기획서 the intent gate bound, listing what is covered, missing, and beyond. A finding from any lens enters the build fix loop: three rounds, then the human, and `tools/auto.sh` reports an exhausted loop as `fixloop.exhausted`.
 
 ### Failed runs leave knowledge
 

@@ -15,8 +15,9 @@ should be able to approve the spec from this section and Flagged concerns
 alone.>
 
 ## Requirements
-<each traces to intent.md; each machine-checkable>
-- R1: <requirement> (intent: "<quoted line>")
+<each cites the intent.md O-item it fulfils; each machine-checkable. An O-item
+with no R is a flagged concern, never a silent drop.>
+- R1: <requirement> (O1)
 
 ## Data shapes
 <schemas, API contracts, migrations, and serialization end to end>

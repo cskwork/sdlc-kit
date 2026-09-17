@@ -199,7 +199,7 @@ digest=$(sdlc_sha256_file "$canon")
   [ -n "$spelling" ] && echo "track_spelling: $spelling" || true
   # upstream binding: whatever this gate was approved ON TOP of
   for up in $(sdlc_upstream_stages "$stage"); do
-    upart=".sdlc/work/$slug/$(sdlc_stage_artifact "$up")"
+    upart=".sdlc/work/$slug/$(sdlc_artifact_of "$up")"
     if [ -f "$upart" ]; then echo "upstream_$up: $(sdlc_sha256_file "$upart")"; fi
   done
   if [ "$stage" = ship ]; then

@@ -29,6 +29,10 @@ Explore the codebase. Use a fresh-context researcher for large areas so raw
 exploration stays out of the main context. Then fill `templates/plan.md`:
 
 - **Files that change.** Give exact paths and mark each as new or modified.
+- **Data touched.** Every shape those files write or read — table, column,
+  type, event, file — with its other producers and consumers and what happens
+  to records that predate the change. The adversary checks it is complete;
+  the verifier's Side effects lens executes it.
 - **Order of work.** Make each step keep the configured checks passing. Add
   tests with the code they test.
 - **Risks.** Record rate limits, migrations, shared state, and important quirks.

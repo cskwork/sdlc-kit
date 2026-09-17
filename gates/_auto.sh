@@ -77,8 +77,7 @@ sdlc_auto_track() { # <slug> → compact | full
   if [ "$t" = compact ] && [ -f "$rec" ] && [ "$(sdlc_field "$rec" track || true)" != "compact" ]; then t=full; fi
   printf '%s\n' "$t"
 }
-sdlc_auto_artifact_for() { case "$1" in
-  intent) echo intent.md;; spec) echo spec.md;; plan) echo plan.md;; ship) echo evidence.md;; esac; }
+sdlc_auto_artifact_for() { sdlc_artifact_of "$1"; }   # one map, in _common.sh
 
 # One stage's state: "<state>|<detail>"
 #   absent    — no artifact yet
@@ -101,7 +100,7 @@ sdlc_auto_stage_state() { # <slug> <stage>
     upart="$dir/$(sdlc_auto_artifact_for "$up")"
     [ -n "$upw" ] || continue
     if [ ! -f "$upart" ] || [ "$(sdlc_sha256_file "$upart" 2>/dev/null || true)" != "$upw" ]; then
-      echo "stale|$(sdlc_auto_artifact_for "$up") changed since the $stage approval — re-approve $up, then $stage"; return 0; fi
+      echo "stale|$(sdlc_auto_artifact_for "$up") changed since the $stage approval — $(sdlc_regate_hint "$up" "$stage")"; return 0; fi
   done
   for up in $(sdlc_upstream_unbound "$rec" "$slug"); do
     echo "stale|$(sdlc_auto_artifact_for "$up") is not part of the approved $stage basis — gates/approve.sh $stage $art"; return 0
@@ -230,6 +229,33 @@ EOF
   echo "ok|intent contract satisfied"
 }
 
+# --- the build fix loop --------------------------------------------------------
+# deviations.md's `- round n/3:` lines are the counter (AGENTS.md rule 5,
+# skills/4-build); a line's `re-check:` field is updated in place. Prints
+# "<state>|<detail>":
+#   none      — no round recorded
+#   open      — the latest round's re-check is pending or open, rounds remain
+#   resolved  — the latest round's re-check is resolved
+#   exhausted — round 3's re-check is still open, or a round past the cap
+#               exists: a human decides, at every lazymode
+sdlc_auto_fixloop_state() { # <slug>
+  local f=".sdlc/work/$1/deviations.md" n line
+  [ -f "$f" ] || { echo "none|no fix loop recorded"; return 0; }
+  { read -r n; read -r line; } <<EOF
+$(awk '/^- *round [0-9]+\/[0-9]+:/ && $0 !~ /<lens>/ { s=$0; sub(/^- *round /,"",s); sub(/\/.*/,"",s); if (s+0>=m) {m=s+0; l=$0} }
+       END{print m+0; print l}' "$f")
+EOF
+  [ "${n:-0}" -ge 1 ] || { echo "none|no fix loop recorded"; return 0; }
+  [ "$n" -le 3 ] || { echo "exhausted|fix loop round $n recorded in deviations.md; the cap is 3 (skills/4-build) — the human decides"; return 0; }
+  case "$line" in
+    *"re-check: resolved"*) echo "resolved|fix loop round $n/3 re-check resolved";;
+    *"re-check: open"*)
+      if [ "$n" -ge 3 ]; then echo "exhausted|fix loop round 3/3 re-check still open — show the human the evidence and deviations.md (skills/4-build)"
+      else echo "open|fix loop round $n/3 re-check open — round $((n + 1)) next"; fi;;
+    *) echo "open|fix loop round $n/3 in progress";;
+  esac
+}
+
 # --- verification receipts ----------------------------------------------------
 # The recipe is .sdlc/verify.md (templates/verify.md). Receipts are written by
 # tools/verify.sh from commands it executed itself, and every field a reader
@@ -294,8 +320,8 @@ sdlc_verify_recipe_issue() { # [recipe] → "" when usable, else "<code> <messag
       if (bad != "") next
       if (id == "" || cmd == "") { bad = "malformed check line " n " needs '\''check: <id> | <kind> | <command>'\''"; next }
       if (id ~ /[^a-zA-Z0-9._-]/) { bad = "id check id '\''" id "'\'' must be [a-zA-Z0-9._-]+ (it names a log file)"; next }
-      if (kind != "build" && kind != "unit" && kind != "lint" && kind != "runtime" && kind != "e2e")
-        { bad = "kind check '\''" id "'\'' has kind '\''" kind "'\'' — use build|unit|lint|runtime|e2e"; next }
+      if (kind != "build" && kind != "unit" && kind != "lint" && kind != "runtime" && kind != "e2e" && kind != "data")
+        { bad = "kind check '\''" id "'\'' has kind '\''" kind "'\'' — use build|unit|lint|runtime|e2e|data"; next }
       if (substr(cmd, 1, 1) == "<") { bad = "placeholder check '\''" id "'\'' still holds the template placeholder (" cmd ")"; next }
       if (seen[id]++) { bad = "duplicate two checks share the id '\''" id "'\''"; next }
     }
@@ -375,7 +401,7 @@ EOF
     if [ "$csha" != "$(printf '%s' "$want" | sdlc_sha256_stdin)" ]; then
       echo "invalid|check '$id' was recorded for a different command than the recipe's — re-run tools/verify.sh run $slug"; return 0; fi
     case "$rc" in ''|*[!0-9]*) echo "invalid|check '$id' records no numeric exit status — re-run tools/verify.sh run $slug"; return 0;; esac
-    case "$kind" in build|unit|lint|runtime|e2e) ;; *)
+    case "$kind" in build|unit|lint|runtime|e2e|data) ;; *)
       echo "invalid|check '$id' records an unknown kind '$kind' — re-run tools/verify.sh run $slug"; return 0;; esac
     if [ ! -f "$log" ]; then
       echo "invalid|check '$id' cites a log that does not exist ($log) — re-run tools/verify.sh run $slug"; return 0; fi
