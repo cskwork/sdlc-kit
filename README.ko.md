@@ -26,7 +26,7 @@ Intent → spec → plan → build → evidence → maintain. 사람 승인 게�
 - `intent.md`의 모든 주장에 `[verified]` 또는 `[assumed]` 라벨이 붙습니다.
 - 새 컨텍스트의 adversary가 스펙을 먼저 공격한 뒤에 사람이 승인합니다.
 - 평범한 계획은 adversary 리뷰만 통과하면 자동 승인됩니다. 마이그레이션, 삭제, API, 보안, 인프라 변경은 사람에게 올라옵니다.
-- 구현은 작성자가 아닌 별도의 verifier가 승인된 산출물과 대조합니다.
+- 구현은 작성자가 아닌 별도의 verifier가 세 갈래로 병렬 검증합니다. 실제 동작(E2E), 부작용과 데이터 정합성, 그리고 요청의 출처인 티켓·기획서와의 일치 여부입니다.
 - 실패한 시도는 교훈과 도메인 지식으로 남아 다음 실행을 돕습니다.
 
 [Anthropic의 AI-Native SDLC 플레이북](https://claude.com/blog/the-ai-native-sdlc-playbook)을 옮긴 것이지만 Claude Code에 묶여 있지 않습니다. 구현체는 순수 Markdown과 셸 스크립트입니다. 파일을 읽고 명령을 실행할 수 있는 하네스라면 어디서든 돌아갑니다.
@@ -146,6 +146,7 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
 │   ├── DOMAIN.md                     # 용어 · 확인된 사실 · 제약
 │   └── lessons/<date>-<lesson>.md
 ├── work/<slug>/                      # 열린 피처만
+│   ├── origin.md                     # 요청 당시의 티켓 · 기획서 스냅샷 — intent 게이트가 결합
 │   ├── intent.md                     # 문제 · 증명 · 성공 기준 · 범위
 │   ├── spec.md                       # Human summary · AS-IS → TO-BE · 계약
 │   ├── plan.md                       # 파일 · 순서 · 리스크 · 증명
@@ -161,7 +162,7 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
     └── approvals/                    # 피처의 승인 기록도 함께 이동, 여전히 gitignore 대상
 ```
 
-`init.sh`는 프로젝트 `.gitignore`에 열두 줄을 추가합니다. `work/`와 `archive/` 양쪽의 `approvals/`, `baseline.txt`, `deviations.md`, `harvest.md`, `scratch/`, `progress.md`입니다. git에 남는 것은 지속 기록입니다. `config.md`, `memory/`, 그리고 피처마다 `intent.md`, `spec.md`, `plan.md`, `map.md`, `evidence.md`, `delivery.md`, 아카이브의 `CLOSED`. 결정과 최종 증거는 작업 사본 없이도 1년 뒤에 읽을 수 있어야 하기 때문입니다. 대용량 출력은 `scratch/`에 남고 evidence.md는 결정적인 줄만 인용합니다. 예전 킷으로 심은 프로젝트에서 `init.sh`를 다시 돌리면 그때 추가했던 `spec.md`·`evidence.md` 무시 줄을 제거하며, git 인덱스는 건드리지 않습니다. 피처가 열려 있는 동안 `status.sh`가 하트비트를 나이와 함께 `now →` 줄로 보여주며, `watch -n5 cat .sdlc/work/<slug>/progress.md`로 실시간 추적할 수 있습니다.
+`init.sh`는 프로젝트 `.gitignore`에 열두 줄을 추가합니다. `work/`와 `archive/` 양쪽의 `approvals/`, `baseline.txt`, `deviations.md`, `harvest.md`, `scratch/`, `progress.md`입니다. git에 남는 것은 지속 기록입니다. `config.md`, `memory/`, 그리고 피처마다 `origin.md`, `intent.md`, `spec.md`, `plan.md`, `map.md`, `evidence.md`, `delivery.md`, 아카이브의 `CLOSED`. 결정과 최종 증거는 작업 사본 없이도 1년 뒤에 읽을 수 있어야 하기 때문입니다. 대용량 출력은 `scratch/`에 남고 evidence.md는 결정적인 줄만 인용합니다. 예전 킷으로 심은 프로젝트에서 `init.sh`를 다시 돌리면 그때 추가했던 `spec.md`·`evidence.md` 무시 줄을 제거하며, git 인덱스는 건드리지 않습니다. 피처가 열려 있는 동안 `status.sh`가 하트비트를 나이와 함께 `now →` 줄로 보여주며, `watch -n5 cat .sdlc/work/<slug>/progress.md`로 실시간 추적할 수 있습니다.
 
 공개 sdlc-kit 저장소는 프레임워크만 담습니다. 커밋되는 산출물(intent, plan, map, memory)은 그것이 설명하는 프로젝트 안에서 함께 버전 관리됩니다. 무시되는 나머지는 그것을 만든 작업 사본 안에만 남습니다.
 
@@ -193,7 +194,7 @@ ship 승인이 묶는 것은 리뷰가 본 프로젝트 소스 전체 스냅샷�
 
 실행 권한은 Git의 `core.filemode` 설정에 따라 판단합니다. Windows Git Bash처럼 값이 `false`이면 추적 중인 파일은 Git 인덱스의 실행 권한을 사용하고 새 파일은 실행 권한이 없는 것으로 처리합니다. 실행 파일로 지정하려면 리뷰 전에 `git add --chmod=+x` 또는 `git update-index --chmod=+x`를 사용하세요. 리뷰 후 인덱스의 실행 권한을 바꾸면 승인이 무효화됩니다. `core.filemode=true`인 환경에서는 파일 시스템의 chmod 변경을 직접 검사합니다.
 
-그 전에 검증은 실제 동작을 돌립니다. 바뀐 동작을 사용자나 호출자가 실제로 만나는 인터페이스로 끝까지 실행하되, 변경 범위에 맞춰 프로젝트 자신의 명령(`.sdlc/config.md`의 `e2e:`, `qa:`, `run:`)을 씁니다. 실행할 환경이 없으면 NOT VERIFIED이며 evidence.md에 그렇게 적습니다. 통과한 단위 테스트가 조용한 대체물이 되는 일은 없습니다.
+그 전에 검증은 실제 동작을 돌립니다. 바뀐 동작을 사용자나 호출자가 실제로 만나는 인터페이스로 끝까지 실행하되, 변경 범위에 맞춰 프로젝트 자신의 명령(`.sdlc/config.md`의 `e2e:`, `qa:`, `run:`)을 씁니다. 실행할 환경이 없으면 NOT VERIFIED이며 evidence.md에 그렇게 적습니다. 통과한 단위 테스트가 조용한 대체물이 되는 일은 없습니다. 그 옆에서 두 갈래가 병렬로 더 돕니다. **부작용** 렌즈는 베이스라인, 유지되어야 할 동작, 그리고 변경이 건드린 데이터 형태가 다른 생산자와 소비자 사이에서 정합성을 지키는지 봅니다. **의도 일치** 렌즈는 intent 게이트가 결합한 티켓·기획서 스냅샷 `origin.md`를 번호 붙은 성공 기준마다 대조해, 구현이 무엇을 담았고 무엇을 빠뜨렸고 무엇을 넘어섰는지 적습니다. 어느 렌즈의 발견이든 build의 fix loop로 들어가며, 3라운드 안에 해결되지 않으면 사람에게 가고 `tools/auto.sh`는 이를 `fixloop.exhausted`로 보고합니다.
 
 ### 실패한 실행도 지식을 남긴다
 

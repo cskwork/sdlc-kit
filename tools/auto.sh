@@ -102,6 +102,7 @@ evaluate() { # <slug>
   EV_NEXT_KIND=""; EV_NEXT_CMD=""; EV_NEXT_TEXT=""
   EV_SRC_STATE=""; EV_SRC_WANT=""; EV_SRC_NOW=""
   EV_VERIFY=""; EV_VERIFY_DETAIL=""; EV_INTENT=""; EV_INTENT_DETAIL=""
+  EV_FIXLOOP=""; EV_FIXLOOP_DETAIL=""
   EV_DELIVERY=""; EV_DELIVERY_DETAIL=""; EV_DELIVERY_TARGET=""; EV_HANDOFF=""
   EV_REMOTE=""; EV_BRANCH=""; EV_REMOTE_SHA=""; EV_REMOTE_VERDICT="not-checked"
   EV_TRACK=$(sdlc_auto_track "$s")
@@ -112,6 +113,7 @@ evaluate() { # <slug>
 
   st=$(sdlc_auto_intent_contract "$s"); EV_INTENT="${st%%|*}"; EV_INTENT_DETAIL="${st#*|}"
   st=$(sdlc_verify_state "$s");        EV_VERIFY="${st%%|*}"; EV_VERIFY_DETAIL="${st#*|}"
+  st=$(sdlc_auto_fixloop_state "$s");  EV_FIXLOOP="${st%%|*}"; EV_FIXLOOP_DETAIL="${st#*|}"
 
   if [ -f "$dir/CLOSED" ]; then
     EV_STAGE=closed; EV_STATUS=complete
@@ -145,7 +147,12 @@ evaluate() { # <slug>
           # evidence.md missing means the work itself is still open: build and
           # the independent verification come before the ship artifact
           EV_STAGE=build
-          case "$EV_VERIFY" in
+          if [ "$EV_FIXLOOP" = exhausted ]; then
+            # the fix loop hit its cap (skills/4-build): a human decides, at every
+            # lazymode — no verification state makes this 'ready'
+            EV_STATUS=needs-human; add_blocker fixloop.exhausted "$EV_FIXLOOP_DETAIL"
+            set_next human "" "$EV_FIXLOOP_DETAIL"
+          else case "$EV_VERIFY" in
             fail|invalid) EV_STATUS=blocked; add_blocker verify.fail "$EV_VERIFY_DETAIL"
                      set_next verify "tools/verify.sh run $s" "the verification is not satisfied over this source — fix it, then re-run";;
             blocked) EV_STATUS=blocked; add_blocker verify.environment "$EV_VERIFY_DETAIL"
@@ -160,7 +167,7 @@ evaluate() { # <slug>
                      set_next build "" "build and verify per skills/4-build + roles/verifier.md, then write $art";;
             ok)      EV_STATUS=ready
                      set_next write "" "write $art (templates/evidence.md), quoting the receipt's deciding lines";;
-          esac
+          esac; fi
         else
           EV_STAGE="$stage"; EV_STATUS=ready
           set_next write "" "write $art (see $(skill_dir_for "$stage"))"
@@ -197,6 +204,12 @@ evaluate() { # <slug>
                      set_next verify "tools/verify.sh run $s" "$EV_VERIFY_DETAIL"; return 0;;
             unconfigured) add_gap verify.unconfigured "$EV_VERIFY_DETAIL";;
           esac
+        fi
+        if [ "$stage" = ship ] && [ "$EV_FIXLOOP" = exhausted ]; then
+          # evidence.md written over an exhausted fix loop: the ship gate is the
+          # human's, whatever the lazymode (AGENTS.md rule 3, blocker past its cap)
+          EV_STATUS=needs-human; add_blocker fixloop.exhausted "$EV_FIXLOOP_DETAIL"
+          set_next human "gates/approve.sh ship $art" "$EV_FIXLOOP_DETAIL"; return 0
         fi
         if [ "$LAZY" -ge "$(sdlc_auto_lazy_min "$stage")" ]; then
           EV_STATUS=ready
@@ -373,6 +386,8 @@ feature_json() { # <slug>
   printf '      "gaps": '; emit_blockers_json "$EV_GAPS"; printf ',\n'
   printf '      "intent_contract": {"state": %s, "detail": %s},\n' \
     "$(sdlc_json_str "$EV_INTENT")" "$(sdlc_json_str "$EV_INTENT_DETAIL")"
+  printf '      "fix_loop": {"state": %s, "detail": %s},\n' \
+    "$(sdlc_json_str "$EV_FIXLOOP")" "$(sdlc_json_str "$EV_FIXLOOP_DETAIL")"
   printf '      "verification": {"state": %s, "profile": %s, "detail": %s, "receipt": %s},\n' \
     "$(sdlc_json_str "$EV_VERIFY")" "$(sdlc_json_str "$(sdlc_verify_profile)")" \
     "$(sdlc_json_str "$EV_VERIFY_DETAIL")" "$(sdlc_json_str "$(sdlc_verify_receipt "$s")")"

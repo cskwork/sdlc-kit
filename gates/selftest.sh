@@ -117,7 +117,7 @@ if [ -n "$py" ]; then
 import sys, glob, os
 failed = []
 for p in glob.glob(os.path.join(sys.argv[1], '**/SKILL.md'), recursive=True):
-    text = open(p).read()
+    text = open(p, encoding='utf-8').read()   # SKILL.md is UTF-8; Windows defaults to cp1252
     if not text.startswith('---'):
         failed.append(f'{p}: no frontmatter'); continue
     fm = text.split('---')[1]
@@ -185,6 +185,26 @@ case "$out" in (*"intent.md changed after"*) ;; (*) echo "FAIL: upstream-drift m
 mv .sdlc/work/feat-d/intent.md.orig .sdlc/work/feat-d/intent.md
 "$kit/gates/check-gate.sh" spec .sdlc/work/feat-d/spec.md >/dev/null || { echo "FAIL: spec gate not open after the upstream was restored"; exit 1; }
 echo "ok: upstream edit closes the downstream gate"
+
+# 14b. origin.md (the ticket / 기획서 snapshot) is bound by the intent gate and
+#      every gate downstream of it, and is never a gate of its own
+mkdir -p .sdlc/work/feat-o
+echo "ticket A20-1: users can export" > .sdlc/work/feat-o/origin.md
+echo i > .sdlc/work/feat-o/intent.md; echo s > .sdlc/work/feat-o/spec.md
+"$kit/gates/approve.sh" intent .sdlc/work/feat-o/intent.md --delegated >/dev/null
+grep -q '^upstream_origin: [0-9a-f]' .sdlc/approvals/feat-o.intent.approval || { echo "FAIL: intent approval does not bind origin.md"; exit 1; }
+"$kit/gates/approve.sh" spec .sdlc/work/feat-o/spec.md --delegated >/dev/null
+echo "edited after approval" >> .sdlc/work/feat-o/origin.md
+out=$("$kit/gates/check-gate.sh" spec .sdlc/work/feat-o/spec.md 2>&1) && { echo "FAIL: spec gate survived an origin.md rewrite"; exit 1; }
+case "$out" in (*"origin.md changed after"*"re-approve intent, then spec"*) ;; (*) echo "FAIL: origin-drift message wrong: $out"; exit 1;; esac
+if "$kit/gates/approve.sh" origin .sdlc/work/feat-o/origin.md --delegated >/dev/null 2>&1; then
+  echo "FAIL: 'origin' accepted as a gate"; exit 1; fi
+mkdir -p .sdlc/work/feat-o2; echo i > .sdlc/work/feat-o2/intent.md
+"$kit/gates/approve.sh" intent .sdlc/work/feat-o2/intent.md --delegated >/dev/null
+echo "late snapshot" > .sdlc/work/feat-o2/origin.md
+out=$("$kit/gates/check-gate.sh" intent .sdlc/work/feat-o2/intent.md 2>&1) && { echo "FAIL: intent gate survived an origin.md written after the approval"; exit 1; }
+case "$out" in (*"binds no digest for origin.md"*) ;; (*) echo "FAIL: unbound-origin message wrong: $out"; exit 1;; esac
+echo "ok: origin.md is bound by intent and every downstream gate, never a gate itself"
 
 # 15. tripwire.sh: flags risky plans, stays quiet on clean ones
 tw=.sdlc/work/feat-d/tw.md

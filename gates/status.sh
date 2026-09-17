@@ -62,8 +62,7 @@ fi
 
 # stage order and the artifact each gate locks
 stages="intent spec plan ship"
-artifact_for() { case "$1" in
-  intent) echo "intent.md";; spec) echo "spec.md";; plan) echo "plan.md";; ship) echo "evidence.md";; esac; }
+artifact_for() { sdlc_artifact_of "$1"; }   # one map, in _common.sh
 next_hint() { case "$1" in
   intent) echo "skills/2-spec";; spec) echo "skills/3-plan";; plan) echo "skills/4-build then 5-ship";;
   ship) echo "commit per skills/5-ship discipline, record delivery.md, then close.sh <slug> shipped";; esac; }
@@ -176,7 +175,7 @@ for dir in .sdlc/work/*/; do
           [ -n "$upw" ] || continue
           if [ ! -f "$upart" ] || [ "$(sdlc_sha256_file "$upart" 2>/dev/null || true)" != "$upw" ]; then
             state="$state — STALE: $(artifact_for "$up") changed since approval"
-            [ -z "$next_action" ] && next_action="upstream $(artifact_for "$up") changed — re-approve $up, then $stage"
+            [ -z "$next_action" ] && next_action="upstream $(artifact_for "$up") changed — $(sdlc_regate_hint "$up" "$stage")"
           fi
         done
         # an upstream artifact on disk that this record binds with nothing (older
@@ -242,6 +241,17 @@ EOF
         if [ "$lazy" -ge 4 ]; then
           next_action="complete ${dir}intent.md before the intent gate: ${ist#*|}"
         fi;;
+    esac
+  fi
+  # the build fix loop cap (skills/4-build), in the machine view's words: an
+  # exhausted loop is a human decision at every lazymode and overrides the next
+  # action, exactly like an open material question.
+  if [ ! -f ".sdlc/approvals/${slug}.ship.approval" ]; then
+    fst=$(sdlc_auto_fixloop_state "$slug")
+    case "${fst%%|*}" in
+      exhausted) printf "  %-8s %s — %s\n" "build" "FIX LOOP EXHAUSTED" "${fst#*|}"
+                 next_action="${fst#*|}";;
+      open|resolved) printf "  %-8s %s\n" "build" "${fst#*|}";;
     esac
   fi
   # shipped means delivered (AGENTS.md rule 6): after the ship gate the feature
