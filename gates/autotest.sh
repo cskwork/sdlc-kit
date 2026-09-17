@@ -1094,6 +1094,43 @@ else
   pass "A23 not applicable: tools/_run.py cannot run at all without python3"
 fi
 
+# =====================================================================
+# A24 the build fix loop cap is machine-readable: deviations.md's round lines
+#     decide, and an exhausted loop is a human decision at lazymode 4
+# =====================================================================
+P="$FIX/a24"; mkproj "$P" 4; cd "$P"
+write_intent "$P" feat-a24
+gate approve.sh intent .sdlc/work/feat-a24/intent.md --lazy --review "read app.sh" >/dev/null
+assert_exit_msg "A24a no fix loop recorded: build is ready" 0 "ready build" auto next feat-a24
+DV=.sdlc/work/feat-a24/deviations.md
+printf '# Deviations: feat-a24\n## Fix loop\n- round 1/3: E2E · accepted F1 · declined none · re-check: open: F1 still fails\n' > "$DV"
+assert_exit_msg "A24b an open round below the cap keeps build ready" 0 "ready build" auto next feat-a24
+printf -- '- round 2/3: E2E · accepted F1 · declined none · re-check: open: F1 still fails\n- round 3/3: E2E · accepted F1 · declined none · re-check: open: F1 still fails\n' >> "$DV"
+assert_exit_msg "A24c round 3 still open is fixloop.exhausted: needs-human, lazymode 4 included" 10 "fixloop.exhausted" auto next feat-a24
+out=$(gate status.sh feat-a24 2>&1)
+case "$out" in *"FIX LOOP EXHAUSTED"*) pass "A24d the cockpit says the same";; *) fail "A24d cockpit hides the exhausted loop" "$out";; esac
+printf '# Deviations: feat-a24\n## Fix loop\n- round 1/3: E2E · accepted F1 · declined none · re-check: open: F1 still fails\n- round 2/3: E2E · accepted F1 · declined none · re-check: open: F1 still fails\n- round 3/3: E2E · accepted F1 · declined none · re-check: resolved\n' > "$DV"
+assert_exit_msg "A24e round 3 resolved in place: build is ready again" 0 "ready build" auto next feat-a24
+printf -- '- round 4/3: E2E · accepted F2 · declined none · re-check: pending\n' >> "$DV"
+assert_exit_msg "A24f a round past the cap is exhausted whatever its re-check says" 10 "fixloop.exhausted" auto next feat-a24
+out=$(auto status --json)
+case "$out" in *'"fix_loop": {"state": "exhausted"'*) pass "A24g the machine view carries fix_loop";; *) fail "A24g fix_loop missing from JSON" "$out";; esac
+printf '# Evidence: feat-a24\n- R1: sh app.sh → hello\n' > .sdlc/work/feat-a24/evidence.md
+assert_exit_msg "A24h evidence.md over an exhausted loop does not make the lazy ship gate ready" 10 "fixloop.exhausted" auto next feat-a24
+
+# =====================================================================
+# A25 `data` is a receipted check kind: a read-only consistency query runs and
+#     is recorded, and never counts as runtime evidence
+# =====================================================================
+P="$FIX/a25"; mkproj "$P" 4; cd "$P"
+write_intent "$P" feat-a25
+write_recipe "$P" advisory "check: D1 | data | sh -c 'test 1 -eq 1'"
+assert_exit_msg "A25a a data check runs under the recipe" 0 "VERIFY ok" verify run feat-a25
+assert_grep .sdlc/work/feat-a25/verify-receipt.md '^check: D1 | data | 0 |' "A25b the receipt records the data check"
+assert_grep .sdlc/work/feat-a25/verify-receipt.md '^runtime_evidence: no' "A25c a data check is not runtime evidence"
+write_recipe "$P" advisory "check: D1 | data | sh -c 'test 1 -eq 2'"
+assert_exit_msg "A25d a failing data check fails the run" 1 "VERIFY fail" verify run feat-a25
+
 echo
 echo "================================================================"
 echo "PASSED: $PASSED   FAILED: $FAILED"

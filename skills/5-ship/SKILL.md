@@ -47,35 +47,20 @@ Fill `templates/evidence.md` → `.sdlc/work/<slug>/evidence.md`:
 - For each spec requirement, include the exact command and real output. Keep
   every numerical result. For long successful logs, include the verdict lines
   and numbers and cite the full scratch output. Include all failure output.
-- For brownfield work, compare baseline and after using the same commands.
-  Check each "stays untouched" item.
+- **The three verifier reports** (roles/verifier.md — E2E, Side effects,
+  Intent match) as reported, each check as command/tool · environment ·
+  scenario · observed result, with the fix-loop rounds from deviations.md. A
+  lens that reported NOT VERIFIED stays NOT VERIFIED here: name what is
+  missing; unit tests never stand in, and delivering over the gap is the
+  human's explicit call, recorded under Not verified.
+- **Bug fixes: the proof chain** (AGENTS.md rule 6) in the Bug proof section.
+  A chain with a missing link is a diagnosis, not a confirmed fix: label it
+  that way here and in the report.
 - Include full test, lint, and build results. Long successful logs may use the
   same verdict-lines-and-scratch-citation rule.
 - Adversary findings + resolutions.
 - State anything not verified, including environment limits and skipped checks.
   Record a gap instead of marking the check as passed.
-- **The real end-to-end run, scoped to this change** (roles/verifier.md): the
-  changed behavior exercised through the interface a user or caller actually
-  meets — the real screen for a UI change (the `qa:` tool from config.md, or
-  any browser/QA tool in the harness), a real request or command against a
-  running instance for an API/CLI/job change, and for a bug fix the SAME
-  failing flow before and after plus the neighbouring flows that share the
-  changed code. Record command or tool · environment · scenario · observed
-  result. Reuse the project's own commands; do not build a parallel harness,
-  and do not re-run the project's entire E2E suite as a ritual.
-  **A missing environment means NOT VERIFIED** — name what is missing and say
-  so here. Unit tests never stand in for the real run, and a green suite is
-  not a substitute. Delivering anyway is possible only as an explicit known
-  gap the human accepted, recorded in this file.
-- For every AS-IS to TO-BE pair, record the observed result and its command or
-  browser evidence.
-- **Bug fixes: the proof chain** (AGENTS.md rule 6), in evidence.md's Bug
-  proof section — the failure observed BEFORE the fix, the causal mechanism
-  that explains it, the SAME reproduction passing after, and the adjacent
-  flows through the changed code. An intermittent defect may substitute
-  logs, traces, or an isolated deterministic reproduction, with its
-  limitation named. A chain with a missing link is a diagnosis, not a
-  confirmed fix: label it that way here and in the report.
 
 ## Retrospective
 
@@ -143,7 +128,7 @@ approval is not that authorization.
    — when changed — `.sdlc/memory/POLICY.md` and `.sdlc/config.md`
    (lazymode, command, and `qa:` edits must reach the audit trail). Do not
    use `git add -A` or `git add .` because they can include unrelated files.
-   Staging `.sdlc/work/<slug>/` yields the durable record — `intent.md`,
+   Staging `.sdlc/work/<slug>/` yields the durable record — `origin.md`, `intent.md`,
    `spec.md`, `plan.md`, `map.md`, `evidence.md`, `delivery.md`; approvals,
    harvest.md, deviations.md, baseline.txt, progress.md, and scratch/ are
    gitignored (init.sh) and stay on disk. If any of THOSE appears in the

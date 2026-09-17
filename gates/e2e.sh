@@ -296,6 +296,13 @@ mkdir -p .sdlc/work/fix-empty-query/scratch
 n=$(wc -l < .sdlc/work/fix-empty-query/scratch/repro-before.log | tr -d ' ')
 [ "$n" = 3 ] && pass "B1 bug reproduced before any change (empty query returned $n lines)" \
   || fail "B1 bug did not reproduce (got $n lines, expected 3)"
+cat > .sdlc/work/fix-empty-query/origin.md <<'EOF'
+# Origin: fix-empty-query
+- Ref: QA-7 (fixture ticket)
+- Read with: fixture
+## Text
+An empty search must print nothing.
+EOF
 cat > .sdlc/work/fix-empty-query/intent.md <<'EOF'
 # Intent: fix-empty-query
 - Goal: an empty search box no longer dumps every record.
@@ -307,6 +314,7 @@ cat > .sdlc/work/fix-empty-query/intent.md <<'EOF'
 - [ ] `./app.sh search ""` prints nothing; `./test_app.sh` passes
 EOF
 assert_ok "B2 intent approved (fixture human)" sdlc approve.sh intent .sdlc/work/fix-empty-query/intent.md --delegated
+assert_grep .sdlc/approvals/fix-empty-query.intent.approval '^upstream_origin: [0-9a-f]' "B2b the intent approval binds the origin snapshot"
 assert_fail_msg "B3 spec gate closed before its own approval" "GATE CLOSED" \
   sdlc check-gate.sh spec .sdlc/work/fix-empty-query/spec.md
 cat > .sdlc/work/fix-empty-query/spec.md <<'EOF'
@@ -412,6 +420,15 @@ assert_fail_msg "B10g a plan.md deleted after the ship review blocks 'shipped'" 
 cp "$FIX/plan.keep" .sdlc/work/fix-empty-query/plan.md
 assert_ok_msg "B10h the restored upstream chain reopens the ship gate" "GATE OPEN" \
   sdlc check-gate.sh ship .sdlc/work/fix-empty-query/evidence.md
+assert_grep .sdlc/approvals/fix-empty-query.ship.approval '^upstream_origin: [0-9a-f]' \
+  "B10i the full-route ship approval binds the origin snapshot"
+cp .sdlc/work/fix-empty-query/origin.md "$FIX/origin.keep"
+echo "- also export every record (ticket edited after the review)" >> .sdlc/work/fix-empty-query/origin.md
+assert_fail_msg "B10j an origin.md edited after the ship review blocks 'shipped'" \
+  "origin.md changed after the ship review" sdlc close.sh fix-empty-query shipped "delivered"
+cp "$FIX/origin.keep" .sdlc/work/fix-empty-query/origin.md
+assert_ok_msg "B10k the restored origin reopens the ship gate" "GATE OPEN" \
+  sdlc check-gate.sh ship .sdlc/work/fix-empty-query/evidence.md
 cat > .sdlc/work/fix-empty-query/delivery.md <<EOF
 # Delivery: fix-empty-query
 - Target: local
@@ -424,6 +441,7 @@ EOF
 assert_ok_msg "B11 close shipped accepts a worktree-identity local delivery" "delivery: local" \
   sdlc close.sh fix-empty-query shipped "empty-query bug fixed; regression test added"
 assert_file .sdlc/archive/fix-empty-query/spec.md "B12 spec.md archived (durable)"
+assert_file .sdlc/archive/fix-empty-query/origin.md "B12b origin.md archived (durable)"
 git add -A; git commit -qm "fix(search): empty query matches nothing" >/dev/null
 git clone -q "$B" "$FIX/clone-full"
 assert_file "$FIX/clone-full/.sdlc/archive/fix-empty-query/spec.md" "B13 spec.md survives a fresh clone"

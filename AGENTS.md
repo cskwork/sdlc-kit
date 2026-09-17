@@ -74,7 +74,9 @@ when closing.
    reviewed>"`, not a human ask.
    **What a gate binds**: the approval record names the canonical
    `.sdlc/work/<slug>/<artifact>` path, the artifact's sha256, and the
-   digests of the upstream artifacts it was granted on top of. Editing the
+   digests of the upstream artifacts it was granted on top of — `origin.md`,
+   the snapshot of the ticket or 기획서 the request came from, included
+   whenever it exists (templates/origin.md). Editing the
    approved artifact, or materially editing an upstream one, closes the gate
    with the exact re-approval command — a downstream gate never outlives the
    text it was granted for. The digest is CHANGE DETECTION, not
@@ -254,18 +256,25 @@ when closing.
 6. **Proof over claims.** Every "done" claim carries command output, using
    the real commands in `.sdlc/config.md`.
 
-   **Verification runs the real thing.** Before a feature ships, the changed
-   behavior is exercised end to end through the interface a user or caller
-   actually meets — the real screen for a UI change, a real request or command
-   against a running instance for an API/CLI/job change, and for a bug fix the
-   SAME failing flow before and after plus the neighbouring flows that share
-   the changed code. It is scoped to the change, reuses the project's own
-   commands (`.sdlc/config.md`: `e2e:`, `qa:`, `run:`), and never means
-   re-running the whole product suite as a ritual. Record command or tool,
+   **Verification runs the real thing, through three lenses.** Before a
+   feature ships, a fresh-context verifier (roles/verifier.md) checks it three
+   ways, in parallel. **E2E**: the changed behavior exercised through the
+   interface a user or caller actually meets, with the project's own commands
+   (`.sdlc/config.md`: `e2e:`, `qa:`, `run:`), scoped to the change — never
+   the whole product suite as a ritual. **Side effects**: what else changed
+   between AS-IS and TO-BE — the baseline, the untouched items, and the
+   consistency of every data shape the change writes or reads across its other
+   producers and consumers. **Intent match**: the build read back against the
+   origin of the request — `origin.md`, the snapshot the intent gate bound,
+   plus the live ticket or 기획서 when reachable — per intent.md O-item,
+   naming what is covered, missing, and beyond. Each check records command or tool,
    environment, scenario, and the observed result. **No environment to run it
    in = NOT VERIFIED**: say what is missing, in evidence.md. A passing unit
    suite is never a silent substitute, and a delivery over a known gap is
-   allowed only when the human accepts that gap explicitly.
+   allowed only when the human accepts that gap explicitly. A finding from any
+   lens enters the build fix loop (skills/4-build): three rounds, then the
+   human — `tools/auto.sh` reads the round lines in deviations.md and reports
+   an exhausted loop as `fixloop.exhausted`, needs-human at every lazymode.
 
    **A receipt makes a missing proof detectable** (optional, and the loop
    works without it). A project that fills `.sdlc/verify.md`
@@ -333,7 +342,7 @@ when closing.
    not call it a confirmed fix.
 7. **Artifacts live in the project repo** under `.sdlc/work/<feature>/`
    while open and `.sdlc/archive/<feature>/` after close. Git keeps the
-   durable record — `intent.md`, `spec.md`, `plan.md`, `map.md`,
+   durable record — `origin.md`, `intent.md`, `spec.md`, `plan.md`, `map.md`,
    `evidence.md`, `delivery.md`, `CLOSED`, `memory/`, `config.md`: the
    decisions and the final proof, readable a year later without the working
    copy. Gitignored working residue stays local (`approvals/`,

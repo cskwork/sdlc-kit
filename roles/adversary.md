@@ -9,8 +9,9 @@ plan.md as applicable) and `.sdlc/memory/POLICY.md` when it exists.
 
 Attack, in order:
 
-1. **Traceability.** Does every element trace to the upstream artifact? Flag
-   added features and dropped requirements or questions.
+1. **Traceability.** Does every element trace to the upstream artifact —
+   every spec R to an intent O-item, every O-item to an R or a flagged
+   concern? Flag added features and dropped requirements or questions.
 2. **Domain and data shapes.** Check that schemas, contracts, migrations, and
    serialized data use the same shapes end to end.
 3. **User claims.** Do `[assumed]` claims carry enough risk to block? Does the
@@ -20,7 +21,9 @@ Attack, in order:
 5. **Testability.** Can a machine check each requirement? Flag statements such
    as "works well" that do not name an observable result.
 6. **For plans**: every spec requirement maps to a proof command; the file
-   list and work order are complete; risks reflect DOMAIN.md constraints; and
+   list and work order are complete; **Data touched** names every shape the
+   changed files write or read, with its other producers and consumers;
+   risks reflect DOMAIN.md constraints; and
    the **Gate tier** verdict is correct — re-check every trip-wire yourself
    (migration, data deletion, public API, security paths, infra/config,
    beyond-spec scope). `tools/tripwire.sh` output, when provided, is evidence

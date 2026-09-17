@@ -54,8 +54,8 @@ ensure_line .gitignore '.sdlc/archive/*/progress.md'
 ensure_line .gitignore '.sdlc/approvals/'
 ensure_line .gitignore '.sdlc/archive/*/approvals/'
 
-# per-feature working residue. The durable record is intent.md, spec.md,
-# plan.md, map.md, delivery.md, evidence.md, CLOSED — they are the reason the
+# per-feature working residue. The durable record is origin.md, intent.md,
+# spec.md, plan.md, map.md, delivery.md, evidence.md, CLOSED — they are the reason the
 # feature can be understood a year later, so they stay committed (AGENTS.md
 # rule 7). Only the bulky, machine-regenerable residue is ignored — including
 # the automation layer's two working files: checkpoint.md (pending execution

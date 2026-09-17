@@ -6,7 +6,8 @@
 - Type: greenfield | brownfield
 - Track: full (default) | compact — <compact only when ALL criteria in skills/1-intent hold; `micro` is the older spelling of compact>
 - Requested by: <who>
-- Refs: <external ticket/PR/incident key or URL, e.g. A20-1234 — omit if none>
+- Refs: <ticket/PR/incident key or URL, 기획서 path — snapshotted in origin.md
+  (templates/origin.md) BEFORE this gate, which binds it. Omit if none>
 - Scope authorization: <the scope the human already authorized, in their words —
   e.g. "fix the A20-1234 login redirect and open a PR". This is NOT the stage
   approval: it answers "may this be done at all?" (AGENTS.md rule 3). Anything
@@ -27,9 +28,10 @@ One line per request, updated in place; max 2 requests, then waived-by-agent
   <!-- update the line to: received <date> | waived-by-human <date, why> | waived-by-agent <date> — unreproduced, diagnosis stays [assumed] -->
 - verification debt: <what could not be run because config.md test/lint is empty, and what replaced it>
 
-## Success criteria
-<Observable behavior that means done. Name a command or test where possible.>
-- [ ] <criterion>
+## Success criteria   <!-- O-numbered: spec R-items cite them; the Intent match lens counts Covered/Missing over them -->
+<Observable behavior that means done, in the origin's words (origin.md) or
+else the human's. Name a command or test where possible.>
+- [ ] O1: <criterion>
 
 ## Compact route   <!-- REQUIRED when Track is compact; delete the section on the full track -->
 <!-- This is the whole work contract: no spec.md, no plan.md, and nothing

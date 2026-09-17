@@ -34,11 +34,11 @@ now=$(sdlc_sha256_file "$canon")
 [ "$now" = "$recorded_digest" ] || closed "$canon changed after it was approved. Show the human what changed, then re-approve: gates/approve.sh $stage $canon"
 
 for up in $(sdlc_upstream_stages "$stage"); do
-  upart=".sdlc/work/$slug/$(sdlc_stage_artifact "$up")"
+  upart=".sdlc/work/$slug/$(sdlc_artifact_of "$up")"
   want=$(sdlc_field "$rec" "upstream_$up" || true)
   [ -n "$want" ] || continue
   [ -f "$upart" ] || closed "$upart was part of the approved '$stage' basis and is now missing. Re-approve $stage after restoring it."
-  [ "$(sdlc_sha256_file "$upart")" = "$want" ] || closed "$upart changed after '$stage' was approved — the downstream gate no longer covers what the human approved. Re-approve $up, then $stage."
+  [ "$(sdlc_sha256_file "$upart")" = "$want" ] || closed "$upart changed after '$stage' was approved — the downstream gate no longer covers what the human approved. $(sdlc_regate_hint "$up" "$stage")."
 done
 
 # The ship approval binds the reviewed SOURCE as well as evidence.md, and
@@ -66,7 +66,7 @@ fi
 # nobody re-approved. Compact features have no spec.md/plan.md and are untouched.
 unbound_up=$(sdlc_upstream_unbound "$rec" "$slug")
 if [ -n "$unbound_up" ]; then
-  closed "the '$stage' approval of '$slug' binds no digest for $(for u in $unbound_up; do printf '%s ' "$(sdlc_stage_artifact "$u")"; done)— those artifacts exist but were never part of the approved basis (an older kit's record, or written after the approval). Re-approve: gates/approve.sh $stage $canon"
+  closed "the '$stage' approval of '$slug' binds no digest for $(for u in $unbound_up; do printf '%s ' "$(sdlc_artifact_of "$u")"; done)— those artifacts exist but were never part of the approved basis (an older kit's record, or written after the approval). Re-approve: gates/approve.sh $stage $canon"
 fi
 
 echo "GATE OPEN: $stage (approved @ $(sdlc_field "$rec" approved_at))"
