@@ -51,9 +51,11 @@ environment: <local dev instance · seeded fixture data · staging URL>
 #   check: <id> | <kind> | <command>
 #   id     [a-zA-Z0-9._-]+ — usually the requirement id (R1, R2, …). It names
 #          the log file under .sdlc/work/<slug>/scratch/verify/<id>.log.
-#   kind   build | unit | lint | runtime | e2e
+#   kind   build | unit | lint | runtime | e2e | data
 #          `runtime` and `e2e` are the only kinds that count as the real run:
 #          the change driven through the interface a user or caller meets.
+#          `data` is a READ-ONLY query that proves a consistency claim (the
+#          Side effects lens, roles/verifier.md) — receipted, never the real run.
 #   command  the project's OWN command, scoped to the change where possible.
 #          It runs with stdin on /dev/null, in its own process group, bounded
 #          by check_timeout. EVERY configured check runs, and the receipt
@@ -63,3 +65,4 @@ check: unit | unit | <the test command, scoped to the change where possible>
 check: lint | lint | <the lint command>
 check: R1 | e2e | <the project's own e2e command for this requirement>
 check: R2 | runtime | <a real request/command against the launched instance>
+check: D1 | data | <a read-only query: e.g. rows written in the new shape == rows read by its consumer>

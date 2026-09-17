@@ -56,6 +56,7 @@ A shell script cannot review code, and this kit never claims one did.
       "blockers": [ { "code": "verify.fail", "detail": "…" } ],
       "gaps":     [ { "code": "verify.unconfigured", "detail": "…" } ],
       "intent_contract": { "state": "ok", "detail": "…" },
+      "fix_loop":        { "state": "none", "detail": "…" },
       "verification":    { "state": "ok", "profile": "strict", "detail": "…", "receipt": "…" },
       "source":   { "state": "ok", "reviewed_digest": "…", "current_digest": "…" },
       "delivery": { "state": "ok", "target": "pr", "detail": "…" },
@@ -178,7 +179,12 @@ environment: local instance, seeded fixture data
 check: build | build | npm run build
 check: R1    | unit  | npm test -- login
 check: R2    | e2e   | npx playwright test --grep @login
+check: D1    | data  | psql -Atc "select count(*) from sessions where token_v2 is null" | grep -qx 0
 ```
+
+`data` is a read-only consistency query (the Side effects lens of
+`roles/verifier.md`): it is receipted like every other check and never counts
+as runtime evidence.
 
 `tools/verify.sh run <slug>` refuses an unfilled or malformed recipe outright,
 deletes any previous receipt, launches the runtime in its own process group,

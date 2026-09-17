@@ -18,6 +18,12 @@ Policy: AGENTS.md rule 3.>
 ## Files that change
 - <path> (new | modified): <why>
 
+## Data touched   <!-- the Side effects lens (roles/verifier.md) executes this list -->
+<Every shape the files above write or read — table, column, type, event,
+file — with its OTHER producers and consumers, and what happens to records
+that predate the change.>
+- <shape> · written | read · also produced/consumed by: <list> · pre-existing records: <what happens>
+
 ## Order of work
 <Each step keeps configured checks passing. Add tests with the code they test.>
 1. <step>
