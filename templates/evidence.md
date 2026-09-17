@@ -2,6 +2,7 @@
 
 - From: plan.md (approved YYYY-MM-DD)
 - Diff: <branch/commit range>
+- Origin: <origin.md Ref · live source re-read with <tool>: unchanged | drifted: <what> | unreachable>
 
 <!-- scratch/ is gitignored and local-only: a fresh clone has the citation but not
      the file. Cite it only NEXT TO the deciding lines quoted here, or point at a
@@ -21,17 +22,18 @@
 - Adjacent flows: <other paths through the changed code> → <checked; result>
 - Intermittent? <the logs/traces or isolated deterministic repro used instead, and what it does NOT prove>
 
-## End-to-end check   <!-- the change exercised for real, scoped to it (roles/verifier.md) -->
-- Command/tool: <the real UI tool, request, or CLI invocation — config.md `e2e:`/`qa:`/`run:` where set>
-- Environment: <where it ran: local instance, staging URL, seeded fixture data>
-- Scenario: <the user's or caller's steps>
-- Observed: <the final result as the user/caller sees it, verbatim; bulk → scratch/>
-- Neighbouring flows: <the ones sharing the changed code> → <result>
-- NOT VERIFIED: <what could not be run for real, and what is missing — never "covered by unit tests">
-
-## Regression   <!-- brownfield -->
-- Baseline vs after: <clean | diffs explained>
-- U1: <checked; result>
+## Verification   <!-- the three verifier reports (roles/verifier.md), as reported; each check: command/tool · environment · scenario · observed -->
+### E2E
+- <command/tool> · <environment> · <scenario> → <observed, verbatim; bulk → scratch/>
+### Side effects   <!-- AS-IS → TO-BE beyond the requirement -->
+- Baseline vs after: <clean | diffs explained> · U1: <checked; result> · neighbouring flows: <named → result>
+- Data consistency: <shape → producers/consumers checked → consistent | skew: what>
+- Unlisted changes: <behavior spec.md did not name but the code now changes, or none>
+### Intent match   <!-- per O-item, against origin.md — not only spec.md -->
+- O1 → R1 → <observed> · O2 → <none> → MISSING: <what>
+- Covered: <n>/<n> · Missing: <list or none> · Beyond: <list or none>
+### Fix loop   <!-- copied from deviations.md; cap 3 rounds -->
+- round 1/3: <lens> · accepted <findings> · declined <findings — reason each> · re-check: resolved | open: <what>
 
 ## Full checks
 - Build: `<command>` → <verdict>
@@ -43,7 +45,7 @@
 - round 2/2: <re-review verdict; blockers surviving here go to Not verified and block --lazy>
 
 ## Not verified
-<honest gaps: environment limits, skipped checks, and why>
+<honest gaps: a lens with no environment (what is missing), skipped checks, an unreachable origin — never "covered by unit tests">
 
 ## Retro lessons   <!-- draft in harvest.md; the close merge writes memory/ -->
 - <lesson one-liner> → harvest.md  [promote: skills/<n> if applicable]

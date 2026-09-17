@@ -36,8 +36,9 @@ Fill `templates/spec.md`. Rules:
   one-line decision with your recommendation. Test: would a non-developer
   colleague understand every sentence? If not, rewrite. Write it LAST
   (after the adversarial pass), place it FIRST.
-- Every requirement traces to a line in intent.md. Do not add features that
-  intent.md does not request.
+- Every requirement cites the intent.md O-item it fulfils (`R1: … (O1)`). An
+  O-item with no R becomes a flagged concern, never a silent drop; a feature no
+  O-item asks for is not added.
 - Every intent.md open question ends up in exactly one of two places: answered
   in the spec, or carried forward as a flagged concern.
 - Define data shapes before behavior. Check schemas, API contracts, migrations,

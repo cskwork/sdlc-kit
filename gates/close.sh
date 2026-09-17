@@ -150,7 +150,7 @@ EOF
   # .sdlc/, which the source snapshot excludes, so this is the only check that
   # sees them. Compact features have no spec.md or plan.md: nothing is demanded.
   for up in $(sdlc_upstream_stages ship); do
-    upart="$dir/$(sdlc_stage_artifact "$up")"
+    upart="$dir/$(sdlc_artifact_of "$up")"
     upw=$(sdlc_field "$srec" "upstream_$up" || true)
     [ -n "$upw" ] || continue
     if [ ! -f "$upart" ]; then
@@ -161,13 +161,13 @@ EOF
     fi
     if [ "$(sdlc_sha256_file "$upart")" != "$upw" ]; then
       echo "BLOCKED: $upart changed after the ship review — the approval no longer covers what the human approved."
-      echo "  Show the human what changed, re-approve $up, then: gates/approve.sh ship $ev"
+      echo "  Show the human what changed, re-approve $(sdlc_regate_of "$up"), then: gates/approve.sh ship $ev"
       exit 1
     fi
   done
   unbound_up=$(sdlc_upstream_unbound "$srec" "$slug")
   if [ -n "$unbound_up" ]; then
-    echo "BLOCKED: the ship approval for '$slug' binds no digest for$(for u in $unbound_up; do printf ' %s' "$(sdlc_stage_artifact "$u")"; done)."
+    echo "BLOCKED: the ship approval for '$slug' binds no digest for$(for u in $unbound_up; do printf ' %s' "$(sdlc_artifact_of "$u")"; done)."
     echo "  Those artifacts exist but were never part of the approved basis (an older"
     echo "  kit's record, or written after the approval), so a rewrite would ride along."
     echo "  Re-run the ship review, then: gates/approve.sh ship $ev"
