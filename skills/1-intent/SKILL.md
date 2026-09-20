@@ -17,6 +17,13 @@ change, overwrite `.sdlc/work/<slug>/progress.md` with one line —
 
 1. Read `.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`, and
    `.sdlc/memory/DOMAIN.md`; open lessons whose tags match this request.
+   Then **retrieve what past features already decided about this area**:
+   `tools/kb.sh search "<the feature's own words>"` over the request's main
+   nouns (the module, the endpoint, the error text), and
+   `tools/kb.sh show <slug>` for any feature the hits name. Closed features
+   are included, so a decision made a year ago surfaces with its evidence
+   and delivery. Two or three targeted searches, not a scan of the archive:
+   what you find goes into the Evidence section with its source path.
 2. Pick a kebab-case feature slug; create `.sdlc/work/<slug>/`. Prefix with
    the tracker key when one exists (`a20-1234-fix-login`), else the date
    (`260830-fix-login`) — at thousands of tickets, bare names collide. Slugs
