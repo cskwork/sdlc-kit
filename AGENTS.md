@@ -208,7 +208,8 @@ when closing.
    The archive is bounded the same way: `status.sh --all` and `stats.sh`
    default to the newest 20 closed features. Never read the whole
    `.sdlc/archive/` into a working context — answer archive questions with
-   a targeted `ls`, `grep`, or a single slug lookup.
+   `tools/kb.sh search "<text>"` or `tools/kb.sh show <slug>` (rule 7), a
+   targeted `ls`/`grep`, or a single slug lookup.
 5. **Fresh context for helpers.** Verification and adversarial review run in
    a fresh context — a subagent (pi: subagent tool; Claude Code: Task;
    Codex: spawn), else a new session given only the `roles/*.md` file and
@@ -340,17 +341,40 @@ when closing.
    deterministic reproduction, with its limitation stated. Without that
    chain the work is a diagnosis or an instrumentation change — say so; do
    not call it a confirmed fix.
-7. **Artifacts live in the project repo** under `.sdlc/work/<feature>/`
-   while open and `.sdlc/archive/<feature>/` after close. Git keeps the
-   durable record — `origin.md`, `intent.md`, `spec.md`, `plan.md`, `map.md`,
-   `evidence.md`, `delivery.md`, `CLOSED`, `memory/`, `config.md`: the
-   decisions and the final proof, readable a year later without the working
-   copy. Gitignored working residue stays local (`approvals/`,
-   `baseline.txt`, `deviations.md`, `harvest.md`, `progress.md`,
-   `scratch/`). Bulk evidence lives in `scratch/`; evidence.md quotes the
-   deciding lines and cites the file, so the durable record stays small. A
-   PR body that carries the same evidence is an acceptable durable home —
-   link it from evidence.md. The kit directory stays framework-only.
+7. **Artifacts live in the record store** under `.sdlc/work/<feature>/` while
+   open and `.sdlc/archive/<feature>/` after close. **The store is
+   gitignored in full** (`/.sdlc`, written by init.sh): the records are the
+   project's knowledge, not its source, so they never enter the
+   application's history and a clone of the application does not carry
+   them. They stay where they are written — in the project's working copy,
+   or, when `init.sh <dir> --area <folder>` was used, in the folder the
+   human chose, one store per checkout (`<area>/<unit>-<checkout-id>/`,
+   `.sdlc` linked to it, ownership recorded in `PROJECT`). Nothing is ever
+   relocated automatically, and a store another checkout owns is refused,
+   never shared — at init AND before every gate verdict or state write, so a
+   copied working copy (the symlink survives `cp -R`) cannot open another
+   checkout's gate or close its features. Reading is not bound that way:
+   `tools/kb.sh` retrieval stays available, including `--area`.
+   **Backing the store up is the human's, not git's.**
+   The durable record is the same as before — `origin.md`, `intent.md`,
+   `spec.md`, `plan.md`, `map.md`, `evidence.md`, `delivery.md`, `CLOSED`,
+   `memory/`, `config.md`: the decisions and the final proof, readable a
+   year later. Working residue (`approvals/`, `baseline.txt`,
+   `deviations.md`, `harvest.md`, `progress.md`, `scratch/`) sits beside it
+   and is never quoted into an artifact. Bulk evidence lives in `scratch/`;
+   evidence.md quotes the deciding lines and cites the file, so the record
+   stays small. A PR body that carries the same evidence is an acceptable
+   durable home — link it from evidence.md. The kit directory stays
+   framework-only.
+   **Records are read back, not just written.** `tools/kb.sh` is the way in:
+   `index` regenerates the store's contents page (init.sh and close.sh run
+   it), `show <slug>` prints one feature's goal, documents, delivery and
+   lessons, and `search "<text>"` is a bounded literal search across open
+   and closed features and durable memory. `--area <folder>` covers every
+   owned store in that folder, including features whose checkout is gone.
+   Exit codes: 0 found, 1 nothing found, 2 usage error or refusal. Never
+   read a whole archive into context to answer a question `search` or
+   `show` answers.
 8. **Speak plainly.** Every report, gate request, and question starts with
    one short context paragraph (which stage, what happened before, what this
    message is for), uses short active sentences and the project's own

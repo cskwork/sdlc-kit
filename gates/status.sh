@@ -9,6 +9,10 @@ kit_self="$(cd "$(dirname "$0")/.." && pwd)"
 . "$kit_self/gates/_common.sh"
 . "$kit_self/gates/_auto.sh"
 [ -d .sdlc ] || { echo "FAIL: no .sdlc/ here. Run init.sh first, from the project root."; exit 1; }
+# status reports gate verdicts, so it answers for the checkout that OWNS the
+# records or not at all (_common.sh sdlc_store_owner_ok). --json is handed to
+# tools/auto.sh below, which runs the same check at its own boundary.
+sdlc_store_owner_ok || exit 1
 # --json is the MACHINE view of the same state (tools/auto.sh, schema
 # sdlc-kit/auto-status@1): stage · status · next action · blockers · source
 # identity, for a driver that must not parse the prose below. One

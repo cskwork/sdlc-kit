@@ -42,6 +42,9 @@ usage() { echo "usage: verify.sh <run|check|show> <slug> [--no-launch] | verify.
 [ $# -ge 1 ] || usage
 cmd="$1"; shift
 [ -d .sdlc ] || { echo "FAIL: no .sdlc/ here. Run init.sh first, from the project root." >&2; exit 2; }
+# A receipt is written into the store and is read as proof of this checkout's
+# source: never another checkout's store (_common.sh sdlc_store_owner_ok).
+sdlc_store_owner_ok || exit 2
 recipe=$(sdlc_verify_recipe)
 
 rfield() { sdlc_verify_field "$recipe" "$1"; }
