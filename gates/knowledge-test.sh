@@ -18,7 +18,11 @@ KIT=$(cd "$KIT" 2>/dev/null && pwd) || { echo "no such kit path: ${1:-}" >&2; ex
 BASE="${KB_TEST_BASE:-${TMPDIR:-/tmp}}"
 FIX=$(mktemp -d "${BASE%/}/sdlc-kb.XXXXXX") || exit 2
 case "$FIX" in */sdlc-kb.*) ;; *) echo "refusing to use fixture $FIX" >&2; exit 2;; esac
-cleanup() { case "$FIX" in */sdlc-kb.*) chmod -R u+w "$FIX" 2>/dev/null; rm -rf "$FIX";; esac; }
+cleanup() { case "$FIX" in */sdlc-kb.*)
+    # a native deny ACE (C10, Windows) is removed before the fixture goes
+    if [ -d "$FIX/ro-area" ] && command -v allow_write >/dev/null 2>&1; then allow_write "$FIX/ro-area"; fi
+    cd / 2>/dev/null || true
+    chmod -R u+w "$FIX" 2>/dev/null; rm -rf "$FIX";; esac; }
 [ -n "${KB_TEST_KEEP:-}" ] || trap cleanup EXIT
 echo "fixture: $FIX"
 echo "kit:     $KIT"
@@ -48,6 +52,45 @@ newproj() { # <dir>
   printf 'echo hi\n' > app.sh; git add app.sh; git commit -qm init >/dev/null
 }
 kb() { bash "$KIT/tools/kb.sh" "$@"; }
+
+# --- an unwritable directory, on this platform -------------------------------
+# `chmod 500` decides nothing on NTFS: Windows grants write access by ACL, and
+# the POSIX bits Git Bash prints are a mapping, not the enforced right. So the
+# deny is made natively there (icacls, on this run's fixture directory only),
+# restored right afterwards, and no refusal is asserted until a real write
+# probe has been denied. A fixture that cannot be made is reported as NOT
+# VERIFIED — never quietly skipped.
+IS_WINDOWS=0
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=1;; esac
+win_user() { printf '%s' "${USERNAME:-$(whoami)}"; }
+deny_write() { # <dir, inside this run's fixture>
+  case "$1" in "$FIX"/*) ;; *) echo "refusing to change rights outside $FIX" >&2; return 1;; esac
+  if [ "$IS_WINDOWS" = 1 ]; then
+    icacls "$(cygpath -w "$1")" /deny "$(win_user):(W)" >/dev/null 2>&1 || return 1
+  else
+    chmod 500 "$1" || return 1
+  fi
+}
+allow_write() { # <dir, inside this run's fixture>
+  case "$1" in "$FIX"/*) ;; *) return 1;; esac
+  [ "$IS_WINDOWS" = 1 ] && icacls "$(cygpath -w "$1")" /remove:d "$(win_user)" >/dev/null 2>&1
+  chmod 700 "$1" 2>/dev/null
+  return 0
+}
+write_denied() { # <dir> → 0 only when a real write into it actually fails
+  local p="$1/.write-probe"
+  rm -rf "$p" 2>/dev/null
+  if mkdir "$p" 2>/dev/null; then rmdir "$p" 2>/dev/null; return 1; fi
+  [ -e "$p" ] && { rm -rf "$p" 2>/dev/null; return 1; }
+  return 0
+}
+# Read a text file without any line-ending translation: CR is shown as `@`, so
+# a byte that is there stays visible and a byte that is gone stays missing. The
+# runtime's own reader is never reused here — a test that mirrors the code it
+# checks cannot tell a real byte loss from a text-mode reader.
+crlf_count() { # <file> <exact line, CR written as @> → how many lines match
+  tr '\r' '@' < "$1" | grep -c -x -F -e "$2"
+}
 # the store name init.sh will compute for a checkout — the test must point at
 # the same directory init.sh would, or a refusal case would never be reached
 . "$KIT/gates/_common.sh"
@@ -165,12 +208,18 @@ assert_fail_msg "C8 a redirected .sdlc link is refused" "already points at" \
   bash "$KIT/init.sh" "$B" --area "$FIX/area-g"
 assert_ok_msg "C9 the original binding survives the refusal" "$STORE" sh -c "cd '$B' && cd .sdlc && pwd -P"
 # an unwritable area fails, it does not fall back anywhere
-mkdir -p "$FIX/ro-area"; chmod 500 "$FIX/ro-area"
+RO="$FIX/ro-area"; mkdir -p "$RO"
+deny_write "$RO" || true
 G="$FIX/proj-g"; newproj "$G"
-assert_fail_msg "C10 an unwritable area fails explicitly" "not writable" \
-  bash "$KIT/init.sh" . --area "$FIX/ro-area"
-assert_nofile "$G/.sdlc" "C11 no fallback store was created"
-chmod 700 "$FIX/ro-area"
+if write_denied "$RO"; then
+  pass "C10a the area really is unwritable here (a real write into it was denied)"
+  assert_fail_msg "C10 an unwritable area fails explicitly" "not writable" \
+    bash "$KIT/init.sh" . --area "$RO"
+  assert_nofile "$G/.sdlc" "C11 no fallback store was created"
+else
+  fail "C10a NOT VERIFIED: no unwritable directory could be made on $(uname -s) — C10 and C11 are untested here, not passing"
+fi
+allow_write "$RO"
 assert_fail_msg "C12 an unknown option is refused" "unknown option" bash "$KIT/init.sh" . --wiki
 assert_fail_msg "C13 two target directories are refused" "more than one target" \
   bash "$KIT/init.sh" . "$G" --area "$FIX/area-h"
@@ -263,12 +312,28 @@ assert_exit "E13 --area does not follow a symlink out of the area" 1 \
   sh -c "bash '$KIT/tools/kb.sh' list --area '$AREA' 2>/dev/null | grep -q linked-store"
 assert_ok_msg "E14 list names the stores and their features" "ext-feat" \
   bash "$KIT/tools/kb.sh" list --area "$AREA"
-# the point of the area: the checkout can be gone and the knowledge stays
+# The point of the area: the checkout can be gone and the knowledge stays.
+# Leave the checkout BEFORE deleting it. A process whose working directory has
+# been removed cannot resolve its own cwd on Windows, and `find` then fails for
+# the whole run — which would break retrieval here for a reason that has
+# nothing to do with the records. The deletion itself is still asserted, and so
+# are the retained bytes: the same query must come back with the same content.
+EVID="$STORE/archive/ext-feat/evidence.md"
+EV_BEFORE=$(sdlc_sha256_file "$EVID")
+SEARCH_BEFORE=$(bash "$KIT/tools/kb.sh" search --area "$AREA" "sh app.sh" 2>&1)
+cd "$FIX" || exit 2
 rm -rf "$B"
+assert_nofile "$B" "E15a the checkout the records came from is really gone"
 assert_ok_msg "E15 knowledge outlives the checkout it came from" "ext-feat" \
   bash "$KIT/tools/kb.sh" show ext-feat --area "$AREA"
 assert_ok_msg "E16 and stays searchable" "evidence.md" \
   bash "$KIT/tools/kb.sh" search --area "$AREA" "sh app.sh"
+[ "$(sdlc_sha256_file "$EVID")" = "$EV_BEFORE" ] \
+  && pass "E16a the retained evidence bytes are unchanged by the deletion" \
+  || fail "E16a the evidence file changed when the checkout was deleted" "$EVID"
+[ "$(bash "$KIT/tools/kb.sh" search --area "$AREA" "sh app.sh" 2>&1)" = "$SEARCH_BEFORE" ] \
+  && pass "E16b the same query returns the same records as before the deletion" \
+  || fail "E16b retrieval changed after the deletion" "$SEARCH_BEFORE"
 
 echo
 echo "=============== F. a COPY of a checkout never uses the original's store"
@@ -346,16 +411,34 @@ CR="$FIX/proj-crlf"; newproj "$CR"
 printf 'keepme\r\n.sdlc/approvals/\r\nbuild/\r\n' > .gitignore
 assert_ok_msg "G1 init reports the obsolete CRLF rule as removed" "removed obsolete kit ignore" \
   bash "$KIT/init.sh" .
-G=$(awk '{ if ($0 ~ /^keepme\r$/) k = 1
-           if ($0 ~ /^build\/\r$/) b = 1
-           if ($0 ~ /^\.sdlc\/approvals\/\r?$/) o = 1
-           if ($0 ~ /^\/\.sdlc\r?$/) n += 1 }
-         END { printf "%d%d%d%d", k, b, o, n }' .gitignore)
+# Counted byte by byte (crlf_count: CR is read as `@`), because the failure to
+# catch here is a LOST CR, and a reader that drops CR itself would call the
+# loss a pass — or an intact file a failure.
+gi_state() { # → <keepme+CR><build/+CR><obsolete, either ending><'/.sdlc', LF only>
+  printf '%d%d%d%d' \
+    "$(crlf_count .gitignore 'keepme@')" \
+    "$(crlf_count .gitignore 'build/@')" \
+    "$(( $(crlf_count .gitignore '.sdlc/approvals/@') + $(crlf_count .gitignore '.sdlc/approvals/') ))" \
+    "$(crlf_count .gitignore '/.sdlc')"
+}
+G=$(gi_state)
 [ "$G" = "1101" ] && pass "G2 CRLF: obsolete rule gone, /.sdlc added once, user lines kept with their CR" \
-  || fail "G2 CRLF cleanup wrong (keepme/build/obsolete/count = $G)" "$(cat .gitignore | tr -d '\r')"
+  || { fail "G2 CRLF cleanup wrong (keepme/build/obsolete/count = $G)" "$(od -c .gitignore | tr '\n' ' ')"
+       printf '      bytes on disk:\n'; od -c .gitignore | sed 's/^/        /'; }
+# Diagnostic, never an assertion: awk's view of this file against its bytes.
+# A disagreement means awk translates line endings on this platform (text
+# mode), which is exactly what can make an intact file look byte-damaged — the
+# reason nothing above reads .gitignore through awk.
+AWK_CR=$(awk '/\r$/ { n += 1 } END { print n + 0 }' .gitignore 2>/dev/null)
+BYTE_CR=$(tr '\r' '@' < .gitignore | grep -c '@$')
+[ "${AWK_CR:-x}" = "$BYTE_CR" ] \
+  || printf 'note: awk sees %s CR-terminated line(s), the bytes have %s — awk is in text mode here\n' \
+       "${AWK_CR:-?}" "$BYTE_CR"
 assert_ok "G3 a second run over the cleaned CRLF file changes nothing more" bash "$KIT/init.sh" .
-G=$(awk '{ if ($0 ~ /^\/\.sdlc\r?$/) n += 1 } END { print n + 0 }' .gitignore)
-[ "$G" = "1" ] && pass "G4 still exactly one /.sdlc rule" || fail "G4 $G copies of the /.sdlc rule"
+G=$(gi_state)
+[ "$G" = "1101" ] && pass "G4 still exactly one /.sdlc rule, and the CRs are still there" \
+  || { fail "G4 the second run changed the file (keepme/build/obsolete/count = $G)"
+       printf '      bytes on disk:\n'; od -c .gitignore | sed 's/^/        /'; }
 assert_exit "G5 the git index was never touched" 1 \
   sh -c "git -C '$CR' diff --cached --quiet; test \$? -ne 0"
 # a non-ASCII checkout keeps a readable store name (only path-hostile bytes go)
