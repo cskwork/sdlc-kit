@@ -97,51 +97,87 @@ allow_write() { # <dir, inside this run's fixture> — always tries both restore
   chmod 700 "$1" 2>/dev/null
   return 0
 }
-# Failure-only forensics (Windows). Runs ONLY when the deny fixture did not
-# hold. It asserts nothing, sets no rights and touches nothing outside the
-# fixture: it reads the token the access check actually uses, the ACL as it
-# actually stands, and then repeats the write once NATIVELY, so "Windows
-# allowed this write" can be told apart from "the MSYS runtime emulated it".
-# Native errors are printed, never swallowed. Every native program is called
-# with per-call MSYS2_ARG_CONV_EXCL='*' (its `/user`, `/priv` switches would
-# otherwise be rewritten into paths) and a cygpath -w directory.
-win_acl_forensics() { # <dir, inside this run's fixture>
+# The deny ACE alone did not hold on the CI runner. Its account (runneradmin,
+# RID 500) carries SeBackupPrivilege and SeRestorePrivilege ENABLED, and with
+# them both a native CreateDirectory and an MSYS mkdir succeeded against a
+# directory whose ACL icacls printed as `runneradmin:(DENY)(W)` — that is a
+# privileged fixture, not the product skipping a Windows permission error
+# (evidence: .sdlc/work/260920-external-knowledge-area/scratch/
+# ci-windows-diagnostics.log, run 35517903326).
+# So on Windows the write probe AND the real init.sh both run in a child whose
+# token no longer has those two privileges (gates/win-restricted-run.py,
+# SE_PRIVILEGE_REMOVED — irreversible, so the MSYS runtime cannot turn them
+# back on). The shell running this test keeps its own privileges, which is what
+# still lets cleanup restore the fixture ACL. Exit 90-93 from the helper means
+# the reduced-privilege child could not be established: NOT VERIFIED, never a
+# pass. Nothing outside this run's fixture, and no account or machine state,
+# is changed.
+RESTRICTED_PY=""; RESTRICTED_BASH=""; RESTRICTED_HELPER=""; RESTRICTED_DIAG=""
+restricted_ready() { # 0 when a reduced-privilege child can be launched here
+  [ "$IS_WINDOWS" = 1 ] || return 1
+  [ -n "$RESTRICTED_PY" ] && return 0
+  local c b
+  for c in python3 python py; do command -v "$c" >/dev/null 2>&1 && { RESTRICTED_PY="$c"; break; }; done
+  [ -n "$RESTRICTED_PY" ] || { RESTRICTED_DIAG="no python3/python/py on PATH"; return 1; }
+  [ -f "$KIT/gates/win-restricted-run.py" ] || { RESTRICTED_DIAG="missing $KIT/gates/win-restricted-run.py"; return 1; }
+  RESTRICTED_HELPER=$(cygpath -w "$KIT/gates/win-restricted-run.py" 2>&1) || {
+    RESTRICTED_DIAG="cygpath -w on the helper failed: $RESTRICTED_HELPER"; RESTRICTED_PY=""; return 1; }
+  # Git Bash is resolved through the MSYS PATH and then converted, so the name
+  # can never fall through to C:\Windows\System32\bash.exe (WSL).
+  b=$(command -v bash) || { RESTRICTED_DIAG="no bash on PATH"; RESTRICTED_PY=""; return 1; }
+  [ -f "$b.exe" ] && b="$b.exe"
+  RESTRICTED_BASH=$(cygpath -w "$b" 2>&1) || {
+    RESTRICTED_DIAG="cygpath -w on bash failed: $RESTRICTED_BASH"; RESTRICTED_PY=""; return 1; }
+  return 0
+}
+# Native Python would otherwise see `/tmp/...` rewritten, so the conversion is
+# off for THIS call only and the two native paths are passed already converted.
+# The helper drops the override again before it starts Git Bash.
+restricted_run() { # <bash -c script> [args…] — under the reduced-privilege token
+  local script="$1"; shift
+  MSYS2_ARG_CONV_EXCL='*' "$RESTRICTED_PY" "$RESTRICTED_HELPER" -- \
+    "$RESTRICTED_BASH" -c "$script" restricted "$@"
+}
+# Failure-only, Windows-only, concise: what the child token actually had, and
+# the ACL as it actually stands. Asserts nothing and changes nothing.
+win_restricted_diag() { # <dir, inside this run's fixture>
   case "$1" in "$FIX"/*) ;; *) return 0;; esac
-  local w py c o rc native_whoami
-  native_whoami="$(cygpath -u "${SYSTEMROOT:-C:/Windows}")/System32/whoami.exe"
-  w=$(cygpath -w "$1" 2>&1) || { printf '      diag: cygpath -w failed: %s\n' "$w"; return 0; }
-  printf '      diag: dir=%s  USERNAME=%s  whoami=%s\n' "$w" "${USERNAME:-<unset>}" "$(whoami 2>&1)"
-  printf '      diag: --- whoami /user (the SID the deny ACE has to match) ---\n'
-  MSYS2_ARG_CONV_EXCL='*' "$native_whoami" /user 2>&1 | sed 's/^/      /'
-  printf '      diag: --- whoami /priv (an ACL-bypass privilege would show here) ---\n'
-  MSYS2_ARG_CONV_EXCL='*' "$native_whoami" /priv 2>&1 | sed 's/^/      /'
-  printf '      diag: --- icacls (the ACL as it actually stands right now) ---\n'
-  MSYS2_ARG_CONV_EXCL='*' icacls "$w" 2>&1 | sed 's/^/      /'
-  py=""
-  for c in python3 python py; do command -v "$c" >/dev/null 2>&1 && { py="$c"; break; }; done
-  if [ -n "$py" ]; then
-    o=$(MSYS2_ARG_CONV_EXCL='*' "$py" -c 'import os, sys
-try:
-    os.mkdir(sys.argv[1])
-    print("CREATED - the native Windows access check allowed it")
-except OSError as e:
-    print("DENIED errno=%s winerror=%s %s" % (e.errno, getattr(e, "winerror", None), e))' "$w\\acl-probe-native" 2>&1); rc=$?
-    printf '      diag: native CreateDirectory via %s (exit %s): %s\n' "$py" "$rc" "$(printf '%s' "$o" | tr '\n' '|')"
-  else
-    printf '      diag: no python3/python/py on PATH — the native write probe did NOT run\n'
+  local w
+  [ -n "$RESTRICTED_DIAG" ] && printf '      diag: %s\n' "$RESTRICTED_DIAG"
+  if restricted_ready; then
+    MSYS2_ARG_CONV_EXCL='*' "$RESTRICTED_PY" "$RESTRICTED_HELPER" --report 2>&1 \
+      | sed 's/^/      diag: /'
   fi
-  o=$(mkdir "$1/acl-probe-msys" 2>&1); rc=$?
-  printf '      diag: MSYS mkdir (exit %s): %s\n' "$rc" "${o:-<no output, it succeeded>}"
-  rmdir "$1/acl-probe-msys" 2>/dev/null
-  rmdir "$1/acl-probe-native" 2>/dev/null
+  w=$(cygpath -w "$1" 2>/dev/null) && \
+    MSYS2_ARG_CONV_EXCL='*' icacls "$w" 2>&1 | sed 's/^/      diag: /'
   return 0
 }
 write_denied() { # <dir> → 0 only when a real write into it actually fails
-  local p="$1/.write-probe"
+  local p="$1/.write-probe" o rc
   rm -rf "$p" 2>/dev/null
+  if [ "$IS_WINDOWS" = 1 ]; then
+    restricted_ready || return 1
+    o=$(restricted_run 'mkdir "$1"' "$p" 2>&1); rc=$?
+    if [ $rc -ge 90 ]; then
+      RESTRICTED_DIAG="the reduced-privilege child could not be established (exit $rc): $(printf '%s' "$o" | tr '\n' '|' | cut -c1-300)"
+      return 1
+    fi
+    if [ $rc -eq 0 ] || [ -e "$p" ]; then rm -rf "$p" 2>/dev/null; return 1; fi
+    return 0
+  fi
   if mkdir "$p" 2>/dev/null; then rmdir "$p" 2>/dev/null; return 1; fi
   [ -e "$p" ] && { rm -rf "$p" 2>/dev/null; return 1; }
   return 0
+}
+# C10 must meet the SAME conditions the write probe was proved under, or it
+# would be testing a different access check than the one C10a established.
+run_init_area() { # <project dir> <area>
+  if [ "$IS_WINDOWS" = 1 ]; then
+    restricted_run 'cd "$1" || exit 2; exec bash "$2" . --area "$3"' \
+      "$1" "$KIT/init.sh" "$2"
+  else
+    ( cd "$1" && bash "$KIT/init.sh" . --area "$2" )
+  fi
 }
 # Read a text file without any line-ending translation: CR is shown as `@`, so
 # a byte that is there stays visible and a byte that is gone stays missing. The
@@ -273,16 +309,16 @@ G="$FIX/proj-g"; newproj "$G"
 if write_denied "$RO"; then
   pass "C10a the area really is unwritable here (a real write into it was denied)"
   assert_fail_msg "C10 an unwritable area fails explicitly" "not writable" \
-    bash "$KIT/init.sh" . --area "$RO"
+    run_init_area "$G" "$RO"
   assert_nofile "$G/.sdlc" "C11 no fallback store was created"
 else
   # the command that was supposed to make the deny is named with its exit
   # status and its own words, so a fixture that cannot be built is debuggable
   fail "C10a NOT VERIFIED: no unwritable directory could be made on $(uname -s) — C10 and C11 are untested here, not passing" \
-    "${ACL_DIAG:-the deny command reported success, but a write into $RO still succeeded}"
-  # `fail` truncates its output to 300 characters, so the forensics print
-  # themselves, and only here, on Windows, after the fixture already failed.
-  if [ "$IS_WINDOWS" = 1 ]; then win_acl_forensics "$RO"; fi
+    "${ACL_DIAG:-${RESTRICTED_DIAG:-the deny command reported success, but a write into $RO still succeeded}}"
+  # `fail` truncates its output to 300 characters, so the privilege state and
+  # the ACL print themselves — only here, on Windows, after the fixture failed.
+  if [ "$IS_WINDOWS" = 1 ]; then win_restricted_diag "$RO"; fi
 fi
 allow_write "$RO"
 assert_fail_msg "C12 an unknown option is refused" "unknown option" bash "$KIT/init.sh" . --wiki
