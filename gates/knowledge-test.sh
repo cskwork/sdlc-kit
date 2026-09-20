@@ -97,6 +97,45 @@ allow_write() { # <dir, inside this run's fixture> — always tries both restore
   chmod 700 "$1" 2>/dev/null
   return 0
 }
+# Failure-only forensics (Windows). Runs ONLY when the deny fixture did not
+# hold. It asserts nothing, sets no rights and touches nothing outside the
+# fixture: it reads the token the access check actually uses, the ACL as it
+# actually stands, and then repeats the write once NATIVELY, so "Windows
+# allowed this write" can be told apart from "the MSYS runtime emulated it".
+# Native errors are printed, never swallowed. Every native program is called
+# with per-call MSYS2_ARG_CONV_EXCL='*' (its `/user`, `/priv` switches would
+# otherwise be rewritten into paths) and a cygpath -w directory.
+win_acl_forensics() { # <dir, inside this run's fixture>
+  case "$1" in "$FIX"/*) ;; *) return 0;; esac
+  local w py c o rc native_whoami
+  native_whoami="$(cygpath -u "${SYSTEMROOT:-C:/Windows}")/System32/whoami.exe"
+  w=$(cygpath -w "$1" 2>&1) || { printf '      diag: cygpath -w failed: %s\n' "$w"; return 0; }
+  printf '      diag: dir=%s  USERNAME=%s  whoami=%s\n' "$w" "${USERNAME:-<unset>}" "$(whoami 2>&1)"
+  printf '      diag: --- whoami /user (the SID the deny ACE has to match) ---\n'
+  MSYS2_ARG_CONV_EXCL='*' "$native_whoami" /user 2>&1 | sed 's/^/      /'
+  printf '      diag: --- whoami /priv (an ACL-bypass privilege would show here) ---\n'
+  MSYS2_ARG_CONV_EXCL='*' "$native_whoami" /priv 2>&1 | sed 's/^/      /'
+  printf '      diag: --- icacls (the ACL as it actually stands right now) ---\n'
+  MSYS2_ARG_CONV_EXCL='*' icacls "$w" 2>&1 | sed 's/^/      /'
+  py=""
+  for c in python3 python py; do command -v "$c" >/dev/null 2>&1 && { py="$c"; break; }; done
+  if [ -n "$py" ]; then
+    o=$(MSYS2_ARG_CONV_EXCL='*' "$py" -c 'import os, sys
+try:
+    os.mkdir(sys.argv[1])
+    print("CREATED - the native Windows access check allowed it")
+except OSError as e:
+    print("DENIED errno=%s winerror=%s %s" % (e.errno, getattr(e, "winerror", None), e))' "$w\\acl-probe-native" 2>&1); rc=$?
+    printf '      diag: native CreateDirectory via %s (exit %s): %s\n' "$py" "$rc" "$(printf '%s' "$o" | tr '\n' '|')"
+  else
+    printf '      diag: no python3/python/py on PATH — the native write probe did NOT run\n'
+  fi
+  o=$(mkdir "$1/acl-probe-msys" 2>&1); rc=$?
+  printf '      diag: MSYS mkdir (exit %s): %s\n' "$rc" "${o:-<no output, it succeeded>}"
+  rmdir "$1/acl-probe-msys" 2>/dev/null
+  rmdir "$1/acl-probe-native" 2>/dev/null
+  return 0
+}
 write_denied() { # <dir> → 0 only when a real write into it actually fails
   local p="$1/.write-probe"
   rm -rf "$p" 2>/dev/null
@@ -241,6 +280,9 @@ else
   # status and its own words, so a fixture that cannot be built is debuggable
   fail "C10a NOT VERIFIED: no unwritable directory could be made on $(uname -s) — C10 and C11 are untested here, not passing" \
     "${ACL_DIAG:-the deny command reported success, but a write into $RO still succeeded}"
+  # `fail` truncates its output to 300 characters, so the forensics print
+  # themselves, and only here, on Windows, after the fixture already failed.
+  if [ "$IS_WINDOWS" = 1 ]; then win_acl_forensics "$RO"; fi
 fi
 allow_write "$RO"
 assert_fail_msg "C12 an unknown option is refused" "unknown option" bash "$KIT/init.sh" . --wiki
