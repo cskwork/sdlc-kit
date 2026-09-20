@@ -175,7 +175,15 @@ if [ -n "$area" ]; then
   else
     link_needed=1
   fi
-  mkdir -p "$store" || { echo "FAIL: cannot create the store: $store" >&2; exit 1; }
+  # The `-w` test above cannot see a Windows deny ACL (MSYS maps NTFS rights
+  # onto POSIX bits and can report a denied directory as writable), so the
+  # first real write is also a refusal, before .sdlc is linked: a store that
+  # cannot be created never becomes a fallback store inside the project.
+  mkdir -p "$store" || {
+    echo "FAIL: cannot create the store: $store" >&2
+    echo "  This usually means the knowledge area is not writable by this account: $area_phys" >&2
+    echo "  Nothing was changed, and no records directory was created in $project_phys." >&2
+    exit 1; }
   if [ -n "$link_needed" ]; then
     ln -s "$store" .sdlc 2>/dev/null || { echo "FAIL: cannot link .sdlc -> $store" >&2; exit 1; }
     if [ ! -L .sdlc ]; then
@@ -243,15 +251,20 @@ ensure_line .gitignore '/.sdlc'
 # Only the matching lines go; every other line is written back as it was read,
 # CR and all, so unrelated bytes and line endings are preserved. The file is
 # rewritten only when something actually matched.
+# Read and written with the shell itself, not awk: an awk built for Windows
+# text mode translates CRLF on read and on write, so a user's line endings
+# would depend on which awk is installed. `IFS= read -r` and `printf` move the
+# bytes as they are on every platform this kit supports.
 drop_line() { # <file> <exact-line>
-  local f="$1" line="$2" tmpf
+  local f="$1" line="$2" tmpf l s n=0
   [ -f "$f" ] || return 0
   tmpf="$f.sdlc-tmp.$$"
-  if awk -v want="$line" '
-        { s = $0; sub(/\r$/, "", s)
-          if (s == want) { n++; next }
-          print }
-        END { exit(n ? 0 : 1) }' "$f" > "$tmpf" 2>/dev/null; then
+  { while IFS= read -r l || [ -n "$l" ]; do
+      s=${l%$'\r'}
+      if [ "$s" = "$line" ]; then n=$((n + 1)); continue; fi
+      printf '%s\n' "$l"
+    done } < "$f" > "$tmpf" 2>/dev/null
+  if [ "$n" -gt 0 ]; then
     mv "$tmpf" "$f" || { rm -f "$tmpf"; return 0; }
     echo "note: removed obsolete kit ignore '$line' from $f (subsumed by /.sdlc — AGENTS.md rule 7)"
   else
