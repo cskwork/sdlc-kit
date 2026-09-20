@@ -4,9 +4,11 @@
 - Diff: <branch/commit range>
 - Origin: <origin.md Ref · live source re-read with <tool>: unchanged | drifted: <what> | unreachable>
 
-<!-- scratch/ is gitignored and local-only: a fresh clone has the citation but not
-     the file. Cite it only NEXT TO the deciding lines quoted here, or point at a
-     durable home instead (the PR body, an artifact URL). -->
+<!-- The record store is local to this checkout or to the area it is linked to
+     (AGENTS.md rule 7); a clone of the application carries neither this file nor
+     the scratch/ logs it cites. Cite scratch/ only NEXT TO the deciding lines
+     quoted here, or point at a durable home instead (the PR body, an artifact
+     URL). -->
 
 
 ## Proof per requirement

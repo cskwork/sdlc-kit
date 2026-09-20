@@ -16,6 +16,11 @@ usage() { echo "usage: check-gate.sh <intent|spec|plan|ship> <artifact-path>"; e
 stage="$1"; artifact="$2"
 closed() { echo "GATE CLOSED: $1"; exit 1; }
 
+# A gate verdict is only worth anything for the checkout the records belong to:
+# a copy of a checkout resolves its `.sdlc` link into the ORIGINAL's store and
+# would otherwise read the original's approvals (_common.sh sdlc_store_owner_ok).
+sdlc_store_owner_ok || { echo "GATE CLOSED: the records reached from here are not this checkout's (see above)."; exit 1; }
+
 sdlc_stage_artifact "$stage" >/dev/null 2>&1 || closed "'$stage' is not a gated stage (intent, spec, plan, ship)"
 canon=$(sdlc_canon_artifact "$artifact" 2>/dev/null) || closed "artifact is not a gated artifact of this project: $artifact (it must be .sdlc/work/<slug>/<file> under the project root, no symlinks)"
 slug=$(sdlc_slug_of "$canon")

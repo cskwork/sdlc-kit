@@ -71,7 +71,7 @@ Mid-loop, lesson and domain candidates stage in the feature's own `harvest.md`; 
 |---|---|
 | Starts coding from the first request | Explores history, code, feasibility, browser, API, or DB before grilling the user |
 | Treats the user's diagnosis as truth | Marks claims `[verified: evidence]` or `[assumed: reason]` |
-| Keeps the plan inside one chat | Commits the durable record — `intent.md`, `spec.md`, `plan.md`, `evidence.md`, `delivery.md` — with the code; bulk logs stay in `scratch/` on disk |
+| Keeps the plan inside one chat | Writes the record — `intent.md`, `spec.md`, `plan.md`, `evidence.md`, `delivery.md` — to a store you can search later (`tools/kb.sh`), out of the application's git history |
 | Author runs its own checks | A fresh-context verifier and adversary review the work without the author's context |
 | Approval is a chat message that disappears | Approval records name the stage, artifact, time, and mode, and stay on disk in `.sdlc/approvals/` |
 | Failed attempt becomes forgotten context | Lessons go to a bounded index; durable facts go to `DOMAIN.md` |
@@ -136,9 +136,10 @@ No hidden state. No vendor-specific hook required. The files are the protocol.
 Per feature, inside the **target project**:
 
 ```text
-.sdlc/
+.sdlc/                                # gitignored in full — records are knowledge, not source
+├── README.md                         # generated contents page (tools/kb.sh index)
 ├── config.md                         # real build/test/lint/run commands
-├── approvals/                        # gitignored
+├── approvals/                        # local gate records
 │   └── <slug>.<stage>.approval       # stage · when · mode
 ├── memory/
 │   ├── POLICY.md                     # human-declared hard rules; agents transcribe only
@@ -152,19 +153,23 @@ Per feature, inside the **target project**:
 │   ├── plan.md                       # files · order · risks · proof
 │   ├── evidence.md                   # commands · outputs · observed behavior
 │   ├── delivery.md                   # target · delivered source · how it was verified
-│   ├── deviations.md                 # build-time differences — gitignored
-│   ├── progress.md                   # heartbeat: ONE live line, gitignored (rule 9)
-│   ├── baseline.txt                  # brownfield behavior before the change — gitignored
-│   ├── harvest.md                    # mid-loop lesson/domain candidates; merged at close — gitignored
-│   └── scratch/                      # bulk logs, captures, traces — gitignored
+│   ├── deviations.md                 # build-time differences
+│   ├── progress.md                   # heartbeat: ONE live line (rule 9)
+│   ├── baseline.txt                  # brownfield behavior before the change
+│   ├── harvest.md                    # mid-loop lesson/domain candidates; merged at close
+│   └── scratch/                      # bulk logs, captures, traces
 └── archive/<slug>/                   # closed features; close.sh moves them here
     ├── CLOSED                        # shipped · abandoned · dead-end · handed-off
-    └── approvals/                    # moves with the feature, still gitignored
+    └── approvals/                    # moves with the feature
 ```
 
-`init.sh` also adds twelve lines to the project's `.gitignore`, covering `work/` and `archive/` alike: `approvals/`, `baseline.txt`, `deviations.md`, `harvest.md`, `scratch/`, and `progress.md`. Git keeps the durable record — `config.md`, `memory/`, and per feature `origin.md`, `intent.md`, `spec.md`, `plan.md`, `map.md`, `evidence.md`, `delivery.md`, and the archived `CLOSED` — so the decisions and the final proof survive without the working copy. Bulk output stays in `scratch/`, cited by the deciding lines quoted in evidence.md. Re-running `init.sh` on a project seeded by an older kit removes the ignore lines it once issued for `spec.md` and `evidence.md`; it never touches the git index. While a feature is open, `status.sh` shows the heartbeat as a `now →` line with its age — `watch -n5 cat .sdlc/work/<slug>/progress.md` follows it live.
+`init.sh` adds ONE line to the project's `.gitignore`: `/.sdlc`. Records are the project's knowledge, not its source — they stay out of the application's history, and a clone of the application does not carry them. The rule is anchored, so a nested shipping unit's own `.sdlc` is unaffected; it matches a real directory and the symlink an external area installs alike. Re-running `init.sh` on a project seeded by an older kit removes the narrower ignore lines that rule now subsumes, and it never touches the git index: files already committed stay committed until you untrack them yourself (`init.sh` prints the command). Bulk output stays in `scratch/`, cited by the deciding lines quoted in evidence.md. While a feature is open, `status.sh` shows the heartbeat as a `now →` line with its age — `watch -n5 cat .sdlc/work/<slug>/progress.md` follows it live.
 
-The public sdlc-kit repository stays framework-only. The committed artifacts — intent, plan, map, memory — live and version with the project they describe. The ignored ones live only in the working copy that produced them.
+**Where the records live is your choice.** By default they sit in the project's working copy. `init.sh . --area ~/knowledge` puts them in a folder you choose instead — `<area>/<unit>-<checkout-id>/`, with `.sdlc` linked to it, one store per checkout so two worktrees never share approvals. The area is refused if it sits inside the project (or the project inside it), if another checkout already owns that store, if a real `.sdlc` directory is already there (nothing is ever relocated for you), or if the link cannot be made. That ownership is re-checked at RUNTIME, not only at init: `check-gate.sh`, `approve.sh`, `close.sh`, `status.sh`, `tools/auto.sh`, `tools/verify.sh` and `tools/handoff.sh` refuse before any verdict or write when `<store>/PROJECT` names a different checkout, so a copied working copy (`cp -R`, rsync and most restores keep the symlink) can neither open another checkout's gate nor close its features. Reading is never bound that way: `tools/kb.sh show|search|list` still works, and nothing is ever re-bound or moved for you. Whichever you choose, **the store is yours to back up** — git no longer does it for you.
+
+**Reading the records back** is `tools/kb.sh`: `index` regenerates the contents page (`init.sh` and `close.sh` do it for you), `show <slug>` prints one feature's goal, documents and lessons, `search "<text>"` does a bounded literal search over open and closed features plus durable memory, and `--area <folder>` does either across every store in that folder — including features whose checkout no longer exists. Exit codes: `0` found, `1` nothing found, `2` usage error or refusal.
+
+The public sdlc-kit repository stays framework-only. The records live and stay readable where they were written — in the project's working copy, or in the area you chose.
 
 ## The safety model
 
@@ -251,6 +256,7 @@ tools/auto.sh intent-check <slug>      # is this intent.md safe to run unattende
 tools/auto.sh checkpoint <slug> …      # pending step, bounded attempts, completed effects
 tools/verify.sh run|check <slug>       # run the project's verification recipe (needs python3); receipt bound to the source
 tools/handoff.sh push|check <slug>     # the review branch, proven to be on the remote
+tools/kb.sh index|show|search|list           # find past features and lessons (--area for every store)
 ```
 
 The host wakes an agent; the agent reads `next`, performs that ONE stage action
@@ -339,6 +345,7 @@ docs/automation.md  the machine contract: status JSON, receipts, handoff, checkp
 ./gates/selftest.sh   # gate mechanics
 ./gates/e2e.sh        # the whole loop, in its own throwaway fixtures
 ./gates/autotest.sh   # the automation layer, in its own throwaway fixtures
+./gates/knowledge-test.sh  # where records live and how they are found again
 ```
 
 The selftest covers gate state and its path/content binding (cross-path reuse, traversal, symlinks, and pre-binding records all fail closed), stage-name injection, bare-path rejection, delegated and lazy approvals with their recorded review and risk authorization, the compact route and its upgrade revalidation, delivery-backed `shipped` closes, `refcheck.sh` drift detection, lesson requirements for closing, double-close rejection, archive-on-close (with approval records and status scoping), YAML frontmatter parsing, and LF line endings in every script. It also runs two end-to-end workflow fixtures: a compact bug fix from intent to a delivered close, and the failure paths around it — plus the source binding over work that was committed BEFORE the review and the commit-containment check on a `pr` delivery.
@@ -358,6 +365,8 @@ the doctor, a hung check, a push over a closed ship gate, a `pr` feature that
 was never pushed, and a local target that must never be pushed at all.
 
 `gates/e2e.sh` is the integration suite on top of that: it builds throwaway git projects in its own temp fixture and drives the real scripts through the compact route, the full route, and every negative case — including post-review edits, added files, chmod and symlink swaps, an old commit named as the delivered source, legacy ship bindings, a full-route spec or plan rewritten or deleted after the ship review, and the agreement between `status.sh`, `check-gate.sh`, and `close.sh`. It writes nothing outside its fixture and makes no network, remote, or `gh` call; `pr` and `deploy` deliveries are exercised locally, which is all `close.sh` inspects. It does not run the selftest inside itself — the two suites are independent. CI runs both on Ubuntu, macOS, and Windows (Git Bash).
+
+`gates/knowledge-test.sh` covers the store itself: the anchored ignore rule, an external area bound to a chosen folder (spaces and non-ASCII included), one store per checkout, and every refusal — an area inside the project, a project inside the area, a store another checkout owns, a directory that is not a store, a real `.sdlc` that is never relocated, a link pointing somewhere else, an unwritable area. It then runs a feature through the link (approve, tamper, ship, deliver, close) to prove the gates are unchanged, and checks retrieval: the contents page refreshed at close, `show`, bounded literal `search`, a query starting with `-`, a user-authored page that is never clobbered, a feature symlink that is never followed, and records still readable through `--area` after the checkout they came from is deleted. Where the filesystem cannot create a symlink the external-area cases are reported as NOT VERIFIED rather than skipped silently.
 
 ## What this is not
 

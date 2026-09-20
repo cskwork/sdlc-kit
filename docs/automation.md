@@ -27,6 +27,23 @@ already knows; both go through `gates/_auto.sh`, which takes every gate verdict
 from `gates/_common.sh` — the functions `check-gate.sh` and `close.sh` use. The
 machine view can never be more permissive than the gates themselves.
 
+**Where the records are, and whose they are.** Every command here runs from the
+project root and reaches the store through `.sdlc`. That may be a real directory
+in the checkout (the default) or a symlink into an external knowledge area
+(`init.sh <dir> --area <folder>`, one store per checkout). Copying a checkout
+copies the symlink, not the store, so a copy would otherwise read the ORIGINAL's
+approvals and could archive its features. An external store therefore records its
+owning checkout in `<store>/PROJECT`, and `auto.sh`, `verify.sh`, `handoff.sh`,
+`status.sh`, `check-gate.sh`, `approve.sh` and `close.sh` all refuse — before any
+verdict and before any write — when that record names a different path, is
+missing, or cannot be read. Nothing is re-bound, adopted, or moved for you: a
+driver that hits this refusal is pointed at a checkout that does not own its
+records, and the fix is a human one (give that checkout its own store with
+`init.sh … --area`, or, after a rename or move, edit the `project:` line of
+`<store>/PROJECT` by hand). Reading is not bound to a checkout at all:
+`tools/kb.sh list|show|search --area <folder>` stays available, read-only, even
+when the owning checkout is gone.
+
 **What these scripts are not.** None of them reasons, writes an artifact, or
 performs a stage. `status: ready` means *the next action is one this project's
 lazymode lets an agent take* — an LLM, under the stage skills, still takes it.

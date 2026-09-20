@@ -32,6 +32,10 @@ if [ $# -eq 4 ] && [ "$4" = "--delegated" ]; then delegated=1; set -- "$1" "$2" 
 [ $# -eq 3 ] || usage
 slug="$1"; state="$2"; reason="$3"
 case "$state" in (shipped|abandoned|dead-end|handed-off) ;; (*) echo "FAIL: state must be shipped|abandoned|dead-end|handed-off"; usage;; esac
+# Closing MOVES another checkout's work into archive/ if the store is not this
+# checkout's — the one destructive side effect a copied checkout could cause
+# (_common.sh sdlc_store_owner_ok). Checked before anything is read or moved.
+sdlc_store_owner_ok || exit 1
 dir=".sdlc/work/$slug"
 archive=".sdlc/archive/$slug"
 if [ -d "$archive" ]; then
@@ -304,17 +308,14 @@ fi
 mkdir -p .sdlc/archive
 in_git=""
 git rev-parse --git-dir >/dev/null 2>&1 && in_git=1
-# Everything ignored under work/ must be ignored under archive/ too: the mv
-# below moves the dir verbatim, so an unlisted pattern (a leftover scratch dir
-# from an abandoned close) would be committed with the archive. spec.md,
-# evidence.md, and delivery.md are NOT here: the decision record and the final
-# proof are durable (AGENTS.md rule 7). Read via tr -d '\r' (a CRLF
-# .gitignore would never match) and match with case, not grep -q (init.sh
-# ensure_line explains the pipefail/SIGPIPE trap).
+# Records are knowledge, not source: the whole of .sdlc/ is gitignored by one
+# anchored rule (init.sh, AGENTS.md rule 7), so the archived feature is covered
+# the moment it is moved. A project seeded before that rule existed gets it
+# here. Read via tr -d '\r' (a CRLF .gitignore would never match) and match
+# with case, not grep -q (init.sh ensure_line explains the pipefail/SIGPIPE
+# trap).
 if [ -n "$in_git" ]; then
-  for line in '.sdlc/archive/*/scratch/' '.sdlc/archive/*/progress.md' \
-              '.sdlc/archive/*/approvals/' '.sdlc/archive/*/baseline.txt' \
-              '.sdlc/archive/*/deviations.md' '.sdlc/archive/*/harvest.md'; do
+  for line in '/.sdlc'; do
     have=""
     if [ -f .gitignore ]; then have=$(tr -d '\r' < .gitignore); fi
     case "
@@ -343,6 +344,13 @@ if ls .sdlc/approvals/"$slug".* >/dev/null 2>&1; then
 fi
 echo "ARCHIVED: $dir → $archive (approvals included)"
 
+# The archived feature must stay FINDABLE: refresh the contents page so the
+# closed record is linked where the next feature looks for it. Best effort —
+# the close already passed its gates, and a page that cannot be written is a
+# reported note, never a failed close. Nothing under work/ or archive/ is
+# touched, so no approved artifact can change.
+bash "$kit/tools/kb.sh" index || echo "note: contents page not refreshed (see the reason above)"
+
 # promotion reminder: a lesson tag repeating 3+ times means the stage skill
 # should absorb the fix, not the memory (see skills/6-maintain lesson format)
 if [ -f .sdlc/memory/INDEX.md ]; then
@@ -358,16 +366,17 @@ fi
 
 echo "Reminder: harvest durable facts into .sdlc/memory/DOMAIN.md."
 if [ -n "$in_git" ]; then
-  # $dir must be staged too: `git add` on a deleted tracked path stages the
-  # deletion. Omitting it leaves the old work/ files in HEAD, and a fresh
-  # clone would resurrect the feature as OPEN (dir without its CLOSED).
-  paths=""
-  [ -n "$(git ls-files "$dir" 2>/dev/null)" ] && paths="\"$dir\" "
-  # approvals are gitignored now, but a project seeded by an older kit still
-  # tracks them and the mv above deleted those paths — stage the deletion or
-  # it lingers in HEAD forever
-  [ -n "$(git ls-files .sdlc/approvals 2>/dev/null)" ] && paths="$paths.sdlc/approvals "
-  echo "Then commit the close (decisions, evidence, delivery, lessons; scratch stays local):"
-  echo "  git add $paths\"$archive\" .sdlc/memory .sdlc/config.md .gitignore"
-  echo "(git records the work/→archive/ move as a rename; history follows it)."
+  # Records are gitignored, so there is normally nothing to stage but the
+  # .gitignore rule itself. A project seeded by an older kit may still TRACK
+  # .sdlc paths the mv above deleted — staging that deletion is the human's
+  # call, and the files stay on disk either way.
+  tracked_sdlc=$(git ls-files -- .sdlc 2>/dev/null || true)
+  echo "Records stay out of git (\`/.sdlc\` is ignored) — find them with:"
+  echo "  $kit/tools/kb.sh show $slug"
+  if [ -n "$tracked_sdlc" ]; then
+    echo "note: this project still TRACKS .sdlc paths from an older kit version."
+    echo "      The archive move deleted some of them in the worktree; stage that yourself"
+    echo "      (git add -A -- .sdlc) or untrack the lot — the files stay on disk."
+  fi
+  echo "Commit the ignore rule if it is new:  git add .gitignore"
 fi
