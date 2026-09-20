@@ -308,8 +308,20 @@ deny_write "$RO" || true
 G="$FIX/proj-g"; newproj "$G"
 if write_denied "$RO"; then
   pass "C10a the area really is unwritable here (a real write into it was denied)"
-  assert_fail_msg "C10 an unwritable area fails explicitly" "not writable" \
-    run_init_area "$G" "$RO"
+  # C10 requires a normal product refusal (non-zero, never a 90-93 helper code)
+  # naming THIS area: the write check, or the traversal check Windows hits first.
+  C10O=$(run_init_area "$G" "$RO" 2>&1); C10RC=$?
+  if [ $C10RC -eq 0 ]; then
+    fail "C10 an unwritable area fails explicitly (succeeded, expected refusal)" "$C10O"
+  elif [ $C10RC -ge 90 ] && [ $C10RC -le 93 ]; then
+    fail "C10 an unwritable area fails explicitly (exit $C10RC is a reserved helper failure, not a product refusal)" "$C10O"
+  else
+    case "$C10O" in
+      *"not writable"*|*"FAIL: cannot resolve the knowledge area: $RO"*)
+        pass "C10 an unwritable area fails explicitly";;
+      *) fail "C10 an unwritable area fails explicitly (refused, but not with an explicit refusal naming $RO)" "$C10O";;
+    esac
+  fi
   assert_nofile "$G/.sdlc" "C11 no fallback store was created"
 else
   # the command that was supposed to make the deny is named with its exit
