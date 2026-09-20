@@ -38,6 +38,16 @@ jobs:
       - name: python3 is available (tools/verify.sh bounded execution)
         run: python3 -c "import sys; print(sys.version)"
         shell: bash
+      # The record store: where it lives, how it refuses, how it is read back.
+      # It exits 2 when the filesystem cannot create symlinks — on Windows that
+      # would be the MSYS setting above failing, which CI must not hide.
+      # It runs FIRST because it is the shortest of the four and the most
+      # platform-sensitive: a Windows-only failure surfaces in about a minute
+      # instead of after the long suites have run. All four still run, and the
+      # job fails if any of them does.
+      - name: knowledge (record store and retrieval, local fixtures only)
+        run: bash gates/knowledge-test.sh
+        shell: bash
       - name: selftest (gate mechanics)
         run: bash gates/selftest.sh
         shell: bash
@@ -46,10 +56,4 @@ jobs:
         shell: bash
       - name: autotest (the automation layer, local fixtures only)
         run: bash gates/autotest.sh
-        shell: bash
-      # the record store: where it lives, how it refuses, how it is read back.
-      # It exits 2 when the filesystem cannot create symlinks — on Windows that
-      # would be the MSYS setting above failing, which CI must not hide.
-      - name: knowledge (record store and retrieval, local fixtures only)
-        run: bash gates/knowledge-test.sh
         shell: bash
