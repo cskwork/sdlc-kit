@@ -60,6 +60,9 @@ esac
 expected=$(sdlc_stage_artifact "$stage") || {
   echo "FAIL: '$stage' is not a gated stage. Gated stages: intent, spec, plan, ship."; exit 1; }
 [ -d .sdlc ] || { echo "FAIL: no .sdlc/ here. Run init.sh first, from the project root."; exit 1; }
+# An approval is state written INTO the store: a checkout that does not own the
+# store never writes one (_common.sh sdlc_store_owner_ok).
+sdlc_store_owner_ok || exit 1
 
 canon=$(sdlc_canon_artifact "$artifact") || { echo "FAIL: $stage approval refused — see the reason above."; exit 1; }
 [ "$(basename "$canon")" = "$expected" ] || {

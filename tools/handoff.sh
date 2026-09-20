@@ -67,6 +67,9 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -d .sdlc ] || { echo "FAIL: no .sdlc/ here." >&2; exit 2; }
+# A handoff re-checks the ship gate and records an external effect, both of
+# them store state of the owning checkout (_common.sh sdlc_store_owner_ok).
+sdlc_store_owner_ok || exit 2
 sdlc_auto_valid_slug "$slug" || { echo "FAIL: '$slug' is not a usable feature slug ([a-zA-Z0-9._-]+)" >&2; exit 2; }
 [ -d ".sdlc/work/$slug" ] || { echo "FAIL: no open feature '.sdlc/work/$slug'" >&2; exit 2; }
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "FAIL: not a git repository — no branch handoff is possible here." >&2; exit 2; }

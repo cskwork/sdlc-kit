@@ -230,8 +230,12 @@ case "$out" in *"no delivery.md"*) pass "A12 status asks for the delivery record
 assert_fail_msg "A13 close shipped BLOCKED with no delivery record" "requires a delivery record" \
   sdlc close.sh add-count shipped "count line delivered"
 
-# staging + committing the reviewed content must NOT invalidate the approval
-git add app.sh test_app.sh .sdlc/work/add-count .sdlc/config.md .gitignore
+# staging + committing the reviewed content must NOT invalidate the approval.
+# The .sdlc paths are ignored now (one `/.sdlc` rule), so naming them here would
+# make `git add` exit 1 and print a hint block — noise that would also hide a
+# real ignored-path error. Only source is staged, which is all the ship
+# approval binds anyway.
+git add app.sh test_app.sh .gitignore
 git commit -qm "feat(search): show the result count"
 SHA=$(git rev-parse HEAD)
 assert_ok_msg "A14 ship gate survives staging+commit of the reviewed content" "GATE OPEN" \
@@ -257,21 +261,27 @@ out=$(sdlc status.sh --all 2>&1)
 case "$out" in *"add-count"*"[CLOSED: shipped]"*) pass "A19 status --all lists the archived feature";;
   *) fail "A19 archived feature not listed" "$out";; esac
 
-# --- durability in a FRESH CLONE
-git add -A .sdlc .gitignore 2>/dev/null
-git commit -qm "close(add-count): archive the decision record" >/dev/null
+# --- the records are KNOWLEDGE, not source: a clone of the application does
+#     not carry them, and they stay findable where they live instead
+git add -A .gitignore 2>/dev/null
+git commit -qm "chore: ignore the record store" >/dev/null 2>&1
 git clone -q "$A" "$FIX/clone-compact"
 C="$FIX/clone-compact"
-assert_file "$C/.sdlc/archive/add-count/intent.md"   "A20 intent.md survives a fresh clone"
-assert_file "$C/.sdlc/archive/add-count/evidence.md" "A21 evidence.md survives a fresh clone"
-assert_file "$C/.sdlc/archive/add-count/delivery.md" "A22 delivery.md survives a fresh clone"
-assert_file "$C/.sdlc/archive/add-count/CLOSED"      "A23 CLOSED survives a fresh clone"
-assert_nofile "$C/.sdlc/archive/add-count/approvals"  "A24 approval records stay local (gitignored)"
-if [ -f "$C/.sdlc/archive/add-count/scratch/after.log" ]; then
-  pass "A25 referenced scratch log also present in the clone"
-else
-  echo "NOTE  A25 scratch/ is gitignored by design: evidence.md's 'scratch/after.log' citation does not resolve in a fresh clone"
-fi
+assert_nofile "$C/.sdlc" "A20 a fresh clone carries no records (/.sdlc is ignored)"
+assert_ok_msg "A20b git confirms the store is ignored" ".sdlc" git -C "$A" check-ignore -v .sdlc
+assert_file "$A/.sdlc/archive/add-count/intent.md"   "A21 intent.md stays in the store where it was written"
+assert_file "$A/.sdlc/archive/add-count/evidence.md" "A22 evidence.md stays in the store"
+assert_file "$A/.sdlc/archive/add-count/delivery.md" "A22b delivery.md stays in the store"
+assert_file "$A/.sdlc/archive/add-count/CLOSED"      "A23 CLOSED stays in the store"
+assert_file "$A/.sdlc/archive/add-count/approvals/add-count.ship.approval" \
+  "A24 approval records stay with the archived feature"
+assert_file "$A/.sdlc/archive/add-count/scratch/after.log" "A25 the cited scratch log is still there"
+# and the closed feature is RETRIEVABLE, which is the point of keeping it
+assert_ok_msg "A26 close refreshed the contents page" "add-count" cat "$A/.sdlc/README.md"
+assert_ok_msg "A27 kb.sh show finds the archived feature" "archive/add-count" \
+  bash "$KIT/tools/kb.sh" show add-count --store "$A/.sdlc"
+assert_ok_msg "A28 kb.sh search finds the delivered evidence" "evidence.md" \
+  bash "$KIT/tools/kb.sh" search --store "$A/.sdlc" "ALL PASS"
 
 echo
 echo "=============== B. full route: a reproduced bug fix, spec+plan gates"
@@ -444,8 +454,9 @@ assert_file .sdlc/archive/fix-empty-query/spec.md "B12 spec.md archived (durable
 assert_file .sdlc/archive/fix-empty-query/origin.md "B12b origin.md archived (durable)"
 git add -A; git commit -qm "fix(search): empty query matches nothing" >/dev/null
 git clone -q "$B" "$FIX/clone-full"
-assert_file "$FIX/clone-full/.sdlc/archive/fix-empty-query/spec.md" "B13 spec.md survives a fresh clone"
-assert_file "$FIX/clone-full/.sdlc/archive/fix-empty-query/evidence.md" "B13b evidence.md survives a fresh clone"
+assert_nofile "$FIX/clone-full/.sdlc" "B13 the clone carries the code, not the records"
+assert_ok_msg "B13b the full route's spec is retrievable from the store" "spec.md" \
+  bash "$KIT/tools/kb.sh" show fix-empty-query --store "$B/.sdlc"
 
 echo
 echo "=============== C. negative scenarios: none may pass or ship"
@@ -705,7 +716,7 @@ cat > .sdlc/work/neg-committed/evidence.md <<'EOF'
 # Evidence: neg-committed
 - Command: sh late.sh -> v1
 EOF
-git add late.sh .sdlc/work/neg-committed
+git add late.sh          # .sdlc is ignored now; naming it would only print a hint block
 git commit -qm "feat: late.sh (committed before the ship review, as many teams do)"
 sdlc approve.sh ship .sdlc/work/neg-committed/evidence.md --delegated >/dev/null
 nbound=$(awk '/^code_files: /{print $2}' .sdlc/approvals/neg-committed.ship.approval)
