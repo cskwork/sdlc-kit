@@ -63,17 +63,37 @@ kb() { bash "$KIT/tools/kb.sh" "$@"; }
 IS_WINDOWS=0
 case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=1;; esac
 win_user() { printf '%s' "${USERNAME:-$(whoami)}"; }
+# Why the ACL command never runs bare: Git Bash rewrites arguments that look
+# like Unix paths into Windows paths before a NATIVE program sees them, so
+# `/deny` and `/remove:d` reach icacls as `C:/Program Files/Git/deny` and the
+# option is gone. MSYS2_ARG_CONV_EXCL='*' turns that conversion off for this
+# one command; both directory arguments are already native (cygpath -w), so
+# nothing is left for the conversion to do.
+# https://www.msys2.org/docs/filesystem-paths/#automatic-unix-windows-path-conversion
+ACL_DIAG=""
+acl_diag() { ACL_DIAG="$1 (exit $2): $(printf '%s' "$3" | tr '\n' '|' | cut -c1-300)"; }
 deny_write() { # <dir, inside this run's fixture>
   case "$1" in "$FIX"/*) ;; *) echo "refusing to change rights outside $FIX" >&2; return 1;; esac
+  ACL_DIAG=""
   if [ "$IS_WINDOWS" = 1 ]; then
-    icacls "$(cygpath -w "$1")" /deny "$(win_user):(W)" >/dev/null 2>&1 || return 1
+    local w o rc
+    w=$(cygpath -w "$1" 2>&1); rc=$?
+    [ $rc -eq 0 ] || { acl_diag "cygpath -w $1" "$rc" "$w"; return 1; }
+    o=$(MSYS2_ARG_CONV_EXCL='*' icacls "$w" /deny "$(win_user):(W)" 2>&1); rc=$?
+    [ $rc -eq 0 ] || { acl_diag "icacls '$w' /deny $(win_user):(W)" "$rc" "$o"; return 1; }
   else
-    chmod 500 "$1" || return 1
+    local o rc
+    o=$(chmod 500 "$1" 2>&1); rc=$?
+    [ $rc -eq 0 ] || { acl_diag "chmod 500 $1" "$rc" "$o"; return 1; }
   fi
 }
-allow_write() { # <dir, inside this run's fixture>
+allow_write() { # <dir, inside this run's fixture> — always tries both restores
   case "$1" in "$FIX"/*) ;; *) return 1;; esac
-  [ "$IS_WINDOWS" = 1 ] && icacls "$(cygpath -w "$1")" /remove:d "$(win_user)" >/dev/null 2>&1
+  if [ "$IS_WINDOWS" = 1 ]; then
+    local w
+    w=$(cygpath -w "$1" 2>/dev/null) && \
+      MSYS2_ARG_CONV_EXCL='*' icacls "$w" /remove:d "$(win_user)" >/dev/null 2>&1
+  fi
   chmod 700 "$1" 2>/dev/null
   return 0
 }
@@ -217,7 +237,10 @@ if write_denied "$RO"; then
     bash "$KIT/init.sh" . --area "$RO"
   assert_nofile "$G/.sdlc" "C11 no fallback store was created"
 else
-  fail "C10a NOT VERIFIED: no unwritable directory could be made on $(uname -s) — C10 and C11 are untested here, not passing"
+  # the command that was supposed to make the deny is named with its exit
+  # status and its own words, so a fixture that cannot be built is debuggable
+  fail "C10a NOT VERIFIED: no unwritable directory could be made on $(uname -s) — C10 and C11 are untested here, not passing" \
+    "${ACL_DIAG:-the deny command reported success, but a write into $RO still succeeded}"
 fi
 allow_write "$RO"
 assert_fail_msg "C12 an unknown option is refused" "unknown option" bash "$KIT/init.sh" . --wiki
