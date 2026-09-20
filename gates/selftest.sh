@@ -84,7 +84,7 @@ grep -q '^state: dead-end' .sdlc/archive/feat-a/CLOSED || { echo "FAIL: CLOSED r
 [ -d .sdlc/work/feat-a ] && { echo "FAIL: closed feature still under work/"; exit 1; }
 [ -f .sdlc/archive/feat-a/approvals/feat-a.intent.approval ] || { echo "FAIL: approvals not archived with the feature"; exit 1; }
 ls .sdlc/approvals/feat-a.*.approval >/dev/null 2>&1 && { echo "FAIL: approvals left behind in .sdlc/approvals/"; exit 1; }
-grep -q '^\.sdlc/archive/\*/scratch/$' .gitignore || { echo "FAIL: archive scratch not gitignored on close"; exit 1; }
+grep -qxF '/.sdlc' .gitignore || { echo "FAIL: the archived record is not gitignored on close"; exit 1; }
 case "$out" in (*"scratch/ still has files"*) ;; (*) echo "FAIL: leftover scratch not flagged at close"; exit 1;; esac
 if "$kit/gates/close.sh" feat-a abandoned "again" >/dev/null 2>&1; then
   echo "FAIL: double close allowed"; exit 1; fi
@@ -416,25 +416,23 @@ case "$out" in (*"(compact)"*) echo "FAIL: post-approval compact flip honored"; 
 case "$out" in (*"re-approve intent"*) ;; (*) echo "FAIL: track mismatch not flagged"; exit 1;; esac
 echo "ok: intent approval freezes the Track verdict"
 
-# 28. init.sh seeds the full ignore set, keeps the decision record committable,
-#     is idempotent, and flags paths a previous kit version already tracked
+# 28. init.sh ignores the WHOLE record store with one anchored rule, is
+#     idempotent, drops the narrower rules older kit versions issued, and flags
+#     paths a previous kit version already tracked
 (
   mkdir -p "$tmp/init-probe"; cd "$tmp/init-probe"; git init -q .
   mkdir -p .sdlc/work/feat-x
   echo e > .sdlc/work/feat-x/evidence.md
   git add -A
-  printf '%s\n' '.sdlc/work/*/spec.md' '.sdlc/archive/*/evidence.md' > .gitignore  # seeded by an older kit
+  # seeded by an older kit: narrower rules plus one rule of the USER's own
+  printf '%s\n' '.sdlc/work/*/spec.md' '.sdlc/approvals/' 'build/' > .gitignore
   out=$("$kit/init.sh" .)
-  for line in '.sdlc/approvals/' '.sdlc/archive/*/approvals/' \
-              '.sdlc/work/*/harvest.md' '.sdlc/work/*/deviations.md' \
-              '.sdlc/work/*/baseline.txt' '.sdlc/work/*/scratch/'; do
-    grep -qxF "$line" .gitignore || { echo "FAIL: init.sh does not ignore $line"; exit 1; }
-  done
-  # the durable record is committable: obsolete kit-owned ignores are removed,
-  # and never re-added
-  for line in '.sdlc/work/*/spec.md' '.sdlc/archive/*/spec.md' \
-              '.sdlc/work/*/evidence.md' '.sdlc/archive/*/evidence.md'; do
-    grep -qxF "$line" .gitignore && { echo "FAIL: init.sh still ignores the durable $line"; exit 1; }
+  grep -qxF '/.sdlc' .gitignore || { echo "FAIL: init.sh does not ignore /.sdlc"; exit 1; }
+  grep -qxF 'build/' .gitignore || { echo "FAIL: init.sh dropped the user's own ignore rule"; exit 1; }
+  # every kit-owned narrower rule is subsumed and removed
+  for line in '.sdlc/work/*/spec.md' '.sdlc/approvals/' '.sdlc/work/*/scratch/' \
+              '.sdlc/archive/*/progress.md'; do
+    grep -qxF "$line" .gitignore && { echo "FAIL: init.sh still issues the subsumed $line"; exit 1; }
   done
   case "$out" in (*"removed obsolete kit ignore"*) ;;
     (*) echo "FAIL: init.sh did not report removing the obsolete ignores"; exit 1;; esac
@@ -443,25 +441,24 @@ echo "ok: intent approval freezes the Track verdict"
   [ "$(wc -l < .gitignore)" = "$before" ] || { echo "FAIL: init.sh .gitignore is not idempotent"; exit 1; }
   # --no-index: check-ignore skips paths already in the index, and evidence.md
   # was staged above on purpose — we are testing the rules, not the index
-  # the durable record must survive: ignoring it would erase the audit trail
-  for keep in intent.md spec.md plan.md map.md evidence.md delivery.md; do
-    if git check-ignore --no-index -q ".sdlc/work/feat-x/$keep"; then
-      echo "FAIL: $keep is gitignored — the durable record must stay committable"; exit 1; fi
+  for p in .sdlc .sdlc/work/feat-x/intent.md .sdlc/work/feat-x/evidence.md \
+           .sdlc/memory/DOMAIN.md .sdlc/config.md .sdlc/work/feat-x/scratch/dump.log \
+           .sdlc/approvals/feat-x.intent.approval; do
+    if ! git check-ignore --no-index -q "$p"; then
+      echo "FAIL: $p is not gitignored — records must stay out of the application's history"; exit 1; fi
   done
-  for drop in harvest.md deviations.md baseline.txt progress.md; do
-    if ! git check-ignore --no-index -q ".sdlc/work/feat-x/$drop"; then
-      echo "FAIL: $drop is not gitignored"; exit 1; fi
-  done
-  if ! git check-ignore --no-index -q .sdlc/work/feat-x/scratch/dump.log; then
-    echo "FAIL: scratch/ is not gitignored"; exit 1; fi
-  if ! git check-ignore --no-index -q .sdlc/approvals/feat-x.intent.approval; then
-    echo "FAIL: approval records are not gitignored"; exit 1; fi
+  # anchored: another shipping unit's store is NOT caught by this project's rule
+  mkdir -p pkg/.sdlc/work/feat-y
+  if git check-ignore --no-index -q pkg/.sdlc/work/feat-y/intent.md; then
+    echo "FAIL: /.sdlc is not anchored — it caught a nested shipping unit's store"; exit 1; fi
   # init.sh must never touch the git index: evidence.md was staged before the
   # run and must still be staged after it (untracking is the human's call)
   git ls-files | grep -q '^\.sdlc/work/feat-x/evidence\.md$' || {
     echo "FAIL: init.sh mutated the git index"; exit 1; }
+  case "$out" in (*"tracked file(s) now match .gitignore"*) ;;
+    (*) echo "FAIL: init.sh did not flag the already-tracked record"; exit 1;; esac
 ) || exit 1
-echo "ok: init.sh keeps the durable record committable, ignores residue, is idempotent"
+echo "ok: init.sh ignores the whole record store, anchored, idempotent, index untouched"
 
 # 29. approvals are bound to a PATH, not a bare slug: a same-slug feature dir
 #     somewhere else cannot reuse the approval, and a symlinked dir is refused
@@ -637,7 +634,7 @@ EOF
   out=$("$kit/gates/status.sh" fix-login)
   case "$out" in (*"no delivery.md"*) ;; (*) echo "FAIL: status does not ask for the delivery record"; exit 1;; esac
   # staging + committing the REVIEWED content keeps the approval valid
-  git add app.py .sdlc/work/fix-login .gitignore
+  git add app.py .gitignore          # .sdlc is ignored: records never enter the index
   git commit -qm "fix(login): strip the name before validating"
   sha=$(git rev-parse HEAD)
   cat > .sdlc/work/fix-login/delivery.md <<EOF
@@ -737,7 +734,8 @@ EOF
   mkdir -p .sdlc/work/committed-two
   echo goal > .sdlc/work/committed-two/intent.md
   echo ev > .sdlc/work/committed-two/evidence.md
-  git add -A .; git commit -qm "chore: archive + next feature"
+  # nothing to commit: the archive and the new feature's records are ignored,
+  # so HEAD still holds exactly the reviewed source
   "$kit/gates/approve.sh" ship .sdlc/work/committed-two/evidence.md --delegated >/dev/null
   printf 'echo HACKED\n' > late.sh          # never reviewed by anyone
   sha=$(git rev-parse HEAD)
