@@ -124,17 +124,15 @@ no push that already happened. Merging that branch or deploying it is a
 separate human approval, recorded as delivery.md's `Authorized-by:` — the ship
 approval is not that authorization.
 
-1. Stage named paths only: changed source files, `.sdlc/work/<slug>/`, and
-   — when changed — `.sdlc/memory/POLICY.md` and `.sdlc/config.md`
-   (lazymode, command, and `qa:` edits must reach the audit trail). Do not
-   use `git add -A` or `git add .` because they can include unrelated files.
-   Staging `.sdlc/work/<slug>/` yields the durable record — `origin.md`, `intent.md`,
-   `spec.md`, `plan.md`, `map.md`, `evidence.md`, `delivery.md`; approvals,
-   harvest.md, deviations.md, baseline.txt, progress.md, and scratch/ are
-   gitignored (init.sh) and stay on disk. If any of THOSE appears in the
-   staged list, the project's `.gitignore` predates the kit version in
-   `.sdlc/config.md` — re-run `init.sh` and follow its notes before
-   committing.
+1. Stage named paths only: the changed source files. Do not use `git add -A`
+   or `git add .` because they can include unrelated files. **The record
+   store is not staged at all**: `/.sdlc` is gitignored in full (AGENTS.md
+   rule 7), so the records stay in the store — the project's working copy,
+   or the area the human chose — and the commit carries code. If any
+   `.sdlc/` path appears in the staged list, the project tracks records
+   from an older kit version: say so, and leave the decision to untrack
+   them to the human (`init.sh` prints the command). Never untrack them
+   mid-ship.
 2. Commit and push following the **Release procedure** line in spec.md
    (compact route: intent.md's Delivery target). The ship approval binds the
    project's whole source snapshot as the review saw it (AGENTS.md rule 6):

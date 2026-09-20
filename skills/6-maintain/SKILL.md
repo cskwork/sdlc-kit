@@ -76,8 +76,13 @@ explicitly (see Evidence tracking below).
    stated.
 4. Trace the cause. Read `.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`,
    and `.sdlc/memory/DOMAIN.md`, then open lesson files whose tags match
-   the task. Check whether this failure mode has occurred before; if a past
-   lesson matches, cite it in the diagnosis.
+   the task. Then ask the store directly whether this has been seen before:
+   `tools/kb.sh search "<the error text>"`, `tools/kb.sh search "<the
+   module or endpoint>"`, and `tools/kb.sh show <slug>` for the features
+   the hits name — the search covers closed features, so a fix from two
+   years ago comes back with its evidence and delivery record. Cite what
+   you find by path in the diagnosis. Records of a checkout that no longer
+   exists are reachable the same way with `--area <folder>`.
 5. Separate the claim before hunting: "it does not react" is a state/handler
    problem; "it looks wrong/disabled" is a RENDERING problem until proven
    otherwise. They have different checklists.
@@ -87,8 +92,8 @@ explicitly (see Evidence tracking below).
    produce the call-site × guard table. One instance is a bug; the table is
    the scope, and it decides fix ordering.
 7. Check the feature's `evidence.md` — a shipped feature is archived, so it
-   sits at `.sdlc/archive/<slug>/evidence.md`: was this covered by proof, or
-   was it a verification gap? A gap is itself a lesson (`promote: skills/5-ship`).
+   sits at `.sdlc/archive/<slug>/evidence.md` (`tools/kb.sh show <slug>`
+   names the path): was this covered by proof, or was it a verification gap? A gap is itself a lesson (`promote: skills/5-ship`).
 
 ## Evidence tracking
 

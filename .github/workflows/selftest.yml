@@ -47,3 +47,9 @@ jobs:
       - name: autotest (the automation layer, local fixtures only)
         run: bash gates/autotest.sh
         shell: bash
+      # the record store: where it lives, how it refuses, how it is read back.
+      # It exits 2 when the filesystem cannot create symlinks — on Windows that
+      # would be the MSYS setting above failing, which CI must not hide.
+      - name: knowledge (record store and retrieval, local fixtures only)
+        run: bash gates/knowledge-test.sh
+        shell: bash

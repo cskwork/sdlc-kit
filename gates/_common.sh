@@ -98,6 +98,65 @@ sdlc_slug_of() { # <canonical path> → slug
   printf '%s\n' "$1" | awk -F/ '{print $3}'
 }
 
+# --- store ownership ---------------------------------------------------------
+# Records may live OUTSIDE the project (init.sh --area), reached through the
+# `.sdlc` symlink. Copying a checkout copies that link: cp -R, rsync, tar
+# without --dereference and most backup restores all preserve it, so the copy
+# resolves to the ORIGINAL's store. Without this check the copy would inherit
+# the original's live approvals and could archive its features.
+# `<store>/PROJECT` records the owning checkout (init.sh --area writes it), and
+# every command that takes a gate verdict or writes store state calls this at
+# its own CLI boundary — never as a side effect of sourcing this file, which
+# must stay usable from any cwd and against a read-only area.
+# Verdicts: 0 = this checkout owns the records, or they are an ordinary local
+# `.sdlc` directory that predates ownership records (nothing to check).
+# 1 = refusal, with the reason and the manual remedies on stderr. Ownership is
+# never transferred, adopted, or repaired here, and no records are moved.
+sdlc_store_owner_ok() { # [project-dir, default .]
+  local root="${1:-.}" proj store owner recorded
+  proj=$(cd "$root" 2>/dev/null && pwd -P) || return 0
+  [ -e "$root/.sdlc" ] || return 0
+  store=$(cd "$root/.sdlc" 2>/dev/null && pwd -P) || {
+    echo "FAIL: $proj/.sdlc cannot be resolved — a broken link, or a store that is gone." >&2
+    echo "  Nothing was changed. Fix or remove the link, then re-run." >&2
+    return 1; }
+  owner="$store/PROJECT"
+  if [ ! -f "$owner" ]; then
+    # An ordinary project-local .sdlc directory carries no PROJECT record and
+    # needs none: it cannot be reached from another checkout.
+    [ "$store" = "$proj/.sdlc" ] && return 0
+    echo "FAIL: the records of $proj are outside the project and carry no ownership record." >&2
+    echo "  store: $store" >&2
+    echo "  Without $owner this kit cannot tell whose approvals these are, and it never assumes." >&2
+    echo "  Read them with: tools/kb.sh list --store \"$store\"" >&2
+    echo "  To work in THIS checkout, give it a store of its own: rm .sdlc && init.sh . --area \"<folder>\"" >&2
+    return 1
+  fi
+  recorded=$(awk '/^project: /{sub(/^project: /,""); sub(/[ \t\r]*$/,""); print; exit}' "$owner" 2>/dev/null || true)
+  if [ -z "$recorded" ]; then
+    echo "FAIL: $owner has no readable 'project:' line, so the owner of these records is unknown." >&2
+    echo "  Nothing was changed and no authorization is assumed. Repair that line by hand, or" >&2
+    echo "  give this checkout its own store: rm .sdlc && init.sh . --area \"<folder>\"" >&2
+    return 1
+  fi
+  [ "$recorded" = "$proj" ] && return 0
+  echo "FAIL: these records belong to another checkout — refusing to read a gate or write state here." >&2
+  echo "  store:          $store" >&2
+  echo "  recorded owner: $recorded" >&2
+  echo "  this checkout:  $proj" >&2
+  echo "  Approvals and verification state are per checkout and are never shared, adopted, or moved." >&2
+  echo "  Reading needs no binding (the owning checkout need not even exist):" >&2
+  echo "    tools/kb.sh list  --store \"$store\"" >&2
+  echo "    tools/kb.sh show   <slug> --area \"$(dirname "$store")\"" >&2
+  echo "    tools/kb.sh search \"<text>\" --area \"$(dirname "$store")\"" >&2
+  echo "  To work in THIS checkout, give it a store of its own (nothing is copied):" >&2
+  echo "    rm .sdlc && init.sh . --area \"$(dirname "$store")\"" >&2
+  echo "  If this checkout IS the owner under a new path (renamed or moved), reconnect by hand:" >&2
+  echo "    edit the 'project:' line of $owner to read: project: $proj" >&2
+  echo "    Do that only when no other checkout still uses this store." >&2
+  return 1
+}
+
 # --- reviewed source identity ------------------------------------------------
 # The ship review is a review of the project's SOURCE, so the ship approval binds
 # the whole source snapshot — not only the part that happened to be uncommitted:
@@ -128,7 +187,10 @@ sdlc_source_paths() { # → project-relative source paths, one per line; non-zer
   git rev-parse --git-dir >/dev/null 2>&1 || return 0
   raw=$(git -c core.quotepath=off ls-files -c -o --exclude-standard 2>/dev/null) || {
     echo "FAIL: git ls-files could not enumerate the source" >&2; return 1; }
-  printf '%s\n' "$raw" | awk 'NF && $0 !~ /^\.sdlc\//' | LC_ALL=C sort -u
+  # `.sdlc` itself is excluded too, not only its descendants: when the records
+  # live in an external area the entry IS the `.sdlc` symlink, and a snapshot
+  # that bound it would drift every time the area moved.
+  printf '%s\n' "$raw" | awk 'NF && $0 != ".sdlc" && $0 !~ /^\.sdlc\//' | LC_ALL=C sort -u
 }
 # One entry line per path: "<kind> <mode> <content-sha256> <path>". The mode
 # column is `x` for an executable file, `-` otherwise, so a chmod is drift; a
@@ -211,7 +273,7 @@ sdlc__tree_entries_unsorted() { # <commit>; ls-tree lines on stdin — helper of
   while IFS='	' read -r meta path; do
     [ -n "$path" ] || continue
     case "$path" in
-      (.sdlc/*) continue;;
+      (.sdlc|.sdlc/*) continue;;   # bare `.sdlc` too: an external area is a committed symlink entry
       (\"*) printf 'unsupported - - %s\n' "$path"; continue;;
     esac
     mode=${meta%% *}; sha=${meta##* }

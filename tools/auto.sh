@@ -36,6 +36,9 @@ EOF
 [ $# -ge 1 ] || usage
 cmd="$1"; shift
 [ -d .sdlc ] || { echo "FAIL: no .sdlc/ here. Run init.sh first, from the project root." >&2; exit 1; }
+# The machine view reports gate verdicts and records checkpoint state, so it is
+# bound to the owning checkout exactly like the gates (_common.sh).
+sdlc_store_owner_ok || exit 1
 
 # Remote verification is ON by default for a delivery that claims a remote
 # branch: a handoff the loop cannot see is not a handoff. `--no-remote-check`
