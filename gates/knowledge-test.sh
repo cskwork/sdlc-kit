@@ -567,6 +567,105 @@ assert_ok_msg "G9 the readable name carries into retrieval output" "지식-프�
   bash "$KIT/tools/kb.sh" list --area "$FIX/area-u"
 
 echo
+echo "=============== H. a human can read it: digest, overview, unmerged knowledge"
+# A store with two open features and one closed. Dates and tags come from the
+# records only; nothing is inferred from mtime except the idle time of `harvest`.
+HP="$FIX/hproj"; newproj "$HP"
+assert_ok "H0 the fixture project initializes" bash "$KIT/init.sh" .
+mkdir -p .sdlc/work/h-new .sdlc/work/h-old .sdlc/work/h-quiet .sdlc/archive/h-done .sdlc/memory/lessons
+cat > .sdlc/work/h-new/intent.md <<'EOF'
+# Intent: h-new
+- Goal: let a teacher export the roster as CSV
+- Date: 2026-09-18
+- Track: compact
+EOF
+cat > .sdlc/work/h-new/summary.md <<'EOF'
+# Summary: h-new
+- Tags: roster, export
+- Problem: the roster page has no export, so teachers retype names into spreadsheets
+- Cause: not known yet
+- Change: add a CSV endpoint behind the existing roster query
+- Result: not delivered
+- Lesson: none
+EOF
+cat > .sdlc/work/h-new/harvest.md <<'EOF'
+# Harvest: h-new
+## Domain candidates
+<!-- - fact — [verified: how] -->
+- the roster query already filters by term — [verified: RosterMapper.xml:40 — 2026-09-18]
+## Lesson candidates
+- [export,encoding] Excel needs a BOM to open UTF-8 CSV as UTF-8
+EOF
+cat > .sdlc/work/h-old/intent.md <<'EOF'
+# Intent: h-old
+- Goal: 학생 현황에서 학습 이력이 있는 학생이 '-'로 보이는 문제를 고쳐 교사가 실제 점수를 볼 수 있게 한다. 이 문장은 표에서 잘려야 할 만큼 길게 이어진다. 그리고 더 이어진다.
+- Date: 2026-08-01
+EOF
+printf '# Intent: h-quiet\n- Goal: nothing to harvest here\n- Date: 2026-08-15\n' > .sdlc/work/h-quiet/intent.md
+printf '# Intent: h-done\n- Goal: an archived one\n- Date: 2026-07-01\n' > .sdlc/archive/h-done/intent.md
+printf 'state: shipped\nreason: done\nclosed_at: 2026-07-02T10:00:00Z\n' > .sdlc/archive/h-done/CLOSED
+printf '# Lesson: a BOM makes Excel read UTF-8\n- Feature: h-new\n' > .sdlc/memory/lessons/2026-09-18-h-new-bom.md
+# show — the digest
+assert_ok_msg "H1 show prints the reader's summary before the paths" "teachers retype names" kb show h-new
+assert_ok_msg "H2 show prints the unmerged harvest candidates" "Excel needs a BOM" kb show h-new
+assert_ok_msg "H3 show prints a lesson's title, not only its file" "a BOM makes Excel read UTF-8" kb show h-new
+assert_ok_msg "H4 show lists documents relative to the store" "work/h-new/summary.md" kb show h-new
+assert_ok_msg "H5 show falls back to the H1 when an intent has no Goal line" "h-quiet" \
+  sh -c "sed -i.bak '/^- Goal/d' .sdlc/work/h-quiet/intent.md && rm -f .sdlc/work/h-quiet/intent.md.bak && bash '$KIT/tools/kb.sh' show h-quiet"
+SHOW=$(kb show h-new)
+case "$SHOW" in *"Summary:"*"Documents:"*) pass "H6 the digest comes before the document list";; *) fail "H6 the document list is not last" "$SHOW";; esac
+# index — overview table, newest first, tags, unmerged harvests
+assert_ok "H7 index regenerates the page" kb index
+PAGE=.sdlc/README.md
+assert_ok_msg "H8 the page opens with an overview table" "| Feature | State | Date | Tags | Goal |" cat "$PAGE"
+assert_ok_msg "H9 the table carries the tags a reader browses by" "roster, export" cat "$PAGE"
+NEW_AT=$(grep -n '^| \[h-new\]' "$PAGE" | head -1 | cut -d: -f1); OLD_AT=$(grep -n '^| \[h-old\]' "$PAGE" | head -1 | cut -d: -f1)
+if [ -n "$NEW_AT" ] && [ -n "$OLD_AT" ] && [ "$NEW_AT" -lt "$OLD_AT" ]; then pass "H10 open features are listed newest first"
+else fail "H10 the newer feature is not listed first (new@${NEW_AT:-?} old@${OLD_AT:-?})"; fi
+assert_ok_msg "H11 the closed feature carries its close date" "closed 2026-07-02" cat "$PAGE"
+assert_ok_msg "H12 unmerged harvests have their own section" "## Knowledge not merged yet" cat "$PAGE"
+assert_ok_msg "H13 the section names the feature and shows the candidate" "Excel needs a BOM" cat "$PAGE"
+assert_exit "H14 a feature without a harvest is not listed as unmerged" 1 \
+  sh -c "awk '/^## Knowledge not merged yet/,/^## Open features/' '$PAGE' | grep -q h-quiet"
+assert_ok_msg "H15 the page still lists the summary of a feature" "teachers retype names" cat "$PAGE"
+# the long goal is cut at a character boundary — never a broken glyph
+CELL=$(grep '^| \[h-old\]' "$PAGE" | head -1)
+case "$CELL" in *"…"*) pass "H16 a long goal is truncated in the table";; *) fail "H16 the long goal was not truncated" "$CELL";; esac
+if command -v python3 >/dev/null 2>&1; then
+  if printf '%s' "$CELL" | python3 -c 'import sys; sys.stdin.buffer.read().decode("utf-8")' 2>/dev/null; then
+    pass "H17 the truncated cell is still valid UTF-8"
+  else fail "H17 the truncation split a multibyte character" "$CELL"; fi
+else echo "NOT VERIFIED  H17 (no python3 to check UTF-8 validity)"; fi
+# regenerating an unchanged store changes nothing (no timestamp in the page)
+cp "$PAGE" "$FIX/page-before"; kb index >/dev/null
+if cmp -s "$PAGE" "$FIX/page-before"; then pass "H18 regenerating an unchanged store yields identical bytes"
+else fail "H18 the page changed without the records changing" "$(diff "$FIX/page-before" "$PAGE" | head -5)"; fi
+# harvest — the trigger
+assert_ok_msg "H19 harvest lists the open feature holding candidates" "h-new" kb harvest
+assert_exit "H20 harvest exits 0 when something is unmerged" 0 bash "$KIT/tools/kb.sh" harvest
+assert_ok_msg "H21 --stale 0 marks it as mergeable without closing" "STALE" kb harvest --stale 0
+assert_ok_msg "H22 a fresh harvest is reported active under the default window" "active" kb harvest
+assert_exit "H23 harvest exits 1 for a store with nothing unmerged" 1 \
+  sh -c "mkdir -p '$FIX/hempty/work/x' && echo '# Intent: x' > '$FIX/hempty/work/x/intent.md' && bash '$KIT/tools/kb.sh' harvest --store '$FIX/hempty'"
+assert_fail_msg "H24 harvest takes no positional argument" "takes no argument" bash "$KIT/tools/kb.sh" harvest h-new
+assert_fail_msg "H25 --stale wants a number" "number of days" bash "$KIT/tools/kb.sh" harvest --stale soon
+# obsidian — frontmatter and inline tags on the generated page only
+assert_ok "H26 index --obsidian writes the page" kb index --obsidian
+assert_ok_msg "H27 the page opens with frontmatter" "---" head -n 1 "$PAGE"
+assert_ok_msg "H28 the frontmatter tags the page" "tags: [sdlc-kit, knowledge]" head -n 5 "$PAGE"
+assert_ok_msg "H29 feature tags become inline #tags" "#roster #export" cat "$PAGE"
+assert_ok_msg "H30 links stay relative markdown" "](work/h-new/intent.md)" cat "$PAGE"
+assert_ok "H31 a frontmatter page is still recognized as generated (plain regenerate)" kb index
+assert_exit "H32 a plain regenerate drops the frontmatter again" 1 sh -c "head -n 1 '$PAGE' | grep -q '^---'"
+printf 'index_style: obsidian   # tools/kb.sh index\n' >> .sdlc/config.md
+assert_ok "H33 index_style in config.md selects the style without a flag" kb index
+assert_ok_msg "H34 the configured style produced frontmatter" "sdlc_store:" head -n 5 "$PAGE"
+assert_fail_msg "H35 --obsidian is refused for anything but index" "applies to index only" bash "$KIT/tools/kb.sh" show h-new --obsidian
+assert_ok_msg "H36 records under work/ were not written by any of this" "not delivered" cat .sdlc/work/h-new/summary.md
+assert_nofile ".sdlc/work/h-new/README.md" "H37 no page was written inside a feature directory"
+cd "$FIX" || exit 2
+
+echo
 echo "================================================================"
 printf 'PASSED: %s   FAILED: %s\n' "$PASSED" "$FAILED"
 if [ "$FAILED" -gt 0 ]; then printf 'failures:%s\n' "$FAILLIST"; echo "KNOWLEDGE-TEST FAIL"; exit 1; fi
