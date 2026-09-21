@@ -193,6 +193,17 @@ when closing.
    `.sdlc/work/<slug>/harvest.md` (templates/harvest.md), never to the
    shared files. At close, merge harvest into lessons/INDEX/DOMAIN and
    delete it; `close.sh` blocks while harvest.md exists.
+   **A loop that never closes must not hide its knowledge.** An unmerged
+   harvest is readable before close — `tools/kb.sh show <slug>` and the
+   contents page print its candidates, `tools/kb.sh harvest` lists every
+   open feature that holds one with its idle time — and a feature idle 30
+   days or more (`--stale <days>` changes the threshold) may have its
+   harvest merged WITHOUT closing: the same procedure, the same one merge
+   at a time in the owning checkout, harvest.md deleted afterwards, the
+   feature stays open. Reporting is not merging: nothing in `kb.sh` writes
+   `memory/`. The feature's `summary.md` (templates/summary.md) is the one
+   record meant to be rewritten as the work moves — it is bound by no
+   approval — and is what `kb.sh show` prints first.
    **Recency wins on merge, three guards.** A contradicting candidate
    replaces the old entry with a fresh `[verified: how — YYYY-MM-DD]`;
    date every fact. Guards: weaker evidence never supersedes stronger (a
