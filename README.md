@@ -156,7 +156,8 @@ Per feature, inside the **target project**:
 │   ├── deviations.md                 # build-time differences
 │   ├── progress.md                   # heartbeat: ONE live line (rule 9)
 │   ├── baseline.txt                  # brownfield behavior before the change
-│   ├── harvest.md                    # mid-loop lesson/domain candidates; merged at close
+│   ├── summary.md                    # the reader's page: Problem/Cause/Change/Result/Lesson, Tags; kept current, bound by no approval
+│   ├── harvest.md                    # mid-loop lesson/domain candidates; merged at close (readable before: kb.sh show / harvest)
 │   └── scratch/                      # bulk logs, captures, traces
 └── archive/<slug>/                   # closed features; close.sh moves them here
     ├── CLOSED                        # shipped · abandoned · dead-end · handed-off
@@ -167,7 +168,7 @@ Per feature, inside the **target project**:
 
 **Where the records live is your choice.** By default they sit in the project's working copy. `init.sh . --area ~/knowledge` puts them in a folder you choose instead — `<area>/<unit>-<checkout-id>/`, with `.sdlc` linked to it, one store per checkout so two worktrees never share approvals. The area is refused if it sits inside the project (or the project inside it), if another checkout already owns that store, if a real `.sdlc` directory is already there (nothing is ever relocated for you), or if the link cannot be made. That ownership is re-checked at RUNTIME, not only at init: `check-gate.sh`, `approve.sh`, `close.sh`, `status.sh`, `tools/auto.sh`, `tools/verify.sh` and `tools/handoff.sh` refuse before any verdict or write when `<store>/PROJECT` names a different checkout, so a copied working copy (`cp -R`, rsync and most restores keep the symlink) can neither open another checkout's gate nor close its features. Reading is never bound that way: `tools/kb.sh show|search|list` still works, and nothing is ever re-bound or moved for you. Whichever you choose, **the store is yours to back up** — git no longer does it for you.
 
-**Reading the records back** is `tools/kb.sh`: `index` regenerates the contents page (`init.sh` and `close.sh` do it for you), `show <slug>` prints one feature's goal, documents and lessons, `search "<text>"` does a bounded literal search over open and closed features plus durable memory, and `--area <folder>` does either across every store in that folder — including features whose checkout no longer exists. Exit codes: `0` found, `1` nothing found, `2` usage error or refusal.
+**Reading the records back** is `tools/kb.sh`: `index` regenerates the contents page (`init.sh` and `close.sh` do it for you) — an overview table by state, date and tags, newest first, the harvests no close has merged yet, then one section per feature; `show <slug>` prints one feature as a digest — goal, its `summary.md` (Problem/Cause/Change/Result/Lesson, the one record meant to be kept current), delivery, unmerged harvest candidates, lesson titles, then the paths; `search "<text>"` does a bounded literal search over open and closed features plus durable memory; `harvest [--stale <days>]` lists open features whose harvest.md is not in memory yet, with idle time (a stale one may be merged without closing — AGENTS.md rule 4); and `--area <folder>` does any of these across every store in that folder — including features whose checkout no longer exists. `index --obsidian` (or `index_style: obsidian` in the store's config.md) adds frontmatter and inline `#tags` for a vault; no timestamp is ever written, so an unchanged page produces no diff. Exit codes: `0` found, `1` nothing found, `2` usage error or refusal.
 
 The public sdlc-kit repository stays framework-only. The records live and stay readable where they were written — in the project's working copy, or in the area you chose.
 
@@ -256,7 +257,7 @@ tools/auto.sh intent-check <slug>      # is this intent.md safe to run unattende
 tools/auto.sh checkpoint <slug> …      # pending step, bounded attempts, completed effects
 tools/verify.sh run|check <slug>       # run the project's verification recipe (needs python3); receipt bound to the source
 tools/handoff.sh push|check <slug>     # the review branch, proven to be on the remote
-tools/kb.sh index|show|search|list           # find past features and lessons (--area for every store)
+tools/kb.sh index|show|search|list|harvest   # find past features and lessons (--area for every store; harvest = knowledge not merged yet)
 ```
 
 The host wakes an agent; the agent reads `next`, performs that ONE stage action

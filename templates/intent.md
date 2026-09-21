@@ -2,6 +2,9 @@
 
 - Goal: <ONE plain-language sentence anyone can understand — who can do what
   once this ships. Written to be copy-pasted into a status report verbatim.>
+  <!-- The reader's digest (Problem/Cause/Change/Result/Lesson, Tags) lives in
+       summary.md (templates/summary.md), NOT here: this file is frozen by its
+       approval, summary.md is meant to be kept current. -->
 - Date: YYYY-MM-DD
 - Type: greenfield | brownfield
 - Track: full (default) | compact — <compact only when ALL criteria in skills/1-intent hold; `micro` is the older spelling of compact>
