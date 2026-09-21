@@ -649,18 +649,19 @@ assert_exit "H23 harvest exits 1 for a store with nothing unmerged" 1 \
   sh -c "mkdir -p '$FIX/hempty/work/x' && echo '# Intent: x' > '$FIX/hempty/work/x/intent.md' && bash '$KIT/tools/kb.sh' harvest --store '$FIX/hempty'"
 assert_fail_msg "H24 harvest takes no positional argument" "takes no argument" bash "$KIT/tools/kb.sh" harvest h-new
 assert_fail_msg "H25 --stale wants a number" "number of days" bash "$KIT/tools/kb.sh" harvest --stale soon
-# obsidian — frontmatter and inline tags on the generated page only
-assert_ok "H26 index --obsidian writes the page" kb index --obsidian
+# obsidian — a store setting (config.md), so init.sh and close.sh keep the style;
+# it changes the generated page only
+printf 'index_style: obsidian   # tools/kb.sh index\n' >> .sdlc/config.md
+assert_ok_msg "H26 index_style: obsidian in config.md selects the style" "(obsidian)" kb index
 assert_ok_msg "H27 the page opens with frontmatter" "---" head -n 1 "$PAGE"
 assert_ok_msg "H28 the frontmatter tags the page" "tags: [sdlc-kit, knowledge]" head -n 5 "$PAGE"
 assert_ok_msg "H29 feature tags become inline #tags" "#roster #export" cat "$PAGE"
 assert_ok_msg "H30 links stay relative markdown" "](work/h-new/intent.md)" cat "$PAGE"
-assert_ok "H31 a frontmatter page is still recognized as generated (plain regenerate)" kb index
-assert_exit "H32 a plain regenerate drops the frontmatter again" 1 sh -c "head -n 1 '$PAGE' | grep -q '^---'"
-printf 'index_style: obsidian   # tools/kb.sh index\n' >> .sdlc/config.md
-assert_ok "H33 index_style in config.md selects the style without a flag" kb index
-assert_ok_msg "H34 the configured style produced frontmatter" "sdlc_store:" head -n 5 "$PAGE"
-assert_fail_msg "H35 --obsidian is refused for anything but index" "applies to index only" bash "$KIT/tools/kb.sh" show h-new --obsidian
+assert_ok "H31 a frontmatter page is still recognized as generated" kb index
+sed -i.bak '/^index_style:/d' .sdlc/config.md && rm -f .sdlc/config.md.bak
+assert_ok_msg "H32 removing the setting regenerates a plain page" "(plain)" kb index
+assert_exit "H33 the plain page has no frontmatter" 1 sh -c "head -n 1 '$PAGE' | grep -q '^---'"
+assert_fail_msg "H34 there is no style flag — one setting, one place" "unknown option" bash "$KIT/tools/kb.sh" index --obsidian
 assert_ok_msg "H36 records under work/ were not written by any of this" "not delivered" cat .sdlc/work/h-new/summary.md
 assert_nofile ".sdlc/work/h-new/README.md" "H37 no page was written inside a feature directory"
 cd "$FIX" || exit 2
