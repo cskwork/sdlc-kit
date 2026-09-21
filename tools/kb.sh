@@ -196,9 +196,11 @@ kb_count_lines() { # kb_body text on stdin → content lines (labels ending in "
   awk '!/:$/ { n++ } END { print n + 0 }'
 }
 # Idle test for the harvest report: a feature is active when any of its own
-# records (not scratch/) was modified inside the window. BSD stat first (macOS),
-# then GNU — the same fallback status.sh uses for the heartbeat age.
-kb_mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || true; }
+# records (not scratch/) was modified inside the window. GNU stat first: on GNU
+# `-f %m` is not a failure but the MOUNT POINT of the file system ("/"), so a
+# BSD-first order silently returns text on Linux and Git Bash. `-c` is an
+# illegal option on BSD/macOS, so that order fails over cleanly there.
+kb_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || true; }
 kb_idle_days() { # <feature dir> → whole days since the newest record, or empty when unknown
   local f m newest=""
   for f in "$1"/*.md "$1"/CLOSED; do
