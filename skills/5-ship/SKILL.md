@@ -71,7 +71,13 @@ no lesson. Write what there is into the feature's
 `.sdlc/work/<slug>/harvest.md` (lesson candidates in the skill 6 format;
 durable terms, verified facts, and constraints as domain candidates).
 INDEX.md, DOMAIN.md, and lessons/ are written only at close, by the closer
-(AGENTS.md rule 4). Domain facts describe the system; lessons describe mistakes. If a
+(AGENTS.md rule 4) — or, for a feature that stays open and idle, by the
+stale-harvest merge the same rule allows. Then bring the feature's
+`summary.md` up to date: `Result` says what delivery.md confirms (a pushed
+review branch is not a deployment), `Lesson` is the one line worth
+remembering, `Cause`/`Change` match what was actually found and built.
+summary.md is bound by no approval; `tools/kb.sh show` prints it first, so
+a stale one misleads every later reader. Domain facts describe the system; lessons describe mistakes. If a
 stage skill should have prevented a mistake, add `promote: skills/<n>` to
 the lesson candidate. A tag that appears three or more times in INDEX.md
 must be promoted: propose the stage-skill change to the human (`close.sh`
