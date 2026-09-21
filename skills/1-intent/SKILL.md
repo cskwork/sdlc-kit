@@ -20,9 +20,11 @@ change, overwrite `.sdlc/work/<slug>/progress.md` with one line —
    Then **retrieve what past features already decided about this area**:
    `tools/kb.sh search "<the feature's own words>"` over the request's main
    nouns (the module, the endpoint, the error text), and
-   `tools/kb.sh show <slug>` for any feature the hits name. Closed features
-   are included, so a decision made a year ago surfaces with its evidence
-   and delivery. Two or three targeted searches, not a scan of the archive:
+   `tools/kb.sh show <slug>` for any feature the hits name — a digest
+   (goal, summary.md, delivery, unmerged harvest candidates, lesson titles)
+   that answers most questions before a single record file is opened.
+   Closed features are included, so a decision made a year ago surfaces
+   with its evidence and delivery. Two or three targeted searches, not a scan of the archive:
    what you find goes into the Evidence section with its source path.
 2. Pick a kebab-case feature slug; create `.sdlc/work/<slug>/`. Prefix with
    the tracker key when one exists (`a20-1234-fix-login`), else the date
@@ -125,10 +127,19 @@ If an Unknown turns out to be an independent shippable change, open a new
 feature slug for it and record the reference under Decided. When resolving
 an Unknown surfaces a durable fact about the system, add it to the feature's
 `.sdlc/work/<slug>/harvest.md` as a domain candidate (merged into DOMAIN.md
-at close — AGENTS.md rule 4) — Decided records the decision, the harvest
-carries the fact to every later feature.
+at close, or without closing once the feature is stale — AGENTS.md rule 4;
+readable before either through `tools/kb.sh show`) — Decided records the
+decision, the harvest carries the fact to every later feature.
 
 ## Write the artifact
+
+Write `summary.md` beside it (templates/summary.md) — the page a human reads
+instead of the stage files, printed first by `tools/kb.sh show` and the
+contents page. Fill `Tags` (the domain areas a reader browses by), `Problem`,
+and `Cause`/`Change` as far as they are known; leave `Result` at "not
+delivered". No approval binds summary.md, so later stages keep it true
+(skills/5-ship sets Result and Lesson). Ten lines, plain language, each
+claim pointing at the record that proves it.
 
 When the request has an origin — a ticket, a 기획서, an incident — snapshot
 it FIRST as `.sdlc/work/<slug>/origin.md` (templates/origin.md): the intent

@@ -167,8 +167,10 @@ spec.md and run the full route instead; the intent gate still comes first.
 
 **Recurrence cap: three fix loops for one symptom.** Before opening a
 fix-slug, grep the symptom's tags in INDEX.md AND open features' harvests
-(`grep -l <tag> .sdlc/work/*/harvest.md`) — in-flight lessons are not
-merged yet. On the third match, stop fixing and start investigating: the repetition is
+(`tools/kb.sh harvest` names every open feature still holding one;
+`tools/kb.sh search "<tag>"` reads through them) — in-flight lessons are
+not merged yet, and a harvest idle 30 days or more may be merged now
+without closing its feature (AGENTS.md rule 4). On the third match, stop fixing and start investigating: the repetition is
 evidence that the cause found so far is not the cause. Widen the
 investigation — what the three incidents share, which invariant keeps
 breaking, what the earlier fixes actually changed — and take the finding to
