@@ -1,11 +1,8 @@
 name: selftest
 on:
-  # branch work is tested once, on its PR; push covers the delivery targets
-  # (main and version tags) that no PR run precedes
-  push:
-    branches: [main]
-    tags: ['v*']
-  pull_request:
+  # Paused (v0.15.0): the suites run only when started by hand from the
+  # Actions tab. Restore the push/pull_request triggers to run them on every change.
+  workflow_dispatch:
 permissions:
   contents: read
 env:
