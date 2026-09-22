@@ -234,9 +234,7 @@ When the incident cannot be reproduced, fresh-context adversaries recount the sc
 gates/status.sh [--all[=n]] [slug]  # open features + one next action; --all adds the newest 20 archived
 gates/status.sh --json [slug]       # the same state, machine-readable (tools/auto.sh)
 gates/stats.sh [--all]              # time per stage + re-approval counts; default open + 20 recent closed
-gates/selftest.sh        # gate, close, injection, lazymode, status render, YAML integrity
-gates/e2e.sh [kit]       # the loop end to end in throwaway git fixtures (local only, no remotes)
-gates/autotest.sh [kit]  # the automation layer in its own fixtures (local bare remotes, no network)
+gates/selftest.sh        # smoke test: scripts parse, skill metadata, gate mechanics (seconds)
 ```
 
 Example:
@@ -338,7 +336,7 @@ init.sh          idempotent project seed
 .gitattributes   pins LF endings so scripts survive a Windows clone
 skills/1-6/      stage instructions
 roles/           verifier · adversary · researcher contracts
-gates/           approve · check · close · status · stats · selftest · e2e · autotest (+ _common.sh, _auto.sh)
+gates/           approve · check · close · status · stats · selftest (+ _common.sh, _auto.sh)
 tools/           auto (machine status) · verify (receipts, needs python3) · handoff (review branch) · _run.py (bounded execution) · tripwire · refcheck
 templates/       intent · spec · plan · evidence · delivery · verify · lesson
 docs/index.html  bilingual EN/KO landing page
@@ -348,31 +346,15 @@ docs/automation.md  the machine contract: status JSON, receipts, handoff, checkp
 ## Verify the kit
 
 ```bash
-./gates/selftest.sh   # gate mechanics
-./gates/e2e.sh        # the whole loop, in its own throwaway fixtures
-./gates/autotest.sh   # the automation layer, in its own throwaway fixtures
-./gates/knowledge-test.sh  # where records live and how they are found again
+./gates/selftest.sh   # a few seconds
 ```
 
-The selftest covers gate state and its path/content binding (cross-path reuse, traversal, symlinks, and pre-binding records all fail closed), stage-name injection, bare-path rejection, delegated and lazy approvals with their recorded review and risk authorization, the compact route and its upgrade revalidation, delivery-backed `shipped` closes, `refcheck.sh` drift detection, lesson requirements for closing, double-close rejection, archive-on-close (with approval records and status scoping), YAML frontmatter parsing, and LF line endings in every script. It also runs two end-to-end workflow fixtures: a compact bug fix from intent to a delivered close, and the failure paths around it — plus the source binding over work that was committed BEFORE the review and the commit-containment check on a `pr` delivery.
-
-`gates/autotest.sh` covers the automation layer on the same principle: the
-full-auto intent contract (a material question blocks, a resolved one releases),
-verification receipts (a failing check, a missing receipt, a strict profile with
-no runtime evidence, and stale code, commands, or recipe all block), the review
-handoff against a local bare remote (unauthorized, protected-branch, force, and
-non-containing pushes refused; a second push repeats nothing; a remote SHA that
-differs blocks review-ready; merge and deploy need `Authorized-by:`), bounded
-retries and resume, and the lazymode-0 and source-binding behavior unchanged.
-It also carries a regression case for every finding of the first independent
-review: material questions written without bullets, a check that reads stdin, a
-launched runtime that must not leak its children, an unowned runtime answering
-the doctor, a hung check, a push over a closed ship gate, a `pr` feature that
-was never pushed, and a local target that must never be pushed at all.
-
-`gates/e2e.sh` is the integration suite on top of that: it builds throwaway git projects in its own temp fixture and drives the real scripts through the compact route, the full route, and every negative case — including post-review edits, added files, chmod and symlink swaps, an old commit named as the delivered source, legacy ship bindings, a full-route spec or plan rewritten or deleted after the ship review, and the agreement between `status.sh`, `check-gate.sh`, and `close.sh`. It writes nothing outside its fixture and makes no network, remote, or `gh` call; `pr` and `deploy` deliveries are exercised locally, which is all `close.sh` inspects. It does not run the selftest inside itself — the two suites are independent. CI runs both on Ubuntu, macOS, and Windows (Git Bash).
-
-`gates/knowledge-test.sh` covers the store itself: the anchored ignore rule, an external area bound to a chosen folder (spaces and non-ASCII included), one store per checkout, and every refusal — an area inside the project, a project inside the area, a store another checkout owns, a directory that is not a store, a real `.sdlc` that is never relocated, a link pointing somewhere else, an unwritable area. It then runs a feature through the link (approve, tamper, ship, deliver, close) to prove the gates are unchanged, and checks retrieval: the contents page refreshed at close, `show`, bounded literal `search`, a query starting with `-`, a user-authored page that is never clobbered, a feature symlink that is never followed, and records still readable through `--area` after the checkout they came from is deleted. Where the filesystem cannot create a symlink the external-area cases are reported as NOT VERIFIED rather than skipped silently.
+One smoke test for a kit that is mostly instructions: every script parses and is
+LF-only, every SKILL.md has valid frontmatter, a gate opens only for the approved
+bytes and closes when they or an upstream artifact change, lazymode never goes
+beyond its level, `dead-end` needs a lesson and `shipped` needs a ship approval
+plus a confirmed delivery, and knowledge is filed under its own product area
+under a UTF-8 locale. CI runs it only when started by hand.
 
 ## What this is not
 
