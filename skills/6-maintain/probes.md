@@ -57,9 +57,10 @@ Trace the claimed error to the fix site. A lower layer that catches its own
 errors and returns false/null cannot reject an upper await; a try/catch
 there fixes nothing. Prove the error can REACH the handler you are editing.
 
-## 8. Timeout audit (when the symptom is "nothing happened")
+## 8. Timeout audit (when the symptom is "nothing happened" or "hangs")
 
-    grep -n 'timeout' <api-client files>
+    grep -n -i 'timeout' <files that make outbound calls: HTTP clients, DB, queues, locks>
 
-An awaited call with no timeout that precedes the visible action (popup,
-navigation) explains a dead-looking UI better than most crash theories.
+A call with no timeout that precedes the expected effect (a popup, a
+response, the next job step) explains a hang or a silent no-op better than
+most crash theories.

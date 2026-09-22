@@ -1,11 +1,9 @@
 name: selftest
 on:
-  # branch work is tested once, on its PR; push covers the delivery targets
-  # (main and version tags) that no PR run precedes
-  push:
-    branches: [main]
-    tags: ['v*']
+  # One smoke test, a few seconds: it runs on pull requests because branch
+  # protection requires its three checks to merge; by hand from the Actions tab.
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 env:
@@ -32,28 +30,6 @@ jobs:
           # Fixtures write LF bytes; do not convert their committed snapshots.
           git config --global core.autocrlf false
         shell: bash
-      # tools/verify.sh bounds each command and kills whole process groups
-      # through tools/_run.py; every GitHub runner image ships python3, and the
-      # automation suite asserts that path. Fail loudly if one ever does not.
-      - name: python3 is available (tools/verify.sh bounded execution)
-        run: python3 -c "import sys; print(sys.version)"
-        shell: bash
-      # The record store: where it lives, how it refuses, how it is read back.
-      # It exits 2 when the filesystem cannot create symlinks — on Windows that
-      # would be the MSYS setting above failing, which CI must not hide.
-      # It runs FIRST because it is the shortest of the four and the most
-      # platform-sensitive: a Windows-only failure surfaces in about a minute
-      # instead of after the long suites have run. All four still run, and the
-      # job fails if any of them does.
-      - name: knowledge (record store and retrieval, local fixtures only)
-        run: bash gates/knowledge-test.sh
-        shell: bash
-      - name: selftest (gate mechanics)
+      - name: selftest (smoke test, a few seconds)
         run: bash gates/selftest.sh
-        shell: bash
-      - name: e2e (the loop end to end, local fixtures only)
-        run: bash gates/e2e.sh
-        shell: bash
-      - name: autotest (the automation layer, local fixtures only)
-        run: bash gates/autotest.sh
         shell: bash

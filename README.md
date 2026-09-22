@@ -74,7 +74,7 @@ Mid-loop, lesson and domain candidates stage in the feature's own `harvest.md`; 
 | Keeps the plan inside one chat | Writes the record — `intent.md`, `spec.md`, `plan.md`, `evidence.md`, `delivery.md` — to a store you can search later (`tools/kb.sh`), out of the application's git history |
 | Author runs its own checks | A fresh-context verifier and adversary review the work without the author's context |
 | Approval is a chat message that disappears | Approval records name the stage, artifact, time, and mode, and stay on disk in `.sdlc/approvals/` |
-| Failed attempt becomes forgotten context | Lessons go to a bounded index; durable facts go to `DOMAIN.md` |
+| Failed attempt becomes forgotten context | Lessons go to a bounded index; business rules go to their product area's page; durable facts go to `DOMAIN.md` |
 | One generic worker does everything | Roles map onto local QA, reviewer, browser, API, or DB specialists when available |
 | "Done" is ambiguous | Every run closes as `shipped`, `abandoned`, `dead-end`, or `handed-off` — and `shipped` requires a verified delivery record, not just an approval |
 
@@ -144,7 +144,8 @@ Per feature, inside the **target project**:
 ├── memory/
 │   ├── POLICY.md                     # human-declared hard rules; agents transcribe only
 │   ├── INDEX.md                      # ≤50 lines of lesson pointers
-│   ├── DOMAIN.md                     # terms · verified facts · constraints
+│   ├── DOMAIN.md                     # terms · facts and constraints that span areas
+│   ├── areas/<area-slug>.md               # one per product area (web app: one menu): business rules P1… · how it works · history
 │   └── lessons/<date>-<lesson>.md
 ├── work/<slug>/                      # OPEN features only
 │   ├── origin.md                     # the ticket / 기획서 as requested — bound by the intent gate
@@ -156,7 +157,7 @@ Per feature, inside the **target project**:
 │   ├── deviations.md                 # build-time differences
 │   ├── progress.md                   # heartbeat: ONE live line (rule 9)
 │   ├── baseline.txt                  # brownfield behavior before the change
-│   ├── summary.md                    # the reader's page: Problem/Cause/Change/Result/Lesson, Tags; kept current, bound by no approval
+│   ├── summary.md                    # the reader's page: Area · What was wrong · Before → After · How to check · Remember; kept current, bound by no approval
 │   ├── harvest.md                    # mid-loop lesson/domain candidates; merged at close (readable before: kb.sh show / harvest)
 │   └── scratch/                      # bulk logs, captures, traces
 └── archive/<slug>/                   # closed features; close.sh moves them here
@@ -168,7 +169,9 @@ Per feature, inside the **target project**:
 
 **Where the records live is your choice.** By default they sit in the project's working copy. `init.sh . --area ~/knowledge` puts them in a folder you choose instead — `<area>/<unit>-<checkout-id>/`, with `.sdlc` linked to it, one store per checkout so two worktrees never share approvals. The area is refused if it sits inside the project (or the project inside it), if another checkout already owns that store, if a real `.sdlc` directory is already there (nothing is ever relocated for you), or if the link cannot be made. That ownership is re-checked at RUNTIME, not only at init: `check-gate.sh`, `approve.sh`, `close.sh`, `status.sh`, `tools/auto.sh`, `tools/verify.sh` and `tools/handoff.sh` refuse before any verdict or write when `<store>/PROJECT` names a different checkout, so a copied working copy (`cp -R`, rsync and most restores keep the symlink) can neither open another checkout's gate nor close its features. Reading is never bound that way: `tools/kb.sh show|search|list` still works, and nothing is ever re-bound or moved for you. Whichever you choose, **the store is yours to back up** — git no longer does it for you.
 
-**Reading the records back** is `tools/kb.sh`: `index` regenerates the contents page (`init.sh` and `close.sh` do it for you) — an overview table by state, date and tags, newest first, the harvests no close has merged yet, then one section per feature; `show <slug>` prints one feature as a digest — goal, its `summary.md` (Problem/Cause/Change/Result/Lesson, the one record meant to be kept current), delivery, unmerged harvest candidates, lesson titles, then the paths; `search "<text>"` does a bounded literal search over open and closed features plus durable memory; `harvest [--stale <days>]` lists open features whose harvest.md is not in memory yet, with idle time (a stale one may be merged without closing — AGENTS.md rule 4); and `--area <folder>` does any of these across every store in that folder — including features whose checkout no longer exists. `index_style: obsidian` in the store's config.md adds frontmatter and inline `#tags` for a vault; no timestamp is ever written, so an unchanged page produces no diff. Exit codes: `0` found, `1` nothing found, `2` usage error or refusal.
+**Knowledge is filed by product area.** For a web app an area is one menu, named by its menu path (`학습 > 평가 > 제출`); for other software a module, API, job, or CLI command. Each area has one page, `memory/areas/<area-slug>.md`: its business rules numbered P1, P2… in sentences a non-developer can read, how it works, and a history line per feature that changed it. A feature's `summary.md` names its area on an `Area:` line, the spec states which rules it keeps or changes, the Side effects verifier re-checks the rules it should not have touched, and the close merge files new or changed rules on the page. `tools/kb.sh show "학습 > 평가 > 제출"` (or the page's file name) prints the page with the features that changed it.
+
+**Reading the records back** is `tools/kb.sh`: `index` regenerates the contents page (`init.sh` and `close.sh` do it for you) — the product areas with their rule count, last change and features, an overview table by state, date, area and tags, newest first, the harvests no close has merged yet, then one section per feature; `show <slug>` prints one feature as a digest — goal, its `summary.md` (area, what was wrong, before → after, how to check, the one record meant to be kept current), delivery, unmerged harvest candidates, lesson titles, then the paths; `search "<text>"` does a bounded literal search over open and closed features plus durable memory; `harvest [--stale <days>]` lists open features whose harvest.md is not in memory yet, with idle time (a stale one may be merged without closing — AGENTS.md rule 4); and `--area <folder>` does any of these across every store in that folder — including features whose checkout no longer exists. `index_style: obsidian` in the store's config.md adds frontmatter and inline `#tags` for a vault; no timestamp is ever written, so an unchanged page produces no diff. Exit codes: `0` found, `1` nothing found, `2` usage error or refusal.
 
 The public sdlc-kit repository stays framework-only. The records live and stay readable where they were written — in the project's working copy, or in the area you chose.
 
@@ -231,9 +234,7 @@ When the incident cannot be reproduced, fresh-context adversaries recount the sc
 gates/status.sh [--all[=n]] [slug]  # open features + one next action; --all adds the newest 20 archived
 gates/status.sh --json [slug]       # the same state, machine-readable (tools/auto.sh)
 gates/stats.sh [--all]              # time per stage + re-approval counts; default open + 20 recent closed
-gates/selftest.sh        # gate, close, injection, lazymode, status render, YAML integrity
-gates/e2e.sh [kit]       # the loop end to end in throwaway git fixtures (local only, no remotes)
-gates/autotest.sh [kit]  # the automation layer in its own fixtures (local bare remotes, no network)
+gates/selftest.sh        # smoke test: scripts parse, skill metadata, gate mechanics (seconds)
 ```
 
 Example:
@@ -335,7 +336,7 @@ init.sh          idempotent project seed
 .gitattributes   pins LF endings so scripts survive a Windows clone
 skills/1-6/      stage instructions
 roles/           verifier · adversary · researcher contracts
-gates/           approve · check · close · status · stats · selftest · e2e · autotest (+ _common.sh, _auto.sh)
+gates/           approve · check · close · status · stats · selftest (+ _common.sh, _auto.sh)
 tools/           auto (machine status) · verify (receipts, needs python3) · handoff (review branch) · _run.py (bounded execution) · tripwire · refcheck
 templates/       intent · spec · plan · evidence · delivery · verify · lesson
 docs/index.html  bilingual EN/KO landing page
@@ -345,31 +346,15 @@ docs/automation.md  the machine contract: status JSON, receipts, handoff, checkp
 ## Verify the kit
 
 ```bash
-./gates/selftest.sh   # gate mechanics
-./gates/e2e.sh        # the whole loop, in its own throwaway fixtures
-./gates/autotest.sh   # the automation layer, in its own throwaway fixtures
-./gates/knowledge-test.sh  # where records live and how they are found again
+./gates/selftest.sh   # a few seconds
 ```
 
-The selftest covers gate state and its path/content binding (cross-path reuse, traversal, symlinks, and pre-binding records all fail closed), stage-name injection, bare-path rejection, delegated and lazy approvals with their recorded review and risk authorization, the compact route and its upgrade revalidation, delivery-backed `shipped` closes, `refcheck.sh` drift detection, lesson requirements for closing, double-close rejection, archive-on-close (with approval records and status scoping), YAML frontmatter parsing, and LF line endings in every script. It also runs two end-to-end workflow fixtures: a compact bug fix from intent to a delivered close, and the failure paths around it — plus the source binding over work that was committed BEFORE the review and the commit-containment check on a `pr` delivery.
-
-`gates/autotest.sh` covers the automation layer on the same principle: the
-full-auto intent contract (a material question blocks, a resolved one releases),
-verification receipts (a failing check, a missing receipt, a strict profile with
-no runtime evidence, and stale code, commands, or recipe all block), the review
-handoff against a local bare remote (unauthorized, protected-branch, force, and
-non-containing pushes refused; a second push repeats nothing; a remote SHA that
-differs blocks review-ready; merge and deploy need `Authorized-by:`), bounded
-retries and resume, and the lazymode-0 and source-binding behavior unchanged.
-It also carries a regression case for every finding of the first independent
-review: material questions written without bullets, a check that reads stdin, a
-launched runtime that must not leak its children, an unowned runtime answering
-the doctor, a hung check, a push over a closed ship gate, a `pr` feature that
-was never pushed, and a local target that must never be pushed at all.
-
-`gates/e2e.sh` is the integration suite on top of that: it builds throwaway git projects in its own temp fixture and drives the real scripts through the compact route, the full route, and every negative case — including post-review edits, added files, chmod and symlink swaps, an old commit named as the delivered source, legacy ship bindings, a full-route spec or plan rewritten or deleted after the ship review, and the agreement between `status.sh`, `check-gate.sh`, and `close.sh`. It writes nothing outside its fixture and makes no network, remote, or `gh` call; `pr` and `deploy` deliveries are exercised locally, which is all `close.sh` inspects. It does not run the selftest inside itself — the two suites are independent. CI runs both on Ubuntu, macOS, and Windows (Git Bash).
-
-`gates/knowledge-test.sh` covers the store itself: the anchored ignore rule, an external area bound to a chosen folder (spaces and non-ASCII included), one store per checkout, and every refusal — an area inside the project, a project inside the area, a store another checkout owns, a directory that is not a store, a real `.sdlc` that is never relocated, a link pointing somewhere else, an unwritable area. It then runs a feature through the link (approve, tamper, ship, deliver, close) to prove the gates are unchanged, and checks retrieval: the contents page refreshed at close, `show`, bounded literal `search`, a query starting with `-`, a user-authored page that is never clobbered, a feature symlink that is never followed, and records still readable through `--area` after the checkout they came from is deleted. Where the filesystem cannot create a symlink the external-area cases are reported as NOT VERIFIED rather than skipped silently.
+One smoke test for a kit that is mostly instructions: every script parses and is
+LF-only, every SKILL.md has valid frontmatter, a gate opens only for the approved
+bytes and closes when they or an upstream artifact change, lazymode never goes
+beyond its level, `dead-end` needs a lesson and `shipped` needs a ship approval
+plus a confirmed delivery, and knowledge is filed under its own product area
+under a UTF-8 locale. CI runs it on pull requests and by hand.
 
 ## What this is not
 

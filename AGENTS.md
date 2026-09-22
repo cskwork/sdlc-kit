@@ -27,8 +27,8 @@ Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>
 **Two routes, one contract.** There is no third shape.
 
 - **Compact** — small and well understood. `intent.md` is the single work
-  artifact and carries the files to change, the proof, the risk, and the
-  delivery target (templates/intent.md). Flow: intent (gate) → build → ship
+  artifact and carries the files to change, the proof, the risk, the
+  baseline, and the delivery target (templates/intent.md). Flow: intent (gate) → build → ship
   → close. No spec, no plan, and none is ever demanded of it. Ship keeps its
   full adversary review — the only review that diff gets. Criteria:
   skills/1-intent.
@@ -139,20 +139,41 @@ archives the feature to `.sdlc/archive/<slug>/`.
    never guessed away; optional uncertainty is carried as `[assumed: why]`
    and blocks nothing. `tools/auto.sh intent-check <slug>` reports the
    verdict (section rules: templates/intent.md; full text: docs/automation.md §3).
-4. **Keep memory bounded.** At each stage start read
-   `.sdlc/memory/POLICY.md` (human-declared hard rules),
-   `.sdlc/memory/INDEX.md` (lessons; 50 lines max), `.sdlc/memory/DOMAIN.md`
-   (terms, verified facts, constraints; 100 lines max), and the feature's
-   own `harvest.md` if present, then open lesson files whose tags match the
-   task. Stage skills do not repeat this. DOMAIN over its limit: split by
-   subdomain, leave pointer lines. INDEX over its limit: merge
+4. **Keep memory bounded, and put each thing in one place.** At each stage
+   start read `.sdlc/memory/POLICY.md`, `INDEX.md`, `DOMAIN.md`, the area
+   page(s) the task touches (`tools/kb.sh show <area>`), and the feature's
+   own `harvest.md` if present; then open lesson files whose tags match the
+   task. Stage skills do not repeat this.
+
+   | What | Where | Written by |
+   |---|---|---|
+   | A product's business rule (정책) — "a submitted answer cannot be edited" | `memory/areas/<area-slug>.md` Business rules, numbered P1… (templates/area.md) | close merge, shipped only |
+   | What changed in an area, when | the area page's History, one line per feature | close merge, shipped only |
+   | A fact that holds for one area only | the area page's How it works | close merge |
+   | A term, or a system fact/constraint that spans areas | `memory/DOMAIN.md` (100 lines max) | close merge |
+   | A trap and the correct move | `memory/lessons/<date>-<slug>.md` + one `INDEX.md` line (50 lines max) | close merge |
+   | A hard rule for agents, in the human's words | `memory/POLICY.md` | only on the human's word |
+   | The story of one feature, for a reader | `work/<slug>/summary.md` (templates/summary.md) | any stage, kept current |
+
+   A **product area** is what users navigate by: for a web app one menu,
+   named by its menu path (`학습 > 평가 > 제출`); otherwise a module, API,
+   job, or CLI command — not the `--area` knowledge folder of rule 7.
+   summary.md's `Area:` line and the page's `Menu:` line use the same words,
+   which is how `kb.sh` links them. DOMAIN over its limit: move
+   area-specific facts to their area page. INDEX over its limit: merge
    near-duplicates, drop superseded entries, replace promoted ones
    (skills/6-maintain).
-   **INDEX.md, DOMAIN.md, and lessons/ have one writer: the close step.**
-   Mid-loop, stages and researchers append candidates — one line each — to
+   **memory/ has one writer: the close step** (POLICY.md aside). Mid-loop,
+   stages and researchers append candidates — one line each — to
    `.sdlc/work/<slug>/harvest.md` (templates/harvest.md). At close, merge
-   harvest into lessons/INDEX/DOMAIN and delete it; `close.sh` blocks while
-   it exists. A feature idle 30 days or more may have its harvest merged the
+   every candidate into its row above — creating an area page from the
+   template when none exists, numbering new rules, adding the feature's
+   History line to each area it changed — then delete harvest.md. Business
+   rules and History describe what the product DOES, so they merge only when
+   the feature closes `shipped`: any other close drops them (summary.md keeps
+   the story), and a stale merge leaves them in harvest.md for that close;
+   `close.sh` blocks while it
+   exists. A feature idle 30 days or more may have its harvest merged the
    same way WITHOUT closing — one merge at a time, in the owning checkout
    (`tools/kb.sh harvest` lists them); nothing in `kb.sh` writes `memory/`.
    **Recency wins on merge, three guards.** A contradicting candidate
@@ -165,7 +186,8 @@ archives the feature to `.sdlc/archive/<slug>/`.
    **POLICY.md is written only on the human's word**: transcribe a hard rule
    they state in chat with the date and their words; never add, soften, or
    remove one on your own judgment. The adversary treats a violation as
-   blocking.
+   blocking. A business rule is never a POLICY.md line: it goes on its area
+   page.
    Never read the whole `.sdlc/archive/` into context: use `tools/kb.sh
    search "<text>"` / `show <slug>` (rule 7), a targeted `ls`/`grep`, or a
    single slug lookup.
@@ -261,7 +283,8 @@ archives the feature to `.sdlc/archive/<slug>/`.
    **Records are read back, not just written**, through `tools/kb.sh`:
    `search "<text>"` (bounded, literal, open and closed features plus
    memory), `show <slug>` (summary.md first, then goal, delivery, lessons,
-   paths), `harvest` (unmerged candidates), `index` (contents page).
+   paths) or `show <product area>` (its page and the features that changed
+   it), `harvest` (unmerged candidates), `index` (contents page).
    `--area <folder>` covers every store in that folder, including features
    whose checkout is gone. Exit 0 found · 1 nothing · 2 usage/refusal.
 8. **Speak plainly.** Every report, gate request, and question starts with
