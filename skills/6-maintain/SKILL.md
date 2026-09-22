@@ -9,9 +9,7 @@ Goal: turn each bug report, incident, alert, or ticket into a diagnosed
 `intent.md`. Restart the process with evidence, not a vague complaint. People
 triage and review the work. They do not create the initial diagnosis.
 
-Heartbeat: as soon as `.sdlc/work/<slug>/` exists, and at every sub-task
-change, overwrite `.sdlc/work/<slug>/progress.md` with one line —
-`maintain · <doing what> · <ISO timestamp>` (AGENTS.md rule 9).
+Heartbeat throughout: AGENTS.md rule 9.
 
 ## Running headless? Sandbox first
 
@@ -38,15 +36,17 @@ change what gets built or exceed the authorized scope: those go to the human
 as `## Material questions` and the loop stops for them (AGENTS.md rule 3).
 Everything else is an `[assumed]` line and the diagnosis continues.
 
-1. Which exact control did you use? (button label / menu item / gesture)
-2. What did you see immediately after? (nothing at all, a popup, an error,
-   a partial change) — "nothing at all" and "something wrong appeared" are
-   different bug classes.
-3. Which environment and when? (prod/stg/dev, URL, approximate time — this
-   picks the deploy ref and the log window)
-4. What account/role? (permissions often hide or disable the control)
-5. Do you have a console log, network capture, or screenshot? If not, can
-   you reproduce once with DevTools open?
+1. What exactly was done, with what input? (the control clicked, the
+   request sent, the command run, the job or schedule that fired)
+2. What happened, and what was expected instead? (nothing at all, an error,
+   a wrong result, a partial change, slow) — each is a different bug class.
+3. Where and when? (environment, URL or host, version, time window — this
+   picks the deployed ref and the log window)
+4. As whom? (account, role, tenant, client — permissions and data scope
+   change behavior)
+5. What trace exists? (screenshot, console or network capture, request or
+   trace id, log line, the affected record keys) If none, can it be
+   reproduced once with capture on?
 
 Record the answers in `intent.md` under Evidence. Track question 5
 explicitly (see Evidence tracking below).
@@ -67,30 +67,29 @@ explicitly (see Evidence tracking below).
 2. Before forming a hypothesis or offering options, run fresh-context history
    and feasibility research under skill 1. Check whether this failure was fixed
    or reverted before, why, and whether it can be reproduced here.
-3. Reproduce the issue first. **A fix needs the proof chain of AGENTS.md
-   rule 6**: the failure before, the mechanism, the same reproduction passing
-   after, the adjacent flows. If it cannot be reproduced, the honest outputs
+3. Reproduce the issue first, as a failing test wherever one can reach the
+   defect (AGENTS.md rule 6). Draft it in `scratch/` or a disposable
+   worktree — the source tree stays untouched until the intent gate — and
+   cite its failing output in intent.md's Evidence; build adds it to the
+   suite first. If it cannot be reproduced, the honest outputs
    are a diagnosis, instrumentation, or a defensive change labelled as
-   unconfirmed — never "fixed". An intermittent defect may stand on logs,
-   traces, or an isolated deterministic reproduction, with the limitation
-   stated.
-4. Trace the cause. Read `.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`,
-   and `.sdlc/memory/DOMAIN.md`, then open lesson files whose tags match
-   the task. Then ask the store directly whether this has been seen before:
+   unconfirmed — never "fixed".
+4. Trace the cause. After memory (AGENTS.md rule 4), ask the store directly
+   whether this has been seen before:
    `tools/kb.sh search "<the error text>"`, `tools/kb.sh search "<the
    module or endpoint>"`, and `tools/kb.sh show <slug>` for the features
    the hits name — the search covers closed features, so a fix from two
    years ago comes back with its evidence and delivery record. Cite what
    you find by path in the diagnosis. Records of a checkout that no longer
    exists are reachable the same way with `--area <folder>`.
-5. Separate the claim before hunting: "it does not react" is a state/handler
-   problem; "it looks wrong/disabled" is a RENDERING problem until proven
-   otherwise. They have different checklists.
-6. **Class sweep.** When a found defect is an instance of a pattern (missing
-   filter, guard, timeout, lock), grep the same file/module for the whole
-   class and report a count table. Before changing any shared symbol,
-   produce the call-site × guard table. One instance is a bug; the table is
-   the scope, and it decides fix ordering.
+5. Name the symptom class before hunting; each has its own checklist:
+   *nothing happened* (handler not reached, swallowed error, missing
+   timeout — probes 7, 8), *wrong result* (logic or data: which query,
+   which record, which version — probes 2, 3), *looks wrong* (rendering
+   until proven otherwise), *intermittent* (concurrency, caching,
+   environment, data-dependent).
+6. **Class sweep and caller audit** (probes 4, 5): one instance is a bug;
+   the count table is the scope, and it decides fix ordering.
 7. Check the feature's `evidence.md` — a shipped feature is archived, so it
    sits at `.sdlc/archive/<slug>/evidence.md` (`tools/kb.sh show <slug>`
    names the path): was this covered by proof, or was it a verification gap? A gap is itself a lesson (`promote: skills/5-ship`).
@@ -113,8 +112,8 @@ with the reporter's ticket key. Never re-request a third time.
 reporter", not "this is reproduced". Work that continues under a waiver is
 unconfirmed by definition: it may ship as instrumentation, a defensive
 change, or a documented hypothesis, and it says so in evidence.md's Bug
-proof section. If it is later reproduced, the chain of AGENTS.md rule 6
-applies in full before anything is called fixed.
+proof section. If it is later reproduced, the full chain (AGENTS.md rule 6)
+applies before anything is called fixed.
 If `.sdlc/config.md` has empty `test:`/`lint:` commands, record one line of
 verification debt in the artifact: what could not be run, and what manual
 check replaced it.
@@ -167,10 +166,8 @@ spec.md and run the full route instead; the intent gate still comes first.
 
 **Recurrence cap: three fix loops for one symptom.** Before opening a
 fix-slug, grep the symptom's tags in INDEX.md AND open features' harvests
-(`tools/kb.sh harvest` names every open feature still holding one;
-`tools/kb.sh search "<tag>"` reads through them) — in-flight lessons are
-not merged yet, and a harvest idle 30 days or more may be merged now
-without closing its feature (AGENTS.md rule 4). On the third match, stop fixing and start investigating: the repetition is
+(`tools/kb.sh harvest`, `tools/kb.sh search "<tag>"`) — in-flight lessons
+are not merged yet. On the third match, stop fixing and start investigating: the repetition is
 evidence that the cause found so far is not the cause. Widen the
 investigation — what the three incidents share, which invariant keeps
 breaking, what the earlier fixes actually changed — and take the finding to
@@ -189,10 +186,8 @@ is a valid, complete answer — INDEX.md is a 50-line budget, and filler
 crowds out the entries that matter. Durable facts about the system are
 domain candidates, not lessons.
 
-When there is one, draft it in the fix feature's `.sdlc/work/<fix-slug>/harvest.md`
-(INDEX.md, DOMAIN.md, and lessons/ are written only at close — AGENTS.md
-rule 4). The
-close merge materializes it as `.sdlc/memory/lessons/YYYY-MM-DD-<slug>.md`
+When there is one, draft it in the fix feature's
+`.sdlc/work/<fix-slug>/harvest.md` (AGENTS.md rule 4). The close merge materializes it as `.sdlc/memory/lessons/YYYY-MM-DD-<slug>.md`
 via `templates/lesson.md` plus ONE line in `.sdlc/memory/INDEX.md`:
 
 ```

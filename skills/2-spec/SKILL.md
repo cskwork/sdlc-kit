@@ -9,17 +9,13 @@ Goal: create `spec.md` from `intent.md` so engineering work has a clear
 contract. The agent writes the spec, and the human reviews it. Automate checks
 where possible. Keep human attention on gate decisions.
 
-Heartbeat: on entry and at every sub-task change, overwrite
-`.sdlc/work/<slug>/progress.md` with one line —
-`spec · <doing what> · <ISO timestamp>` (AGENTS.md rule 9).
+Heartbeat throughout: AGENTS.md rule 9.
 
 ## Before you start
 
 1. Run `gates/check-gate.sh intent .sdlc/work/<slug>/intent.md`. STOP if closed.
-2. Read intent.md fully. Read `.sdlc/memory/POLICY.md`,
-   `.sdlc/memory/INDEX.md`, `.sdlc/memory/DOMAIN.md`, and the feature's
-   `harvest.md` if present; open lesson files whose tags match the current
-   task. Use DOMAIN.md terms so the spec uses the project's established
+2. Read intent.md (and origin.md) fully, and memory (AGENTS.md rule 4).
+   Use DOMAIN.md terms so the spec uses the project's established
    vocabulary.
 3. Brownfield: read the researcher report from stage 1 (or dispatch one now).
 
@@ -61,11 +57,9 @@ Fill `templates/spec.md`. Rules:
 
 ## Adversarial verification (automated, before the human)
 
-At lazymode ≥2 (AGENTS.md rule 3) this review is still the reviewer — what
-changes is who decides at the gate. `tools/tripwire.sh` over the draft is a
-supplemental input: a hit means the review runs in full AND the risky work
-needs recorded authorization. A clean scan shortens nothing on its own; judge
-by what the spec actually changes, in any language it is written in.
+This review runs at every lazymode — lazymode changes who decides at the
+gate, not whether the spec is reviewed (AGENTS.md rule 3). Include
+`tools/tripwire.sh` output over the draft as evidence.
 
 Dispatch a fresh-context adversary (`roles/adversary.md`) with ONLY:
 intent.md, draft spec.md, `.sdlc/memory/POLICY.md` if present, and the
