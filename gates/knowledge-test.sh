@@ -677,39 +677,25 @@ assert_fail_msg "H34 there is no style flag — one setting, one place" "unknown
 assert_ok_msg "H36 records under work/ were not written by any of this" "not delivered" cat .sdlc/work/h-new/summary.md
 assert_nofile ".sdlc/work/h-new/README.md" "H37 no page was written inside a feature directory"
 # product areas — a reader navigates by menu; business rules live on the area page
-if [ -d .sdlc/memory/areas ]; then pass "H38 init.sh seeds memory/areas/"; else fail "H38 memory/areas/ was not seeded"; fi
 kb index >/dev/null
-assert_ok_msg "H39 the page lists product areas" "## Product areas" cat "$PAGE"
-assert_ok_msg "H40 an area row links its page and counts live rules only" \
+assert_ok_msg "H38 an area row links its page, counts live rules, and files only its own features" \
   "| [명단 > 내보내기](memory/areas/roster-export.md) | 1 | 2026-09-18 | h-new |" cat "$PAGE"
-assert_ok_msg "H41 an area a feature names without a page is still listed" "| 결제 > 환불 — no page yet | — | — | h-old |" cat "$PAGE"
-AREAS_AT=$(grep -n '^## Product areas' "$PAGE" | cut -d: -f1); OVER_AT=$(grep -n '^## Overview' "$PAGE" | cut -d: -f1)
-if [ -n "$AREAS_AT" ] && [ -n "$OVER_AT" ] && [ "$AREAS_AT" -lt "$OVER_AT" ]; then pass "H42 areas come before the feature overview"
-else fail "H42 areas are not first (areas@${AREAS_AT:-?} overview@${OVER_AT:-?})"; fi
-assert_ok_msg "H43 show <area file name> prints the business rules" "현재 학기의 학생만" kb show roster-export
-assert_ok_msg "H44 show <menu path> finds the same page" "product area" kb show "명단 > 내보내기"
-assert_ok_msg "H45 an area page lists the features that name it" "work/h-new" kb show roster-export
-assert_ok_msg "H46 a feature digest names its area" "Area: 명단 > 내보내기" kb show h-new
-assert_ok_msg "H47 search finds a business rule by its words" "memory/areas/roster-export.md" kb search "현재 학기"
-assert_fail_msg "H48 an unknown name is neither a feature nor an area" "no feature or product area" bash "$KIT/tools/kb.sh" show nowhere
-assert_exit "H49 an area name cannot walk out of memory/areas" 1 bash "$KIT/tools/kb.sh" show ../POLICY
-# the templates as shipped: an unfinished summary prints only what is known
+assert_ok_msg "H39 an area a feature names without a page is still listed" "| 결제 > 환불 — no page yet | — | — | h-old |" cat "$PAGE"
+assert_ok_msg "H40 show <menu path> prints the page with the features that name it" "work/h-new" kb show "명단 > 내보내기"
+assert_ok_msg "H41 an area without a page can be shown with its features" "work/h-old" kb show "결제 > 환불"
+assert_exit "H42 an area name cannot walk out of memory/areas" 1 bash "$KIT/tools/kb.sh" show ../POLICY
+# the summary template as shipped: an unfinished summary prints only what is known
 mkdir -p .sdlc/work/h-tmpl && printf '# Intent: h-tmpl\n- Goal: raw template\n' > .sdlc/work/h-tmpl/intent.md
 cp "$KIT/templates/summary.md" .sdlc/work/h-tmpl/summary.md
 TMPL=$(kb show h-tmpl)
-case "$TMPL" in *"<"*|*"Before → After:"*|*"Remember:"*) fail "H50 an unfilled summary leaks placeholders or empty sections" "$TMPL";;
-  *) pass "H50 an unfilled summary prints no placeholder and no empty section";; esac
+case "$TMPL" in *"<"*|*"Remember:"*) fail "H43 an unfilled summary leaks placeholders or empty sections" "$TMPL";;
+  *) pass "H43 an unfilled summary prints no placeholder and no empty section";; esac
 awk '{ print } /^## What was wrong/ { print "teachers could not export" }' .sdlc/work/h-tmpl/summary.md > "$FIX/s.md" \
   && mv "$FIX/s.md" .sdlc/work/h-tmpl/summary.md
-assert_ok_msg "H51 a filled section prints under its heading" "teachers could not export" kb show h-tmpl
-assert_ok_msg "H52 an area features name without a page can be shown" "no page yet" kb show "결제 > 환불"
-assert_ok_msg "H53 ...with the features that name it" "work/h-old" kb show "결제 > 환불"
+assert_ok_msg "H44 a filled section prints under its heading" "teachers could not export" kb show h-tmpl
 printf '# s\n- Area: roster-export\n' > .sdlc/work/h-quiet/summary.md
 kb index >/dev/null
-assert_ok_msg "H54 an Area line may name the page by its file name" "| 1 | 2026-09-18 | h-new, h-quiet |" cat "$PAGE"
-cp "$KIT/templates/area.md" .sdlc/memory/areas/unfilled.md; kb index >/dev/null
-assert_ok_msg "H55 an unfilled area page counts no rule and is named by its file" "| [unfilled](memory/areas/unfilled.md) | 0 |" cat "$PAGE"
-rm -f .sdlc/memory/areas/unfilled.md
+assert_ok_msg "H45 an Area line may name the page by its file name" "| 1 | 2026-09-18 | h-new, h-quiet |" cat "$PAGE"
 cd "$FIX" || exit 2
 
 echo

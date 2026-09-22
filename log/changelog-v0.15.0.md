@@ -62,6 +62,10 @@ unchanged.
     `show <slug | product area>`, the contents page's Search line names
     `show <slug | area>`, and the harvest and close hints name the area
     pages.
+- **`kb.sh` runs with byte semantics (`LC_ALL=C`).** Under a UTF-8 locale,
+  macOS awk compares strings by collation, so different Hangul menu paths
+  compared equal and every feature was filed under every area. Found by macOS
+  CI (en_US.UTF-8).
 - **Rules and history describe what shipped.** They merge only on a
   `shipped` close; any other close drops them, and a stale merge leaves
   them in harvest.md for that close. The merge
@@ -87,11 +91,11 @@ updated for that deliberate change.
 
 ## Validation
 
-- `bash gates/knowledge-test.sh` → `KNOWLEDGE-TEST PASS`, 162 (H38–H55 new:
-  seeding, areas table, live-rule count, page-less areas, ordering, `show` by
-  file name, by menu path, and for a page-less area, features per area,
-  search, unknown name, path walk, the shipped summary and area templates run
-  through `show`/`index` unfilled)
+- `bash gates/knowledge-test.sh` → `KNOWLEDGE-TEST PASS`, 152, under the
+  en_US.UTF-8, ko_KR.UTF-8 and C locales. H38–H45 are new and cover one
+  contract each: area row, page-less area, `show` by menu path, `show` of a
+  page-less area, path walk, unfilled summary, filled section, and Area by
+  file name. H38, H39 and H45 fail on the pre-fix kb.sh under en_US.UTF-8.
 - Three fresh-context verifier lenses (E2E, Side effects, Intent match).
   Round 1 found the unfilled-template leak (blocking) and ~20 minor gaps. A
   round-2 re-check found every one resolved (PASS), including against the old
