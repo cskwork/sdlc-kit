@@ -105,3 +105,5 @@ updated for that deliberate change.
   destination), and those were fixed.
 - `bash gates/selftest.sh` → `SELFTEST PASS`
 - `bash gates/e2e.sh` → `E2E PASS`, 152 · `bash gates/autotest.sh` → `AUTOTEST PASS`, 195
+- CI test runs are paused: `.github/workflows/selftest.yml` now runs only on
+  a manual `workflow_dispatch`. This release was merged without a CI run.
