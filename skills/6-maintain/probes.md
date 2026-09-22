@@ -16,13 +16,13 @@ at all. Pass `--deployed-sha` whenever the release system or the running app
 reports one; a branch ref is a pointer in this clone, not deployment
 evidence.
 
-## 2. Sibling-query filter diff (when one method issues 2+ queries on one entity)
+## 2. Sibling-query filter diff (when one flow reads or writes one entity 2+ ways)
 
-    awk '/id="queryA"/,/<\/select>/' mapper.xml | grep -E 'WHERE|AND'
-    awk '/id="queryB"/,/<\/select>/' mapper.xml | grep -E 'WHERE|AND'
-
-Any predicate present in one and absent in the other is a candidate defect.
-Watch for filters written in JOIN ON clauses, not only WHERE.
+List the filter of every query on that entity along the flow — SQL WHERE and
+JOIN ON, ORM criteria, API query params, cache keys — side by side. A
+predicate present in one and absent in another (soft delete, tenant, status,
+version) is a candidate defect; so is a read key that differs from the
+write's unique key.
 
 ## 3. Blame the failing lines (who, when, and was it ever revisited)
 
