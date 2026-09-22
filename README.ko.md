@@ -74,7 +74,7 @@ Intent → spec → plan → build → evidence → maintain. 사람 승인 게�
 | 계획이 채팅 안에만 존재 | 기록(`intent.md`, `spec.md`, `plan.md`, `evidence.md`, `delivery.md`)을 애플리케이션 히스토리 밖의 저장소에 남기고 나중에 `tools/kb.sh`로 찾음 |
 | 작성자가 자기 검사를 직접 실행 | 작성자 컨텍스트가 없는 verifier와 adversary가 리뷰 |
 | 승인이 사라지는 채팅 메시지 | 승인 기록이 단계, 산출물, 시각, 모드를 담고 `.sdlc/approvals/`에 파일로 남음 |
-| 실패한 시도는 잊힌 컨텍스트가 됨 | 교훈은 상한 있는 인덱스로, 확인된 사실은 `DOMAIN.md`로 |
+| 실패한 시도는 잊힌 컨텍스트가 됨 | 교훈은 상한 있는 인덱스로, 업무 정책은 제품 영역 페이지로, 확인된 사실은 `DOMAIN.md`로 |
 | 만능 워커 하나가 전부 수행 | 로컬 QA, 리뷰어, 브라우저, API, DB 전문 에이전트가 있으면 역할 계약을 그쪽에 위임 |
 | "끝났다"가 모호함 | 모든 실행이 `shipped`, `abandoned`, `dead-end`, `handed-off` 중 하나로 종결되고, `shipped`는 승인만으로는 부족하며 검증된 전달 기록을 요구 |
 
@@ -144,7 +144,8 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
 ├── memory/
 │   ├── POLICY.md                     # 사람이 선언한 하드 룰, 에이전트는 전사만
 │   ├── INDEX.md                      # 교훈 포인터, 50줄 이하
-│   ├── DOMAIN.md                     # 용어 · 확인된 사실 · 제약
+│   ├── DOMAIN.md                     # 여러 제품 영역에 걸친 용어 · 사실 · 제약
+│   ├── areas/<area-slug>.md               # 제품 영역(웹앱은 메뉴)마다 한 장: 업무 정책 P1… · 동작 · 변경 이력
 │   └── lessons/<date>-<lesson>.md
 ├── work/<slug>/                      # 열린 피처만
 │   ├── origin.md                     # 요청 당시의 티켓 · 기획서 스냅샷 — intent 게이트가 결합
@@ -156,7 +157,7 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
 │   ├── deviations.md                 # 빌드 중 편차 기록
 │   ├── progress.md                   # 하트비트: 살아있는 한 줄 (규칙 9)
 │   ├── baseline.txt                  # 브라운필드의 변경 전 동작
-│   ├── summary.md                    # 읽는 사람용 페이지: 문제·원인·변경·결과·교훈·태그, 승인에 묶이지 않아 계속 갱신
+│   ├── summary.md                    # 읽는 사람용 페이지: 제품 영역 · 무엇이 문제였나 · Before → After · 확인 방법 · 기억할 점, 승인에 묶이지 않아 계속 갱신
 │   ├── harvest.md                    # 루프 중 교훈·도메인 후보, close에서 병합(그 전에도 kb.sh show / harvest로 읽힘)
 │   └── scratch/                      # 대용량 로그 · 캡처 · 트레이스
 └── archive/<slug>/                   # 닫힌 피처, close.sh가 여기로 옮김
@@ -168,7 +169,9 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
 
 **기록을 어디에 둘지는 사용자가 정합니다.** 기본값은 프로젝트 작업 사본 안이고, `init.sh . --area ~/knowledge`를 쓰면 사용자가 고른 폴더 아래 `<area>/<단위이름>-<체크아웃 식별자>/`에 저장하고 `.sdlc`를 그곳으로 연결합니다. 체크아웃마다 저장소가 하나씩이므로 워크트리 두 개가 승인 상태를 공유하는 일이 없습니다. 영역이 프로젝트 안에 있거나 프로젝트가 영역 안에 있을 때, 다른 체크아웃이 이미 그 저장소를 소유할 때, 실제 `.sdlc` 디렉터리가 이미 있을 때(자동으로 옮기지 않습니다), 링크를 만들 수 없을 때는 아무것도 쓰지 않고 분명히 실패합니다. 이 소유권은 init 시점뿐 아니라 실행 시점에도 다시 확인합니다. `<store>/PROJECT`에 적힌 체크아웃이 지금 실행 중인 체크아웃과 다르면 `check-gate.sh`, `approve.sh`, `close.sh`, `status.sh`, `tools/auto.sh`, `tools/verify.sh`, `tools/handoff.sh`가 판정을 내리거나 상태를 쓰기 전에 거부하므로, 심볼릭 링크를 그대로 복사한 작업 사본(`cp -R`, rsync, 대부분의 백업 복원)이 다른 체크아웃의 게이트를 열거나 그 피처를 닫을 수 없습니다. 읽기는 이 제약을 받지 않아 `tools/kb.sh show|search|list`는 그대로 쓸 수 있고, 소유권을 자동으로 옮기거나 다시 묶는 일은 없습니다. 어느 쪽을 고르든 **저장소 백업은 사용자의 몫입니다.** git이 더 이상 대신해 주지 않습니다.
 
-**기록을 다시 읽는 도구는 `tools/kb.sh`입니다.** `index`는 목차 페이지를 다시 만듭니다(`init.sh`와 `close.sh`가 자동으로 실행합니다). 페이지는 상태·날짜·태그를 담은 개요 표(최신순), 아직 close가 병합하지 않은 harvest 목록, 피처별 절 순서입니다. `show <slug>`는 피처 하나를 요약본으로 보여줍니다. 목표, `summary.md`(문제·원인·변경·결과·교훈을 담는, 계속 갱신하도록 만든 유일한 기록), 배포 상태, 병합되지 않은 harvest 후보, 교훈 제목이 먼저 나오고 파일 경로는 마지막입니다. `search "<문자열>"`은 열린 피처와 닫힌 피처, 지속 메모리를 대상으로 출력량을 제한한 문자열 검색을 하고, `harvest [--stale <일수>]`는 harvest.md가 아직 memory/에 들어가지 않은 열린 피처를 유휴 기간과 함께 나열합니다(유휴 상태가 오래된 피처는 close 없이 병합할 수 있습니다 — AGENTS.md 규칙 4). `--area <폴더>`를 붙이면 그 폴더 안의 모든 저장소를 대상으로 같은 일을 하며, 원래 체크아웃이 사라진 피처도 읽을 수 있습니다. 저장소 config.md에 `index_style: obsidian`을 적으면 Obsidian 볼트용 frontmatter와 인라인 `#태그`를 덧붙입니다. 생성 시각은 절대 쓰지 않으므로 내용이 같으면 diff도 생기지 않습니다. 종료 코드는 `0` 찾음, `1` 없음, `2` 사용법 오류 또는 거부입니다.
+**지식은 제품 영역별로 정리됩니다.** 웹앱이면 제품 영역은 메뉴 하나이고 메뉴 경로(`학습 > 평가 > 제출`)로 부릅니다. 다른 소프트웨어는 모듈, API, 배치 작업, CLI 명령입니다. 제품 영역마다 `memory/areas/<area-slug>.md` 한 장이 있고, 여기에 개발자가 아니어도 읽을 수 있는 문장으로 쓴 업무 정책(P1, P2…), 동작 방식, 그 영역을 바꾼 피처별 이력 한 줄이 담깁니다. 피처의 `summary.md`는 `Area:` 줄로 제품 영역을 적고, spec은 어떤 정책을 유지하거나 바꾸는지 밝히고, Side effects 검증자는 건드리지 않아야 할 정책이 그대로인지 다시 확인하며, close 병합이 새로 생기거나 바뀐 정책을 페이지에 올립니다. `tools/kb.sh show "학습 > 평가 > 제출"`(또는 페이지 파일 이름)은 그 페이지와 그 제품 영역을 바꾼 피처를 함께 보여줍니다.
+
+**기록을 다시 읽는 도구는 `tools/kb.sh`입니다.** `index`는 목차 페이지를 다시 만듭니다(`init.sh`와 `close.sh`가 자동으로 실행합니다). 페이지는 정책 수·마지막 변경·피처를 담은 제품 영역 표, 상태·날짜·제품 영역·태그를 담은 개요 표(최신순), 아직 close가 병합하지 않은 harvest 목록, 피처별 절 순서입니다. `show <slug>`는 피처 하나를 요약본으로 보여줍니다. 목표, `summary.md`(제품 영역·무엇이 문제였나·Before → After·확인 방법을 담는, 계속 갱신하도록 만든 유일한 기록), 배포 상태, 병합되지 않은 harvest 후보, 교훈 제목이 먼저 나오고 파일 경로는 마지막입니다. `search "<문자열>"`은 열린 피처와 닫힌 피처, 지속 메모리를 대상으로 출력량을 제한한 문자열 검색을 하고, `harvest [--stale <일수>]`는 harvest.md가 아직 memory/에 들어가지 않은 열린 피처를 유휴 기간과 함께 나열합니다(유휴 상태가 오래된 피처는 close 없이 병합할 수 있습니다 — AGENTS.md 규칙 4). `--area <폴더>`를 붙이면 그 폴더 안의 모든 저장소를 대상으로 같은 일을 하며, 원래 체크아웃이 사라진 피처도 읽을 수 있습니다. 저장소 config.md에 `index_style: obsidian`을 적으면 Obsidian 볼트용 frontmatter와 인라인 `#태그`를 덧붙입니다. 생성 시각은 절대 쓰지 않으므로 내용이 같으면 diff도 생기지 않습니다. 종료 코드는 `0` 찾음, `1` 없음, `2` 사용법 오류 또는 거부입니다.
 
 공개 sdlc-kit 저장소는 프레임워크만 담습니다. 기록은 작성된 자리, 즉 프로젝트 작업 사본이나 사용자가 고른 영역에 남아 그대로 읽힙니다.
 
@@ -231,10 +234,7 @@ abandoned나 dead-end는 교훈이 없으면 닫히지 않습니다(lazymode 3 �
 gates/status.sh [--all[=n]] [slug]  # 열린 피처 + 다음 액션 하나, --all은 최신 아카이브 20건 포함
 gates/status.sh --json [slug]       # 같은 상태를 기계가 읽는 형식으로(tools/auto.sh)
 gates/stats.sh [--all]              # 단계별 소요 시간 + 재승인 횟수, 기본은 열린 피처 + 최근 종결 20건
-gates/selftest.sh        # 게이트, 종결, 인젝션, lazymode, status 렌더, YAML 무결성
-gates/e2e.sh [kit]       # 일회용 git 픽스처에서 루프 전체를 검사(로컬 전용, 원격 호출 없음)
-gates/autotest.sh [kit]  # 자동화 계층을 자체 픽스처에서 검사(로컬 bare 원격, 네트워크 없음)
-gates/knowledge-test.sh  # 기록 저장 위치와 재검색을 자체 픽스처에서 검사
+gates/selftest.sh        # 스모크 테스트: 스크립트 문법, 스킬 메타데이터, 게이트 동작 (몇 초)
 ```
 
 예시:
@@ -334,7 +334,7 @@ init.sh          멱등 프로젝트 시드
 .gitattributes   LF 고정, Windows 클론에서도 스크립트 생존
 skills/1-6/      단계별 지시서
 roles/           verifier · adversary · researcher 계약
-gates/           approve · check · close · status · stats · selftest · e2e · autotest (공용 헬퍼 _common.sh, _auto.sh 포함)
+gates/           approve · check · close · status · stats · selftest (공용 헬퍼 _common.sh, _auto.sh 포함)
 tools/           auto(기계 상태) · verify(영수증, python3 필요) · handoff(리뷰 브랜치) · _run.py(제한된 실행) · tripwire · refcheck
 templates/       intent · spec · plan · evidence · delivery · verify · lesson
 docs/index.html  EN/KO 랜딩 페이지
@@ -344,24 +344,14 @@ docs/automation.md  기계 계약: status JSON, 영수증, 핸드오프, 체크�
 ## 킷 검증
 
 ```bash
-./gates/selftest.sh   # 게이트 동작
-./gates/e2e.sh        # 자체 일회용 픽스처에서 루프 전체
-./gates/autotest.sh   # 자체 일회용 픽스처에서 자동화 계층
-./gates/knowledge-test.sh  # 기록이 저장되는 위치와 다시 찾는 방법
+./gates/selftest.sh   # 몇 초
 ```
 
-셀프테스트는 게이트 상태와 경로·내용 결합(다른 경로 재사용, 경로 이탈, 심볼릭 링크, 결합 이전 기록은 모두 닫힌 상태로 실패), 단계명 인젝션, 경로 이탈 거부, delegated와 lazy 승인 및 그 리뷰·위험 허가 기록, 컴팩트 루트와 승격 시 재승인, 전달 기록을 요구하는 `shipped` 종결, `refcheck.sh`의 드리프트 감지, 종결 시 교훈 요구, 이중 종결 거부, 종결 시 아카이브(승인 기록 이동과 status 범위 포함), YAML 프런트매터 파싱, 전체 스크립트의 LF 줄 끝을 검사합니다. 여기에 엔드투엔드 워크플로 픽스처 두 가지 — 컴팩트 버그 수정의 intent부터 전달 종결까지, 그리고 그 주변 실패 경로 — 가 함께 돌고, 리뷰 전에 이미 커밋된 작업의 소스 결합과 `pr` 전달의 커밋 포함 여부 검사도 포함됩니다.
-
-`gates/autotest.sh`는 같은 원칙으로 자동화 계층을 검사합니다. 풀오토 intent 계약(중대한 질문은
-막고, 해결되면 풀린다), 검증 영수증(검사 실패, 영수증 없음, runtime 증거 없는 strict 프로파일,
-코드·명령·레시피가 바뀐 경우 모두 차단), 로컬 bare 원격을 상대로 한 리뷰 핸드오프(허가 없는 푸시,
-보호 브랜치, force, 리뷰된 소스를 담지 않은 커밋은 거부, 두 번째 푸시는 아무 효과도 반복하지 않음,
-원격 SHA가 다르면 리뷰 준비 완료가 차단, 머지·배포는 `Authorized-by:` 필요), 제한된 재시도와 재개,
-그리고 lazymode 0 동작과 소스 결합이 그대로임을 확인합니다.
-
-`gates/e2e.sh`는 그 위의 통합 스위트입니다. 자체 임시 디렉토리에 일회용 git 프로젝트를 만들어 실제 스크립트로 컴팩트 루트, 풀 루트, 그리고 모든 부정 시나리오를 돌립니다. 리뷰 후 수정, 파일 추가, chmod와 심볼릭 링크 교체, 전달 소스로 지목된 엉뚱한 옛 커밋, 예전 킷의 ship 결합, ship 리뷰 이후 수정되거나 삭제된 풀 루트의 spec·plan, 그리고 `status.sh`·`check-gate.sh`·`close.sh`가 같은 판정을 내는지까지 검사합니다. 픽스처 밖에는 아무것도 쓰지 않고 네트워크·원격·`gh` 호출도 하지 않습니다. `pr`과 `deploy` 전달은 로컬에서만 재현하며, 그것이 `close.sh`가 실제로 확인하는 전부입니다. 셀프테스트를 내부에서 다시 실행하지는 않습니다 — 두 스위트는 독립입니다. CI는 Ubuntu, macOS, Windows(Git Bash)에서 네 스위트를 모두 실행합니다.
-
-`gates/knowledge-test.sh`는 저장소 자체를 검사합니다. 루트에 고정된 무시 규칙, 사용자가 고른 폴더에 묶인 외부 영역(공백과 비ASCII 경로 포함), 체크아웃마다 분리되는 저장소, 그리고 모든 거부 경로를 확인합니다. 영역이 프로젝트 안에 있는 경우, 프로젝트가 영역 안에 있는 경우, 다른 체크아웃이 소유한 저장소, 저장소가 아닌 디렉터리, 자동으로 옮기지 않는 실제 `.sdlc`, 다른 곳을 가리키는 링크, 쓸 수 없는 영역이 여기에 해당합니다. 이어서 링크를 통해 피처 하나를 승인·변조·ship·전달·종결까지 돌려 게이트 동작이 그대로인지 확인하고, 재검색도 검사합니다. close 시점의 목차 갱신, `show`, 출력이 제한된 문자열 `search`, `-`로 시작하는 질의, 사람이 쓴 페이지를 덮어쓰지 않는 동작, 피처 심볼릭 링크를 따라가지 않는 동작, 그리고 체크아웃을 삭제한 뒤에도 `--area`로 기록을 읽는 동작입니다. 심볼릭 링크를 만들 수 없는 파일 시스템에서는 외부 영역 항목을 조용히 건너뛰지 않고 NOT VERIFIED로 보고합니다.
+대부분이 지침 문서인 킷이라 스모크 테스트 하나만 둡니다. 모든 스크립트가 문법 오류 없이 LF로
+저장돼 있는지, 모든 SKILL.md의 frontmatter가 올바른지, 게이트가 승인된 내용에서만 열리고 그
+내용이나 상위 산출물이 바뀌면 닫히는지, lazymode가 설정 단계를 넘지 않는지, `dead-end`에는
+교훈이 필요하고 `shipped`에는 ship 승인과 확인된 전달 기록이 필요한지, 그리고 UTF-8 로케일에서도
+지식이 제 제품 영역에 정리되는지 확인합니다. CI는 PR과 수동 실행 때만 돌립니다.
 
 ## 이것이 아닌 것
 

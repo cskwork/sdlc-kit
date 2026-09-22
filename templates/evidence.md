@@ -1,6 +1,6 @@
 # Evidence: <feature slug>
 
-- From: plan.md (approved YYYY-MM-DD)
+- From: plan.md (approved YYYY-MM-DD) | intent.md (compact route, approved YYYY-MM-DD)
 - Diff: <branch/commit range>
 - Origin: <origin.md Ref · live source re-read with <tool>: unchanged | drifted: <what> | unreachable>
 
