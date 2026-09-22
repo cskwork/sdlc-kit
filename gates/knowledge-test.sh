@@ -581,6 +581,7 @@ cat > .sdlc/work/h-new/intent.md <<'EOF'
 EOF
 cat > .sdlc/work/h-new/summary.md <<'EOF'
 # Summary: h-new
+- Area: 명단 > 내보내기
 - Tags: roster, export
 - Problem: the roster page has no export, so teachers retype names into spreadsheets
 - Cause: not known yet
@@ -605,6 +606,17 @@ printf '# Intent: h-quiet\n- Goal: nothing to harvest here\n- Date: 2026-08-15\n
 printf '# Intent: h-done\n- Goal: an archived one\n- Date: 2026-07-01\n' > .sdlc/archive/h-done/intent.md
 printf 'state: shipped\nreason: done\nclosed_at: 2026-07-02T10:00:00Z\n' > .sdlc/archive/h-done/CLOSED
 printf '# Lesson: a BOM makes Excel read UTF-8\n- Feature: h-new\n' > .sdlc/memory/lessons/2026-09-18-h-new-bom.md
+printf '# s\n- Area: 결제 > 환불\n' > .sdlc/work/h-old/summary.md
+cat > .sdlc/memory/areas/roster-export.md <<'EOF'
+# Area: 명단 > 내보내기
+- Menu: 명단 > 내보내기
+- Where: /roster/export
+## Business rules (정책)
+- P1: 내보낸 명단에는 현재 학기의 학생만 들어간다. — source: 기획서 v1 · set by h-new
+- ~~P2: 명단은 PDF로만 내보낸다.~~ — retired 2026-09-18 by h-new: CSV로 대체
+## History
+- 2026-09-18 h-new — 교사가 명단을 CSV로 내려받을 수 있다
+EOF
 # show — the digest
 assert_ok_msg "H1 show prints the reader's summary before the paths" "teachers retype names" kb show h-new
 assert_ok_msg "H2 show prints the unmerged harvest candidates" "Excel needs a BOM" kb show h-new
@@ -617,7 +629,7 @@ case "$SHOW" in *"Summary:"*"Documents:"*) pass "H6 the digest comes before the 
 # index — overview table, newest first, tags, unmerged harvests
 assert_ok "H7 index regenerates the page" kb index
 PAGE=.sdlc/README.md
-assert_ok_msg "H8 the page opens with an overview table" "| Feature | State | Date | Tags | Goal |" cat "$PAGE"
+assert_ok_msg "H8 the page carries an overview table" "| Feature | State | Date | Area | Tags | Goal |" cat "$PAGE"
 assert_ok_msg "H9 the table carries the tags a reader browses by" "roster, export" cat "$PAGE"
 NEW_AT=$(grep -n '^| \[h-new\]' "$PAGE" | head -1 | cut -d: -f1); OLD_AT=$(grep -n '^| \[h-old\]' "$PAGE" | head -1 | cut -d: -f1)
 if [ -n "$NEW_AT" ] && [ -n "$OLD_AT" ] && [ "$NEW_AT" -lt "$OLD_AT" ]; then pass "H10 open features are listed newest first"
@@ -664,6 +676,40 @@ assert_exit "H33 the plain page has no frontmatter" 1 sh -c "head -n 1 '$PAGE' |
 assert_fail_msg "H34 there is no style flag — one setting, one place" "unknown option" bash "$KIT/tools/kb.sh" index --obsidian
 assert_ok_msg "H36 records under work/ were not written by any of this" "not delivered" cat .sdlc/work/h-new/summary.md
 assert_nofile ".sdlc/work/h-new/README.md" "H37 no page was written inside a feature directory"
+# product areas — a reader navigates by menu; business rules live on the area page
+if [ -d .sdlc/memory/areas ]; then pass "H38 init.sh seeds memory/areas/"; else fail "H38 memory/areas/ was not seeded"; fi
+kb index >/dev/null
+assert_ok_msg "H39 the page lists product areas" "## Product areas" cat "$PAGE"
+assert_ok_msg "H40 an area row links its page and counts live rules only" \
+  "| [명단 > 내보내기](memory/areas/roster-export.md) | 1 | 2026-09-18 | h-new |" cat "$PAGE"
+assert_ok_msg "H41 an area a feature names without a page is still listed" "| 결제 > 환불 — no page yet | — | — | h-old |" cat "$PAGE"
+AREAS_AT=$(grep -n '^## Product areas' "$PAGE" | cut -d: -f1); OVER_AT=$(grep -n '^## Overview' "$PAGE" | cut -d: -f1)
+if [ -n "$AREAS_AT" ] && [ -n "$OVER_AT" ] && [ "$AREAS_AT" -lt "$OVER_AT" ]; then pass "H42 areas come before the feature overview"
+else fail "H42 areas are not first (areas@${AREAS_AT:-?} overview@${OVER_AT:-?})"; fi
+assert_ok_msg "H43 show <area file name> prints the business rules" "현재 학기의 학생만" kb show roster-export
+assert_ok_msg "H44 show <menu path> finds the same page" "product area" kb show "명단 > 내보내기"
+assert_ok_msg "H45 an area page lists the features that name it" "work/h-new" kb show roster-export
+assert_ok_msg "H46 a feature digest names its area" "Area: 명단 > 내보내기" kb show h-new
+assert_ok_msg "H47 search finds a business rule by its words" "memory/areas/roster-export.md" kb search "현재 학기"
+assert_fail_msg "H48 an unknown name is neither a feature nor an area" "no feature or product area" bash "$KIT/tools/kb.sh" show nowhere
+assert_exit "H49 an area name cannot walk out of memory/areas" 1 bash "$KIT/tools/kb.sh" show ../POLICY
+# the templates as shipped: an unfinished summary prints only what is known
+mkdir -p .sdlc/work/h-tmpl && printf '# Intent: h-tmpl\n- Goal: raw template\n' > .sdlc/work/h-tmpl/intent.md
+cp "$KIT/templates/summary.md" .sdlc/work/h-tmpl/summary.md
+TMPL=$(kb show h-tmpl)
+case "$TMPL" in *"<"*|*"Before → After:"*|*"Remember:"*) fail "H50 an unfilled summary leaks placeholders or empty sections" "$TMPL";;
+  *) pass "H50 an unfilled summary prints no placeholder and no empty section";; esac
+awk '{ print } /^## What was wrong/ { print "teachers could not export" }' .sdlc/work/h-tmpl/summary.md > "$FIX/s.md" \
+  && mv "$FIX/s.md" .sdlc/work/h-tmpl/summary.md
+assert_ok_msg "H51 a filled section prints under its heading" "teachers could not export" kb show h-tmpl
+assert_ok_msg "H52 an area features name without a page can be shown" "no page yet" kb show "결제 > 환불"
+assert_ok_msg "H53 ...with the features that name it" "work/h-old" kb show "결제 > 환불"
+printf '# s\n- Area: roster-export\n' > .sdlc/work/h-quiet/summary.md
+kb index >/dev/null
+assert_ok_msg "H54 an Area line may name the page by its file name" "| 1 | 2026-09-18 | h-new, h-quiet |" cat "$PAGE"
+cp "$KIT/templates/area.md" .sdlc/memory/areas/unfilled.md; kb index >/dev/null
+assert_ok_msg "H55 an unfilled area page counts no rule and is named by its file" "| [unfilled](memory/areas/unfilled.md) | 0 |" cat "$PAGE"
+rm -f .sdlc/memory/areas/unfilled.md
 cd "$FIX" || exit 2
 
 echo

@@ -129,11 +129,13 @@ feature.
 
 Write `summary.md` beside it (templates/summary.md) — the page a human reads
 instead of the stage files, printed first by `tools/kb.sh show` and the
-contents page. Fill `Tags` (the domain areas a reader browses by), `Problem`,
-and `Cause`/`Change` as far as they are known; leave `Result` at "not
-delivered". No approval binds summary.md, so later stages keep it true
-(skills/5-ship sets Result and Lesson). Ten lines, plain language, each
-claim pointing at the record that proves it.
+contents page. Name the product area(s) on its `Area:` line — for a web app
+the menu path a user clicks, in the exact words of the existing area page
+(`tools/kb.sh index` lists them), or as the UI labels it when no page exists
+yet. Open the page with `tools/kb.sh show <area>` and cite the business rules
+(P-numbers) the request touches in intent.md's Evidence section. Fill What was wrong and Before → After as far as they are
+known; `Status: not delivered`. No approval binds summary.md, so later
+stages keep it true (skills/5-ship finishes it).
 
 When the request has an origin — a ticket, a 기획서, an incident — snapshot
 it FIRST as `.sdlc/work/<slug>/origin.md` (templates/origin.md): the intent
@@ -178,7 +180,8 @@ no plan, and nothing downstream may demand one. Take it only when ALL hold:
 - the change is bounded and you can name the single revert that undoes it;
 - the probes named the exact files and symbols to change;
 - success is checkable by an existing command from `.sdlc/config.md`;
-- intent.md has no open questions;
+- intent.md has no open questions at all — optional ones included: on the
+  full route the spec answers them, and the compact route has no spec;
 - the work is inside what the human has already authorized — no data loss,
   public API change, security path, or migration outside that scope
   (AGENTS.md rule 3 "Autonomy is not authority"). A clean `tools/tripwire.sh`
@@ -187,10 +190,11 @@ no plan, and nothing downstream may demand one. Take it only when ALL hold:
 A single "maybe" means **full**. Ambiguity, breadth, and risk are exactly
 what the spec and plan gates exist for.
 
-A compact intent.md carries what spec and plan would have carried, in four
+A compact intent.md carries what spec and plan would have carried, in five
 extra lines (templates/intent.md): **Files** to change, **Proof** command,
-**Risk** and its blast radius, **Delivery target** (local | pr | deploy).
-Without those four it is not compact-ready — write them or go full.
+**Risk** and its blast radius, **Baseline** (brownfield), **Delivery
+target** (local | pr | deploy). Without those five it is not compact-ready —
+write them or go full.
 
 Record the verdict in the `Track:` line with the reasons
 (`- Track: compact — two known files, existing test covers it`) BEFORE the

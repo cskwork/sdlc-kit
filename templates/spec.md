@@ -33,6 +33,9 @@ cases where they apply.>
 |---|------|------------------|-------|
 | B1 | <flow> | <today, with source> | <after> |
 
+## Business rules touched   <!-- from the area page(s) summary.md names; the verifier re-checks every kept one -->
+- <area> P1: kept · P3: changed → R2 · P4: retired → R5 · new rule → R6
+
 ## What stays untouched   <!-- brownfield: testable statements; becomes regression baseline -->
 - U1: <existing behavior>; checked by <command/test>
 

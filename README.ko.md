@@ -74,7 +74,7 @@ Intent → spec → plan → build → evidence → maintain. 사람 승인 게�
 | 계획이 채팅 안에만 존재 | 기록(`intent.md`, `spec.md`, `plan.md`, `evidence.md`, `delivery.md`)을 애플리케이션 히스토리 밖의 저장소에 남기고 나중에 `tools/kb.sh`로 찾음 |
 | 작성자가 자기 검사를 직접 실행 | 작성자 컨텍스트가 없는 verifier와 adversary가 리뷰 |
 | 승인이 사라지는 채팅 메시지 | 승인 기록이 단계, 산출물, 시각, 모드를 담고 `.sdlc/approvals/`에 파일로 남음 |
-| 실패한 시도는 잊힌 컨텍스트가 됨 | 교훈은 상한 있는 인덱스로, 확인된 사실은 `DOMAIN.md`로 |
+| 실패한 시도는 잊힌 컨텍스트가 됨 | 교훈은 상한 있는 인덱스로, 업무 정책은 제품 영역 페이지로, 확인된 사실은 `DOMAIN.md`로 |
 | 만능 워커 하나가 전부 수행 | 로컬 QA, 리뷰어, 브라우저, API, DB 전문 에이전트가 있으면 역할 계약을 그쪽에 위임 |
 | "끝났다"가 모호함 | 모든 실행이 `shipped`, `abandoned`, `dead-end`, `handed-off` 중 하나로 종결되고, `shipped`는 승인만으로는 부족하며 검증된 전달 기록을 요구 |
 
@@ -144,7 +144,8 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
 ├── memory/
 │   ├── POLICY.md                     # 사람이 선언한 하드 룰, 에이전트는 전사만
 │   ├── INDEX.md                      # 교훈 포인터, 50줄 이하
-│   ├── DOMAIN.md                     # 용어 · 확인된 사실 · 제약
+│   ├── DOMAIN.md                     # 여러 제품 영역에 걸친 용어 · 사실 · 제약
+│   ├── areas/<area-slug>.md               # 제품 영역(웹앱은 메뉴)마다 한 장: 업무 정책 P1… · 동작 · 변경 이력
 │   └── lessons/<date>-<lesson>.md
 ├── work/<slug>/                      # 열린 피처만
 │   ├── origin.md                     # 요청 당시의 티켓 · 기획서 스냅샷 — intent 게이트가 결합
@@ -156,7 +157,7 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
 │   ├── deviations.md                 # 빌드 중 편차 기록
 │   ├── progress.md                   # 하트비트: 살아있는 한 줄 (규칙 9)
 │   ├── baseline.txt                  # 브라운필드의 변경 전 동작
-│   ├── summary.md                    # 읽는 사람용 페이지: 문제·원인·변경·결과·교훈·태그, 승인에 묶이지 않아 계속 갱신
+│   ├── summary.md                    # 읽는 사람용 페이지: 제품 영역 · 무엇이 문제였나 · Before → After · 확인 방법 · 기억할 점, 승인에 묶이지 않아 계속 갱신
 │   ├── harvest.md                    # 루프 중 교훈·도메인 후보, close에서 병합(그 전에도 kb.sh show / harvest로 읽힘)
 │   └── scratch/                      # 대용량 로그 · 캡처 · 트레이스
 └── archive/<slug>/                   # 닫힌 피처, close.sh가 여기로 옮김
@@ -168,7 +169,9 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
 
 **기록을 어디에 둘지는 사용자가 정합니다.** 기본값은 프로젝트 작업 사본 안이고, `init.sh . --area ~/knowledge`를 쓰면 사용자가 고른 폴더 아래 `<area>/<단위이름>-<체크아웃 식별자>/`에 저장하고 `.sdlc`를 그곳으로 연결합니다. 체크아웃마다 저장소가 하나씩이므로 워크트리 두 개가 승인 상태를 공유하는 일이 없습니다. 영역이 프로젝트 안에 있거나 프로젝트가 영역 안에 있을 때, 다른 체크아웃이 이미 그 저장소를 소유할 때, 실제 `.sdlc` 디렉터리가 이미 있을 때(자동으로 옮기지 않습니다), 링크를 만들 수 없을 때는 아무것도 쓰지 않고 분명히 실패합니다. 이 소유권은 init 시점뿐 아니라 실행 시점에도 다시 확인합니다. `<store>/PROJECT`에 적힌 체크아웃이 지금 실행 중인 체크아웃과 다르면 `check-gate.sh`, `approve.sh`, `close.sh`, `status.sh`, `tools/auto.sh`, `tools/verify.sh`, `tools/handoff.sh`가 판정을 내리거나 상태를 쓰기 전에 거부하므로, 심볼릭 링크를 그대로 복사한 작업 사본(`cp -R`, rsync, 대부분의 백업 복원)이 다른 체크아웃의 게이트를 열거나 그 피처를 닫을 수 없습니다. 읽기는 이 제약을 받지 않아 `tools/kb.sh show|search|list`는 그대로 쓸 수 있고, 소유권을 자동으로 옮기거나 다시 묶는 일은 없습니다. 어느 쪽을 고르든 **저장소 백업은 사용자의 몫입니다.** git이 더 이상 대신해 주지 않습니다.
 
-**기록을 다시 읽는 도구는 `tools/kb.sh`입니다.** `index`는 목차 페이지를 다시 만듭니다(`init.sh`와 `close.sh`가 자동으로 실행합니다). 페이지는 상태·날짜·태그를 담은 개요 표(최신순), 아직 close가 병합하지 않은 harvest 목록, 피처별 절 순서입니다. `show <slug>`는 피처 하나를 요약본으로 보여줍니다. 목표, `summary.md`(문제·원인·변경·결과·교훈을 담는, 계속 갱신하도록 만든 유일한 기록), 배포 상태, 병합되지 않은 harvest 후보, 교훈 제목이 먼저 나오고 파일 경로는 마지막입니다. `search "<문자열>"`은 열린 피처와 닫힌 피처, 지속 메모리를 대상으로 출력량을 제한한 문자열 검색을 하고, `harvest [--stale <일수>]`는 harvest.md가 아직 memory/에 들어가지 않은 열린 피처를 유휴 기간과 함께 나열합니다(유휴 상태가 오래된 피처는 close 없이 병합할 수 있습니다 — AGENTS.md 규칙 4). `--area <폴더>`를 붙이면 그 폴더 안의 모든 저장소를 대상으로 같은 일을 하며, 원래 체크아웃이 사라진 피처도 읽을 수 있습니다. 저장소 config.md에 `index_style: obsidian`을 적으면 Obsidian 볼트용 frontmatter와 인라인 `#태그`를 덧붙입니다. 생성 시각은 절대 쓰지 않으므로 내용이 같으면 diff도 생기지 않습니다. 종료 코드는 `0` 찾음, `1` 없음, `2` 사용법 오류 또는 거부입니다.
+**지식은 제품 영역별로 정리됩니다.** 웹앱이면 제품 영역은 메뉴 하나이고 메뉴 경로(`학습 > 평가 > 제출`)로 부릅니다. 다른 소프트웨어는 모듈, API, 배치 작업, CLI 명령입니다. 제품 영역마다 `memory/areas/<area-slug>.md` 한 장이 있고, 여기에 개발자가 아니어도 읽을 수 있는 문장으로 쓴 업무 정책(P1, P2…), 동작 방식, 그 영역을 바꾼 피처별 이력 한 줄이 담깁니다. 피처의 `summary.md`는 `Area:` 줄로 제품 영역을 적고, spec은 어떤 정책을 유지하거나 바꾸는지 밝히고, Side effects 검증자는 건드리지 않아야 할 정책이 그대로인지 다시 확인하며, close 병합이 새로 생기거나 바뀐 정책을 페이지에 올립니다. `tools/kb.sh show "학습 > 평가 > 제출"`(또는 페이지 파일 이름)은 그 페이지와 그 제품 영역을 바꾼 피처를 함께 보여줍니다.
+
+**기록을 다시 읽는 도구는 `tools/kb.sh`입니다.** `index`는 목차 페이지를 다시 만듭니다(`init.sh`와 `close.sh`가 자동으로 실행합니다). 페이지는 정책 수·마지막 변경·피처를 담은 제품 영역 표, 상태·날짜·제품 영역·태그를 담은 개요 표(최신순), 아직 close가 병합하지 않은 harvest 목록, 피처별 절 순서입니다. `show <slug>`는 피처 하나를 요약본으로 보여줍니다. 목표, `summary.md`(제품 영역·무엇이 문제였나·Before → After·확인 방법을 담는, 계속 갱신하도록 만든 유일한 기록), 배포 상태, 병합되지 않은 harvest 후보, 교훈 제목이 먼저 나오고 파일 경로는 마지막입니다. `search "<문자열>"`은 열린 피처와 닫힌 피처, 지속 메모리를 대상으로 출력량을 제한한 문자열 검색을 하고, `harvest [--stale <일수>]`는 harvest.md가 아직 memory/에 들어가지 않은 열린 피처를 유휴 기간과 함께 나열합니다(유휴 상태가 오래된 피처는 close 없이 병합할 수 있습니다 — AGENTS.md 규칙 4). `--area <폴더>`를 붙이면 그 폴더 안의 모든 저장소를 대상으로 같은 일을 하며, 원래 체크아웃이 사라진 피처도 읽을 수 있습니다. 저장소 config.md에 `index_style: obsidian`을 적으면 Obsidian 볼트용 frontmatter와 인라인 `#태그`를 덧붙입니다. 생성 시각은 절대 쓰지 않으므로 내용이 같으면 diff도 생기지 않습니다. 종료 코드는 `0` 찾음, `1` 없음, `2` 사용법 오류 또는 거부입니다.
 
 공개 sdlc-kit 저장소는 프레임워크만 담습니다. 기록은 작성된 자리, 즉 프로젝트 작업 사본이나 사용자가 고른 영역에 남아 그대로 읽힙니다.
 

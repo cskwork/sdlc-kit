@@ -34,10 +34,12 @@ Report format (target: 60 lines or fewer):
 - Claims checked: "<claim>" → CONFIRMED/REFUTED (<file:line>)
 - Unknowns: <what you could not determine>
 - Domain candidates: <durable terms/facts/constraints you verified that
-  belong in .sdlc/memory/DOMAIN.md; one line each with [verified: how]>
+  span areas (.sdlc/memory/DOMAIN.md); one line each with [verified: how]>
+- Area candidates: <a business rule or a fact that holds for one product
+  area: `[area: <menu path>] …`, one line each with [verified: how]>
 ```
 
-The dispatcher appends Domain candidates to the feature's
+The dispatcher appends Domain and Area candidates to the feature's
 `.sdlc/work/<slug>/harvest.md` (AGENTS.md rule 4). A candidate that contradicts an
 existing DOMAIN.md entry supersedes it — mark it `supersedes: <old entry>`
 so the close merge replaces the old line instead of keeping both.
