@@ -40,7 +40,7 @@ else the human's. Name a command or test where possible.>
 <!-- This is the whole work contract: no spec.md, no plan.md, and nothing
      downstream may ask for one (AGENTS.md "Two routes, one contract"). -->
 - Files: <exact paths and symbols that change>
-- Proof: <the existing command from .sdlc/config.md that proves it, and what its passing output means>
+- Proof: <the existing command from .sdlc/config.md that proves it (bug fix: the regression test it runs — AGENTS.md rule 6), and what its passing output means>
 - Risk: <blast radius, what else touches this code, the single revert that undoes it>
 - Delivery target: local | pr | deploy   <!-- what "shipped" will have to prove; becomes delivery.md's Target -->
 

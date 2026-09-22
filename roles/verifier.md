@@ -16,16 +16,20 @@ spec.md and plan.md (compact route: intent.md only), the changed-file list,
    `tools/verify.sh run <slug>`: the receipt records what ran, your report is
    still the judgement.
 2. Exercise the change for real, scoped to it — the flows it touches, not the
-   product's whole suite; the project's own commands and fixtures, never a
-   parallel harness:
+   product's whole suite; the project's own commands and fixtures (config.md
+   `e2e:` when set), never a parallel harness:
    - **UI** → drive the actual screen (`qa:` tool, else any browser tool in
      the harness): load it, do the user's steps, read the rendered result.
    - **API / CLI / job** → the real request or command against a running
      instance (`run:`); read the response, exit status, and resulting state.
-   - **Bug fix** → the proof chain (AGENTS.md rule 6): reproduce the ORIGINAL
-     failure against the pre-fix state (`git show <base>:<file>` into scratch
-     or a disposable checkout — never `git stash` or anything that mutates the
-     human's tree), confirm the mechanism, run the SAME reproduction after.
+   - **Bug fix** → the proof chain (AGENTS.md rule 6): run the regression
+     test (or, where none can reach the defect, the recorded reproduction)
+     against the pre-fix code — a disposable worktree of the commit before
+     the fix (HEAD while the fix is uncommitted) with only the new test
+     copied in; never `git stash` or anything that mutates the human's
+     tree — and
+     confirm it FAILS for the reported reason; confirm the mechanism; run the
+     SAME test after. A test that passes on the pre-fix code proves nothing.
      A chain you cannot complete is a FAIL, or a stated limitation for an
      intermittent defect — never a pass by assumption.
 3. Check each plan.md **Proof** item (compact route: intent.md's Proof line).

@@ -8,20 +8,16 @@ description: "Read-only planning with a tiered gate: files, order, risks, proof.
 Goal: create `plan.md` before changing code. Name the files, work order, risks,
 and proof. During this stage, read and run non-mutating commands only.
 
-Heartbeat: on entry and at every sub-task change, overwrite
-`.sdlc/work/<slug>/progress.md` with one line —
-`plan · <doing what> · <ISO timestamp>` (AGENTS.md rule 9; writing inside
-`.sdlc/work/<slug>/` is allowed here, like the plan artifact itself).
+Heartbeat throughout: AGENTS.md rule 9.
 
 ## Before you start
 
 1. Run `gates/check-gate.sh spec .sdlc/work/<slug>/spec.md`. STOP if closed.
-2. Read spec.md fully. Read `.sdlc/memory/POLICY.md`,
-   `.sdlc/memory/INDEX.md`, `.sdlc/memory/DOMAIN.md`, and the feature's
-   `harvest.md` if present; open lesson files whose tags match the current
-   task. Treat DOMAIN.md constraints and POLICY.md rules as plan risks.
+2. Read spec.md fully, and memory (AGENTS.md rule 4). Treat DOMAIN.md
+   constraints and POLICY.md rules as plan risks.
 3. **Read-only rule: in this stage you may read code and run non-mutating
-   commands only. No edits, no writes outside `.sdlc/work/<slug>/`.**
+   commands only. No edits, no writes outside `.sdlc/work/<slug>/`** (the heartbeat and
+   the plan artifact live there).
 
 ## Plan
 
@@ -36,7 +32,8 @@ exploration stays out of the main context. Then fill `templates/plan.md`:
 - **Order of work.** Make each step keep the configured checks passing. Add
   tests with the code they test.
 - **Risks.** Record rate limits, migrations, shared state, and important quirks.
-- **Proof.** For each spec requirement, name the test or command that proves it.
+- **Proof.** For each spec requirement, name the test or command that proves it
+  (bug fix: the regression test — AGENTS.md rule 6).
   Use commands from `.sdlc/config.md`.
 - Brownfield additions:
   - **Regression baseline.** Give the exact commands to run before changes and

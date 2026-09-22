@@ -9,23 +9,18 @@ Goal: create an `intent.md` precise enough to plan without guessing. Verify
 the problem, cause, and requested outcome before moving on. Stage 1 is the
 least costly place to correct a wrong assumption.
 
-Heartbeat: as soon as `.sdlc/work/<slug>/` exists, and at every sub-task
-change, overwrite `.sdlc/work/<slug>/progress.md` with one line —
-`intent · <doing what> · <ISO timestamp>` (AGENTS.md rule 9).
+Heartbeat throughout: AGENTS.md rule 9.
 
 ## Before you start
 
-1. Read `.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`, and
-   `.sdlc/memory/DOMAIN.md`; open lessons whose tags match this request.
-   Then **retrieve what past features already decided about this area**:
+1. Read memory (AGENTS.md rule 4), then **retrieve what past features
+   already decided about this area**:
    `tools/kb.sh search "<the feature's own words>"` over the request's main
    nouns (the module, the endpoint, the error text), and
-   `tools/kb.sh show <slug>` for any feature the hits name — a digest
-   (goal, summary.md, delivery, unmerged harvest candidates, lesson titles)
-   that answers most questions before a single record file is opened.
-   Closed features are included, so a decision made a year ago surfaces
-   with its evidence and delivery. Two or three targeted searches, not a scan of the archive:
-   what you find goes into the Evidence section with its source path.
+   `tools/kb.sh show <slug>` for any feature the hits name (closed ones
+   included — AGENTS.md rule 7). Two or three targeted searches, not a scan
+   of the archive: what you find goes into the Evidence section with its
+   source path.
 2. Pick a kebab-case feature slug; create `.sdlc/work/<slug>/`. Prefix with
    the tracker key when one exists (`a20-1234-fix-login`), else the date
    (`260830-fix-login`) — at thousands of tickets, bare names collide. Slugs
@@ -126,10 +121,9 @@ finding about the Destination, never progress.
 If an Unknown turns out to be an independent shippable change, open a new
 feature slug for it and record the reference under Decided. When resolving
 an Unknown surfaces a durable fact about the system, add it to the feature's
-`.sdlc/work/<slug>/harvest.md` as a domain candidate (merged into DOMAIN.md
-at close, or without closing once the feature is stale — AGENTS.md rule 4;
-readable before either through `tools/kb.sh show`) — Decided records the
-decision, the harvest carries the fact to every later feature.
+`.sdlc/work/<slug>/harvest.md` as a domain candidate (AGENTS.md rule 4) —
+Decided records the decision, the harvest carries the fact to every later
+feature.
 
 ## Write the artifact
 
@@ -213,11 +207,10 @@ refuses a spec or plan approval until intent is re-approved as full.
 ## Gate
 
 At lazymode 4 (AGENTS.md rule 3): review the change itself — the code the
-intent points at and the behavior it would alter. `tools/tripwire.sh` over
-intent.md is one supplemental input: any hit means a fresh-context adversary
-(`roles/adversary.md`) reviews intent.md — this stage has no other adversary
-pass — and the risky work needs recorded authorization. A clean scan clears
-nothing on its own. Max 2 adversary rounds: blockers surviving round 2 mean
+intent points at and the behavior it would alter. A `tools/tripwire.sh` hit
+over intent.md means a fresh-context adversary (`roles/adversary.md`)
+reviews it — this stage has no other adversary pass. Max 2 adversary
+rounds: blockers surviving round 2 mean
 the intent is unclearable — `close.sh <slug> dead-end "intent blockers:
 <list>"` with a lesson, and report them. When your review finds no blocking
 objection, run:
@@ -227,10 +220,9 @@ objection, run:
   --review "<what you actually reviewed>" [--risk-authorized "<the human's words>"]
 ```
 
-Post the intent summary and any objections to the human as FYI, then continue
-to the next stage in the same run — a waived gate is not a stop (AGENTS.md
-rule 3). An unresolved MATERIAL question is the exception: it stops the loop
-here, at every level.
+Post the intent summary and any objections as FYI and continue (AGENTS.md
+rule 3 "A waived gate is not a stop"); an unresolved MATERIAL question
+stops the loop here, at every level.
 
 Below lazymode 4 the intent gate is the human's. Tell the user:
 
@@ -239,6 +231,5 @@ Below lazymode 4 the intent gate is the human's. Tell the user:
 
 and STOP there. After approval, continue to stage 2 (`skills/2-spec/SKILL.md`) — or, on
 the compact route, straight to build (`skills/4-build/SKILL.md`) with the
-intent gate as its gate. Dispatch that work to a subagent only when it buys
-something concrete (AGENTS.md rule 5); the approved artifact, not the
-conversation, is the input either way.
+intent gate as its gate. The approved artifact, not the conversation, is
+the input.
