@@ -107,3 +107,16 @@ updated for that deliberate change.
 - `bash gates/e2e.sh` → `E2E PASS`, 152 · `bash gates/autotest.sh` → `AUTOTEST PASS`, 195
 - CI test runs are paused: `.github/workflows/selftest.yml` now runs only on
   a manual `workflow_dispatch`. This release was merged without a CI run.
+
+## Tests: one smoke test
+
+The kit is mostly instructions, and four suites (about 3,800 lines, several
+minutes per run) mostly re-checked wording. `gates/e2e.sh`,
+`gates/autotest.sh`, `gates/knowledge-test.sh`, and
+`gates/win-restricted-run.py` are removed. `gates/selftest.sh` is now one
+smoke test (~75 lines, a few seconds) covering: scripts parse and are
+LF-only, SKILL.md frontmatter, gates bind content and upstream, lazymode
+limits, close proof (lesson, ship approval, confirmed delivery), and
+product-area filing under a UTF-8 locale. CI runs only that, and only when
+started by hand.
+
