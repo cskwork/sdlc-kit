@@ -18,7 +18,8 @@
   ```
 
 ## Bug proof   <!-- bug fixes only; AGENTS.md rule 6. A missing link = diagnosis, not a fix -->
-- Before: `<the reproduction command / steps>` → <the observed failure, verbatim>
+- Regression test: <path::name, kept in the suite | none — why no test can reach this defect>
+- Before: `<that test, or the reproduction steps>` on the pre-fix code → <the observed failure, verbatim>
 - Mechanism: <why that code produced that failure — the causal chain, not a guess>
 - After: `<the SAME reproduction>` → <passing output>
 - Adjacent flows: <other paths through the changed code> → <checked; result>

@@ -8,10 +8,7 @@ description: "Plan execution with fresh-context verification and triaged fix loo
 Goal: execute the plan and verify each step. Run checks during implementation,
 not only at the end.
 
-Heartbeat: on entry, at every plan step, and at every fix-loop round,
-overwrite `.sdlc/work/<slug>/progress.md` with one line —
-`build <n>/<m> · <doing what> · <ISO timestamp>`, n/m counting plan.md's
-Order of work — and update it before each dispatch (AGENTS.md rule 9).
+Heartbeat throughout: AGENTS.md rule 9.
 
 ## Before you start
 
@@ -21,10 +18,8 @@ Order of work — and update it before each dispatch (AGENTS.md rule 9).
    `gates/check-gate.sh intent .sdlc/work/<slug>/intent.md` instead, and
    treat intent.md's Compact route section (Files · Proof · Risk · Delivery
    target) plus its success criteria as the plan.
-2. Read plan.md and spec.md (compact route: intent.md). Read
-   `.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`,
-   `.sdlc/memory/DOMAIN.md`, and the feature's `harvest.md` if present;
-   open lesson files whose tags match the current task.
+2. Read plan.md and spec.md (compact route: intent.md), and memory
+   (AGENTS.md rule 4).
 3. **Brownfield: capture the regression baseline before editing.** Run the
    baseline commands from plan.md and save output to
    `.sdlc/work/<slug>/baseline.txt`. Without a baseline, you cannot prove that
@@ -59,6 +54,11 @@ Order of work — and update it before each dispatch (AGENTS.md rule 9).
   deviations.md the moment it happens — counters live on disk, not in
   context (AGENTS.md rule 5 "Caps survive dispatch"). Endless spec↔plan
   churn is a finding about intent, never progress.
+- **Bug fix: the failing test comes first.** Before touching the fix, add
+  the regression test (AGENTS.md rule 6; the one stage 6 drafted, if any)
+  and watch it fail on the current code for the reported reason. Save that
+  output under `scratch/`; ship quotes its deciding lines in evidence.md's
+  Bug proof. A test you never saw fail is not proof.
 - A check that must fail the build must fail it synchronously (direct throw,
   sync IO, or top-level await). An unawaited promise is not a gate. It depends
   on environment behavior and may finish too late.
@@ -80,8 +80,7 @@ Order of work — and update it before each dispatch (AGENTS.md rule 9).
   expectation is the correct one. What is forbidden is preserving a wrong
   expectation, and equally, editing a test to make a real failure quiet.
 - **Record each mistake immediately** in the feature's
-  `.sdlc/work/<slug>/harvest.md` (INDEX.md, DOMAIN.md, and lessons/ are
-  written only at close — AGENTS.md rule 4). This includes your mistakes,
+  `.sdlc/work/<slug>/harvest.md` (AGENTS.md rule 4). This includes your mistakes,
   plan mistakes, and surprises in the codebase. Use the skill 6 lesson
   format so a future run can avoid it.
 - Independent parallel work: use worktrees/subagents if your harness supports
