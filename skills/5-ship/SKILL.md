@@ -65,12 +65,16 @@ what would help the next agent — but only what a future run could REUSE
 no lesson. Write what there is into the feature's
 `.sdlc/work/<slug>/harvest.md` (lesson candidates in the skill 6 format;
 durable terms, verified facts, and constraints as domain candidates;
-AGENTS.md rule 4). Then bring the feature's
-`summary.md` up to date: `Result` says what delivery.md confirms (a pushed
-review branch is not a deployment), `Lesson` is the one line worth
-remembering, `Cause`/`Change` match what was actually found and built.
-summary.md is bound by no approval; `tools/kb.sh show` prints it first, so
-a stale one misleads every later reader. Domain facts describe the system; lessons describe mistakes. If a
+AGENTS.md rule 4). **Every business rule this feature set, changed, or
+retired is an area candidate** — the rule in one testable sentence, its
+source (the origin, the spec R-item or compact intent O-item), the P-number
+it changes or retires — plus one
+history line per area it changed. Then finish the feature's `summary.md`:
+`Status` says only what delivery.md confirms (a pushed review branch is not
+a deployment), Before → After and How to check match what was actually
+built and proven, Remember holds the one thing worth knowing next time.
+`tools/kb.sh show` prints it first, so a stale one misleads every later
+reader. Domain facts describe the system; lessons describe mistakes. If a
 stage skill should have prevented a mistake, add `promote: skills/<n>` to
 the lesson candidate. A tag that appears three or more times in INDEX.md
 must be promoted: propose the stage-skill change to the human (`close.sh`
@@ -103,7 +107,7 @@ work:
 > - staged files: <list from `git status --short`>
 > - final diff: <stat line + the deciding hunks, or the scratch file that holds it>
 > - commit message: <subject line + body>
-> - delivery target: <local | pr | deploy, from spec.md's Release procedure>
+> - delivery target: <local | pr | deploy, from spec.md's Release procedure (compact route: intent.md's Delivery target)>
 > Approve this delivery?
 
 If the human already authorized this scope — "ship it when it's green", "push

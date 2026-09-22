@@ -6,8 +6,10 @@ dispatcher names yours; the lenses run in parallel, fresh context each.
 
 Inputs: intent.md and origin.md (the snapshot of the ticket / 기획서 the
 intent gate bound; absent when the request had no origin beyond the chat),
-spec.md and plan.md (compact route: intent.md only), the changed-file list,
-`.sdlc/config.md` commands, and `baseline.txt` when it exists.
+spec.md and plan.md (compact route: intent.md only), summary.md (its `Area:`
+line names the area pages to read with `tools/kb.sh show <area>`), the
+changed-file list, `.sdlc/config.md` commands, and `baseline.txt` when it
+exists.
 
 ## Lens 1 — E2E: does the change work where the user meets it?
 
@@ -39,8 +41,10 @@ spec.md and plan.md (compact route: intent.md only), the changed-file list,
 Assume the feature works and look for what it broke, skewed, or left behind:
 
 1. Brownfield: rerun the baseline commands and diff against `baseline.txt`;
-   check every "stays untouched" item (spec.md U-items) and the neighbouring
-   flows that share the changed code or data. Name them; no quota.
+   check every "stays untouched" item (spec.md U-items), every business
+   rule on the touched area pages that the change did not set out to change
+   (`tools/kb.sh show <area>`), and the neighbouring flows that share the
+   changed code or data. Name them; no quota.
 2. **Data consistency.** Start from plan.md's **Data touched** list (compact
    route: intent.md's Risk line) and add any shape the diff touches that it
    missed — a missed shape is itself a finding. Follow each one to its other

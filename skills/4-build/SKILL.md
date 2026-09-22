@@ -16,12 +16,13 @@ Heartbeat throughout: AGENTS.md rule 9.
    Compact-route features (intent.md `Track: compact`, older spelling
    `micro`) have no spec or plan and never need one: check
    `gates/check-gate.sh intent .sdlc/work/<slug>/intent.md` instead, and
-   treat intent.md's Compact route section (Files · Proof · Risk · Delivery
+   treat intent.md's Compact route section (Files · Proof · Risk · Baseline · Delivery
    target) plus its success criteria as the plan.
 2. Read plan.md and spec.md (compact route: intent.md), and memory
    (AGENTS.md rule 4).
 3. **Brownfield: capture the regression baseline before editing.** Run the
-   baseline commands from plan.md and save output to
+   baseline commands from plan.md (compact route: intent.md's Baseline line)
+   and save output to
    `.sdlc/work/<slug>/baseline.txt`. Without a baseline, you cannot prove that
    existing behavior stayed unchanged.
 
