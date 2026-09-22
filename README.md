@@ -354,7 +354,7 @@ LF-only, every SKILL.md has valid frontmatter, a gate opens only for the approve
 bytes and closes when they or an upstream artifact change, lazymode never goes
 beyond its level, `dead-end` needs a lesson and `shipped` needs a ship approval
 plus a confirmed delivery, and knowledge is filed under its own product area
-under a UTF-8 locale. CI runs it only when started by hand.
+under a UTF-8 locale. CI runs it on pull requests and by hand.
 
 ## What this is not
 

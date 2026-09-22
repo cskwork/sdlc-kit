@@ -1,7 +1,8 @@
 name: selftest
 on:
-  # Paused (v0.15.0): the suites run only when started by hand from the
-  # Actions tab. Restore the push/pull_request triggers to run them on every change.
+  # One smoke test, a few seconds: it runs on pull requests because branch
+  # protection requires its three checks to merge; by hand from the Actions tab.
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
