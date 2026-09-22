@@ -354,6 +354,12 @@ qa:
 # then finds the project's own e2e entry point, and records NOT VERIFIED when
 # there is no runnable environment (roles/verifier.md). Never a new dependency.
 e2e:
+# Optional: the project's own agent or skill to dispatch for each kit role
+# (AGENTS.md "Running beside…" rule 3) — e.g. a debugging skill as researcher,
+# a QA agent as verifier. Empty = the best local fit, else a generic worker.
+researcher:
+verifier:
+adversary:
 EOF
 
 # projects seeded before lazymode existed keep their config; append the block
