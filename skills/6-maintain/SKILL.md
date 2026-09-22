@@ -40,6 +40,9 @@ Everything else is an `[assumed]` line and the diagnosis continues.
    request sent, the command run, the job or schedule that fired)
 2. What happened, and what was expected instead? (nothing at all, an error,
    a wrong result, a partial change, slow) — each is a different bug class.
+   The area page's business rules (`tools/kb.sh show <area>`) are the first
+   reference for "expected"; a report that contradicts one is a question
+   about the rule, not yet a bug.
 3. Where and when? (environment, URL or host, version, time window — this
    picks the deployed ref and the log window)
 4. As whom? (account, role, tenant, client — permissions and data scope
@@ -146,7 +149,9 @@ one contract"). There is no separate compressed loop.
   `.sdlc/work/<fix-slug>/` directory so prior approvals stay intact, and
   write ONE work artifact: `intent.md` with `- Track: compact`, carrying the
   reproduction and diagnosis as verified evidence plus the Compact route
-  section (Files · Proof · Risk · Delivery target). Pass the intent gate,
+  section (Files · Proof · Risk · Baseline · Delivery target), and a
+  summary.md naming the product area (skills/1-intent "Write the
+  artifact"). Pass the intent gate,
   then build and verify under skill 4, then ship. No spec.md, no plan.md, and
   nothing downstream asks for one.
 - **Full route.** Use it for everything else — an unclear cause, a wide blast

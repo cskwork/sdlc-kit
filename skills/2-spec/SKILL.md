@@ -41,9 +41,10 @@ Fill `templates/spec.md`. Rules:
   and serialization end to end.
 - Behavior as AS-IS → TO-BE pairs (template table). Brownfield AS-IS comes
   from explorer or browser evidence with file:line or capture references. Use
-  observations, not memory. The pair format is also how the change is
-  presented to the human at the gate: what happens today, what will happen
-  after.
+  observations, not memory. The business rules on the area page (P-numbers)
+  are AS-IS too: name each one this change keeps, changes, or retires. The
+  pair format is also how the change is presented to the human at the gate:
+  what happens today, what will happen after.
 - Brownfield: include a **"What stays untouched"** section with testable
   statements about behavior that must survive. This becomes the regression baseline.
 - **Ask for constraints the code does not show.** Ownership boundaries,
@@ -62,8 +63,8 @@ gate, not whether the spec is reviewed (AGENTS.md rule 3). Include
 `tools/tripwire.sh` output over the draft as evidence.
 
 Dispatch a fresh-context adversary (`roles/adversary.md`) with ONLY:
-intent.md, draft spec.md, `.sdlc/memory/POLICY.md` if present, and the
-researcher report if any. It checks intent mismatch, wrong data shapes,
+intent.md, draft spec.md, `.sdlc/memory/POLICY.md` if present, the area
+pages summary.md names, and the researcher report if any. It checks intent mismatch, wrong data shapes,
 missing edge cases, scope creep, untestable requirements, and policy
 violations.
 

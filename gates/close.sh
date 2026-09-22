@@ -4,7 +4,7 @@
 #   The reason MUST contain the external ticket/PR reference (e.g. A20-1240).
 # Terminal state for a feature. Human decision; --delegated per AGENTS.md rule 3.
 # A dead-ended feature must leave MORE knowledge behind than it consumed:
-# closing requires a lesson (dead-end/abandoned) and a DOMAIN.md harvest check.
+# closing requires a lesson (dead-end/abandoned) and a merged harvest.md.
 # `shipped` requires a DELIVERY: the ship approval must still bind the reviewed
 # evidence AND the reviewed source snapshot, and delivery.md must record a
 # confirmed result whose Source is that source — a commit that contains it, or
@@ -269,8 +269,9 @@ fi
 # harvest.md means lesson/domain candidates were never merged into memory/.
 if [ -f "$dir/harvest.md" ]; then
   echo "BLOCKED: unmerged harvest: $dir/harvest.md"
-  echo "  Merge it into .sdlc/memory/ (lesson files + INDEX.md lines + DOMAIN.md"
-  echo "  facts), delete the file, then re-run. Close is the single-writer moment."
+  echo "  Merge it into .sdlc/memory/ (area pages: rules + history; DOMAIN.md facts;"
+  echo "  lesson files + INDEX.md lines — AGENTS.md rule 4), delete the file, then"
+  echo "  re-run. Close is the single-writer moment."
   exit 1
 fi
 
@@ -364,7 +365,7 @@ if [ -f .sdlc/memory/INDEX.md ]; then
   fi
 fi
 
-echo "Reminder: harvest durable facts into .sdlc/memory/DOMAIN.md."
+echo "Reminder: file what this feature taught in .sdlc/memory/ — area pages, DOMAIN.md, lessons (AGENTS.md rule 4)."
 if [ -n "$in_git" ]; then
   # Records are gitignored, so there is normally nothing to stage but the
   # .gitignore rule itself. A project seeded by an older kit may still TRACK
