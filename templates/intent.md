@@ -2,9 +2,9 @@
 
 - Goal: <ONE plain-language sentence anyone can understand — who can do what
   once this ships. Written to be copy-pasted into a status report verbatim.>
-  <!-- The reader's digest (Problem/Cause/Change/Result/Lesson, Tags) lives in
-       summary.md (templates/summary.md), NOT here: this file is frozen by its
-       approval, summary.md is meant to be kept current. -->
+  <!-- The reader's page (Area, what was wrong, before → after, how to check)
+       lives in summary.md (templates/summary.md), NOT here: this file is
+       frozen by its approval, summary.md is meant to be kept current. -->
 - Date: YYYY-MM-DD
 - Type: greenfield | brownfield
 - Track: full (default) | compact — <compact only when ALL criteria in skills/1-intent hold; `micro` is the older spelling of compact>
@@ -42,6 +42,7 @@ else the human's. Name a command or test where possible.>
 - Files: <exact paths and symbols that change>
 - Proof: <the existing command from .sdlc/config.md that proves it (bug fix: the regression test it runs — AGENTS.md rule 6), and what its passing output means>
 - Risk: <blast radius, what else touches this code, the single revert that undoes it>
+- Baseline: <brownfield: the command(s) whose output must not change, run before the edit into baseline.txt | none — greenfield>
 - Delivery target: local | pr | deploy   <!-- what "shipped" will have to prove; becomes delivery.md's Target -->
 
 ## Out of scope / must not change

@@ -212,7 +212,7 @@ if [ -n "$area" ]; then
   echo "Knowledge area: $store (linked as $project_phys/.sdlc)"
 fi
 
-mkdir -p .sdlc/work .sdlc/approvals .sdlc/memory/lessons
+mkdir -p .sdlc/work .sdlc/approvals .sdlc/memory/lessons .sdlc/memory/areas
 
 # Append a line to a project file unless it is already there, verbatim.
 # tr -d '\r': a CRLF file would never match, re-appending the line each run.
@@ -302,8 +302,8 @@ EOF
 EOF
 
 [ -f .sdlc/memory/DOMAIN.md ] || cat > .sdlc/memory/DOMAIN.md <<'EOF'
-# Domain knowledge — how THIS system works (≤100 lines; over → split by
-# subdomain into memory/domain/<area>.md and keep one pointer line here)
+# Domain knowledge — how THIS system works: terms and facts that span areas
+# (≤100 lines; over → move area-specific facts to memory/areas/<area-slug>.md)
 # ONE writer: the close step. Mid-loop candidates stage in the feature's
 # work/<slug>/harvest.md and merge here at close (AGENTS.md rule 4).
 # Facts carry [verified: how — YYYY-MM-DD]. Recency wins: a merge candidate

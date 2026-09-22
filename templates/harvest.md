@@ -1,17 +1,19 @@
 # Harvest: <feature slug>
 
-<!-- Mid-loop staging for shared memory (AGENTS.md rule 4). Stages and
-     researchers append candidates HERE, never to INDEX.md or DOMAIN.md —
-     parallel loops would race or merge-conflict on the shared files.
-     At close: merge into memory/ (lesson files + INDEX.md lines + DOMAIN.md
-     facts), then DELETE this file. close.sh blocks while it exists.
-     Readable BEFORE close: `tools/kb.sh show <slug>` and the contents page
-     print these candidates, and `tools/kb.sh harvest` lists every open
-     feature that still holds one. A feature idle 30 days or more may be
-     merged without closing (same procedure; it stays open — rule 4). -->
+<!-- Mid-loop staging for shared memory: one line per candidate, merged into
+     memory/ at close and then deleted — AGENTS.md rule 4 says what goes
+     where, and what a stale merge holds back. close.sh blocks while this
+     file exists. -->
+
+## Area candidates
+<!-- - [area: <menu path>] rule new | P<n> changed | P<n> retired: <rule> — source · [verified: how — YYYY-MM-DD]
+     - [area: <menu path>] fact: <holds for this area only> — [verified: how — YYYY-MM-DD]
+     - [area: <menu path>] history: YYYY-MM-DD <slug> — <what changed for the user>
+     Rules and history merge only when the feature closes shipped; a stale
+     merge leaves them here (rule 4). The merge numbers a new rule. -->
 
 ## Domain candidates
-<!-- - fact / term / constraint — [verified: how — YYYY-MM-DD]
+<!-- - fact / term / constraint that spans areas — [verified: how — YYYY-MM-DD]
      Contradicts an existing DOMAIN.md entry? Add `supersedes: <old line>` —
      the close merge REPLACES the old entry; recency wins, never keep both. -->
 
