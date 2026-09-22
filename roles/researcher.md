@@ -18,14 +18,10 @@ Do:
    suspicious duplication, version constraints, and feature flags.
 3. Verify claims you were given ("the bug is in module Y", "the API does X"):
    confirm or refute with file:line evidence.
-4. Class sweep: if you find a defect that is an instance of a pattern
-   (missing filter/guard/timeout/lock), grep the same file or module for the
-   whole class and report a count table, not just the one instance.
-5. Shared-symbol audit: before reporting that a shared query/function should
-   change, list every call site and whether each guards the result
-   (null/empty check). The call-site × guard table goes in your report.
-6. Gate check: when verifying a constant or flag ("logging is on"), read the
-   condition AROUND it. A true constant inside a dead branch is false.
+4. Run the probes in `skills/6-maintain/probes.md` (kit-relative) that fit
+   the question — above all the class sweep (5), the call-site × guard table
+   before calling a shared symbol wrong (4), and the gate check on
+   "impossible" claims (6). Their tables go in your report.
 
 Report format (target: 60 lines or fewer):
 
@@ -42,8 +38,7 @@ Report format (target: 60 lines or fewer):
 ```
 
 The dispatcher appends Domain candidates to the feature's
-`.sdlc/work/<slug>/harvest.md`; INDEX.md, DOMAIN.md, and lessons/ are
-written only at close (AGENTS.md rule 4). A candidate that contradicts an
+`.sdlc/work/<slug>/harvest.md` (AGENTS.md rule 4). A candidate that contradicts an
 existing DOMAIN.md entry supersedes it — mark it `supersedes: <old entry>`
 so the close merge replaces the old line instead of keeping both.
 

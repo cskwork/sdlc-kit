@@ -212,7 +212,7 @@ An abandoned or dead-end run cannot close until a lesson exists (at lazymode ≥
 
 ### Incident diagnosis starts with cheap probes
 
-Stage 6 does not begin with a broad agent fan-out. It first checks the deployed source — `refcheck.sh` compares the working tree's content (staged, unstaged, and untracked alike) against the target revision, takes the real deployment SHA with `--deployed-sha` when the release system reports one, and reports UNKNOWN rather than guessing when a ref or fetch fails — asks which control failed, tracks requested reproduction evidence, and runs the short probes in `skills/6-maintain/probes.md`.
+Stage 6 does not begin with a broad agent fan-out. It first checks the deployed source — `refcheck.sh` compares the working tree's content (staged, unstaged, and untracked alike) against the target revision, takes the real deployment SHA with `--deployed-sha` when the release system reports one, and reports UNKNOWN rather than guessing when a ref or fetch fails — asks what was done with what input, what happened instead, where, as whom, and what trace exists (the same five questions for a UI, an API, a job, or a CLI), tracks requested reproduction evidence, and runs the short probes in `skills/6-maintain/probes.md`.
 
 The probes catch four common diagnosis mistakes before they reach a fix plan:
 
@@ -220,6 +220,8 @@ The probes catch four common diagnosis mistakes before they reach a fix plan:
 - changing one shared query without auditing every caller;
 - adding a `try/catch` where the lower layer already swallows the error;
 - calling a change "zero risk" without checking normal missing-data states.
+
+A bug fix starts with a regression test that fails on the pre-fix code for the reported reason; the same test passes after and stays in the suite. Manual steps or logs stand in only when no test can reach the defect, and the evidence says why.
 
 When the incident cannot be reproduced, fresh-context adversaries recount the scope, prove the claimed error propagation, attack every "never" claim, and propose a rival cause. Outstanding console, network, or screenshot evidence stays visible in `status.sh` until it is received or the human waives it.
 

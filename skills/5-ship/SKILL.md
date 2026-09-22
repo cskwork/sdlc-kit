@@ -9,9 +9,7 @@ Goal: create `evidence.md` so a human can decide whether to release, then
 deliver and record what was delivered in `delivery.md`. Run agent reviews
 first. The human reviews findings about intent and risk.
 
-Heartbeat: on entry and at every sub-task change, overwrite
-`.sdlc/work/<slug>/progress.md` with one line —
-`ship · <doing what> · <ISO timestamp>` (AGENTS.md rule 9).
+Heartbeat throughout: AGENTS.md rule 9.
 
 ## Before you start
 
@@ -20,10 +18,7 @@ rule 5); assembling the evidence itself may stay with the implementer. Read plan
 present), and the diff (`git diff` against the base branch). Compact-route
 features have no spec or plan: intent.md replaces both as the upstream
 source, and its Compact route section and success criteria are the
-requirements. Read
-`.sdlc/memory/POLICY.md`, `.sdlc/memory/INDEX.md`, `.sdlc/memory/DOMAIN.md`,
-and the feature's `harvest.md`; open lesson files whose tags match the
-current task.
+requirements. Read memory (AGENTS.md rule 4).
 
 ## Adversarial code review (fresh context)
 
@@ -69,10 +64,8 @@ what would help the next agent — but only what a future run could REUSE
 (skills/6-maintain "Record the lesson"); a clean feature legitimately leaves
 no lesson. Write what there is into the feature's
 `.sdlc/work/<slug>/harvest.md` (lesson candidates in the skill 6 format;
-durable terms, verified facts, and constraints as domain candidates).
-INDEX.md, DOMAIN.md, and lessons/ are written only at close, by the closer
-(AGENTS.md rule 4) — or, for a feature that stays open and idle, by the
-stale-harvest merge the same rule allows. Then bring the feature's
+durable terms, verified facts, and constraints as domain candidates;
+AGENTS.md rule 4). Then bring the feature's
 `summary.md` up to date: `Result` says what delivery.md confirms (a pushed
 review branch is not a deployment), `Lesson` is the one line worth
 remembering, `Cause`/`Change` match what was actually found and built.
