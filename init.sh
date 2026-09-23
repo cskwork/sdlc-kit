@@ -303,7 +303,7 @@ EOF
 
 [ -f .sdlc/memory/DOMAIN.md ] || cat > .sdlc/memory/DOMAIN.md <<'EOF'
 # Domain knowledge — how THIS system works: terms and facts that span areas
-# (≤100 lines; over → move area-specific facts to memory/areas/<area-slug>.md)
+# (≤100 lines; over → move area-specific facts to memory/areas/<menu path>.md)
 # ONE writer: the close step. Mid-loop candidates stage in the feature's
 # work/<slug>/harvest.md and merge here at close (AGENTS.md rule 4).
 # Facts carry [verified: how — YYYY-MM-DD]. Recency wins: a merge candidate
