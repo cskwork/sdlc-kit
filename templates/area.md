@@ -22,6 +22,13 @@
        - ~~P3: <rule>~~ — retired YYYY-MM-DD by <slug>: <why>
      Not POLICY.md — that file holds the human's rules for agents. -->
 
+## Numbers (통계 산정)
+<!-- Only for an area that shows counts, rates, scores or charts; delete the
+     section otherwise. One line per figure, named as the screen labels it:
+       - N1: <label on screen> — <what is counted> / <out of what> · <real-time | batch: <job>, refreshed <when>, data up to <when>> — source: <기획서 / ticket / code, date> · set by <slug> · [verified: how — YYYY-MM-DD]
+     N-numbers follow the P-number rules above: permanent, a changed figure is
+     edited in place, a retired one is kept struck through. -->
+
 ## How it works
 <!-- ≤10 lines: what the user does, step by step, what the system does in
      response, and facts that hold for this area only. Use DOMAIN.md terms;

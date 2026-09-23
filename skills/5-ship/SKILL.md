@@ -69,7 +69,9 @@ AGENTS.md rule 4). **Every business rule this feature set, changed, or
 retired is an area candidate** — the rule in one testable sentence, its
 source (the origin, the spec R-item or compact intent O-item), the P-number
 it changes or retires — plus one
-history line per area it changed. Then finish the feature's `summary.md`:
+history line per area it changed. **A figure the area page shows a Numbers
+section for is treated the same way**: the N-number it sets, changes, or
+retires, named on screen, with what it counts and its source. Then finish the feature's `summary.md`:
 `Status` says only what delivery.md confirms (a pushed review branch is not
 a deployment), Before → After and How to check match what was actually
 built and proven, Remember holds the one thing worth knowing next time.

@@ -148,6 +148,7 @@ archives the feature to `.sdlc/archive/<slug>/`.
    | What | Where | Written by |
    |---|---|---|
    | A product's business rule (정책) — "a submitted answer cannot be edited" | `memory/areas/<area-slug>.md` Business rules, numbered P1… (templates/area.md) | close merge, shipped only |
+   | How an on-screen count, rate, score or chart figure is calculated | the same page's Numbers, numbered N1… (templates/area.md) | close merge, shipped only |
    | What changed in an area, when | the area page's History, one line per feature | close merge, shipped only |
    | A fact that holds for one area only | the area page's How it works | close merge |
    | A term, or a system fact/constraint that spans areas | `memory/DOMAIN.md` (100 lines max) | close merge |
