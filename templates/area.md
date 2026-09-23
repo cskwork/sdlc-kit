@@ -49,6 +49,11 @@
      its summary.md. -->
 - YYYY-MM-DD <slug> — <what changed for the user>
 
+<!-- In a store with `index_style: obsidian` write this block as a folded
+     callout instead, every line prefixed "> ":
+       > [!info]- 근거 · 코드 위치 (개발자용)
+       > - Where: <…>
+       > - P1 — source: … · set by … · [verified: …] -->
 <details>
 <summary>근거 · 코드 위치 (개발자용)</summary>
 

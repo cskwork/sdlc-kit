@@ -66,6 +66,11 @@ rule count still counts only the live `- P<n>:` rules.
   headings are unchanged. `templates/harvest.md`'s area candidates split
   the plain sentence from its evidence the same way, and ship's
   retrospective says which part goes where.
+- **Obsidian form of the evidence block.** Obsidian does not render markdown
+  inside `<details>`, so a store with `index_style: obsidian` writes it as
+  a folded callout (`> [!info]- 근거 · 코드 위치 (개발자용)`, every line
+  prefixed `> `); `kb.sh` reads both forms (Where found, callout lines
+  printed last without `> `, never counted as rules).
 - **README.md / README.ko.md**: the "Knowledge is filed by product area"
   paragraph and the memory-tree comment now mention the optional Numbers
   section, the menu-path file name, and the folded evidence block.
@@ -106,4 +111,5 @@ with only P-numbers renders identically to before). No script parses the
   a retired rule: the contents-page row links the percent-encoded path with
   a Rules count of 2 (evidence and retired lines not counted); `show` by
   Menu and by file name prints the rules before the evidence block; a
-  lookup holding `/` is refused. With the old `kb.sh`, the test fails.
+  lookup holding `/` is refused; a second page in the Obsidian callout form
+  is read the same way. With the old `kb.sh`, the test fails.

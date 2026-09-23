@@ -149,7 +149,7 @@ archives the feature to `.sdlc/archive/<slug>/`.
    |---|---|---|
    | A product's business rule (정책) — "a submitted answer cannot be edited" | `memory/areas/<menu path>.md` Business rules, numbered P1…, one plain sentence each (templates/area.md) | close merge, shipped only |
    | How an on-screen count, rate, score or chart figure is calculated | the same page's Numbers, numbered N1… (templates/area.md) | close merge, shipped only |
-   | Where a rule or figure came from, and the code behind the area | the same page's evidence block at the bottom (`<details>`): `P1 — source · set by · [verified]`, the Where line | close merge |
+   | Where a rule or figure came from, and the code behind the area | the same page's evidence block at the bottom (`<details>`, or the folded callout `> [!info]-` in an Obsidian store (index_style: obsidian)): `P1 — source · set by · [verified]`, the Where line | close merge |
    | What changed in an area, when | the area page's History, one line per feature | close merge, shipped only |
    | A fact that holds for one area only | the area page's How it works | close merge |
    | A term, or a system fact/constraint that spans areas | `memory/DOMAIN.md` (100 lines max) | close merge |
@@ -166,7 +166,8 @@ archives the feature to `.sdlc/archive/<slug>/`.
    (`교사 > 학생 > 학급 분석` → `memory/areas/교사 - 학생 - 학급 분석.md`).
    An area page reads reader first: rules, figures, how it works and history
    in plain language on top; every source, verification, and code identifier
-   in the evidence block at the bottom. DOMAIN over its limit: move
+   in the evidence block at the bottom — a `<details>` block, or the folded
+   callout in an Obsidian store (index_style: obsidian). DOMAIN over its limit: move
    area-specific facts to their area page. INDEX over its limit: merge
    near-duplicates, drop superseded entries, replace promoted ones
    (skills/6-maintain).
