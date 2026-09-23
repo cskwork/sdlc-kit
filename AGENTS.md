@@ -147,8 +147,10 @@ archives the feature to `.sdlc/archive/<slug>/`.
 
    | What | Where | Written by |
    |---|---|---|
-   | A product's business rule (정책) — "a submitted answer cannot be edited" | `memory/areas/<area-slug>.md` Business rules, numbered P1… (templates/area.md) | close merge, shipped only |
-   | What changed in an area, when | the area page's History, one line per feature | close merge, shipped only |
+   | A product's business rule (정책) — "a submitted answer cannot be edited" | `memory/areas/<menu path>.md` Business rules table, one row per rule — P1…, one plain sentence (templates/area.md) | close merge, shipped only |
+   | How an on-screen count, rate, score or chart figure is calculated | the same page's Numbers table, one row per figure — N1… (templates/area.md) | close merge, shipped only |
+   | Where a rule or figure came from, and the code behind the area | the same page's evidence block at the bottom (`<details>`, or the folded callout `> [!info]-` in an Obsidian store (index_style: obsidian)): the Where line, then one evidence row per rule or figure — `\| P1 \| source \| set by \| verified \|` | close merge |
+   | What changed in an area, when | the area page's History table, one row per feature | close merge, shipped only |
    | A fact that holds for one area only | the area page's How it works | close merge |
    | A term, or a system fact/constraint that spans areas | `memory/DOMAIN.md` (100 lines max) | close merge |
    | A trap and the correct move | `memory/lessons/<date>-<slug>.md` + one `INDEX.md` line (50 lines max) | close merge |
@@ -159,7 +161,13 @@ archives the feature to `.sdlc/archive/<slug>/`.
    named by its menu path (`학습 > 평가 > 제출`); otherwise a module, API,
    job, or CLI command — not the `--area` knowledge folder of rule 7.
    summary.md's `Area:` line and the page's `Menu:` line use the same words,
-   which is how `kb.sh` links them. DOMAIN over its limit: move
+   which is how `kb.sh` links them. The page's file name is that Menu with
+   each ` > ` written ` - ` and any of `/ \ : * ? " < > |` replaced with `-`
+   (`교사 > 학생 > 학급 분석` → `memory/areas/교사 - 학생 - 학급 분석.md`).
+   An area page reads reader first: rules, figures and history as table rows
+   and how it works as bullets, in plain language, on top; every source, verification, and code identifier
+   in the evidence block at the bottom — a `<details>` block, or the folded
+   callout in an Obsidian store (index_style: obsidian). DOMAIN over its limit: move
    area-specific facts to their area page. INDEX over its limit: merge
    near-duplicates, drop superseded entries, replace promoted ones
    (skills/6-maintain).
@@ -167,8 +175,11 @@ archives the feature to `.sdlc/archive/<slug>/`.
    stages and researchers append candidates — one line each — to
    `.sdlc/work/<slug>/harvest.md` (templates/harvest.md). At close, merge
    every candidate into its row above — creating an area page from the
-   template when none exists, numbering new rules, adding the feature's
-   History line to each area it changed — then delete harvest.md. Business
+   template when none exists (file named by its menu path, as above),
+   numbering new rules, writing each rule or figure as a table row and its
+   source as its evidence row, adding the feature's History row to each
+   area it changed (a line-shaped candidate becomes a row) — then delete
+   harvest.md. Business
    rules and History describe what the product DOES, so they merge only when
    the feature closes `shipped`: any other close drops them (summary.md keeps
    the story), and a stale merge leaves them in harvest.md for that close;
