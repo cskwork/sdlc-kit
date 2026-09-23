@@ -147,11 +147,19 @@ kb_hashtags() { # "tag, tag" → "#tag #tag" for Obsidian's tag pane (spaces ins
 # Obsidian form) become `X:` labels — the callout's own lines print without
 # their "> " prefix — so a record embedded in the
 # contents page cannot hijack its outline. A heading with nothing under it yet
-# is dropped too: an unfinished record prints only what is known.
+# is dropped too: an unfinished record prints only what is known. A markdown
+# table prints as written, except a template placeholder row (every cell after
+# the first is only `<…>`); a table left with no data row loses its header too.
 kb_body() { # <file>
   [ -f "$1" ] || return 0
   awk '
-    BEGIN { c = 0; q = 0 }
+    function ph(l,   a, n, i, x) { # a template placeholder row: every cell after the first is <…>
+      gsub(/\\\|/, "\001", l); sub(/^[ \t]*\|/, "", l); sub(/\|[ \t]*$/, "", l)
+      n = split(l, a, "|")
+      for (i = 2; i <= n; i++) { x = a[i]; gsub(/^[ \t]+|[ \t]+$/, "", x); if (x !~ /^<.*>$/) return 0 }
+      return n >= 2
+    }
+    BEGIN { c = 0; q = 0; tb = 0 }
     {
       line = $0
       if (c) { i = index(line, "-->"); if (i) { c = 0; line = substr(line, i + 3) } else next }
@@ -166,6 +174,15 @@ kb_body() { # <file>
       if (line ~ /^# /) next
       if (line ~ /^##+ /) { sub(/^#+ +/, "", line); pend = line ":"; next }
       if (line ~ /^[ \t]*<summary>.*<\/summary>[ \t]*$/) { sub(/^[ \t]*<summary>[ \t]*/, "", line); sub(/[ \t]*<\/summary>[ \t]*$/, "", line); pend = line ":"; next }
+      if (line ~ /^[ \t]*\|/) {   # a table: hold the header and separator until a data row shows
+        if (!tb) { tb = 1; hd = line; hs = ""; next }
+        if (hd != "" && hs == "" && line ~ /^[ \t]*\|[ \t:|-]+$/) { hs = line; next }
+        if (ph(line)) next
+        if (pend != "") { print pend; pend = "" }
+        if (hd != "") { print hd; if (hs != "") print hs; hd = ""; hs = "" }
+        print line; next
+      }
+      tb = 0; hd = ""; hs = ""
       if (line ~ /^[ \t]*$/) next
       if (line ~ /^[ \t]*[-*] *<[^>]*>[ \t]*$/) next
       if (line ~ /^[ \t]*<[^>]*>[ \t]*$/) next
@@ -225,13 +242,23 @@ kb_area_menu() { # <page> → its Menu line, else its H1, else its file name (an
   case "$m" in ''|'<'*) m=$(basename "$1" .md);; esac
   printf '%s' "$m"
 }
-# Live rules: the top "- P<n>: rule" lines. A retired one reads "- ~~P…", an
-# evidence line "- P<n> — source…" (no colon after the number; "> - P<n> —" in
-# an Obsidian callout — never at column 0), and an unfilled
-# template line "- P1: <…>" — none of them counts.
-kb_area_rules() { awk '/^- P[0-9]+:/ && !/^- P[0-9]+: *</ { n++ } END { print n + 0 }' "$1"; }
-kb_area_last() { # <page> → the date of the newest History line
-  awk '/^## /{ h = ($0 ~ /^## History/); next } h && /^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ { print substr($0, 3, 10); exit }' "$1"
+# Live rules: the "| P<n> | rule |" table rows, and the "- P<n>: rule" list
+# lines pages written before the table form still hold — counted only ABOVE
+# the evidence block (the `<details>` or `> [!…]` line), whose rows carry the
+# same P-numbers. Row shapes only, never header words. A retired rule reads
+# "| ~~P…" or "- ~~P…", and an unfilled template row "| P1 | <…> |" (or line
+# "- P1: <…>") — none of them counts.
+kb_area_rules() {
+  awk '/^[ \t]*<details/ || /^> *\[!/ { exit }
+    /^- P[0-9]+:/ && !/^- P[0-9]+: *</ { n++; next }
+    /^\| *P[0-9]+ *\|/ { r = $0; sub(/^\| *P[0-9]+ *\| */, "", r); if (r !~ /^</) n++ }
+    END { print n + 0 }' "$1"
+}
+kb_area_last() { # <page> → the date of History's first (newest) row "| YYYY-MM-DD |", or list line "- YYYY-MM-DD"
+  awk '/^[ \t]*<details/ || /^> *\[!/ { exit }
+    /^## /{ h = ($0 ~ /^## History/); next }
+    h && (/^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ || /^\| *[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] *\|/) {
+      match($0, /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/); print substr($0, RSTART, 10); exit }' "$1"
 }
 # "<area><SEP><kind><SEP><slug><SEP><dir>" for every feature naming an area.
 kb_area_refs() { # <store>
