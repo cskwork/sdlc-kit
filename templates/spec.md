@@ -35,6 +35,7 @@ cases where they apply.>
 
 ## Business rules touched   <!-- from the area page(s) summary.md names; the verifier re-checks every kept one -->
 - <area> P1: kept · P3: changed → R2 · P4: retired → R5 · new rule → R6
+- <area> N1: kept · N2: changed → R2 · new figure → R6   <!-- only if the area page has a Numbers section; same treatment as business rules -->
 
 ## What stays untouched   <!-- brownfield: testable statements; becomes regression baseline -->
 - U1: <existing behavior>; checked by <command/test>
