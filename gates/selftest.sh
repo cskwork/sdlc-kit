@@ -67,33 +67,36 @@ LC_ALL=en_US.UTF-8 bash "$kit/tools/kb.sh" index >/dev/null
 grep -qF '| [명단 > 내보내기](memory/areas/roster.md) | 1 | — | f1 |' .sdlc/README.md || fail "area table wrong: $(grep '명단' .sdlc/README.md)"
 out=$(bash "$kit/tools/kb.sh" show "명단 > 내보내기")
 case "$out" in (*"P1: 현재 학기만"*) ;; (*) fail "show <menu path> did not print the rule: $out";; esac
-#    a page named by its menu path (" > " → " - "), reader first: plain rules on
-#    top, evidence in <details> at the bottom — evidence lines do not count as rules
+#    a page named by its menu path (" > " → " - "), reader first, in tables:
+#    rules counted from rows above the evidence block (evidence and retired rows
+#    are not), last change from the History table, header words free
 mkdir -p .sdlc/work/f3; printf -- '- Area: 교사 > 학생 > 학급 분석\n' > .sdlc/work/f3/summary.md
-printf -- '%s\n' '# Area: 교사 > 학생 > 학급 분석' '- Menu: 교사 > 학생 > 학급 분석' '## Business rules (정책)' \
-  '- P1: 자기 학급만 본다' '- P2: 전학생은 빠진다' '- ~~P3: 지난 학기도 보인다~~' '## History' '- 2026-09-01 f3 — 참여율 추가' \
-  '<details>' '<summary>근거 · 코드 위치 (개발자용)</summary>' '' '- Where: ClassAnalysis#get' \
-  '- P1 — source: 기획서 · set by f3' '- P3 — retired 2026-09-01 by f3: 정책 변경' '' '</details>' > ".sdlc/memory/areas/교사 - 학생 - 학급 분석.md"
+printf -- '%s\n' '# Area: 교사 > 학생 > 학급 분석' '- Menu: 교사 > 학생 > 학급 분석' '## Business rules (정책)' '| # | 정책 |' '|---|---|' \
+  '| P1 | 자기 학급만 본다 |' '| P2 | 전학생은 빠진다 |' '| ~~P3~~ | ~~지난 학기도 보인다~~ |' '| P4 | <rule> |' \
+  '## History' '| 날짜 | 작업 | 바뀐 점 |' '|---|---|---|' '| 2026-09-01 | f3 | 참여율 추가 |' '| 2026-08-01 | f1 | 처음 |' \
+  '<details>' '<summary>근거 · 코드 위치 (개발자용)</summary>' '' '- Where: ClassAnalysis#get' '' '| # | 출처 | 작업 | 검증 |' '|---|---|---|---|' \
+  '| P1 | 기획서 | f3 | code — 2026-09-01 |' '| P3 | retired 2026-09-01 by f3: 정책 변경 | f3 | human |' '' '</details>' > ".sdlc/memory/areas/교사 - 학생 - 학급 분석.md"
+#    the Obsidian form of the evidence block: a folded callout, lines prefixed "> "
+printf -- '%s\n' '- Menu: 학생 > 과제' '## Business rules (정책)' '| # | Rule |' '|---|---|' '| P1 | 마감 후 제출 불가 |' \
+  '## History' '| Date | Feature | What changed |' '|---|---|---|' '| 2026-09-02 | f4 | 마감 표시 |' \
+  '> [!info]- 근거 · 코드 위치 (개발자용)' '> - Where: HomeworkApi#submit' '>' '> | # | Source | Set by | Verified |' '> |---|---|---|---|' \
+  '> | P1 | 기획서 | f4 | test — 2026-09-02 |' '> | P2 | 증거 행은 규칙이 아니다 | f4 | — |' > ".sdlc/memory/areas/학생 - 과제.md"
 LC_ALL=en_US.UTF-8 bash "$kit/tools/kb.sh" index >/dev/null
 grep -qF '| [교사 > 학생 > 학급 분석](memory/areas/교사%20-%20학생%20-%20학급%20분석.md) | 2 | 2026-09-01 | f3 |' .sdlc/README.md \
-  || fail "menu-named page row wrong: $(grep '교사' .sdlc/README.md)"
+  || fail "menu-named table page row wrong: $(grep '교사' .sdlc/README.md)"
+grep -qF '| [학생 > 과제](memory/areas/학생%20-%20과제.md) | 1 | 2026-09-02 | — |' .sdlc/README.md || fail "callout page row wrong: $(grep '과제' .sdlc/README.md)"
 for q in "교사 > 학생 > 학급 분석" "교사 - 학생 - 학급 분석"; do
   out=$(bash "$kit/tools/kb.sh" show "$q") || fail "show '$q' found no page"
-  case "$out" in (*"P1: 자기 학급만"*"근거 · 코드 위치 (개발자용):"*"Where: ClassAnalysis#get"*) ;; (*) fail "show '$q' not reader first: $out";; esac
+  case "$out" in (*"| P1 | 자기 학급만"*"| 2026-09-01 | f3 |"*"근거 · 코드 위치 (개발자용):"*"Where: ClassAnalysis#get"*"| P3 | retired"*) ;; (*) fail "show '$q' not reader first: $out";; esac
+  case "$out" in (*"<rule>"*) fail "show printed a placeholder row: $out";; esac
 done
-bash "$kit/tools/kb.sh" show "../areas/roster" >/dev/null 2>&1 && fail "area lookup followed a path"
-#    the Obsidian form of the evidence block: a folded callout, lines prefixed "> "
-printf -- '%s\n' '- Menu: 학생 > 과제' '## Business rules (정책)' '- P1: 마감 후 제출 불가' '## History' '- 2026-09-02 f4 — 마감 표시' \
-  '> [!info]- 근거 · 코드 위치 (개발자용)' '> - Where: HomeworkApi#submit' '> - P1 — source: 기획서 · set by f4' '> - P2: 콜론 줄도 규칙이 아니다' \
-  > ".sdlc/memory/areas/학생 - 과제.md"
-LC_ALL=en_US.UTF-8 bash "$kit/tools/kb.sh" index >/dev/null
-grep -qF '| [학생 > 과제](memory/areas/학생%20-%20과제.md) | 1 | 2026-09-02 | — |' .sdlc/README.md || fail "callout page row wrong: $(grep '과제' .sdlc/README.md)"
 out=$(bash "$kit/tools/kb.sh" show "학생 > 과제") || fail "show found no callout page"
-case "$out" in (*"P1: 마감 후"*"History:"*"근거 · 코드 위치 (개발자용):"*"  - Where: HomeworkApi#submit"*) ;; (*) fail "callout evidence not read last: $out";; esac
-case "$out" in (*"> -"*) fail "callout prefix printed: $out";; esac
+case "$out" in (*"| P1 | 마감 후"*"History:"*"근거 · 코드 위치 (개발자용):"*"  - Where: HomeworkApi#submit"*"  | P1 | 기획서 | f4 |"*) ;; (*) fail "callout evidence not read last: $out";; esac
+printf '%s\n' "$out" | grep -q '^ *>' && fail "callout prefix printed: $out"
 fns=$(sed -n -e '/^kb_field() {/,/^}/p' -e '/^kb_get() {/,/^}/p' "$kit/tools/kb.sh")
 where=$(eval "$fns"; kb_get ".sdlc/memory/areas/학생 - 과제.md" Where)
 [ "$where" = "HomeworkApi#submit" ] || fail "kb_get did not read Where inside the callout: '$where'"
+bash "$kit/tools/kb.sh" show "../areas/roster" >/dev/null 2>&1 && fail "area lookup followed a path"
 echo "ok: knowledge by product area"
 
 echo "SELFTEST PASS"

@@ -72,9 +72,9 @@ evidence, the source (the origin, the spec R-item or compact intent O-item)
 and how it was verified — plus one history line per area it changed. **A
 figure the area page shows a Numbers section for is treated the same way**:
 the N-number it sets, changes, or retires, named on screen, with what it
-counts, and its source as evidence. The close merge writes the sentence on
-top of the area page and the evidence on the page's evidence line in the
-`<details>` block at the bottom (or the folded callout in an Obsidian store,
+counts, and its source as evidence. The close merge writes the sentence as
+a table row on top of the area page (a history candidate as a History row)
+and the evidence as its evidence row in the `<details>` block at the bottom (or the folded callout in an Obsidian store,
 index_style: obsidian); a page it creates is named by its menu path — the Menu with each
 ` > ` written ` - ` and any of `/ \ : * ? " < > |` replaced with `-`
 (templates/area.md). Then finish the feature's `summary.md`:
