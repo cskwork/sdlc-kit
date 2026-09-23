@@ -7,10 +7,12 @@
 
 ## Area candidates
 <!-- - [area: <menu path>] rule new | P<n> changed | P<n> retired: <rule> — source · [verified: how — YYYY-MM-DD]
+     - [area: <menu path>] figure new | N<n> changed | N<n> retired: <label on screen> — what it counts · source · [verified: how — YYYY-MM-DD]
      - [area: <menu path>] fact: <holds for this area only> — [verified: how — YYYY-MM-DD]
      - [area: <menu path>] history: YYYY-MM-DD <slug> — <what changed for the user>
-     Rules and history merge only when the feature closes shipped; a stale
-     merge leaves them here (rule 4). The merge numbers a new rule. -->
+     Rules, figures, and history merge only when the feature closes shipped;
+     a stale merge leaves them here (rule 4). The merge numbers a new rule
+     or figure. -->
 
 ## Domain candidates
 <!-- - fact / term / constraint that spans areas — [verified: how — YYYY-MM-DD]
