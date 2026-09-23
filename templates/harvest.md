@@ -13,7 +13,9 @@
      Rules, figures, and history merge only when the feature closes shipped;
      a stale merge leaves them here (rule 4). The merge numbers a new rule
      or figure, writes the plain sentence on top of the area page and the
-     evidence part on its evidence line at the bottom (templates/area.md).
+     evidence part on its evidence line in the <details> block at the bottom,
+     or the folded callout in an Obsidian store (index_style: obsidian;
+     templates/area.md).
      Code identifiers belong only in the evidence part. -->
 
 ## Domain candidates

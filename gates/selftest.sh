@@ -82,6 +82,18 @@ for q in "교사 > 학생 > 학급 분석" "교사 - 학생 - 학급 분석"; do
   case "$out" in (*"P1: 자기 학급만"*"근거 · 코드 위치 (개발자용):"*"Where: ClassAnalysis#get"*) ;; (*) fail "show '$q' not reader first: $out";; esac
 done
 bash "$kit/tools/kb.sh" show "../areas/roster" >/dev/null 2>&1 && fail "area lookup followed a path"
+#    the Obsidian form of the evidence block: a folded callout, lines prefixed "> "
+printf -- '%s\n' '- Menu: 학생 > 과제' '## Business rules (정책)' '- P1: 마감 후 제출 불가' '## History' '- 2026-09-02 f4 — 마감 표시' \
+  '> [!info]- 근거 · 코드 위치 (개발자용)' '> - Where: HomeworkApi#submit' '> - P1 — source: 기획서 · set by f4' '> - P2: 콜론 줄도 규칙이 아니다' \
+  > ".sdlc/memory/areas/학생 - 과제.md"
+LC_ALL=en_US.UTF-8 bash "$kit/tools/kb.sh" index >/dev/null
+grep -qF '| [학생 > 과제](memory/areas/학생%20-%20과제.md) | 1 | 2026-09-02 | — |' .sdlc/README.md || fail "callout page row wrong: $(grep '과제' .sdlc/README.md)"
+out=$(bash "$kit/tools/kb.sh" show "학생 > 과제") || fail "show found no callout page"
+case "$out" in (*"P1: 마감 후"*"History:"*"근거 · 코드 위치 (개발자용):"*"  - Where: HomeworkApi#submit"*) ;; (*) fail "callout evidence not read last: $out";; esac
+case "$out" in (*"> -"*) fail "callout prefix printed: $out";; esac
+fns=$(sed -n -e '/^kb_field() {/,/^}/p' -e '/^kb_get() {/,/^}/p' "$kit/tools/kb.sh")
+where=$(eval "$fns"; kb_get ".sdlc/memory/areas/학생 - 과제.md" Where)
+[ "$where" = "HomeworkApi#submit" ] || fail "kb_get did not read Where inside the callout: '$where'"
 echo "ok: knowledge by product area"
 
 echo "SELFTEST PASS"

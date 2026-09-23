@@ -96,9 +96,9 @@ kb_stores() { # <store-or-empty> <area-or-empty>
 # --- record fields -----------------------------------------------------------
 KB_DOCS="summary.md origin.md intent.md spec.md plan.md map.md evidence.md delivery.md CLOSED"
 
-kb_field() { # <file> <label> → the first "- <label>: value" line's value (raw)
+kb_field() { # <file> <label> → the first "- <label>: value" line's value (raw); a "> " quote prefix (an Obsidian callout) is dropped first
   [ -f "$1" ] || return 1
-  awk -v k="- $2:" 'index($0, k) == 1 { sub(/^[^:]*: */, ""); sub(/[ \t\r]*$/, ""); print; exit }' "$1"
+  awk -v k="- $2:" '{ sub(/^> ?/, "") } index($0, k) == 1 { sub(/^[^:]*: */, ""); sub(/[ \t\r]*$/, ""); print; exit }' "$1"
 }
 # A field is read wherever its "- <label>:" line sits in the file — an area
 # page's Where line lives inside its <details> evidence block (templates/area.md).
@@ -142,14 +142,16 @@ kb_hashtags() { # "tag, tag" → "#tag #tag" for Obsidian's tag pane (spaces ins
 }
 # The readable body of a record: template comments (single- and multi-line),
 # blank lines and unfilled `<placeholder>` lines are dropped; the H1 is dropped;
-# `## X` (and deeper headings) and a `<summary>X</summary>` line (the area
-# page's evidence block) become `X:` labels, so a record embedded in the
+# `## X` (and deeper headings), a `<summary>X</summary>` line and a
+# `> [!type]- X` callout line (the area page's evidence block, HTML or
+# Obsidian form) become `X:` labels — the callout's own lines print without
+# their "> " prefix — so a record embedded in the
 # contents page cannot hijack its outline. A heading with nothing under it yet
 # is dropped too: an unfinished record prints only what is known.
 kb_body() { # <file>
   [ -f "$1" ] || return 0
   awk '
-    BEGIN { c = 0 }
+    BEGIN { c = 0; q = 0 }
     {
       line = $0
       if (c) { i = index(line, "-->"); if (i) { c = 0; line = substr(line, i + 3) } else next }
@@ -159,6 +161,8 @@ kb_body() { # <file>
         else { line = substr(line, 1, s - 1); c = 1; break }
       }
       sub(/[ \t\r]+$/, "", line)
+      if (q) { if (line ~ /^>/) sub(/^> ?/, "", line); else q = 0 }
+      if (line ~ /^> *\[![A-Za-z-]+\][-+]?/) { sub(/^> *\[![A-Za-z-]+\][-+]? */, "", line); pend = line ":"; q = 1; next }
       if (line ~ /^# /) next
       if (line ~ /^##+ /) { sub(/^#+ +/, "", line); pend = line ":"; next }
       if (line ~ /^[ \t]*<summary>.*<\/summary>[ \t]*$/) { sub(/^[ \t]*<summary>[ \t]*/, "", line); sub(/[ \t]*<\/summary>[ \t]*$/, "", line); pend = line ":"; next }
@@ -222,7 +226,8 @@ kb_area_menu() { # <page> → its Menu line, else its H1, else its file name (an
   printf '%s' "$m"
 }
 # Live rules: the top "- P<n>: rule" lines. A retired one reads "- ~~P…", an
-# evidence line "- P<n> — source…" (no colon after the number), and an unfilled
+# evidence line "- P<n> — source…" (no colon after the number; "> - P<n> —" in
+# an Obsidian callout — never at column 0), and an unfilled
 # template line "- P1: <…>" — none of them counts.
 kb_area_rules() { awk '/^- P[0-9]+:/ && !/^- P[0-9]+: *</ { n++ } END { print n + 0 }' "$1"; }
 kb_area_last() { # <page> → the date of the newest History line
