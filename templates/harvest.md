@@ -6,11 +6,18 @@
      file exists. -->
 
 ## Area candidates
-<!-- - [area: <menu path>] rule new | P<n> changed | P<n> retired: <rule> — source · [verified: how — YYYY-MM-DD]
+<!-- - [area: <menu path>] rule new | P<n> changed | P<n> retired: <rule, one plain sentence> — evidence: source · [verified: how — YYYY-MM-DD] · why, if retired
+     - [area: <menu path>] figure new | N<n> changed | N<n> retired: <label on screen> — what it counts — evidence: source · [verified: how — YYYY-MM-DD]
      - [area: <menu path>] fact: <holds for this area only> — [verified: how — YYYY-MM-DD]
      - [area: <menu path>] history: YYYY-MM-DD <slug> — <what changed for the user>
-     Rules and history merge only when the feature closes shipped; a stale
-     merge leaves them here (rule 4). The merge numbers a new rule. -->
+     Rules, figures, and history merge only when the feature closes shipped;
+     a stale merge leaves them here (rule 4). The merge numbers a new rule
+     or figure, writes the plain sentence as a table row on top of the area
+     page (history as a History row) and the evidence part as its evidence
+     row in the <details> block at the bottom,
+     or the folded callout in an Obsidian store (index_style: obsidian;
+     templates/area.md).
+     Code identifiers belong only in the evidence part. -->
 
 ## Domain candidates
 <!-- - fact / term / constraint that spans areas — [verified: how — YYYY-MM-DD]

@@ -24,9 +24,11 @@
 #
 # `show` is a digest — goal, summary.md (templates/summary.md), delivery,
 # unmerged harvest.md candidates, lesson titles, then the paths. A name that is
-# no feature is looked up as a product area: memory/areas/<name>.md, or the page
-# whose Menu line reads exactly <name> (templates/area.md), printed with the
-# features whose summary.md names it. `index` opens with the product areas
+# no feature is looked up as a product area: memory/areas/<name>.md, else the
+# page whose Menu line reads exactly <name>, else the page whose file name that
+# Menu gives (" > " → " - ", templates/area.md), printed top first — the plain
+# rules before the developer evidence — with the features whose summary.md
+# names it. `index` opens with the product areas
 # (business-rule count, last change, features), then an overview table (state,
 # date, area, tags) newest first, and lists the harvests no close has merged yet. `index_style: obsidian` in the store's config.md adds
 # YAML frontmatter and inline #tags to the page; links stay relative markdown.
@@ -94,10 +96,12 @@ kb_stores() { # <store-or-empty> <area-or-empty>
 # --- record fields -----------------------------------------------------------
 KB_DOCS="summary.md origin.md intent.md spec.md plan.md map.md evidence.md delivery.md CLOSED"
 
-kb_field() { # <file> <label> → the first "- <label>: value" line's value (raw)
+kb_field() { # <file> <label> → the first "- <label>: value" line's value (raw); a "> " quote prefix (an Obsidian callout) is dropped first
   [ -f "$1" ] || return 1
-  awk -v k="- $2:" 'index($0, k) == 1 { sub(/^[^:]*: */, ""); sub(/[ \t\r]*$/, ""); print; exit }' "$1"
+  awk -v k="- $2:" '{ sub(/^> ?/, "") } index($0, k) == 1 { sub(/^[^:]*: */, ""); sub(/[ \t\r]*$/, ""); print; exit }' "$1"
 }
+# A field is read wherever its "- <label>:" line sits in the file — an area
+# page's Where line lives inside its <details> evidence block (templates/area.md).
 kb_get() { # <file> <label> → the value, or empty when absent or still a template placeholder (<…>, YYYY-…)
   local v; v=$(kb_field "$1" "$2" 2>/dev/null || true)
   case "$v" in ''|'<'*|YYYY*) printf '';; *) printf '%s' "$v";; esac
@@ -138,13 +142,24 @@ kb_hashtags() { # "tag, tag" → "#tag #tag" for Obsidian's tag pane (spaces ins
 }
 # The readable body of a record: template comments (single- and multi-line),
 # blank lines and unfilled `<placeholder>` lines are dropped; the H1 is dropped;
-# `## X` (and deeper headings) become `X:` labels, so a record embedded in the
+# `## X` (and deeper headings), a `<summary>X</summary>` line and a
+# `> [!type]- X` callout line (the area page's evidence block, HTML or
+# Obsidian form) become `X:` labels — the callout's own lines print without
+# their "> " prefix — so a record embedded in the
 # contents page cannot hijack its outline. A heading with nothing under it yet
-# is dropped too: an unfinished record prints only what is known.
+# is dropped too: an unfinished record prints only what is known. A markdown
+# table prints as written, except a template placeholder row (every cell after
+# the first is only `<…>`); a table left with no data row loses its header too.
 kb_body() { # <file>
   [ -f "$1" ] || return 0
   awk '
-    BEGIN { c = 0 }
+    function ph(l,   a, n, i, x) { # a template placeholder row: every cell after the first is <…>
+      gsub(/\\\|/, "\001", l); sub(/^[ \t]*\|/, "", l); sub(/\|[ \t]*$/, "", l)
+      n = split(l, a, "|")
+      for (i = 2; i <= n; i++) { x = a[i]; gsub(/^[ \t]+|[ \t]+$/, "", x); if (x !~ /^<.*>$/) return 0 }
+      return n >= 2
+    }
+    BEGIN { c = 0; q = 0; tb = 0 }
     {
       line = $0
       if (c) { i = index(line, "-->"); if (i) { c = 0; line = substr(line, i + 3) } else next }
@@ -154,12 +169,24 @@ kb_body() { # <file>
         else { line = substr(line, 1, s - 1); c = 1; break }
       }
       sub(/[ \t\r]+$/, "", line)
+      if (q) { if (line ~ /^>/) sub(/^> ?/, "", line); else q = 0 }
+      if (line ~ /^> *\[![A-Za-z-]+\][-+]?/) { sub(/^> *\[![A-Za-z-]+\][-+]? */, "", line); pend = line ":"; q = 1; next }
       if (line ~ /^# /) next
       if (line ~ /^##+ /) { sub(/^#+ +/, "", line); pend = line ":"; next }
+      if (line ~ /^[ \t]*<summary>.*<\/summary>[ \t]*$/) { sub(/^[ \t]*<summary>[ \t]*/, "", line); sub(/[ \t]*<\/summary>[ \t]*$/, "", line); pend = line ":"; next }
+      if (line ~ /^[ \t]*\|/) {   # a table: hold the header and separator until a data row shows
+        if (!tb) { tb = 1; hd = line; hs = ""; next }
+        if (hd != "" && hs == "" && line ~ /^[ \t]*\|[ \t:|-]+$/) { hs = line; next }
+        if (ph(line)) next
+        if (pend != "") { print pend; pend = "" }
+        if (hd != "") { print hd; if (hs != "") print hs; hd = ""; hs = "" }
+        print line; next
+      }
+      tb = 0; hd = ""; hs = ""
       if (line ~ /^[ \t]*$/) next
       if (line ~ /^[ \t]*[-*] *<[^>]*>[ \t]*$/) next
       if (line ~ /^[ \t]*<[^>]*>[ \t]*$/) next
-      if (line ~ /^[ \t]*[-*] *[A-Za-z-]+: *<[^>]*>[ \t]*$/) next
+      if (line ~ /^[ \t]*[-*] *[A-Za-z0-9-]+: *<[^>]*>[ \t]*$/) next
       if (pend != "") { print pend; pend = "" }
       print line
     }' "$1"
@@ -215,9 +242,23 @@ kb_area_menu() { # <page> → its Menu line, else its H1, else its file name (an
   case "$m" in ''|'<'*) m=$(basename "$1" .md);; esac
   printf '%s' "$m"
 }
-kb_area_rules() { awk '/^- P[0-9]+:/ { n++ } END { print n + 0 }' "$1"; }   # live rules; a retired one reads "- ~~P…"
-kb_area_last() { # <page> → the date of the newest History line
-  awk '/^## /{ h = ($0 ~ /^## History/); next } h && /^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ { print substr($0, 3, 10); exit }' "$1"
+# Live rules: the "| P<n> | rule |" table rows, and the "- P<n>: rule" list
+# lines pages written before the table form still hold — counted only ABOVE
+# the evidence block (the `<details>` or `> [!…]` line), whose rows carry the
+# same P-numbers. Row shapes only, never header words. A retired rule reads
+# "| ~~P…" or "- ~~P…", and an unfilled template row "| P1 | <…> |" (or line
+# "- P1: <…>") — none of them counts.
+kb_area_rules() {
+  awk '/^[ \t]*<details/ || /^> *\[!/ { exit }
+    /^- P[0-9]+:/ && !/^- P[0-9]+: *</ { n++; next }
+    /^\| *P[0-9]+ *\|/ { r = $0; sub(/^\| *P[0-9]+ *\| */, "", r); if (r !~ /^</) n++ }
+    END { print n + 0 }' "$1"
+}
+kb_area_last() { # <page> → the date of History's first (newest) row "| YYYY-MM-DD |", or list line "- YYYY-MM-DD"
+  awk '/^[ \t]*<details/ || /^> *\[!/ { exit }
+    /^## /{ h = ($0 ~ /^## History/); next }
+    h && (/^- [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/ || /^\| *[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] *\|/) {
+      match($0, /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/); print substr($0, RSTART, 10); exit }' "$1"
 }
 # "<area><SEP><kind><SEP><slug><SEP><dir>" for every feature naming an area.
 kb_area_refs() { # <store>
@@ -230,15 +271,33 @@ kb_area_of() { # <menu> <file name>; kb_area_refs lines on stdin → the lines n
   awk -F "$SEP" -v a="$1" -v b="$2" '$1 == a || $1 == b'
 }
 kb_area_slugs() { awk -F "$SEP" '{ if (n++) printf ", "; printf "%s", $3 }'; }   # kb_area_refs lines → "slug, slug"
-kb_area_find() { # <store> <name> → the page: <name>.md, else the page whose Menu is <name>
-  local f
-  case "$2" in */*|.*) ;; *)
-    f="$1/memory/areas/$2.md"
-    [ -f "$f" ] && [ ! -L "$f" ] && { printf '%s\n' "$f"; return 0; };;
-  esac
-  kb_area_pages "$1" | while IFS= read -r f; do
+# The file name a Menu gives its page (templates/area.md): each " > " written
+# " - ", and every character a Windows or macOS file name may not hold
+# (/ \ : * ? " < > |) replaced with "-". Byte-wise under LC_ALL=C: no byte of a
+# multibyte (Hangul) character falls in an ASCII class, so it passes unchanged.
+kb_area_file() { printf '%s' "$1" | sed -e 's/ > / - /g' -e 's#[/\\:*?"<>|]#-#g'; }
+kb_area_page() { # <store> <file name, no .md> → the page when it exists; a name with / or \ or a leading . is refused
+  case "$2" in ''|*/*|*\\*|.*) return 1;; esac
+  [ -f "$1/memory/areas/$2.md" ] && [ ! -L "$1/memory/areas/$2.md" ] && printf '%s\n' "$1/memory/areas/$2.md"
+}
+kb_area_find() { # <store> <name> → the page: <name>.md, else the page whose Menu is <name>, else the page named by that Menu
+  local f d
+  kb_area_page "$1" "$2" && return 0
+  f=$(kb_area_pages "$1" | while IFS= read -r f; do
     [ "$(kb_area_menu "$f")" = "$2" ] && { printf '%s\n' "$f"; break; }
-  done
+  done)
+  [ -n "$f" ] && { printf '%s\n' "$f"; return 0; }
+  d=$(kb_area_file "$2")
+  [ "$d" = "$2" ] || kb_area_page "$1" "$d"
+  return 0
+}
+# A page's link target on the contents page. File names hold spaces (and, from a
+# Menu, Hangul): space % ( ) [ ] # < > are percent-encoded so the link works in
+# GitHub and Obsidian alike; other UTF-8 bytes stay as they are, the form
+# Obsidian writes its own markdown links in.
+kb_area_href() { # <file name> → memory/areas/<encoded>
+  printf 'memory/areas/%s' "$(printf '%s' "$1" | sed -e 's/%/%25/g' -e 's/ /%20/g' -e 's/(/%28/g' -e 's/)/%29/g' \
+    -e 's/\[/%5B/g' -e 's/\]/%5D/g' -e 's/#/%23/g' -e 's/</%3C/g' -e 's/>/%3E/g')"
 }
 # "<slug>\t<lines>\t<dir>" for every open feature whose harvest.md still holds
 # candidates — the one definition `index` and `harvest` share.
@@ -321,7 +380,7 @@ kb_index() { # <store>
         menu=$(kb_area_menu "$f")
         body=$(printf '%s\n' "$refs" | kb_area_of "$menu" "$(basename "$f" .md)" | kb_area_slugs)
         f_last=$(kb_area_last "$f")
-        printf '| [%s](memory/areas/%s) | %s | %s | %s |\n' "$(kb_table_cell "$menu")" "$(basename "$f")" \
+        printf '| [%s](%s) | %s | %s | %s |\n' "$(kb_table_cell "$menu")" "$(kb_area_href "$(basename "$f")")" \
           "$(kb_area_rules "$f")" "${f_last:-—}" "${body:-—}"
       done
       printf '%s\n' "$refs" | awk -F "$SEP" 'NF && !seen[$1]++ { print $1 }' | while IFS= read -r menu; do
