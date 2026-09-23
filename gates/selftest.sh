@@ -67,6 +67,21 @@ LC_ALL=en_US.UTF-8 bash "$kit/tools/kb.sh" index >/dev/null
 grep -qF '| [명단 > 내보내기](memory/areas/roster.md) | 1 | — | f1 |' .sdlc/README.md || fail "area table wrong: $(grep '명단' .sdlc/README.md)"
 out=$(bash "$kit/tools/kb.sh" show "명단 > 내보내기")
 case "$out" in (*"P1: 현재 학기만"*) ;; (*) fail "show <menu path> did not print the rule: $out";; esac
+#    a page named by its menu path (" > " → " - "), reader first: plain rules on
+#    top, evidence in <details> at the bottom — evidence lines do not count as rules
+mkdir -p .sdlc/work/f3; printf -- '- Area: 교사 > 학생 > 학급 분석\n' > .sdlc/work/f3/summary.md
+printf -- '%s\n' '# Area: 교사 > 학생 > 학급 분석' '- Menu: 교사 > 학생 > 학급 분석' '## Business rules (정책)' \
+  '- P1: 자기 학급만 본다' '- P2: 전학생은 빠진다' '- ~~P3: 지난 학기도 보인다~~' '## History' '- 2026-09-01 f3 — 참여율 추가' \
+  '<details>' '<summary>근거 · 코드 위치 (개발자용)</summary>' '' '- Where: ClassAnalysis#get' \
+  '- P1 — source: 기획서 · set by f3' '- P3 — retired 2026-09-01 by f3: 정책 변경' '' '</details>' > ".sdlc/memory/areas/교사 - 학생 - 학급 분석.md"
+LC_ALL=en_US.UTF-8 bash "$kit/tools/kb.sh" index >/dev/null
+grep -qF '| [교사 > 학생 > 학급 분석](memory/areas/교사%20-%20학생%20-%20학급%20분석.md) | 2 | 2026-09-01 | f3 |' .sdlc/README.md \
+  || fail "menu-named page row wrong: $(grep '교사' .sdlc/README.md)"
+for q in "교사 > 학생 > 학급 분석" "교사 - 학생 - 학급 분석"; do
+  out=$(bash "$kit/tools/kb.sh" show "$q") || fail "show '$q' found no page"
+  case "$out" in (*"P1: 자기 학급만"*"근거 · 코드 위치 (개발자용):"*"Where: ClassAnalysis#get"*) ;; (*) fail "show '$q' not reader first: $out";; esac
+done
+bash "$kit/tools/kb.sh" show "../areas/roster" >/dev/null 2>&1 && fail "area lookup followed a path"
 echo "ok: knowledge by product area"
 
 echo "SELFTEST PASS"
