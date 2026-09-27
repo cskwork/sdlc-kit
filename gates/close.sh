@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# close.sh <slug> <shipped|abandoned|dead-end|handed-off> "<reason>" [--delegated]
+# close.sh <slug> <shipped|abandoned|dead-end|handed-off> "<reason>" [--delegated] [--accept-gap "<words>"]
 # handed-off: the work continues outside this loop (another team's tracker).
 #   The reason MUST contain the external ticket/PR reference (e.g. A20-1240).
 # Terminal state for a feature. Human decision; --delegated per AGENTS.md rule 3.
@@ -8,17 +8,21 @@
 # `shipped` requires a DELIVERY: the ship approval must still bind the reviewed
 # evidence AND the reviewed source snapshot, and delivery.md must record a
 # confirmed result whose Source is that source — a commit that contains it, or
-# the current worktree identity for a local target.
+# the current worktree identity for a local target. With a verification recipe
+# it also needs the ship verdict (docs/automation.md §4).
 set -euo pipefail
 kit="$(cd "$(dirname "$0")/.." && pwd)"
 . "$kit/gates/_common.sh"
+. "$kit/gates/_auto.sh"
 
 usage() {
   cat >&2 <<'EOF'
-usage: close.sh <slug> <shipped|abandoned|dead-end|handed-off> "<reason>" [--delegated]
+usage: close.sh <slug> <shipped|abandoned|dead-end|handed-off> "<reason>" [--delegated] [--accept-gap "<words>"]
   shipped     needs the ship approval (still matching its evidence and the
               reviewed source) AND .sdlc/work/<slug>/delivery.md with a confirmed
-              result whose Source contains that reviewed source
+              result whose Source contains that reviewed source, and — with a
+              verification recipe — an ok receipt (or a blocked one whose gap
+              the human accepted: at ship, or here with --accept-gap)
   abandoned   needs a lesson (lazymode >=3: the reason line is the record)
   dead-end    same as abandoned
   handed-off  the reason must name the external ticket key or URL
@@ -27,10 +31,24 @@ where scratch/ is pruned — keep whatever evidence.md, delivery.md, or a lesson
 EOF
   exit 1
 }
-delegated=""
-if [ $# -eq 4 ] && [ "$4" = "--delegated" ]; then delegated=1; set -- "$1" "$2" "$3"; fi
-[ $# -eq 3 ] || usage
-slug="$1"; state="$2"; reason="$3"
+delegated=""; accept_gap=""; accept_gap_set=""
+[ $# -ge 3 ] || usage
+slug="$1"; state="$2"; reason="$3"; shift 3
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --delegated) delegated=1;;
+    --accept-gap) [ $# -ge 2 ] || usage; accept_gap="$2"; accept_gap_set=1; shift;;
+    --accept-gap=*) accept_gap="${1#--accept-gap=}"; accept_gap_set=1;;
+    *) usage;;
+  esac
+  shift
+done
+if [ -n "$accept_gap_set" ]; then
+  [ "$state" = shipped ] || { echo "FAIL: --accept-gap applies to 'shipped' only (it accepts a verification gap)"; exit 1; }
+  gap_issue=$(sdlc_verify_gap_words_issue "$accept_gap")
+  [ -z "$gap_issue" ] || { echo "FAIL: $gap_issue"; exit 1; }
+fi
+V_STATE=""; V_DETAIL=""; gap_words=""; gap_at=""
 case "$state" in (shipped|abandoned|dead-end|handed-off) ;; (*) echo "FAIL: state must be shipped|abandoned|dead-end|handed-off"; usage;; esac
 # Closing MOVES another checkout's work into archive/ if the store is not this
 # checkout's — the one destructive side effect a copied checkout could cause
@@ -177,6 +195,34 @@ EOF
     echo "  Re-run the ship review, then: gates/approve.sh ship $ev"
     exit 1
   fi
+  # --- the verification receipt (gates/_auto.sh sdlc_verify_gate) -------------
+  # after the source binding: a source change reads as the drift it is, not as
+  # the stale receipt it also causes
+  sdlc_verify_gate "$slug" "$accept_gap" record
+  case "$V_VERDICT" in
+    pass) ;;
+    note) echo "note: $V_DETAIL";;
+    accepted)
+      if [ -n "$accept_gap" ]; then
+        gap_words="$accept_gap"; gap_at=close
+        echo "VERIFICATION GAP ACCEPTED: $V_DETAIL — accepted by the human: $accept_gap"
+      else
+        gap_words=$(sdlc_field "$srec" verify_gap_accepted || true); gap_at=ship
+        echo "VERIFICATION GAP ACCEPTED at ship: $V_DETAIL — the human's words: $gap_words"
+      fi;;
+    *)
+      echo "BLOCKED: 'shipped' needs a verification the gates can stand on — it is $V_STATE: $V_DETAIL"
+      if [ "$V_VERDICT" = refuse ]; then echo "  A $V_STATE verification is fixed, never accepted: $V_FIX"; exit 1; fi
+      shipgap=$(sdlc_field "$srec" verify_gap || true)
+      [ -z "$shipgap" ] || echo "  The gap the human accepted at ship was a different one: $shipgap"
+      echo "  Fix the environment and re-run tools/verify.sh run $slug, or, if the human accepts"
+      echo "  delivering over THIS gap, re-run with --accept-gap \"<the human's words>\""
+      echo "  (or re-approve ship with it: gates/approve.sh ship $ev --accept-gap \"<the human's words>\")."
+      exit 1;;
+  esac
+  if [ -n "$accept_gap" ] && [ "$V_VERDICT" != accepted ]; then
+    echo "note: --accept-gap ignored — the verification is '$V_STATE', not blocked; nothing to accept."
+  fi
   # --- the delivery record (templates/delivery.md) -----------------------------
   if [ ! -f "$del" ]; then
     echo "BLOCKED: 'shipped' requires a delivery record: $del"
@@ -298,6 +344,13 @@ if [ -z "$resume" ]; then
     echo "closed_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     [ -n "$delegated" ] && echo "mode: delegated-chat (agent-run on explicit human instruction)" || true
     [ -n "$delegated" ] && echo "runner: agent" || true
+    # what the shipped close stood on
+    [ -n "$V_STATE" ] && echo "verify_state: $V_STATE" || true
+    if [ -n "$gap_at" ]; then
+      echo "verify_gap: $V_DETAIL"
+      echo "verify_gap_accepted: $gap_words"
+      echo "verify_gap_accepted_at: $gap_at"
+    fi
   } > "$dir/CLOSED"
   echo "CLOSED: $slug ($state) — $reason"
 fi

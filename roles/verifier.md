@@ -15,9 +15,14 @@ exists.
 
 1. Run the build, test, and lint commands from config.md; record exact
    commands and verdict lines. With a `.sdlc/verify.md` recipe, run
-   `tools/verify.sh run <slug>`: the receipt records what ran, your report is
-   still the judgement.
-2. Exercise the change for real, scoped to it — the flows it touches, not the
+   `tools/verify.sh baseline <slug>` (name the base), then `run` and
+   `coverage`, and quote the receipt's deciding lines; your report is still
+   the judgement. A failure the baseline (no recipe: `baseline.txt`) shows
+   failing the same way is pre-existing, reported with its base; any other is
+   a regression and a finding.
+2. **Trace every changed file** to a requirement and scenario, or mark it
+   `no behavior` with the reason. A behavior file with no scenario is a finding.
+3. Exercise the change for real, scoped to it — the flows it touches, not the
    product's whole suite; the project's own commands and fixtures (config.md
    `e2e:` when set), never a parallel harness:
    - **UI** → drive the actual screen (`qa:` tool, else any browser tool in
@@ -34,7 +39,23 @@ exists.
      SAME test after. A test that passes on the pre-fix code proves nothing.
      A chain you cannot complete is a FAIL, or a stated limitation for an
      intermittent defect — never a pass by assumption.
-3. Check each plan.md **Proof** item (compact route: intent.md's Proof line).
+4. **Scenarios per requirement** (`R1.happy` …; compact route `O1.happy`):
+   - **Floor:** `happy`, `boundary`, `negative`; plus `regression` for a bug
+     fix, `authz` (the wrong role, refused) for a permission change.
+   - **Expectation first**, written before the run. Assert status, shape, then
+     the VALUE the change is about. A 5xx or crash where a refusal belongs is
+     a FAIL.
+   - **Each role and platform in scope** (mobile vs desktop) gets its own real
+     run with a real account or device. A wrong-role refusal never stands in.
+     None available → NOT VERIFIED for it, naming what would unblock it.
+   - **Source rung per scenario:** user-supplied → saved fixture → real data
+     (personal data redacted) → synthesized, the first that works. A `happy`
+     resting only on synthesized data is labelled so and cannot alone PASS.
+   - **Writes:** read the state back before and after; success over unchanged
+     state is a FAIL.
+   - **New tests** are `must-fail-on-base` (no recipe: run against the base
+     worktree, as for a bug fix). A test never seen failing is not proof.
+5. Check each plan.md **Proof** item (compact route: intent.md's Proof line).
 
 ## Lens 2 — Side effects: what else changed between AS-IS and TO-BE?
 
@@ -44,7 +65,8 @@ Assume the feature works and look for what it broke, skewed, or left behind:
    check every "stays untouched" item (spec.md U-items), every business
    rule on the touched area pages that the change did not set out to change
    (`tools/kb.sh show <area>`), and the neighbouring flows that share the
-   changed code or data. Name them; no quota.
+   changed code or data. Name them; no quota. For a `pre-existing` check,
+   diff its base and current logs (`scratch/verify-base/`, `scratch/verify/`).
 2. **Data consistency.** Start from plan.md's **Data touched** list (compact
    route: intent.md's Risk line) and add any shape the diff touches that it
    missed — a missed shape is itself a finding. Follow each one to its other
@@ -85,8 +107,12 @@ human's explicit call, recorded in evidence.md.
 
 ```
 ## Verifier report — <E2E | Side effects | Intent match>   (fill your lens's lines)
-- Ran: <command> → <verdict line(s)>
+- Ran: <command> → <verdict line(s)> · receipt: <VERIFY line · coverage line>
+- Failures: pre-existing <ids> at <base ref @ sha> | none · regressions <ids> | none
+- Changed files: <path> → <R/scenario> | no behavior: <reason>   (one per file)
 - E2E: <command/tool> · <environment> · <scenario> → <observed>
+- Variants: <R1.happy> · expected <…> · observed <…> · source <user | fixture | real | synthesized>   (one per variant)
+- Roles/platforms: <role or platform> · <real account/device> → <observed> | NOT VERIFIED: <what would unblock>
 - Bug proof (fixes): before <observed> · mechanism <confirmed|unconfirmed> · after <observed>
 - Proof items: <n> pass / <n> fail (list failures)
 - Baseline diff: clean | differences: <what> · untouched: <U-items → result> · neighbouring flows: <named → result>
@@ -97,7 +123,13 @@ VERDICT: PASS | FAIL (findings, each with evidence) | PASS WITH GAP (<what was N
 ```
 
 Do not dismiss a failure as acceptable. A failing config.md command is a
-finding. Do not report a clean result after a shallow pass.
+finding unless the baseline shows it pre-existing (Lens 1, step 1). Do not
+report a clean result after a shallow pass.
+
+**Red flags** — the lens did not really run; go back: a verdict with no exit
+code or observed output; every variant `happy`; a role verified only by its
+refusal; a write with no read-back; a NOT VERIFIED or `blocked` item summarized
+as passed; "looks good"; a test never seen failing offered as proof.
 
 Tools:
 - Needs: shell (config.md commands) and file reads; the project's ticket or
