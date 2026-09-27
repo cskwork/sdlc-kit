@@ -80,6 +80,14 @@ add_blocker() { EV_BLOCKERS="$EV_BLOCKERS$1|$2
 add_gap()     { EV_GAPS="$EV_GAPS$1|$2
 "; }
 set_next() { EV_NEXT_KIND="$1"; EV_NEXT_CMD="$2"; EV_NEXT_TEXT="$3"; }
+verify_blocker() { # the blocker code for a refusing EV_VERIFY, one table for every stage
+  case "$EV_VERIFY" in
+    fail|invalid|flaky) add_blocker verify.fail "$EV_VERIFY_DETAIL";;
+    blocked) add_blocker verify.environment "$EV_VERIFY_DETAIL";;
+    recipe|uncovered|vacuous) add_blocker "verify.$EV_VERIFY" "$EV_VERIFY_DETAIL";;
+    *) add_blocker verify.stale "$EV_VERIFY_DETAIL";;
+  esac
+}
 
 skill_dir_for() { case "$1" in
   intent) echo skills/1-intent;; spec) echo skills/2-spec;; plan) echo skills/3-plan;;
@@ -156,15 +164,17 @@ evaluate() { # <slug>
             EV_STATUS=needs-human; add_blocker fixloop.exhausted "$EV_FIXLOOP_DETAIL"
             set_next human "" "$EV_FIXLOOP_DETAIL"
           else case "$EV_VERIFY" in
-            fail|invalid) EV_STATUS=blocked; add_blocker verify.fail "$EV_VERIFY_DETAIL"
+            fail|invalid|flaky) EV_STATUS=blocked; verify_blocker
                      set_next verify "tools/verify.sh run $s" "the verification is not satisfied over this source — fix it, then re-run";;
-            blocked) EV_STATUS=blocked; add_blocker verify.environment "$EV_VERIFY_DETAIL"
+            blocked) EV_STATUS=blocked; verify_blocker
                      set_next human "" "no runnable verification environment: $EV_VERIFY_DETAIL";;
-            recipe)  EV_STATUS=blocked; add_blocker verify.recipe "$EV_VERIFY_DETAIL"
+            recipe)  EV_STATUS=blocked; verify_blocker
                      set_next write "" "$EV_VERIFY_DETAIL";;
+            uncovered|vacuous) EV_STATUS=blocked; verify_blocker
+                     set_next write "$(sdlc_verify_fix_cmd "$s" "$EV_VERIFY" "$EV_VERIFY_DETAIL")" "$EV_VERIFY_DETAIL";;
             missing|stale|inconclusive)
                      EV_STATUS=ready
-                     set_next verify "tools/verify.sh run $s" "build per skills/4-build, then record the verification receipt";;
+                     set_next verify "$(sdlc_verify_fix_cmd "$s" "$EV_VERIFY" "$EV_VERIFY_DETAIL")" "build per skills/4-build, then record the verification receipt: $EV_VERIFY_DETAIL";;
             unconfigured)
                      EV_STATUS=ready; add_gap verify.unconfigured "$EV_VERIFY_DETAIL"
                      set_next build "" "build and verify per skills/4-build + roles/verifier.md, then write $art";;
@@ -196,15 +206,19 @@ evaluate() { # <slug>
         fi
         if [ "$stage" = ship ]; then
           case "$EV_VERIFY" in
-            fail|invalid) EV_STATUS=blocked; add_blocker verify.fail "$EV_VERIFY_DETAIL"
+            fail|invalid|flaky) EV_STATUS=blocked; verify_blocker
                      set_next verify "tools/verify.sh run $s" "$EV_VERIFY_DETAIL"; return 0;;
-            blocked) EV_STATUS=blocked; add_blocker verify.environment "$EV_VERIFY_DETAIL"
-                     set_next human "" "$EV_VERIFY_DETAIL"; return 0;;
-            recipe)  EV_STATUS=blocked; add_blocker verify.recipe "$EV_VERIFY_DETAIL"
+            blocked) EV_STATUS=blocked; verify_blocker
+                     # only the HUMAN's own words accept the gap; --lazy never does
+                     set_next human "gates/approve.sh ship $art --accept-gap \"<the human's words>\"" \
+                       "$EV_VERIFY_DETAIL — fix the environment, or ask the human whether to ship over this gap"; return 0;;
+            recipe)  EV_STATUS=blocked; verify_blocker
                      set_next write "" "$EV_VERIFY_DETAIL"; return 0;;
+            uncovered|vacuous) EV_STATUS=blocked; verify_blocker
+                     set_next write "$(sdlc_verify_fix_cmd "$s" "$EV_VERIFY" "$EV_VERIFY_DETAIL")" "$EV_VERIFY_DETAIL"; return 0;;
             missing|stale|inconclusive)
-                     EV_STATUS=blocked; add_blocker verify.stale "$EV_VERIFY_DETAIL"
-                     set_next verify "tools/verify.sh run $s" "$EV_VERIFY_DETAIL"; return 0;;
+                     EV_STATUS=blocked; verify_blocker
+                     set_next verify "$(sdlc_verify_fix_cmd "$s" "$EV_VERIFY" "$EV_VERIFY_DETAIL")" "$EV_VERIFY_DETAIL"; return 0;;
             unconfigured) add_gap verify.unconfigured "$EV_VERIFY_DETAIL";;
           esac
         fi
@@ -251,6 +265,24 @@ EOF
   # --- everything is approved: delivery and the review handoff ---------------
   EV_STAGE=delivery
   EV_DELIVERY_TARGET=$(planned_target "$s")
+  # close.sh shipped re-reads the ship verdict (gates/_auto.sh sdlc_verify_gate):
+  # a verification that went bad after the ship approval blocks here too, so the
+  # driver is never sent to a close that will refuse
+  sdlc_verify_verdict "$s" "$EV_VERIFY" "$EV_VERIFY_DETAIL" "" record
+  case "$V_VERDICT" in
+    gap)
+      # not the gap accepted at ship: the human decides, as close.sh says
+      EV_STATUS=blocked; verify_blocker
+      set_next human "gates/approve.sh ship $dir/evidence.md --accept-gap \"<the human's words>\"" \
+        "$EV_VERIFY_DETAIL — not a gap the human accepted at ship: fix the environment, or ask the human whether to deliver over this gap (or gates/close.sh $s shipped \"<reason>\" --accept-gap \"<the human's words>\")"
+      return 0;;
+    refuse)
+      EV_STATUS=blocked; verify_blocker
+      set_next verify "$V_FIX" \
+        "the verification the ship approval stood on no longer holds: $EV_VERIFY_DETAIL"
+      return 0;;
+    accepted) add_gap verify.gap-accepted "$EV_VERIFY_DETAIL — accepted by the human at ship";;
+  esac
   if [ ! -f "$dir/delivery.md" ]; then
     EV_DELIVERY=absent; EV_DELIVERY_DETAIL="no delivery.md yet"
     # What the next action is depends on WHERE the loop agreed to deliver, and on

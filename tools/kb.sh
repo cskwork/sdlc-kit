@@ -20,7 +20,8 @@
 #
 # What is read: *.md and CLOSED under work/, archive/ and memory/.
 # Never read: scratch/ (bulk evidence), approvals/ (machine records),
-# progress.md (heartbeat), baseline.txt, checkpoint.md, verify-receipt.md.
+# progress.md (heartbeat), baseline.txt, checkpoint.md, verify-receipt.md,
+# verify-baseline.md.
 #
 # `show` is a digest — goal, summary.md (templates/summary.md), delivery,
 # unmerged harvest.md candidates, lesson titles, then the paths. A name that is
@@ -567,7 +568,7 @@ kb_searchable() { # <store> → readable record paths, one per line
     $0 ~ /\/scratch\// { next }
     $0 ~ /\/approvals\// { next }
     { n = split($0, p, "/"); b = p[n] }
-    b == "progress.md" || b == "baseline.txt" || b == "checkpoint.md" || b == "verify-receipt.md" { next }
+    b == "progress.md" || b == "baseline.txt" || b == "checkpoint.md" || b == "verify-receipt.md" || b == "verify-baseline.md" { next }
     { print }
   ' | LC_ALL=C sort
 }

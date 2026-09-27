@@ -14,6 +14,10 @@
 # work (data loss, public API, security, migrations, external delivery); an
 # automated risk hit on the artifact makes it mandatory for --lazy.
 #
+# Ship, in every mode, also reads the verification verdict (a `blocked` one
+# passes only with --accept-gap "<the human's words>") and needs each verifier
+# lens VERDICT in evidence.md — docs/automation.md §4.
+#
 # The record binds: the canonical artifact path, the artifact's sha256, and the
 # digests of the upstream artifacts it was approved against — plus, at ship, the
 # reviewed code identity. sha256 is CHANGE DETECTION, not authentication.
@@ -22,6 +26,7 @@
 set -euo pipefail
 kit="$(cd "$(dirname "$0")/.." && pwd)"
 . "$kit/gates/_common.sh"
+. "$kit/gates/_auto.sh"
 
 usage() {
   cat >&2 <<'EOF'
@@ -31,11 +36,12 @@ usage: approve.sh <intent|spec|plan|ship> <artifact-path> [flags]   (run from th
   --lazy                       lazymode waives this human gate (needs --review)
   --review "<text>"            what the review actually covered (code/behavior, not a keyword scan)
   --risk-authorized "<text>"   the human's prior authorization for risky work
+  --accept-gap "<text>"        ship only: the human's words accepting a blocked verification
 EOF
   exit 1
 }
 
-mode=""; review=""; risk_auth=""
+mode=""; review=""; risk_auth=""; accept_gap=""; accept_gap_set=""
 [ $# -ge 2 ] || usage
 stage="$1"; artifact="$2"; shift 2
 while [ $# -gt 0 ]; do
@@ -47,6 +53,8 @@ while [ $# -gt 0 ]; do
     --review=*) review="${1#--review=}";;
     --risk-authorized) [ $# -ge 2 ] || usage; risk_auth="$2"; shift;;
     --risk-authorized=*) risk_auth="${1#--risk-authorized=}";;
+    --accept-gap) [ $# -ge 2 ] || usage; accept_gap="$2"; accept_gap_set=1; shift;;
+    --accept-gap=*) accept_gap="${1#--accept-gap=}"; accept_gap_set=1;;
     *) usage;;
   esac
   shift
@@ -56,6 +64,12 @@ done
 case "$mode" in (agent-adversary*)
   [ "$stage" = "plan" ] || { echo "FAIL: --agent-adversary is valid for the plan stage only (AGENTS.md rule 3)"; exit 1; };;
 esac
+
+if [ -n "$accept_gap_set" ]; then
+  [ "$stage" = ship ] || { echo "FAIL: --accept-gap is valid for the ship stage only (it accepts a verification gap)"; exit 1; }
+  gap_issue=$(sdlc_verify_gap_words_issue "$accept_gap")
+  [ -z "$gap_issue" ] || { echo "FAIL: $gap_issue"; exit 1; }
+fi
 
 expected=$(sdlc_stage_artifact "$stage") || {
   echo "FAIL: '$stage' is not a gated stage. Gated stages: intent, spec, plan, ship."; exit 1; }
@@ -141,6 +155,45 @@ if [ "$mode" = "lazy" ]; then
   mode="lazy (auto-approved: lazymode $lm waives the $stage human gate; review recorded below)"
 fi
 
+# --- the verification receipt (ship only; gates/_auto.sh sdlc_verify_gate) ---
+# every mode: lazymode moves who approves, never what the approval stands on
+V_STATE=""; V_DETAIL=""; V_VERDICT=""
+if [ "$stage" = ship ]; then
+  sdlc_verify_gate "$slug" "$accept_gap"
+  case "$V_VERDICT" in
+    pass) ;;
+    note) echo "note: $V_DETAIL";;
+    accepted)
+      echo "VERIFICATION GAP ACCEPTED: $V_DETAIL"
+      echo "  accepted by the human: $accept_gap";;
+    gap)
+      echo "FAIL: ship approval refused — verification blocked: $V_DETAIL"
+      echo "  Fix the environment and re-run tools/verify.sh run $slug, or, if the human accepts"
+      echo "  delivering over this gap, re-run with --accept-gap \"<the human's words>\"."
+      echo "  --lazy alone never accepts it (AGENTS.md rule 6: a known gap needs the human)."
+      exit 1;;
+    *)
+      echo "FAIL: ship approval refused — verification $V_STATE: $V_DETAIL"
+      echo "  A $V_STATE verification is fixed, never accepted: $V_FIX"
+      exit 1;;
+  esac
+  if [ -n "$accept_gap" ] && [ "$V_VERDICT" != accepted ]; then
+    echo "note: --accept-gap ignored — the verification is '$V_STATE', not blocked; nothing to accept."
+  fi
+fi
+
+# --- the verifier lens reports (ship only; _common.sh sdlc_lens_missing) -----
+if [ "$stage" = ship ]; then
+  lens_missing=$(sdlc_lens_missing "$canon")
+  if [ -n "$lens_missing" ]; then
+    echo "FAIL: ship approval refused — evidence.md has no VERDICT: line under $lens_missing."
+    echo "  Paste each verifier lens report (roles/verifier.md) under its section of evidence.md"
+    echo "  (templates/evidence.md), VERDICT: line included — or, with no fresh-context verifier,"
+    echo "  write 'no independent verification available: <reason>' (AGENTS.md rule 5)."
+    exit 1
+  fi
+fi
+
 mkdir -p .sdlc/approvals
 rec=".sdlc/approvals/${slug}.${stage}.approval"
 snap="${rec%.approval}.source"
@@ -185,6 +238,14 @@ if [ "$stage" = ship ]; then
   fi
 fi
 
+# The entry list lives beside the record (gitignored with it) so close.sh and
+# status.sh can name exactly WHAT changed. Written BEFORE the record, so an
+# interrupted approve never leaves a new record without it (`nosnapshot`).
+if [ "$stage" = ship ]; then
+  rm -f "$snap"
+  if [ "$code_scope" != none ]; then printf '%s\n' "$entries" > "$snap"; else : > "$snap"; fi
+fi
+
 # Re-approvals must leave a trail: approval records are gitignored (init.sh),
 # so git history holds no approvals at all and the re-gate cap (AGENTS.md
 # rule 3) is counted from disk — this .history file is the only trail there is.
@@ -213,6 +274,12 @@ digest=$(sdlc_sha256_file "$canon")
     echo "code_scope: $code_scope"
     echo "code_digest: $code_digest"
     echo "code_files: $code_count"
+    echo "verify_state: $V_STATE"
+    if [ "$V_VERDICT" = accepted ]; then
+      # close.sh honours this acceptance only while the gap is this SAME gap
+      echo "verify_gap: $V_DETAIL"
+      echo "verify_gap_accepted: $accept_gap"
+    fi
   fi
   [ -n "$review" ] && echo "review: $review" || true
   [ -n "$risk_auth" ] && echo "risk_authority: $risk_auth" || true
@@ -226,10 +293,6 @@ digest=$(sdlc_sha256_file "$canon")
 } > "$rec"
 echo "APPROVED: $stage of $slug ($canon)"
 if [ "$stage" = ship ]; then
-  # the entry list lives beside the record (gitignored with it) so close.sh and
-  # status.sh can name exactly WHAT changed, not just that something did
-  rm -f "$snap"
-  if [ "$code_scope" != none ]; then printf '%s\n' "$entries" > "$snap"; else : > "$snap"; fi
   echo "Reviewed source identity: $code_digest ($code_count files, scope: $code_scope)"
   if [ "$code_scope" = none ]; then
     echo "  NOT BOUND: no git repository — close.sh will record the delivery as NOT VERIFIED."

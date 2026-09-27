@@ -89,12 +89,12 @@ ship_gate() { # → 0 open; prints check-gate.sh's own refusal otherwise
   printf '%s\n' "$out"
   return 1
 }
-# The verification receipt, by the same rule the loop and the cockpit use.
+# The verification receipt, by the ship verdict (gates/_auto.sh sdlc_verify_gate).
 verify_gate() { # → 0 when nothing is owed
-  local st; st=$(sdlc_verify_state "$slug")
-  case "${st%%|*}" in
-    ok|unconfigured) return 0;;
-    *) printf 'verification %s: %s\n' "${st%%|*}" "${st#*|}"; return 1;;
+  sdlc_verify_gate "$slug" "" record
+  case "$V_VERDICT" in
+    pass|note|accepted) return 0;;
+    *) printf 'verification %s: %s\n' "$V_STATE" "$V_DETAIL"; return 1;;
   esac
 }
 [ -n "$remote" ] || { [ -f "$del" ] && remote=$(sdlc_delivery_field "$del" Remote) || true; }
