@@ -10,6 +10,7 @@
 set -euo pipefail
 kit="$(cd "$(dirname "$0")/.." && pwd)"
 . "$kit/gates/_common.sh"
+. "$kit/gates/_auto.sh"
 
 usage() { echo "usage: check-gate.sh <intent|spec|plan|ship> <artifact-path>"; exit 1; }
 [ $# -eq 2 ] || usage
@@ -63,6 +64,15 @@ EOF
     (ok) ;;
     (unbound) echo "note: no git repository here — this ship approval binds no source identity";;
     (*) closed "the ship source binding is in an unknown state ('${src_state:-empty}') — closed by default.";;
+  esac
+  # the ship verdict close.sh reads (gates/_auto.sh sdlc_verify_gate): an open
+  # gate here never meets a refusing close
+  sdlc_verify_gate "$slug" "" record
+  case "$V_VERDICT" in
+    (pass|note) ;;
+    (accepted) echo "note: verification blocked, gap accepted by the human at ship: $V_DETAIL";;
+    (gap) closed "verification blocked: $V_DETAIL — the ship approval accepted no such gap. Fix it and re-run tools/verify.sh run $slug, or, if the human accepts delivering over it: gates/approve.sh ship $canon --accept-gap \"<the human's words>\"";;
+    (*) closed "verification $V_STATE: $V_DETAIL — fixed, never accepted: $V_FIX";;
   esac
 fi
 

@@ -28,7 +28,8 @@ before the push, and the only security pass (AGENTS.md rule 3).
 Dispatch an adversary (`roles/adversary.md`) with: spec.md, plan.md,
 `.sdlc/memory/POLICY.md` if present, and the diff (compact route: intent.md
 and the diff). It checks spec mismatch, missing untouched checks, security issues,
-policy violations, tests that cannot fail, and complexity that hides bugs.
+policy violations, tests that cannot fail, complexity that hides bugs, and
+its clean-code list, one row per changed file.
 Fix findings or record justified rejections, then re-run the adversary over
 the fixed diff — max 2 rounds, each logged in evidence.md's Adversary
 section. Blockers surviving round 2 go into evidence.md's not-verified list
@@ -43,8 +44,9 @@ Fill `templates/evidence.md` → `.sdlc/work/<slug>/evidence.md`:
   every numerical result. For long successful logs, include the verdict lines
   and numbers and cite the full scratch output. Include all failure output.
 - **The three verifier reports** (roles/verifier.md — E2E, Side effects,
-  Intent match) as reported, each check as command/tool · environment ·
-  scenario · observed result, with the fix-loop rounds from deviations.md. A
+  Intent match) as reported, each with its `VERDICT:` line (ship refuses
+  without it), each check as command/tool · environment · scenario · observed
+  result, with the fix-loop rounds from deviations.md. A
   lens that reported NOT VERIFIED stays NOT VERIFIED here: name what is
   missing; unit tests never stand in, and delivering over the gap is the
   human's explicit call, recorded under Not verified.
@@ -103,6 +105,12 @@ Below lazymode 3 the ship gate is the human's:
 > `<kit>/gates/approve.sh ship .sdlc/work/<slug>/evidence.md`
 
 STOP after requesting approval — and ask once, not once per artifact.
+
+**The verification receipt gates this approval** in every mode (with
+`.sdlc/verify.md`; docs/automation.md §4). A refusal prints its fix: run it,
+then approve again. Only `blocked` takes `--accept-gap "<words>"`, and the
+words are the human's own, quoted — never the agent's, at any lazymode.
+Without them, STOP and ask.
 
 ## After approval: one authorization, then deliver
 
@@ -166,6 +174,7 @@ approval is not that authorization.
    Never write a result you did not observe — an unverified delivery is
    `Confirmed: no`, and the feature closes as handed-off, not shipped.
 4. Hand it to close: `gates/close.sh <slug> shipped "<reason>"`. It re-checks
-   the ship approval and the delivery record. `scratch/` stays until then —
+   the ship approval, the delivery record, and the verification (a new gap
+   needs the human's `--accept-gap` again). `scratch/` stays until then —
    the pruning happens at close, and anything evidence.md, delivery.md, or a
    lesson cites is kept (AGENTS.md rule 5).

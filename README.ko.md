@@ -203,7 +203,7 @@ ship 승인이 묶는 것은 리뷰가 본 프로젝트 소스 전체 스냅샷�
 
 실행 권한은 Git의 `core.filemode` 설정에 따라 판단합니다. Windows Git Bash처럼 값이 `false`이면 추적 중인 파일은 Git 인덱스의 실행 권한을 사용하고 새 파일은 실행 권한이 없는 것으로 처리합니다. 실행 파일로 지정하려면 리뷰 전에 `git add --chmod=+x` 또는 `git update-index --chmod=+x`를 사용하세요. 리뷰 후 인덱스의 실행 권한을 바꾸면 승인이 무효화됩니다. `core.filemode=true`인 환경에서는 파일 시스템의 chmod 변경을 직접 검사합니다.
 
-그 전에 검증은 실제 동작을 돌립니다. 바뀐 동작을 사용자나 호출자가 실제로 만나는 인터페이스로 끝까지 실행하되, 변경 범위에 맞춰 프로젝트 자신의 명령(`.sdlc/config.md`의 `e2e:`, `qa:`, `run:`)을 씁니다. 실행할 환경이 없으면 NOT VERIFIED이며 evidence.md에 그렇게 적습니다. 통과한 단위 테스트가 조용한 대체물이 되는 일은 없습니다. 그 옆에서 두 갈래가 병렬로 더 돕니다. **부작용** 렌즈는 베이스라인, 유지되어야 할 동작, 그리고 변경이 건드린 데이터 형태가 다른 생산자와 소비자 사이에서 정합성을 지키는지 봅니다. **의도 일치** 렌즈는 intent 게이트가 결합한 티켓·기획서 스냅샷 `origin.md`를 번호 붙은 성공 기준마다 대조해, 구현이 무엇을 담았고 무엇을 빠뜨렸고 무엇을 넘어섰는지 적습니다. 어느 렌즈의 발견이든 build의 fix loop로 들어가며, 3라운드 안에 해결되지 않으면 사람에게 가고 `tools/auto.sh`는 이를 `fixloop.exhausted`로 보고합니다.
+그 전에 검증은 실제 동작을 돌립니다. 바뀐 동작을 사용자나 호출자가 실제로 만나는 인터페이스로 끝까지 실행하되, 변경 범위에 맞춰 프로젝트 자신의 명령(`.sdlc/config.md`의 `e2e:`, `qa:`, `run:`)을 씁니다. 요구사항마다 정상·경계·잘못된 입력 사례를 기대 결과부터 적어 두고, 범위 안의 역할과 플랫폼마다 따로 실행합니다. 실행할 환경이 없으면 NOT VERIFIED이며 evidence.md에 그렇게 적습니다. 통과한 단위 테스트가 조용한 대체물이 되는 일은 없습니다. 그 옆에서 두 갈래가 병렬로 더 돕니다. **부작용** 렌즈는 베이스라인, 유지되어야 할 동작, 그리고 변경이 건드린 데이터 형태가 다른 생산자와 소비자 사이에서 정합성을 지키는지 봅니다. **의도 일치** 렌즈는 intent 게이트가 결합한 티켓·기획서 스냅샷 `origin.md`를 번호 붙은 성공 기준마다 대조해, 구현이 무엇을 담았고 무엇을 빠뜨렸고 무엇을 넘어섰는지 적습니다. 어느 렌즈의 발견이든 build의 fix loop로 들어가며, 3라운드 안에 해결되지 않으면 사람에게 가고 `tools/auto.sh`는 이를 `fixloop.exhausted`로 보고합니다.
 
 ### 실패한 실행도 지식을 남긴다
 
@@ -258,7 +258,7 @@ tools/auto.sh next <slug>              # 한 줄 출력, 종료 코드 0 ready �
 tools/auto.sh status --json [slug]     # 스키마 sdlc-kit/auto-status@1
 tools/auto.sh intent-check <slug>      # 이 intent.md를 무인으로 실행해도 되는가
 tools/auto.sh checkpoint <slug> …      # 대기 중인 단계, 제한된 재시도, 완료된 외부 효과
-tools/verify.sh run|check <slug>       # 프로젝트의 검증 레시피 실행(python3 필요), 소스에 결합된 영수증 기록
+tools/verify.sh run|check|baseline|coverage <slug>   # 프로젝트의 검증 레시피 실행(python3 필요), 소스에 결합된 영수증 기록. baseline = 같은 검사를 기준 커밋에서 실행, coverage = 요구사항 → 검사 대응표
 tools/handoff.sh push|check <slug>     # 리뷰용 브랜치가 원격에 실제로 있음을 증명
 tools/kb.sh index|show|search|list|harvest   # 지난 피처와 교훈 찾기(--area로 영역 전체; harvest = 아직 병합되지 않은 지식)
 ```
@@ -278,7 +278,9 @@ tools/kb.sh index|show|search|list|harvest   # 지난 피처와 교훈 찾기(--
   실행 전후의 소스·레시피·각 명령의 출력 해시에 묶습니다. 코드가 바뀌면 `stale`,
   인용한 로그가 사라지거나 수정되면 `invalid`가 됩니다. `profile: strict`에서는 그 실행이
   직접 띄운 런타임에 대한 runtime/e2e 검사가 통과하지 않으면 리뷰 준비 완료가 아니며,
-  유닛 테스트 통과가 그 자리를 대신하지 않습니다. 영수증은 **변경 탐지**이지 인증이
+  유닛 테스트 통과가 그 자리를 대신하지 않습니다. 요구사항마다 검사나 검사하지 않는 이유가
+  있어야 합니다. 레시피가 있으면 영수증이 `ok`가 아닐 때 ship이 거부되고, 실행할 환경이 없는
+  `blocked`만 사람이 직접 한 말(`--accept-gap`)로 배포할 수 있습니다. 영수증은 **변경 탐지**이지 인증이
   아닙니다: 실행되지 않았거나 나중에 고쳐진 증거를 드러낼 뿐, 누가 만들었는지는 말하지
   않습니다.
 - **루프는 푸시된 피처 브랜치에서 끝납니다.** `tools/handoff.sh push`는 푸시 직전에
@@ -336,7 +338,7 @@ skills/1-6/      단계별 지시서
 roles/           verifier · adversary · researcher 계약
 gates/           approve · check · close · status · stats · selftest (공용 헬퍼 _common.sh, _auto.sh 포함)
 tools/           auto(기계 상태) · verify(영수증, python3 필요) · handoff(리뷰 브랜치) · _run.py(제한된 실행) · tripwire · refcheck
-templates/       intent · spec · plan · evidence · delivery · verify · lesson
+templates/       intent · spec · plan · evidence · delivery · verify (+ verify-feature) · lesson
 docs/index.html  EN/KO 랜딩 페이지
 docs/automation.md  기계 계약: status JSON, 영수증, 핸드오프, 체크포인트
 ```

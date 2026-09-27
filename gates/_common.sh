@@ -6,11 +6,15 @@
 # sha256 is used for CHANGE DETECTION only: it proves an artifact is byte-identical
 # to the one that was approved. It authenticates nobody — anyone who can write the
 # artifact can write the approval record next to it (both live in the working copy).
+# sha256sum first: macOS's shasum is a Perl script, several times slower to
+# start, and one gate call can hash hundreds of times. Same digest either way.
 sdlc_sha256_stdin() {
-  if command -v shasum >/dev/null 2>&1; then shasum -a 256 | awk '{print $1}'
-  elif command -v sha256sum >/dev/null 2>&1; then sha256sum | awk '{print $1}'
-  elif command -v openssl >/dev/null 2>&1; then openssl dgst -sha256 | awk '{print $NF}'
+  local h
+  if command -v sha256sum >/dev/null 2>&1; then h=$(sha256sum) || return 1
+  elif command -v shasum >/dev/null 2>&1; then h=$(shasum -a 256) || return 1
+  elif command -v openssl >/dev/null 2>&1; then h=$(openssl dgst -sha256) || return 1; h=${h##* }
   else echo "FAIL: no sha256 tool found (need shasum, sha256sum, or openssl)" >&2; return 1; fi
+  printf '%s\n' "${h%% *}"
 }
 sdlc_sha256_file() { # <path>
   [ -f "$1" ] || return 1
@@ -411,7 +415,27 @@ sdlc_delivery_issue() { # <delivery.md> <source-state> <recorded-digest> <curren
 }
 
 # --- record reading ----------------------------------------------------------
-sdlc_field() { # <record> <field>
+sdlc_field() { # <record> <field> → the first "<field>: " line's value
+  # plain bash, no awk: a gate reads dozens of fields per call, and a process
+  # per field was most of its run time
+  local k="$2: " l
   [ -f "$1" ] || return 1
-  awk -v k="$2: " 'index($0, k) == 1 { print substr($0, length(k) + 1); exit }' "$1"
+  while IFS= read -r l || [ -n "$l" ]; do
+    case "$l" in "$k"*) printf '%s\n' "${l#"$k"}"; return 0;; esac
+  done < "$1"
+}
+
+# Each verifier lens section of evidence.md needs its `VERDICT:` line, unless
+# evidence.md carries AGENTS.md rule 5's gap line. approve.sh ship reads this;
+# close.sh and check-gate.sh ship already bind the approved evidence.md.
+sdlc_lens_missing() { # <evidence.md> → the sections lacking a VERDICT: line, comma separated ("" = none)
+  awk '
+    { sub(/\r$/, "") }
+    tolower($0) ~ /no independent verification available: *[^< ]/ { gap = 1 }
+    /^[ \t]*```/ { fence = !fence; next }
+    !fence && /^#/ && !/^####/ { h = $0; sub(/[ \t]*<!--.*$/, "", h); sub(/[ \t]+$/, "", h); sec = tolower(h); next }
+    $0 ~ /^[ \t]*(- )?VERDICT: *[^< ]/ { ok[sec] = 1 }
+    END { if (gap) exit
+          n = split("### E2E|### Side effects|### Intent match", want, "|")
+          for (i = 1; i <= n; i++) if (!(tolower(want[i]) in ok)) { printf "%s%s", s, want[i]; s = ", " } }' "$1"
 }

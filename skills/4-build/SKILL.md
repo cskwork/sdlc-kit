@@ -24,7 +24,9 @@ Heartbeat throughout: AGENTS.md rule 9.
    baseline commands from plan.md (compact route: intent.md's Baseline line)
    and save output to
    `.sdlc/work/<slug>/baseline.txt`. Without a baseline, you cannot prove that
-   existing behavior stayed unchanged.
+   existing behavior stayed unchanged. With a `.sdlc/verify.md` recipe, also
+   run `tools/verify.sh baseline <slug>` once the new tests exist, and again
+   after editing them.
 
 ## Execute
 
@@ -60,6 +62,12 @@ Heartbeat throughout: AGENTS.md rule 9.
   and watch it fail on the current code for the reported reason. Save that
   output under `scratch/`; ship quotes its deciding lines in evidence.md's
   Bug proof. A test you never saw fail is not proof.
+- **With a recipe, write the checks with the code** in
+  `.sdlc/work/<slug>/verify.md` (templates/verify-feature.md): one `check:`
+  per requirement variant (roles/verifier.md), new tests `must-fail-on-base`
+  where allowed, a `gap:` line only for what truly cannot be checked.
+  `tools/verify.sh coverage <slug>` lists no uncovered id; fix a `vacuous` test
+  (or `test_paths:`) until it fails at base for the reason it tests.
 - A check that must fail the build must fail it synchronously (direct throw,
   sync IO, or top-level await). An unawaited promise is not a gate. It depends
   on environment behavior and may finish too late.
