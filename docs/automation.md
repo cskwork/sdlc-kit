@@ -19,7 +19,7 @@ runners, which all ship python3.
 | `tools/auto.sh next <slug>` | one line plus an exit code, for a driver |
 | `tools/auto.sh intent-check <slug>` | the full-auto intent contract |
 | `tools/auto.sh checkpoint <slug> …` | pending execution metadata: step, bounded attempts, completed external effects |
-| `tools/verify.sh run\|check\|doctor\|show <slug>` | executes the project's verification recipe and records a receipt bound to the source |
+| `tools/verify.sh run\|check\|doctor\|show\|baseline\|coverage <slug>` | executes the project's verification recipe and records a receipt bound to the source |
 | `tools/handoff.sh check\|push <slug>` | the review handoff: a feature branch a human can review, proven to be there |
 
 `gates/status.sh --json` is the same output through the cockpit everyone
@@ -184,7 +184,10 @@ authorized scope stops the loop at every level, including 4.
 
 `.sdlc/verify.md` (seed from `templates/verify.md`) maps each requirement to the
 project's own command and names the launch / doctor / cleanup commands around
-them:
+them. A feature's own checks may live in `.sdlc/work/<slug>/verify.md`
+(`templates/verify-feature.md`). The two files are one recipe: a check id
+appears once across both, and the receipt binds both digests, so editing one
+feature's file stales only that feature's receipt:
 
 ```
 profile: strict
@@ -193,11 +196,25 @@ doctor: curl -fsS http://localhost:3000/health
 doctor_timeout: 60
 cleanup: docker compose -f compose.test.yml down -v
 environment: local instance, seeded fixture data
+test_paths: test/*
 check: build | build | npm run build
 check: R1    | unit  | npm test -- login
 check: R2    | e2e   | npx playwright test --grep @login
 check: D1    | data  | psql -Atc "select count(*) from sessions where token_v2 is null" | grep -qx 0
 ```
+
+and, in `.sdlc/work/login-v2/verify.md`:
+
+```
+check: R3.negative   | unit | npm test -- login-lockout
+check: R3.regression | unit | npm test -- login-lockout-regression | must-fail-on-base
+gap: R4 | SSO callback needs the partner sandbox; verified by hand in evidence.md
+```
+
+Ids are requirement ids, optionally with a variant (`R1.happy`,
+`R1.regression`; roles/verifier.md). The line syntax is in
+`templates/verify.md`: a line the parser would not read as written is refused,
+never skipped.
 
 `data` is a read-only consistency query (the Side effects lens of
 `roles/verifier.md`): it is receipted like every other check and never counts
@@ -215,6 +232,9 @@ receipt_schema: sdlc-kit/verify-receipt@1
 source_digest_before: <the whole source snapshot before the checks>
 source_digest_after:  <and after — they must be equal>
 recipe_digest: <sha256 of .sdlc/verify.md>
+feature_recipe_digest: <sha256 of .sdlc/work/<slug>/verify.md, or none>
+baseline: <base sha of a usable verify-baseline.md, or none>
+pre_existing: lint | none
 launch: started (pgid 4711) | failed | skipped (--no-launch) | none
 runtime_instance: owned | external | none
 doctor: pass | fail (after 60s) | unowned-runtime | skip
@@ -222,8 +242,11 @@ cleanup: ok | failed | none
 checks_configured: 5
 checks_run: 5
 runtime_evidence: yes | no
-result: pass | fail | inconclusive
+result: pass | fail | flaky | inconclusive
 check: R2 | e2e | 0 | <command sha256> | <output sha256> | <log path>
+check: R5 | e2e | 1 | <command sha256> | <output sha256> | <log path> | flaky (re-run exit 0: <re-run log>)
+check: lint | lint | 1 | <command sha256> | <output sha256> | <log path> | pre-existing
+gap: R4 | SSO callback needs the partner sandbox; verified by hand in evidence.md
 ```
 
 Consequences, all of them deliberate:
@@ -244,6 +267,9 @@ Consequences, all of them deliberate:
   `profile: strict`, blocks — nothing proves an instance this run did not start
   is running this source. `strict` + `launch:` also requires a passing `doctor:`
   (make it assert the build or version, not just a listening port).
+- **A failing runtime/e2e check runs once more.** Passing then makes it
+  `flaky` (first exit kept, the re-run in its label), which refuses ship like
+  `fail`. build/unit/lint/data never re-run.
 - **A cleanup that fails is loud.** `cleanup: failed` blocks instead of leaving a
   leftover runtime to make the next result meaningless.
 - **An interruption stops the check that is running.** INT/TERM take down this
@@ -281,8 +307,127 @@ write the receipt can also run the commands. It is not a review either — the
 independent verifier (`roles/verifier.md`, fresh context) is still required and
 is not replaced by any receipt.
 
-`tools/verify.sh check <slug>` reports `ok` · `fail` · `stale` · `missing` ·
-`invalid` · `inconclusive` · `blocked` · `recipe` · `unconfigured`.
+`tools/verify.sh check <slug>` reports `ok` · `fail` · `flaky` · `stale` ·
+`missing` · `invalid` · `inconclusive` · `blocked` · `uncovered` · `vacuous` ·
+`recipe` · `unconfigured`.
+
+### The receipt gates ship
+
+`gates/approve.sh ship` (every mode: human, `--delegated`, `--lazy`),
+`gates/close.sh <slug> shipped` and `gates/check-gate.sh ship` read one verdict
+table (`gates/_auto.sh sdlc_verify_gate`), shared with `tools/auto.sh`,
+`tools/handoff.sh` and `status.sh`:
+
+| state | ship approval / `shipped` close |
+|---|---|
+| `ok` | allowed |
+| `unconfigured` (no `.sdlc/verify.md`) | allowed, with a note that runtime proof is not machine-checked |
+| `blocked` | refused unless `--accept-gap "<the human's words>"` |
+| every other state | refused with the fix command: fixed, never accepted |
+
+`blocked` means: the doctor failed, or answered for a runtime this run did not
+own; the cleanup failed; there is no git repository (an empty source snapshot
+would make every receipt look current); or, under `profile: strict`, no
+runtime/e2e check passed, the run used `--no-launch`, or `launch:` has no
+passing doctor.
+
+`--accept-gap` takes the human's words, one line, not blank; `--lazy` never
+supplies them. The ship approval records them as `verify_gap_accepted:` with
+the gap as `verify_gap:`. `close.sh` honours that acceptance while the gap is
+the same one, or takes its own `--accept-gap`; a different gap closes the ship
+gate and refuses the close. A `shipped` close records `verify_state:` in
+`CLOSED`, and for an accepted gap `verify_gap:`, `verify_gap_accepted:` and
+`verify_gap_accepted_at: ship|close`.
+
+Ship also needs a `VERDICT:` line under each lens section of evidence.md
+(`### E2E`, `### Side effects`, `### Intent match`), or AGENTS.md rule 5's
+`no independent verification available: <reason>` line, in every mode.
+
+`tools/auto.sh --json` reports `flaky` as `verify.fail`, `uncovered` and
+`vacuous` as `verify.uncovered` / `verify.vacuous` (next action
+`tools/verify.sh coverage|baseline <slug>`), and an unaccepted `blocked` at
+ship as the human's `--accept-gap`. After the ship approval, a verification
+that no longer holds blocks the delivery stage too.
+
+### Requirement coverage
+
+Every requirement id — spec.md `- R<n>:` lines (full route), intent.md
+`- [ ] O<n>:` lines (compact) — needs a `unit`/`runtime`/`e2e`/`data` check
+whose id is the requirement id or starts with `<id>.`, or a
+`gap: <id> | <reason>` line; else the state is `uncovered`, naming the ids.
+build and lint never cover. `tools/verify.sh coverage <slug>` prints the table;
+gap lines are listed in the receipt and in `status.sh`.
+
+Under `profile: strict`:
+
+- the covering check must be `runtime` or `e2e`. A unit/data-only requirement
+  is `uncovered`, which `--accept-gap` never clears; a gap line satisfies
+  coverage and leaves the run `blocked`, which the human may accept.
+- each id with checks also needs `<id>.happy`, `<id>.boundary` and
+  `<id>.negative` checks (any of unit/runtime/e2e/data) or a
+  `gap: <id>.<variant> | <reason>` line; a missing one is `uncovered`.
+
+The id reader is lenient, because a requirement it fails to see is one nobody
+has to cover: `-`/`*`/`+` bullets, indentation, `**R1**:`, `R3 :`, and an
+optional checkbox on the compact route. Only the template's placeholder line
+(`R1: <requirement>`, `O1: <criterion>`) is skipped. A requirement file with no
+id at all is `uncovered`, never ok.
+
+### The baseline: pre-existing, regression, vacuous
+
+`tools/verify.sh baseline <slug> [--base <ref>]` checks the base out in a
+disposable `git worktree add --detach` outside the project, hooks off. The
+default base is `HEAD` when the tree has uncommitted changes; a clean tree needs
+`--base`; a base that is not an ancestor of `HEAD` is refused. It runs
+`baseline_setup:`, then the PROJECT recipe's build/unit/lint checks — not one
+named for a requirement, not a feature recipe's, not one whose command names a
+file new since the base, never launch or doctor — and the `must-fail-on-base`
+checks, and writes `.sdlc/work/<slug>/verify-baseline.md` (base ref and sha,
+both recipe digests, and per check its command digest, exit code and log). The
+kit never stashes, resets or writes the human's tree. The worktree is removed
+on every path out, INT/TERM/HUP included, the running check first; if
+`git worktree remove` fails, only this worktree's directory and
+`.git/worktrees/` entry are deleted (never a global prune), and a leftover is
+reported. A `baseline_setup:` or check that links into `$SDLC_PROJECT_ROOT` can
+write the human's checkout: install or copy, never link.
+
+- **Pre-existing.** `run` labels a failing build/unit/lint check of the project
+  recipe `pre-existing` when the usable baseline shows the same id and command
+  failing with the SAME exit status, the base could run it (not 124/126/127),
+  and its command names no file new since the base. The label is on the
+  receipt line and in `VERIFY ok`, `show` and `status.sh`; the check does not
+  fail the result. The state re-derives it from the baseline on every read. A
+  check named for a requirement, a runtime/e2e/data check, a must-fail check
+  and a feature recipe check are never pre-existing. A baseline for another
+  recipe, or at a base no longer in `HEAD`'s history, is ignored with a note.
+- **The limit.** A suite that already failed can hide a NEW failure; an exit
+  code cannot tell them apart. The Side effects lens compares the base and
+  current logs (`scratch/verify-base/`, `scratch/verify/`). A base check that
+  fails only for missing dependencies makes every failure look pre-existing:
+  that is what `baseline_setup:` is for.
+- **Must fail on base.** The baseline copies the changed and added files
+  matching `test_paths:` into the base worktree and runs each
+  `must-fail-on-base` check there. Exit 0 is `vacuous` (it passes without the
+  change); so is 124/126/127 (it could not run). The baseline refuses, writing
+  nothing, when no changed file matches `test_paths:`, or when a must-fail
+  command names a changed file `test_paths:` misses. No usable baseline is
+  `missing`; test files edited after it are `stale`. The flag is refused on
+  runtime/e2e checks when `launch:` is set (the verifier compares by hand).
+  The command need not name the copied file: a runner may select tests by
+  name.
+
+### Safety
+
+- `forbidden_hosts:` refuses the recipe (exit 2, state `recipe`) before
+  anything runs when any launch / doctor / cleanup / baseline_setup / check
+  command names one (case-insensitive substring of the command text: a guard
+  against a mistake, not a sandbox).
+- `tools/_run.py` redacts credentials in every log it writes, after the
+  command ends and before the log is hashed: `Authorization:` / `Bearer`
+  values, `token|password|passwd|secret|api_key` values after `=` or `:`, and
+  JWT-shaped strings become `[REDACTED]`. Best-effort: other shapes pass
+  through, the raw bytes exist while the command runs, and on Windows a helper
+  killed outright never redacts.
 
 ## 5. The review handoff, and where the loop stops
 
