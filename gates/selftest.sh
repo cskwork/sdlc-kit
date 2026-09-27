@@ -340,7 +340,7 @@ mkdir spec; printf 'x\n' > spec/x.txt
 out=$(TMPDIR="$tt" "$V" baseline w2 2>&1) && fail "a must-fail command running an uncopied changed file was baselined"
 has "$out" "runs tests/o2.sh, which changed since the base" "the uncopied test not named"
 sed 's#^test_paths: .*#test_paths: tests/*#' .sdlc/verify.md > "$t/r.tmp"; cat "$t/r.tmp" > .sdlc/verify.md
-printf 'sh helper.sh\n' > tests/o2.sh; printf 'exit 1\n' > helper.sh   # the helper does not exist at base
+printf './helper.sh\n' > tests/o2.sh; printf 'exit 1\n' > helper.sh   # absent at base → 127 (`sh missing.sh` is 2 under dash)
 out=$(TMPDIR="$tt" "$V" baseline w2 2>&1) && fail "a must-fail check that could not run at base passed"
 has "$out" "COULD NOT RUN" "a 127 at base was counted as the test failing"; wtclean "after a vacuous baseline"
 out=$("$V" check w2) || true; has "$out" "could not run at base" "the state did not name the check that could not run"
