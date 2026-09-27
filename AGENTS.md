@@ -242,8 +242,10 @@ archives the feature to `.sdlc/archive/<slug>/`.
 
    **Verification runs the real thing, through three lenses** — E2E, Side
    effects, Intent match — each in its own fresh context, in parallel
-   (roles/verifier.md defines them). **No environment to run it in = NOT
-   VERIFIED**: say what is missing, in evidence.md. A passing unit suite is
+   (roles/verifier.md defines them), each requirement by variants with
+   expectations written first, for every role and platform in scope.
+   **No environment to run it in = NOT VERIFIED**: say what is
+   missing, in evidence.md. A passing unit suite is
    never a silent substitute, and a delivery over a known gap is allowed
    only when the human accepts that gap explicitly. A finding from any lens
    enters the build fix loop (skills/4-build): three rounds, then the human
@@ -251,7 +253,9 @@ archives the feature to `.sdlc/archive/<slug>/`.
    A project that fills `.sdlc/verify.md` (templates/verify.md) gets a
    receipt from `tools/verify.sh run <slug>` that makes "this never ran" and
    "this was edited afterwards" detectable (docs/automation.md §4). It does
-   not replace the fresh-context verifier.
+   not replace the fresh-context verifier. With a recipe, ship and a
+   `shipped` close need that receipt `ok`, or `blocked` with the human's own
+   words (`--accept-gap`).
 
    **A bug fix carries its own proof chain**: the failure observed before
    the fix, the causal mechanism, the SAME reproduction passing after, and

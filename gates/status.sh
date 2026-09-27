@@ -300,13 +300,17 @@ EOF
     fi
   fi
   # verification receipt (tools/verify.sh): the same verdict the machine view
-  # reports, so a feature never looks review-ready here and blocked there.
+  # and the ship gates read (gates/_auto.sh sdlc_verify_gate), so a feature never
+  # looks review-ready here and blocked there.
   if [ -f .sdlc/verify.md ]; then
-    vst=$(sdlc_verify_state "$slug")
-    printf "  %-8s %s — %s\n" "verify" "${vst%%|*}" "${vst#*|}"
-    case "${vst%%|*}" in
-      fail|stale|missing|blocked)
-        [ -z "$next_action" ] && next_action="verification: ${vst#*|}";;
+    sdlc_verify_gate "$slug" "" record
+    if [ "$V_VERDICT" = accepted ]; then
+      V_DETAIL="$V_DETAIL — gap accepted by the human at ship: $(sdlc_field ".sdlc/approvals/${slug}.ship.approval" verify_gap_accepted || true)"
+    fi
+    printf "  %-8s %s — %s\n" "verify" "$V_STATE" "$V_DETAIL"
+    case "$V_VERDICT" in
+      refuse|gap)
+        [ -z "$next_action" ] && next_action="verification: $V_DETAIL";;
     esac
   fi
   # heartbeat (AGENTS.md rule 9): the live one-liner plus its age, so silence

@@ -30,7 +30,16 @@ Attack, in order:
    to check, not a verdict. An understated tier is a blocking finding.
 7. **For diffs**: spec mismatch, security (injection, authz, secrets, unsafe
    deserialization), test theater (tests that cannot fail / assert nothing),
-   silently changed behavior that spec says stays untouched.
+   silently changed behavior that spec says stays untouched. Then read every
+   changed file once per question, judging only what this diff added. These
+   block: a **masked symptom** (a catch that logs and continues, a default
+   that hides a missing value); an **unrequested behavior change**; a **split
+   source of truth** (one rule decided in two places); a **name that lies**
+   (`getX` writes, `total` holds a count); a **hardcoded environment value**
+   (URL, credential, port, tenant or account id, date); a **new path with no
+   boundary handling** (empty, null, zero); **dead code from this change** (a
+   replaced method, an unread flag, an unused import). Unsure → non-blocking;
+   style alone never blocks.
 8. **Policy.** Check the artifact against every rule in
    `.sdlc/memory/POLICY.md`. These are human-declared hard rules: any
    violation is a blocking finding, never a judgment call.
@@ -45,8 +54,15 @@ Report format:
 - <concern>
 ### Checked and clean
 - <area>: <what you looked at>
+### Per changed file   (diffs only)
+| File | Severity | Finding |
+|------|----------|---------|
+| <path> | blocking / non-blocking / none | <finding, with line> |
 VERDICT: NO BLOCKERS | N BLOCKERS
 ```
+
+For a diff, every changed file gets a row, `none` written out (an absent row
+reads as unread). Each blocking row is also listed under Blocking.
 
 Support every objection with a quote, path, or line. An empty blocking section
 is valid after a complete attack. Do not report a clean result after a shallow

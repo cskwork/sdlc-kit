@@ -32,8 +32,9 @@ that predate the change.>
 - <rate limits, migrations, shared state, important quirks>
 
 ## Proof
-<per spec requirement: what demonstrates it, using .sdlc/config.md commands>
-- R1 → <test/command>
+<per spec requirement: what demonstrates it, using .sdlc/config.md commands,
+its variants (roles/verifier.md) and every role/platform in scope>
+- R1 → <test/command> · variants: R1.happy, R1.boundary, R1.negative · roles/platforms: <each, or n/a>
 
 ## Regression baseline   <!-- brownfield -->
 - Commands: <exact commands run BEFORE changes>
