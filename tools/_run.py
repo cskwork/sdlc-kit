@@ -10,7 +10,9 @@ three things here. Nothing else in the kit depends on this file: the gates,
 Subcommands (all take --cmd as ONE shell string, run through `sh -c`):
 
   exec   --cmd C --log F --timeout S      run C to completion, stdin </dev/null,
-                                          output appended to F. Exit = the
+         [--cwd D]                        in D when given (the baseline's base
+                                          worktree), output appended to F, then
+                                          F's credentials redacted. Exit = the
                                           command's own status, or 124 on
                                           timeout (the whole process group is
                                           terminated, then killed). INT/TERM
@@ -31,6 +33,8 @@ Subcommands (all take --cmd as ONE shell string, run through `sh -c`):
                                           (TERM, then KILL). Exit 0 only when
                                           nothing of it is left; 1 says so
                                           explicitly instead of hanging.
+  redact --log F                          redact credentials in F in place (the
+                                          launched runtime's log, once stopped).
 
 Exit 2 is a usage or environment error of this helper itself.
 
@@ -57,6 +61,7 @@ Two limits of that containment, stated rather than assumed:
 import argparse
 import csv
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -233,6 +238,48 @@ def _win_bind_tree(proc):
         return "%s: %s" % (type(exc).__name__, exc)
 
 
+# --- credential redaction ----------------------------------------------------
+# A check log is evidence, hashed and quoted, so a printed token must not
+# survive into it: every log this helper writes is rewritten after the command
+# ends, before it is hashed. BEST-EFFORT (limits: docs/automation.md §4).
+_REDACTED = b"[REDACTED]"
+_REDACTIONS = [
+    # JWT-shaped: header.payload.signature, the first two base64url JSON ("eyJ")
+    (re.compile(rb"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*"),
+     lambda m: _REDACTED),
+    (re.compile(rb"(?i)(authorization[\"']?\s*[:=]\s*[\"']?)((?:bearer|basic|token|digest)\s+)?[^\s\"',;]+"),
+     lambda m: m.group(1) + (m.group(2) or b"") + _REDACTED),
+    (re.compile(rb"(?i)(\bbearer\s+)[A-Za-z0-9._~+/-]+=*"),
+     lambda m: m.group(1) + _REDACTED),
+    (re.compile(rb"(?i)((?:token|password|passwd|secret|api[_-]?key)[\"']?\s*[:=]\s*[\"']?)[^\s\"',;&]+"),
+     lambda m: m.group(1) + _REDACTED),
+]
+
+
+def _redact_bytes(data):
+    for pattern, repl in _REDACTIONS:
+        data = pattern.sub(repl, data)
+    return data
+
+
+def _redact_file(path):
+    """Rewrite path with credentials redacted. Silent when there is no file."""
+    if not path:
+        return
+    try:
+        with open(path, "rb") as fh:
+            data = fh.read()
+    except OSError:
+        return
+    new = _redact_bytes(data)
+    if new != data:
+        try:
+            with open(path, "wb") as fh:
+                fh.write(new)
+        except OSError as exc:
+            _report("could not redact %s: %s" % (path, exc))
+
+
 def _open_log(path, append=True):
     if not path:
         return subprocess.DEVNULL, None
@@ -243,9 +290,11 @@ def _open_log(path, append=True):
     return fh, fh
 
 
-def _spawn(cmd, log, new_group=True, bind_tree=False):
+def _spawn(cmd, log, new_group=True, bind_tree=False, cwd=None):
     out, fh = _open_log(log)
     kwargs = {"stdin": subprocess.DEVNULL, "stdout": out, "stderr": subprocess.STDOUT}
+    if cwd:
+        kwargs["cwd"] = cwd
     if new_group:
         if WINDOWS:
             kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
@@ -319,10 +368,22 @@ def _stop(p):
 
 
 def cmd_exec(a):
+    # every exit path redacts: a timed-out or interrupted check's log is
+    # evidence too, and it is hashed after this returns
+    try:
+        return _exec(a)
+    finally:
+        _redact_file(a.log)
+
+
+def _exec(a):
     if a.timeout <= 0:
         print("_run.py: --timeout must be a positive number of seconds", file=sys.stderr)
         return 2
-    p = _spawn(a.cmd, a.log, bind_tree=True)
+    if a.cwd and not os.path.isdir(a.cwd):
+        print("_run.py: --cwd %s is not a directory" % a.cwd, file=sys.stderr)
+        return 2
+    p = _spawn(a.cmd, a.log, bind_tree=True, cwd=a.cwd or None)
     # The command runs in its OWN group, so a signal sent to this helper (or to
     # the shell's foreground group) never reaches it. Forward it explicitly:
     # an interrupted run must stop the command it is running, not outlive it.
@@ -425,11 +486,17 @@ def cmd_stop(a):
     return 1
 
 
+def cmd_redact(a):
+    _redact_file(a.log)
+    return 0
+
+
 def main(argv):
     ap = argparse.ArgumentParser(add_help=True)
     sub = ap.add_subparsers(dest="sub")
     e = sub.add_parser("exec"); e.add_argument("--cmd", required=True)
     e.add_argument("--log", default=""); e.add_argument("--timeout", type=float, required=True)
+    e.add_argument("--cwd", default="")
     e.set_defaults(fn=cmd_exec)
     l = sub.add_parser("launch"); l.add_argument("--cmd", required=True)
     l.add_argument("--log", default=""); l.add_argument("--pidfile", required=True)
@@ -440,6 +507,8 @@ def main(argv):
     s = sub.add_parser("stop"); s.add_argument("--pidfile", required=True)
     s.add_argument("--timeout", type=float, default=15)
     s.set_defaults(fn=cmd_stop)
+    r = sub.add_parser("redact"); r.add_argument("--log", required=True)
+    r.set_defaults(fn=cmd_redact)
     a = ap.parse_args(argv)
     if not getattr(a, "fn", None):
         ap.print_usage(sys.stderr)

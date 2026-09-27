@@ -203,7 +203,7 @@ The ship approval binds the project's whole source snapshot as the review saw it
 
 Executable bits follow Git's `core.filemode` setting. When it is `false`, as on Git Bash for Windows, the snapshot uses the index mode for tracked files and treats new files as non-executable. Use `git add --chmod=+x` or `git update-index --chmod=+x` before review to mark an executable; changing that index mode after review invalidates approval. With `core.filemode=true`, filesystem chmod changes are checked directly.
 
-Before any of that, verification runs the real thing: the changed behavior exercised end to end through the interface a user or caller actually meets, scoped to the change, with the project's own commands (`e2e:`, `qa:`, `run:` in `.sdlc/config.md`). No environment to run it in means NOT VERIFIED, stated as such in evidence.md — a green unit suite is never a silent substitute. Two more lenses run beside it in parallel: **side effects** — the baseline, the untouched items, and the consistency of every data shape the change touches across its other producers and consumers — and **intent match** — the build read back, per numbered success criterion, against `origin.md`, the snapshot of the ticket or 기획서 the intent gate bound, listing what is covered, missing, and beyond. A finding from any lens enters the build fix loop: three rounds, then the human, and `tools/auto.sh` reports an exhausted loop as `fixloop.exhausted`.
+Before any of that, verification runs the real thing: the changed behavior exercised end to end through the interface a user or caller actually meets, scoped to the change, with the project's own commands (`e2e:`, `qa:`, `run:` in `.sdlc/config.md`): happy, boundary, and negative cases per requirement, expectations written first, for every role and platform in scope. No environment to run it in means NOT VERIFIED, stated as such in evidence.md — a green unit suite is never a silent substitute. Two more lenses run beside it in parallel: **side effects** — the baseline, the untouched items, and the consistency of every data shape the change touches across its other producers and consumers — and **intent match** — the build read back, per numbered success criterion, against `origin.md`, the snapshot of the ticket or 기획서 the intent gate bound, listing what is covered, missing, and beyond. A finding from any lens enters the build fix loop: three rounds, then the human, and `tools/auto.sh` reports an exhausted loop as `fixloop.exhausted`.
 
 ### Failed runs leave knowledge
 
@@ -258,7 +258,7 @@ tools/auto.sh next <slug>              # one line; exit 0 ready · 10 needs-huma
 tools/auto.sh status --json [slug]     # schema sdlc-kit/auto-status@1
 tools/auto.sh intent-check <slug>      # is this intent.md safe to run unattended?
 tools/auto.sh checkpoint <slug> …      # pending step, bounded attempts, completed effects
-tools/verify.sh run|check <slug>       # run the project's verification recipe (needs python3); receipt bound to the source
+tools/verify.sh run|check|baseline|coverage <slug>   # run the project's verification recipe (needs python3); receipt bound to the source; baseline = the same checks at the base commit; coverage = requirement → check
 tools/handoff.sh push|check <slug>     # the review branch, proven to be on the remote
 tools/kb.sh index|show|search|list|harvest   # find past features and lessons (--area for every store; harvest = knowledge not merged yet)
 ```
@@ -280,8 +280,11 @@ Three boundaries are explicit and do not move:
   output. Change the code and it goes `stale`; edit a log it cites and it goes
   `invalid`. Under `profile: strict`, no passing runtime/e2e check against a
   runtime that run launched means not review-ready — a green unit suite is never
-  a stand-in. The receipt is change detection, not authentication: it makes a
-  missing or edited proof visible, and never says who produced it.
+  a stand-in. Every requirement needs a check or a stated gap. With a recipe,
+  ship refuses a receipt that is not `ok`; a `blocked` one (no environment to
+  run in) ships only with the human's own words (`--accept-gap`). The receipt
+  is change detection, not authentication: it makes a missing or edited proof
+  visible, and never says who produced it.
 - **The loop ends at a pushed feature branch.** `tools/handoff.sh push` re-runs
   the complete ship gate and the verification immediately before it pushes, and
   requires that the scope `intent.md` records actually names a publication — an
@@ -338,7 +341,7 @@ skills/1-6/      stage instructions
 roles/           verifier · adversary · researcher contracts
 gates/           approve · check · close · status · stats · selftest (+ _common.sh, _auto.sh)
 tools/           auto (machine status) · verify (receipts, needs python3) · handoff (review branch) · _run.py (bounded execution) · tripwire · refcheck
-templates/       intent · spec · plan · evidence · delivery · verify · lesson
+templates/       intent · spec · plan · evidence · delivery · verify (+ verify-feature) · lesson
 docs/index.html  bilingual EN/KO landing page
 docs/automation.md  the machine contract: status JSON, receipts, handoff, checkpoint
 ```
