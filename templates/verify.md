@@ -78,7 +78,8 @@ baseline_setup: <e.g. npm ci --prefer-offline --no-audit>
 #   check: <id> | <kind> | <command> [| must-fail-on-base]
 #   id     [a-zA-Z0-9._-]+ — the requirement id (R1 on the full route, O1 on the
 #          compact one), optionally with a variant: R1.happy, R1.boundary,
-#          R1.negative, R1.regression, R1.authz (roles/verifier.md). It names
+#          R1.negative, R1.regression, R1.authz, or a reach axis: R1.entry,
+#          R2.state, R1.context (roles/verifier.md). It names
 #          the log .sdlc/work/<slug>/scratch/verify/<id>.log.
 #   kind   build | unit | lint | runtime | e2e | data
 #          `runtime` and `e2e` are the only kinds that count as the real run:

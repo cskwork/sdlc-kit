@@ -97,8 +97,9 @@ archives the feature to `.sdlc/archive/<slug>/`.
    code and behavior.
 
    **The plan gate is tiered.** Trip-wires: schema or data migration, data
-   deletion or destructive backfill, public API or contract change,
-   security-sensitive paths, infra or config change, beyond-spec scope —
+   deletion or destructive backfill, public API or contract change
+   (refusing input that existing callers send is one), security-sensitive
+   paths, infra or config change, beyond-spec scope —
    anything build would execute irreversibly. plan.md records the verdict
    in its **Gate tier** section; the adversary re-checks every trip-wire,
    and an understated tier is a blocking finding. No trip-wires and no
@@ -243,7 +244,10 @@ archives the feature to `.sdlc/archive/<slug>/`.
    **Verification runs the real thing, through three lenses** — E2E, Side
    effects, Intent match — each in its own fresh context, in parallel
    (roles/verifier.md defines them), each requirement by variants with
-   expectations written first, for every role and platform in scope.
+   expectations written first, for every role and platform in scope, plus
+   three **reach** scenarios per change — another caller (entry), an
+   existing record (state), another surrounding condition (context) —
+   picked from plan.md's Reach list.
    **No environment to run it in = NOT VERIFIED**: say what is
    missing, in evidence.md. A passing unit suite is
    never a silent substitute, and a delivery over a known gap is allowed

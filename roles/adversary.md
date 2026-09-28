@@ -27,6 +27,10 @@ Attack, in order:
 6. **For plans**: every spec requirement maps to a proof command; the file
    list and work order are complete; **Data touched** names every shape the
    changed files write or read, with its other producers and consumers;
+   **Reach** lists every caller of each changed behavior found across the
+   repositories and tiers that call it, with what each sends, and picks one
+   entry, state, and context scenario; a caller you find that it omits is
+   blocking when the change refuses input it accepted before;
    risks reflect DOMAIN.md constraints; and
    the **Gate tier** verdict is correct — re-check every trip-wire yourself
    (migration, data deletion, public API, security paths, infra/config,
@@ -42,7 +46,9 @@ Attack, in order:
    (`getX` writes, `total` holds a count); a **hardcoded environment value**
    (URL, credential, port, tenant or account id, date); a **new path with no
    boundary handling** (empty, null, zero); **dead code from this change** (a
-   replaced method, an unread flag, an unused import). Unsure → non-blocking;
+   replaced method, an unread flag, an unused import); a **new refusal** (a
+   validation, a newly required field, a narrowed type or range) with no
+   check of what each existing caller actually sends. Unsure → non-blocking;
    style alone never blocks.
 8. **Policy.** Check the artifact against every rule in
    `.sdlc/memory/POLICY.md`. These are human-declared hard rules: any
