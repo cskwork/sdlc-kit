@@ -212,7 +212,8 @@ gap: R4 | SSO callback needs the partner sandbox; verified by hand in evidence.m
 ```
 
 Ids are requirement ids, optionally with a variant (`R1.happy`,
-`R1.regression`; roles/verifier.md). The line syntax is in
+`R1.regression`) or a reach axis (`R1.entry`, `R1.state`, `R1.context`;
+roles/verifier.md). The line syntax is in
 `templates/verify.md`: a line the parser would not read as written is refused,
 never skipped.
 
@@ -366,6 +367,11 @@ Under `profile: strict`:
 - each id with checks also needs `<id>.happy`, `<id>.boundary` and
   `<id>.negative` checks (any of unit/runtime/e2e/data) or a
   `gap: <id>.<variant> | <reason>` line; a missing one is `uncovered`.
+- once any requirement is proved, the change also needs one reach scenario
+  per axis — a check named `<id>.entry`, `<id>.state` and `<id>.context` for
+  any requirement id (any of unit/runtime/e2e/data), or a
+  `gap: <id>.<axis> | <reason>` line; a missing axis is reported as
+  `reach.<axis>` and is `uncovered` (roles/verifier.md, plan.md's Reach).
 
 The id reader is lenient, because a requirement it fails to see is one nobody
 has to cover: `-`/`*`/`+` bullets, indentation, `**R1**:`, `R3 :`, and an

@@ -64,7 +64,8 @@ Heartbeat throughout: AGENTS.md rule 9.
   Bug proof. A test you never saw fail is not proof.
 - **With a recipe, write the checks with the code** in
   `.sdlc/work/<slug>/verify.md` (templates/verify-feature.md): one `check:`
-  per requirement variant (roles/verifier.md), new tests `must-fail-on-base`
+  per requirement variant and per reach scenario plan.md picked
+  (roles/verifier.md), new tests `must-fail-on-base`
   where allowed, a `gap:` line only for what truly cannot be checked.
   `tools/verify.sh coverage <slug>` lists no uncovered id; fix a `vacuous` test
   (or `test_paths:`) until it fails at base for the reason it tests.
