@@ -30,7 +30,8 @@ calls it, not only the one being changed.>
 - Entry: <each caller — screen, route, client, job, service — and what it sends or assumes>
 - State: <states of existing records the change meets — made before it, in progress, finished, copied>
 - Context: <conditions that change the outcome — tenant, category, locale, configuration, shared ownership>
-- Picked: <R1.entry: the caller least like the one built against> · <R2.state: …> · <R1.context: …> | gap: <axis — why nothing else exists>
+- Picked: <R1.entry: the caller least like the one built against> · <R2.state: reached through the product's own steps> · <R1.context: …> | gap: <axis — why nothing else exists>
+- Combined: <the picks that can happen in one real use, run together> | none — <why they cannot meet>
 
 ## Order of work
 <Each step keeps configured checks passing. Add tests with the code they test.>

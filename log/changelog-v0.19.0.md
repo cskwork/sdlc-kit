@@ -14,11 +14,16 @@ another screen had always sent).
   create), `context` (a condition no requirement names). Named `<id>.entry`,
   `<id>.state`, `<id>.context`; an axis with nothing else to try gets a gap
   line. New report line and red flag (every scenario through one caller).
+  The state is reached through the product's own steps (do the earlier step,
+  leave, return, continue), not by acting on seeded data; picks that can
+  happen in one real use also run together, since a defect that needs two of
+  them at once passes every single-axis run.
 - **templates/plan.md and skills/3-plan: Reach section.** Every caller of each
   changed behavior, found across the repositories and tiers that call it, with
   what each sends; the record states and conditions it meets; the three picked
-  scenarios. The Proof section lists them. Compact route: a `- Reach:` line in
-  templates/intent.md.
+  scenarios, how the product returns a user to the picked state, and which
+  picks combine. The Proof section lists them. Compact route: a `- Reach:`
+  line in templates/intent.md.
 - **Contract tightening is a contract change.** Refusing input that existing
   callers send (a new validation, a newly required field, a narrowed type) is
   named under AGENTS.md rule 3's "public API or contract change";
