@@ -41,6 +41,7 @@ else the human's. Name a command or test where possible.>
      downstream may ask for one (AGENTS.md "Two routes, one contract"). -->
 - Files: <exact paths and symbols that change>
 - Proof: <the existing command from .sdlc/config.md that proves it (bug fix: the regression test it runs — AGENTS.md rule 6), the variants it covers (O1.happy, O1.boundary, O1.negative — roles/verifier.md), and what its passing output means>
+- Reach: <the other callers, record states, and conditions that meet this change; the entry, state, and context scenario picked from them (O1.entry …) or gap: <axis — why nothing else exists> — roles/verifier.md>
 - Risk: <blast radius, what else touches this code, the single revert that undoes it>
 - Baseline: <brownfield: the command(s) whose output must not change, run before the edit into baseline.txt | none — greenfield>
 - Delivery target: local | pr | deploy   <!-- what "shipped" will have to prove; becomes delivery.md's Target -->

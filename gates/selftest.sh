@@ -120,6 +120,15 @@ where=$(eval "$fns"; kb_get ".sdlc/memory/areas/학생 - 과제.md" Where)
 [ "$where" = "HomeworkApi#submit" ] || fail "kb_get did not read Where inside the callout: '$where'"
 bash "$kit/tools/kb.sh" show "../areas/roster" >/dev/null 2>&1 && fail "area lookup followed a path"
 echo "ok: knowledge by product area"
+
+# a plan that makes the server refuse what callers send today trips the contract wire
+printf -- '- R1: the save endpoint now rejects a request without the type field\n' > "$t/tight.md"
+out=$(bash "$kit/tools/tripwire.sh" "$t/tight.md") || true
+has "$out" "public API/contract" "a tightened contract did not trip the contract wire"
+printf -- '- R1: the report lists overdue items first\n' > "$t/loose.md"
+out=$(bash "$kit/tools/tripwire.sh" "$t/loose.md") || true
+has "$out" "no trip-wire candidates" "an unrelated plan tripped a wire"
+echo "ok: contract tightening trips the plan gate"
 }
 
 # 7. verification: the receipt gates ship; a baseline separates pre-existing
@@ -232,7 +241,16 @@ printf 'check: O1.happy | runtime | true\n' >> .sdlc/work/vn/verify.md
 out=$("$V" check vn) && fail "strict verified with O1.negative missing"
 has "$out" "VERIFY uncovered" "strict missing variant not uncovered"; has "$out" "O1.negative" "uncovered did not name O1.negative"
 printf 'gap: O1.negative | no invalid input exists for this fixture\n' >> .sdlc/work/vn/verify.md
-out=$("$V" coverage vn) || fail "a variant gap line did not clear strict coverage: $out"
+#    strict: the change also needs entry, state, and context reach scenarios, or a gap line each
+out=$("$V" coverage vn) && fail "strict coverage passed with no reach scenario"
+has "$out" "reach.entry" "a missing entry scenario was not named"; has "$out" "reach.context" "a missing context scenario was not named"
+printf 'check: O1.entry | runtime | true\ncheck: O1.state | unit | true\n' >> .sdlc/work/vn/verify.md
+out=$("$V" coverage vn) && fail "strict coverage passed with the context scenario missing"
+has "$out" "reach.context" "the remaining context scenario was not named"
+case "$out" in *reach.entry*|*reach.state*) fail "a proved reach axis was still reported: $out";; esac
+printf 'gap: O1.context | one tenant and one configuration in this fixture\n' >> .sdlc/work/vn/verify.md
+out=$("$V" coverage vn) || fail "a reach gap line did not clear strict coverage: $out"
+has "$out" "one tenant" "the reach gap reason was not shown"
 #    close honours the gap accepted at ship, and only that one: a different
 #    blocked gap is refused by close and the gate, and the driver sends it to the human
 src=$(awk '/^code_digest: /{print $2}' .sdlc/approvals/vg.ship.approval)

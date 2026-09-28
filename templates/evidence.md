@@ -18,6 +18,7 @@
   ```
   - R1.happy · source <user | fixture | real | synthesized> → <observed> · R1.boundary … · R1.negative … · <R1.regression · R1.authz where they apply>
   - roles/platforms: <role or platform> → <observed> | NOT VERIFIED: <what would unblock>
+- Reach: R1.entry · <caller> → <observed> · R2.state · <record> → <observed> · R1.context · <condition> → <observed> | gap: <axis — why nothing else exists>
 - Receipt: `tools/verify.sh check <slug>` → <VERIFY line, verbatim> · coverage: <gap: lines, or none>   <!-- recipe only -->
 
 ## Bug proof   <!-- bug fixes only; AGENTS.md rule 6. A missing link = diagnosis, not a fix -->
