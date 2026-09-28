@@ -29,6 +29,16 @@ exploration stays out of the main context. Then fill `templates/plan.md`:
   type, event, file — with its other producers and consumers and what happens
   to records that predate the change. The adversary checks it is complete;
   the verifier's Side effects lens executes it.
+- **Reach.** Every caller of each changed behavior — search the other
+  repositories and tiers that call it, not only this one — with what each
+  sends; the states of existing records it meets; the conditions that change
+  its outcome. Pick the riskiest of each as the entry, state, and context
+  scenarios the verifier runs; say how the product itself brings a user back
+  to the picked state, and which picks can happen in one real use (they run
+  together as well). When the change refuses input it accepted
+  before (a new validation, a newly required field, a narrowed type), list
+  what every caller sends today: that change is a contract change (AGENTS.md
+  rule 3).
 - **Order of work.** Make each step keep the configured checks passing. Add
   tests with the code they test.
 - **Risks.** Record rate limits, migrations, shared state, and important quirks.

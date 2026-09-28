@@ -474,7 +474,10 @@ sdlc_verify_requirement_ids() { # <slug> → ids in file order
 #   no-runtime — strict only: checks exist, none runtime/e2e, no gap
 #   uncovered  — nothing
 # Strict also emits "<id>.<variant>\tuncovered|gap" for each of happy/boundary/
-# negative with no check and no gap line of its own (none for a gap'd id).
+# negative with no check and no gap line of its own (none for a gap'd id), and
+# once any requirement is proved, "reach.<axis>\tuncovered|gap" for each of
+# entry/state/context (roles/verifier.md) that no `<any id>.<axis>` check
+# proves — a `gap: <any id>.<axis> | <reason>` line answers it.
 sdlc_verify_coverage() { # <slug>
   local ids strict=0
   ids=$(sdlc_verify_requirement_ids "$1")
@@ -506,6 +509,7 @@ sdlc_verify_coverage() { # <slug>
         else st = "uncovered"
         print id "\t" st "\t" list "\t" (id in gap ? gap[id] : "")
         if (!strict || !any || st == "gap") continue
+        proved = 1
         split("happy boundary negative", vs, " ")
         for (x = 1; x <= 3; x++) {
           v = id "." vs[x]; hit = 0
@@ -513,6 +517,18 @@ sdlc_verify_coverage() { # <slug>
           if (hit) continue
           print v "\t" (v in gap ? "gap" : "uncovered") "\t\t" (v in gap ? gap[v] : "")
         }
+      }
+      if (!proved) exit
+      split("entry state context", ax, " ")
+      for (x = 1; x <= 3; x++) {
+        hit = 0; why = ""
+        for (i = 1; i <= n; i++) {
+          v = ids[i] "." ax[x]
+          for (j = 1; j <= m; j++) if ((cid[j] == v || index(cid[j], v ".") == 1) && proves(ckind[j])) hit = 1
+          if (why == "" && (v in gap)) why = gap[v]
+        }
+        if (hit) continue
+        print "reach." ax[x] "\t" (why != "" ? "gap" : "uncovered") "\t\t" why
       }
     }'
 }

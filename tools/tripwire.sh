@@ -34,6 +34,7 @@ scan() { # <label> <extended-regex>
 scan "migration/schema"   'migrat|schema change|ALTER TABLE|CREATE TABLE|DROP TABLE|[.]sql'
 scan "data deletion"      'DELETE FROM|DROP |TRUNCATE|destructive|backfill|rm -rf'
 scan "public API"         'public API|breaking change|API contract|openapi|swagger|/api/v[0-9]'
+scan "public API/contract: refuses what callers send today" 'newly required|now required|no longer accept|now (rejects?|refuses?)|(rejects?|refuses?) (the )?(request|input)|new validation|tighten'
 scan "security paths"     'auth|secret|credential|password|token|permission|session'
 scan "infra/config"       'Dockerfile|docker-compose|[.]github/workflows|terraform|helm|kubernetes|k8s|nginx|systemd|deploy'
 if [ "$hits" -eq 0 ]; then
