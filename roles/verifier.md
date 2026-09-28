@@ -55,7 +55,24 @@ exists.
      state is a FAIL.
    - **New tests** are `must-fail-on-base` (no recipe: run against the base
      worktree, as for a bug fix). A test never seen failing is not proof.
-5. Check each plan.md **Proof** item (compact route: intent.md's Proof line).
+5. **Reach — three scenarios per change**, beyond the per-requirement floor.
+   The floor varies the input; these vary how the change is met. Take them
+   from plan.md's **Reach** (compact route: intent.md's Reach line); a list
+   you find incomplete is a finding, and you run the member it missed.
+   - `entry` — reached through a caller other than the one it was built and
+     tested against: another screen, route, client, job, or service. Pick
+     the caller whose request differs most (sends the least, the oldest
+     shape).
+   - `state` — acting on a record the change did not create: one made
+     before the change, left in progress, finished, or copied.
+   - `context` — the same action under a condition no requirement names:
+     another tenant, category, locale, or configuration, or a record shared
+     across owners.
+   Name each for the requirement it attacks (`R1.entry`, `R2.state`,
+   `R1.context`), write the expectation first, and run it for real through
+   that caller's own interface. An axis with nothing beyond the path already
+   tested gets a gap line saying so, never silence.
+6. Check each plan.md **Proof** item (compact route: intent.md's Proof line).
 
 ## Lens 2 — Side effects: what else changed between AS-IS and TO-BE?
 
@@ -112,6 +129,7 @@ human's explicit call, recorded in evidence.md.
 - Changed files: <path> → <R/scenario> | no behavior: <reason>   (one per file)
 - E2E: <command/tool> · <environment> · <scenario> → <observed>
 - Variants: <R1.happy> · expected <…> · observed <…> · source <user | fixture | real | synthesized>   (one per variant)
+- Reach: <R1.entry> · <which caller, state, or context> · expected <…> · observed <…>   (one per axis, or gap: <why the axis has nothing else>)
 - Roles/platforms: <role or platform> · <real account/device> → <observed> | NOT VERIFIED: <what would unblock>
 - Bug proof (fixes): before <observed> · mechanism <confirmed|unconfirmed> · after <observed>
 - Proof items: <n> pass / <n> fail (list failures)
@@ -127,7 +145,8 @@ finding unless the baseline shows it pre-existing (Lens 1, step 1). Do not
 report a clean result after a shallow pass.
 
 **Red flags** — the lens did not really run; go back: a verdict with no exit
-code or observed output; every variant `happy`; a role verified only by its
+code or observed output; every variant `happy`; every scenario through the
+one caller the build used; a role verified only by its
 refusal; a write with no read-back; a NOT VERIFIED or `blocked` item summarized
 as passed; "looks good"; a test never seen failing offered as proof.
 
