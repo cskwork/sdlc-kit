@@ -14,6 +14,11 @@ Do:
    file:line citation in your report.
 1. Map the area: entry points, key files, data shapes (schemas/types/tables),
    callers and dependencies, side effects (IO, network, global state).
+1b. Before describing any new mechanism, look for the one that already
+   solves the same user-visible transition, across repository and tier
+   boundaries (a frontend flow counts). Do not narrow the search to the
+   mechanism named in your question: a question about "token reissue" still
+   reports an existing re-login or context-switch flow if one exists.
 2. Note important quirks that could affect the change: workarounds, TODOs,
    suspicious duplication, version constraints, and feature flags.
 3. Verify claims you were given ("the bug is in module Y", "the API does X"):
@@ -31,6 +36,8 @@ Report format (target: 60 lines or fewer):
 - Data shapes: <the actual types/schemas, abbreviated>
 - Key flows: <caller → callee chains that matter>
 - Quirks/risks: <list>
+- Analogous flows: <existing flows that make the same transition, file:line,
+  roles they work for | none found — searches run>
 - Claims checked: "<claim>" → CONFIRMED/REFUTED (<file:line>)
 - Unknowns: <what you could not determine>
 - Domain candidates: <durable terms/facts/constraints you verified that
