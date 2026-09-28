@@ -1,12 +1,6 @@
 # v0.18.0 — look for the flow that already exists before designing a new one
 
-A feature asked students to switch between two teachers and reload under the
-chosen one. Stage 1 framed it as "where do we store the chosen teacher",
-sent researchers after backend token-reissue precedents, and approved a
-design with new APIs. The product already had a working re-entry flow for a
-similar switch in the frontend repository; it surfaced after build, and the
-design changed three times, past the spec re-gate cap. Nothing in the kit
-asked for that search. This release adds it.
+Stage 1 now looks for an existing product flow for the same user-visible change before it offers new designs (from one feature whose design changed three times after such a flow surfaced late).
 
 ## Changes
 
