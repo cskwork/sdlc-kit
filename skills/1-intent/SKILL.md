@@ -40,13 +40,12 @@ in parallel, then start the interview:
 - **Affected area**: entry points, data shapes, callers, side effects of the
   code the request touches.
 - **Existing analogous flow**: before any option exists, find a flow the
-  product ALREADY runs that makes the same kind of user-visible transition
-  (switch context, re-authenticate, reload under another owner, change mode)
-  — in every repository and tier the request crosses, frontend included,
-  not only the service you expect to change. Match the request's own
-  behavior words against those flows ("log out and reload as …" names a
-  re-entry). Report each with its entry file:line and whether it works for
-  the roles in scope, or "none found" with the searches that were run.
+  product ALREADY runs for the same kind of user-visible change the request
+  describes — in every repository and tier the request crosses, not only the
+  service you expect to change. Search by the behavior the request names,
+  not by the mechanism you have in mind. Report each with its entry
+  file:line and whether it works for the roles in scope, or "none found"
+  with the searches that were run.
 - **Feasibility**: can the behavior run or be reproduced locally? Verify the
   available test infrastructure, development environments, tools, and access.
 - **Current browser behavior** for UI changes or hard bugs. When a browser
@@ -69,13 +68,9 @@ Record the command, toolchain, and resolved versions. If execution is
 unavailable, cite authoritative compatibility evidence and label the remaining
 uncertainty.
 
-**Reuse rule:** When an existing analogous flow was found, the options shown
-to the human include reusing it, with its evidence. Leaving it out needs a
-stated reason. A question framed as "where do we store X" or "which new
-mechanism" is a solution; restate it as the transition the user makes, then
-check that transition against the flows the probe found. Designs that change
-after approval because an existing flow surfaced late are the cost this rule
-prevents.
+**Reuse rule:** When the probe found an existing flow, the options shown to
+the human include reusing it, with its evidence, or say why it does not fit.
+Ask about the change the user sees before asking which mechanism to build.
 
 ## Grill protocol
 
