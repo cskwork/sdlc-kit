@@ -18,6 +18,10 @@ Attack, in order:
    cited check support each `[verified]` label?
 4. **Edge cases.** Check empty, huge, concurrent, unauthorized, malformed, and
    retried inputs.
+4b. **Reuse.** Did the options consider the existing analogous flows the
+   researchers reported? An option set that adds a new mechanism while a
+   working flow for the same transition exists, with no stated reason to
+   skip it, is a blocking finding at the intent and spec gates.
 5. **Testability.** Can a machine check each requirement? Flag statements such
    as "works well" that do not name an observable result.
 6. **For plans**: every spec requirement maps to a proof command; the file
