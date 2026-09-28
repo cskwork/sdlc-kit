@@ -33,7 +33,9 @@ exploration stays out of the main context. Then fill `templates/plan.md`:
   repositories and tiers that call it, not only this one — with what each
   sends; the states of existing records it meets; the conditions that change
   its outcome. Pick the riskiest of each as the entry, state, and context
-  scenarios the verifier runs. When the change refuses input it accepted
+  scenarios the verifier runs; say how the product itself brings a user back
+  to the picked state, and which picks can happen in one real use (they run
+  together as well). When the change refuses input it accepted
   before (a new validation, a newly required field, a narrowed type), list
   what every caller sends today: that change is a contract change (AGENTS.md
   rule 3).

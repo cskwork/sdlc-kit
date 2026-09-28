@@ -72,6 +72,15 @@ exists.
    `R1.context`), write the expectation first, and run it for real through
    that caller's own interface. An axis with nothing beyond the path already
    tested gets a gap line saying so, never silence.
+   - **Reach the state the way a user does.** Let the product's own steps
+     put the record in that state and bring the user back to it — do the
+     earlier step, leave, return, continue — rather than acting on seeded
+     data directly; the return trip is where the request is rebuilt. Seed
+     only what the product cannot produce here, and say so.
+   - **Combine picks that can happen together.** When the picked entry,
+     state, and context can occur in one real use, run them as one scenario
+     as well as apart: a defect that needs two of them at once passes every
+     single-axis run.
 6. Check each plan.md **Proof** item (compact route: intent.md's Proof line).
 
 ## Lens 2 — Side effects: what else changed between AS-IS and TO-BE?
