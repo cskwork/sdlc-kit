@@ -158,7 +158,7 @@ EOF
       { sdlc_source_snapshot 2>&1 >/dev/null || true; } | awk 'NR <= 20 { print "    " $0 }'
       echo "  Fix that, then close again."
       exit 1;;
-    ok) ;;
+    ok) SDLC_SOURCE_DIGEST_NOW=$now_code;;   # the verification check below reuses it
     unbound)
       echo "note: no git repository here — the ship approval bound no source identity."
       echo "      The delivery below is recorded as NOT VERIFIED for its source.";;
