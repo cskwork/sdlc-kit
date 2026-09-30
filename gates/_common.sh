@@ -20,6 +20,26 @@ sdlc_sha256_file() { # <path>
   [ -f "$1" ] || return 1
   sdlc_sha256_stdin < "$1"
 }
+# Many files, one hashing process (xargs splits a very long list into a few).
+# A source snapshot used to start a process or three PER FILE; Git Bash starts
+# processes slowly enough that a close over a few thousand files took minutes.
+# The caller passes at least one path: xargs runs its command once on no input.
+sdlc_sha256_paths() { # NUL-separated paths on stdin → one digest per path, in order; non-zero when any failed
+  local out line
+  if command -v sha256sum >/dev/null 2>&1; then out=$(xargs -0 sha256sum --) || return 1
+  elif command -v shasum >/dev/null 2>&1; then out=$(xargs -0 shasum -a 256 --) || return 1
+  else
+    # openssl's per-file output format varies by version: one file at a time
+    while IFS= read -r -d '' line; do sdlc_sha256_file "$line" || return 1; done
+    return 0
+  fi
+  # "<digest>  <name>" (" *" in binary mode); a leading \ marks an escaped name
+  while IFS= read -r line; do
+    line=${line#\\}; printf '%s\n' "${line%% *}"
+  done <<EOF
+$out
+EOF
+}
 
 # --- stage ↔ artifact allowlist ---------------------------------------------
 # Gated stages and the ONE artifact each gate may bind. An approval for any other
@@ -210,7 +230,8 @@ sdlc_source_entries() { # paths on stdin → entry lines (sorted); non-zero on a
   return $rc
 }
 sdlc__entries_unsorted() { # helper of sdlc_source_entries
-  local f h t mode filemode indexed_exec="" raw rc=0
+  local f h t mode filemode indexed_exec="" raw rc=0 n=0 i=0
+  local -a files modes hs
   filemode=$(git config --bool core.filemode 2>/dev/null) || filemode=true
   if [ "$filemode" = false ]; then
     # Git Bash's -x result is not the mode Git will commit. Follow the index
@@ -232,18 +253,37 @@ $(printf '%s\n' "$raw" | awk '$1 == "100755" { sub(/^[^\t]*\t/, ""); print }')
     elif [ -d "./$f" ]; then
       printf 'submodule - - %s\n' "$f"
     elif [ -f "./$f" ]; then
-      if h=$(sdlc_sha256_file "./$f") && [ -n "$h" ]; then
-        mode=-
-        if [ "$filemode" = false ]; then
-          case "$indexed_exec" in (*"
+      mode=-
+      if [ "$filemode" = false ]; then
+        case "$indexed_exec" in (*"
 $f
 "*) mode=x;; esac
-        elif [ -x "./$f" ]; then mode=x; fi
-        printf 'f %s %s %s\n' "$mode" "$h" "$f"
-      else echo "FAIL: cannot hash file: $f" >&2; rc=1; fi
+      elif [ -x "./$f" ]; then mode=x; fi
+      files[n]=$f; modes[n]=$mode; n=$((n + 1))   # hashed below, in one batch
     else
       printf 'missing - - %s\n' "$f"
     fi
+  done
+  [ "$n" -gt 0 ] || return $rc
+  if raw=$(printf './%s\0' "${files[@]}" | sdlc_sha256_paths 2>/dev/null); then
+    while IFS= read -r h; do [ -z "$h" ] || { hs[i]=$h; i=$((i + 1)); }; done <<EOF
+$raw
+EOF
+  fi
+  if [ "$i" = "$n" ]; then
+    i=0
+    while [ "$i" -lt "$n" ]; do printf 'f %s %s %s\n' "${modes[i]}" "${hs[i]}" "${files[i]}"; i=$((i + 1)); done
+    return $rc
+  fi
+  # the batch refused a file (unreadable, or gone since it was listed): hash one
+  # at a time, so the FAIL line names the file
+  i=0
+  while [ "$i" -lt "$n" ]; do
+    f=${files[i]}
+    if h=$(sdlc_sha256_file "./$f") && [ -n "$h" ]; then
+      printf 'f %s %s %s\n' "${modes[i]}" "$h" "$f"
+    else echo "FAIL: cannot hash file: $f" >&2; rc=1; fi
+    i=$((i + 1))
   done
   return $rc
 }
@@ -268,9 +308,53 @@ sdlc_tree_entries() { # <commit> → entry lines (sorted); non-zero on a read/ha
   local rev="$1" raw out rc=0
   raw=$(git -c core.quotepath=off ls-tree -r --full-tree "$rev" 2>/dev/null) || {
     echo "FAIL: git ls-tree could not read the tree of $rev" >&2; return 1; }
-  out=$(printf '%s\n' "$raw" | sdlc__tree_entries_unsorted "$rev") || rc=$?
+  out=$(printf '%s\n' "$raw" | sdlc__tree_entries_checkout "$rev" 2>/dev/null) \
+    || out=$(printf '%s\n' "$raw" | sdlc__tree_entries_unsorted "$rev") || rc=$?
   [ -z "$out" ] || printf '%s\n' "$out" | LC_ALL=C sort
   return $rc
+}
+# The same lines from ONE checkout of the commit into a temp dir (a temp index,
+# so the repository's own index and worktree are untouched): checkout-index
+# writes the bytes a checkout would, through the same filters, and one batch
+# hashes the regular files. Reading blob by blob cost two or three processes
+# per file. Symlinks, submodules and quoted names go through the blob-by-blob
+# helper, which is cheap for the few there are. Any failure (a name the
+# filesystem refuses, names that clash when case is ignored) returns non-zero
+# and the caller reads blob by blob instead.
+sdlc__tree_entries_checkout() { # <commit>; ls-tree lines on stdin
+  local rev="$1" meta path mode tmp gtmp hashes h n=0 i=0 other=""
+  local -a files modes hs
+  while IFS='	' read -r meta path; do
+    [ -n "$path" ] || continue
+    mode=${meta%% *}
+    case "$path" in (.sdlc|.sdlc/*) continue;; esac
+    case "$mode:$path" in
+      (100644:\"*|100755:\"*) other="$other$meta	$path
+";;
+      (100644:*) files[n]=$path; modes[n]=-; n=$((n + 1));;
+      (100755:*) files[n]=$path; modes[n]=x; n=$((n + 1));;
+      (*) other="$other$meta	$path
+";;
+    esac
+  done
+  if [ -n "$other" ]; then printf '%s' "$other" | sdlc__tree_entries_unsorted "$rev" || return 1; fi
+  [ "$n" -gt 0 ] || return 0
+  [ -z "$(printf '%s\n' "${files[@]}" | tr '[:upper:]' '[:lower:]' | LC_ALL=C sort | uniq -d)" ] || return 1
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/sdlc-tree.XXXXXX") || return 1
+  # git for Windows is a native program: hand it a Windows path
+  gtmp=$tmp; if command -v cygpath >/dev/null 2>&1; then gtmp=$(cygpath -m "$tmp") || gtmp=""; fi
+  if [ -n "$gtmp" ] && mkdir "$tmp/w" \
+     && GIT_INDEX_FILE="$gtmp/index" git read-tree "$rev" >/dev/null 2>&1 \
+     && GIT_INDEX_FILE="$gtmp/index" git --work-tree="$gtmp/w" checkout-index -a >/dev/null 2>&1 \
+     && hashes=$(cd "$tmp/w" && printf './%s\0' "${files[@]}" | sdlc_sha256_paths 2>/dev/null); then
+    while IFS= read -r h; do [ -z "$h" ] || { hs[i]=$h; i=$((i + 1)); }; done <<EOF
+$hashes
+EOF
+  fi
+  rm -rf "$tmp"
+  [ "$i" = "$n" ] || return 1
+  i=0
+  while [ "$i" -lt "$n" ]; do printf 'f %s %s %s\n' "${modes[i]}" "${hs[i]}" "${files[i]}"; i=$((i + 1)); done
 }
 sdlc__tree_entries_unsorted() { # <commit>; ls-tree lines on stdin — helper of sdlc_tree_entries
   local rev="$1" meta path mode sha h rc=0
@@ -296,8 +380,13 @@ sdlc__tree_entries_unsorted() { # <commit>; ls-tree lines on stdin — helper of
   return $rc
 }
 sdlc_entries_digest() { sdlc_sha256_stdin; }           # entry lines on stdin
+# close.sh sets this to the digest sdlc_source_state has just computed, so its
+# verification check does not walk the whole source a second time. Cleared on
+# every load: a value inherited from the environment is never trusted.
+SDLC_SOURCE_DIGEST_NOW=""
 sdlc_source_digest() { # → digest of the current snapshot; non-zero when it could not be taken
   local s
+  if [ -n "$SDLC_SOURCE_DIGEST_NOW" ]; then printf '%s\n' "$SDLC_SOURCE_DIGEST_NOW"; return 0; fi
   s=$(sdlc_source_snapshot) || return 1
   printf '%s\n' "$s" | sdlc_sha256_stdin
 }
