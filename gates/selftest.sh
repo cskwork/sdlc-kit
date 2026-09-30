@@ -368,9 +368,45 @@ wtclean "after a failed baseline"
 echo "ok: verification reads ids and baselines strictly; cleans up"
 }
 
+# 10. source hashing is batched, and every read of the same source agrees: the
+# worktree snapshot, a commit read through one checkout, and the same commit
+# read blob by blob (the fallback) — including after a failed batch
+source_hashing() {
+git init -q .
+. "$kit/gates/_common.sh"
+printf 'a\n' > plain.txt; printf 'b\n' > 'with space.txt'; printf 'c\n' > ./-dash.txt; printf 'd\n' > '한글.txt'
+printf '#!/bin/sh\n' > run.sh; chmod +x run.sh
+printf '*.crlf eol=crlf\n' > .gitattributes; printf 'e\nf\n' > text.crlf
+ln -s plain.txt link; mkdir .sdlc; echo record > .sdlc/r
+git add -A 2>/dev/null; git update-index --chmod=+x run.sh; commit 2>/dev/null
+rm text.crlf; git checkout -- text.crlf   # the bytes a checkout writes
+[ -n "$(tr -dc '\r' < text.crlf)" ] || fail "the eol=crlf fixture has no CR: filters untested"
+w=$(sdlc_source_snapshot) || fail "worktree snapshot failed"
+raw=$(git -c core.quotepath=off ls-tree -r --full-tree HEAD)
+b=$(printf '%s\n' "$raw" | sdlc__tree_entries_checkout HEAD | LC_ALL=C sort) || fail "the one-checkout read of a commit failed"
+o=$(printf '%s\n' "$raw" | sdlc__tree_entries_unsorted HEAD | LC_ALL=C sort) || fail "the blob-by-blob read of a commit failed"
+[ "$b" = "$o" ] || fail "the checkout read and the blob read disagree: $b // $o"
+[ "$w" = "$b" ] || fail "the worktree snapshot and its own commit disagree: $w // $b"
+has "$w" "f x " "the executable lost its mode"; has "$w" "l - " "the symlink was not hashed as a link"
+case "$w" in (*.sdlc*) fail "the snapshot bound .sdlc/: $w";; esac
+[ "$(printf '%s\n' "$w" | grep -c .)" = 8 ] || fail "the snapshot has not one entry per source file: $w"
+f=$( sdlc_sha256_paths() { return 1; }; sdlc_source_snapshot ) || fail "the one-by-one fallback failed"
+[ "$f" = "$w" ] || fail "the one-by-one fallback disagrees with the batch: $f"
+#    names that clash when case is ignored cannot share one checkout: read blob by blob
+x=$(printf 'x\n' | git hash-object -w --stdin); y=$(printf 'y\n' | git hash-object -w --stdin)
+tree=$(GIT_INDEX_FILE=.git/clash git update-index --add --cacheinfo "100644,$x,Clash.txt" --cacheinfo "100644,$y,clash.txt" && GIT_INDEX_FILE=.git/clash git write-tree)
+c=$(echo clash | git -c user.email=t@t.invalid -c user.name=t commit-tree "$tree")
+git ls-tree "$c" | sdlc__tree_entries_checkout "$c" >/dev/null 2>&1 && fail "a case clash was read through one checkout"
+[ "$(sdlc_tree_entries "$c" | grep -c '^f - ')" = 2 ] || fail "a case clash lost an entry"
+#    a digest reused by close.sh is never taken from the environment
+out=$(SDLC_SOURCE_DIGEST_NOW=forged bash -c '. "$1"; sdlc_source_digest' _ "$kit/gates/_common.sh")
+[ "$out" != forged ] || fail "sdlc_source_digest trusted an inherited SDLC_SOURCE_DIGEST_NOW"
+echo "ok: source hashing is batched; worktree, checkout and blob reads agree"
+}
+
 # Every section at once, each in its own dir and output file; the output is
 # printed in this order, and any failed section fails the run.
-sections="basics verify_ship verify_vacuous verify_strict verify_reads verify_baseline"
+sections="basics verify_ship verify_vacuous verify_strict verify_reads verify_baseline source_hashing"
 set --
 for s in $sections; do
   t="$tmp/$s"; mkdir "$t"
