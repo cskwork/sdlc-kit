@@ -349,6 +349,10 @@ run:
 # Optional preferred browser/QA tool for UI verification (CLI, MCP, or agent name).
 # Empty is fine: the verifier falls back to any browser/QA tool its harness has.
 qa:
+# Optional QA mode for screens: agent (default) or jev (Jego scenarios + HTML
+# report, docs/jev-qa.md). Empty = the user default; switch with tools/qa-mode.sh.
+qa_mode:
+jev_dir:
 # Optional: the project's own end-to-end command, scoped per run where possible
 # (e.g. npx playwright test --grep <tag>). Empty or absent is fine — the verifier
 # then finds the project's own e2e entry point, and records NOT VERIFIED when
