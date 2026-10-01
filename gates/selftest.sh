@@ -404,9 +404,33 @@ out=$(SDLC_SOURCE_DIGEST_NOW=forged bash -c '. "$1"; sdlc_source_digest' _ "$kit
 echo "ok: source hashing is batched; worktree, checkout and blob reads agree"
 }
 
+qa_mode() {
+Q="$kit/tools/qa-mode.sh"
+export XDG_CONFIG_HOME="$PWD/cfg"
+mkdir .sdlc && printf 'qa:\nqa_mode:\njev_dir:\n' > .sdlc/config.md
+#    nothing set anywhere: agent
+[ "$("$Q" get)" = agent ] || fail "qa_mode default is not agent"
+#    a switch is remembered as the user default, outside the project
+"$Q" set jev --jev-dir /nowhere >/dev/null
+[ "$("$Q" get)" = jev ] || fail "qa_mode set jev not remembered"
+grep -q '^qa_mode: jev$' cfg/sdlc-kit/config || fail "qa_mode not saved in the user config"
+( mkdir other && cd other && [ "$("$Q" get)" = jev ] ) || fail "qa_mode user default did not reach another project"
+#    a project setting beats the user default, and set replaces rather than duplicates
+"$Q" set agent --project >/dev/null
+[ "$("$Q" get)" = agent ] || fail "project qa_mode did not override the user default"
+[ "$(grep -c '^qa_mode:' .sdlc/config.md)" = 1 ] || fail "qa_mode line duplicated in config.md"
+#    only agent|jev are accepted; an unknown stored value falls back to agent
+"$Q" set robot >/dev/null 2>&1 && fail "qa_mode accepted an unknown mode"
+printf 'qa_mode: robot\n' > .sdlc/config.md
+[ "$("$Q" get 2>/dev/null)" = agent ] || fail "unknown qa_mode did not fall back to agent"
+#    jev mode with no usable Jego says it is not ready (the verifier then falls back)
+"$Q" check >/dev/null 2>&1 && fail "qa-mode check passed with jev_dir /nowhere"
+echo "ok: qa mode switch is remembered, overridable per project, and fails closed"
+}
+
 # Every section at once, each in its own dir and output file; the output is
 # printed in this order, and any failed section fails the run.
-sections="basics verify_ship verify_vacuous verify_strict verify_reads verify_baseline source_hashing"
+sections="basics verify_ship verify_vacuous verify_strict verify_reads verify_baseline source_hashing qa_mode"
 set --
 for s in $sections; do
   t="$tmp/$s"; mkdir "$t"
