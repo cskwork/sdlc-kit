@@ -205,6 +205,8 @@ Executable bits follow Git's `core.filemode` setting. When it is `false`, as on 
 
 Before any of that, verification runs the real thing: the changed behavior exercised end to end through the interface a user or caller actually meets, scoped to the change, with the project's own commands (`e2e:`, `qa:`, `run:` in `.sdlc/config.md`): happy, boundary, and negative cases per requirement, expectations written first, for every role and platform in scope. Those vary the input; three **reach** scenarios per change vary how the change is met — through another caller of the same behavior (entry), on a record the change did not create (state), and under a condition no requirement names (context) — picked from the plan's list of every caller found across the repositories and tiers that call it. A change that refuses input existing callers send today is a contract change and trips the plan gate. No environment to run it in means NOT VERIFIED, stated as such in evidence.md — a green unit suite is never a silent substitute. Two more lenses run beside it in parallel: **side effects** — the baseline, the untouched items, and the consistency of every data shape the change touches across its other producers and consumers — and **intent match** — the build read back, per numbered success criterion, against `origin.md`, the snapshot of the ticket or 기획서 the intent gate bound, listing what is covered, missing, and beyond. A finding from any lens enters the build fix loop: three rounds, then the human, and `tools/auto.sh` reports an exhausted loop as `fixloop.exhausted`.
 
+Screens can be checked two ways. The default **agent** mode drives a browser through the `qa:` tool or whatever the harness has. **Jev** mode hands each UI scenario to [Jego](https://github.com/cskwork/ego-jev-ultrafast) as a plain-language goal with the texts that must appear, re-checks each result in a fresh tab, and produces one HTML report with screenshots, time, and cost per scenario for the ship gate. Switch with `tools/qa-mode.sh set jev` (remembered for every project until switched back; `--project` for one project only) and see [`docs/jev-qa.md`](docs/jev-qa.md). When Jego is not usable, the verifier says so and uses agent mode.
+
 ### Failed runs leave knowledge
 
 ```bash
@@ -340,10 +342,11 @@ init.sh          idempotent project seed
 skills/1-6/      stage instructions
 roles/           verifier · adversary · researcher contracts
 gates/           approve · check · close · status · stats · selftest (+ _common.sh, _auto.sh)
-tools/           auto (machine status) · verify (receipts, needs python3) · handoff (review branch) · _run.py (bounded execution) · tripwire · refcheck
+tools/           auto (machine status) · verify (receipts, needs python3) · handoff (review branch) · qa-mode (agent/jev QA switch) · _run.py (bounded execution) · tripwire · refcheck
 templates/       intent · spec · plan · evidence · delivery · verify (+ verify-feature) · lesson
 docs/index.html  bilingual EN/KO landing page
 docs/automation.md  the machine contract: status JSON, receipts, handoff, checkpoint
+docs/jev-qa.md   Jev QA mode: switching, scenarios, report
 ```
 
 ## Verify the kit

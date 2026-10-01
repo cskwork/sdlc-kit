@@ -25,6 +25,12 @@ exists.
 3. Exercise the change for real, scoped to it — the flows it touches, not the
    product's whole suite; the project's own commands and fixtures (config.md
    `e2e:` when set), never a parallel harness:
+   - **UI, jev mode** (`tools/qa-mode.sh get` prints `jev`) → follow
+     `docs/jev-qa.md`: the UI scenarios become Jego goals with expected
+     texts, `qa/run.mjs` runs them, and its `report.html` is part of your
+     report. If `tools/qa-mode.sh check` fails, or a scenario needs what
+     Jego cannot drive (file upload, canvas, iframe), use the agent way
+     below for it and say why.
    - **UI** → drive the actual screen (`qa:` tool, else any browser tool in
      the harness): load it, do the user's steps, read the rendered result.
    - **API / CLI / job** → the real request or command against a running
@@ -161,7 +167,8 @@ as passed; "looks good"; a test never seen failing offered as proof.
 
 Tools:
 - Needs: shell (config.md commands) and file reads; the project's ticket or
-  document tool for the origin; the `qa:` tool or any browser/QA tool for UI;
+  document tool for the origin; the `qa:` tool or any browser/QA tool for UI
+  (jev mode: Jego through `docs/jev-qa.md`);
   a read-only database tool for data claims. Name each tool used.
 - **Write authority**: you may NOT change source, tests, or any stage artifact.
   You MAY produce what running things produces — build output, test reports,

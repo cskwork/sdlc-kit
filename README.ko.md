@@ -205,6 +205,8 @@ ship 승인이 묶는 것은 리뷰가 본 프로젝트 소스 전체 스냅샷�
 
 그 전에 검증은 실제 동작을 돌립니다. 바뀐 동작을 사용자나 호출자가 실제로 만나는 인터페이스로 끝까지 실행하되, 변경 범위에 맞춰 프로젝트 자신의 명령(`.sdlc/config.md`의 `e2e:`, `qa:`, `run:`)을 씁니다. 요구사항마다 정상·경계·잘못된 입력 사례를 기대 결과부터 적어 두고, 범위 안의 역할과 플랫폼마다 따로 실행합니다. 이것들은 입력값을 바꿔 봅니다. 여기에 더해 변경마다 **도달(reach)** 시나리오 세 개로 변경을 만나는 방식을 바꿔 봅니다. 같은 동작을 부르는 다른 호출자(entry), 이번 변경이 만들지 않은 기존 데이터(state), 어떤 요구사항도 언급하지 않은 조건(context)입니다. 세 시나리오는 plan이 호출하는 모든 저장소와 계층에서 찾아 적은 호출자 목록에서 고릅니다. 기존 호출자가 지금 보내는 입력을 거부하게 되는 변경은 계약 변경이라 plan 게이트의 트립와이어에 걸립니다. 실행할 환경이 없으면 NOT VERIFIED이며 evidence.md에 그렇게 적습니다. 통과한 단위 테스트가 조용한 대체물이 되는 일은 없습니다. 그 옆에서 두 갈래가 병렬로 더 돕니다. **부작용** 렌즈는 베이스라인, 유지되어야 할 동작, 그리고 변경이 건드린 데이터 형태가 다른 생산자와 소비자 사이에서 정합성을 지키는지 봅니다. **의도 일치** 렌즈는 intent 게이트가 결합한 티켓·기획서 스냅샷 `origin.md`를 번호 붙은 성공 기준마다 대조해, 구현이 무엇을 담았고 무엇을 빠뜨렸고 무엇을 넘어섰는지 적습니다. 어느 렌즈의 발견이든 build의 fix loop로 들어가며, 3라운드 안에 해결되지 않으면 사람에게 가고 `tools/auto.sh`는 이를 `fixloop.exhausted`로 보고합니다.
 
+화면 검증은 두 방식 중 하나로 합니다. 기본값인 **agent** 모드는 `qa:` 도구나 하네스의 브라우저 도구로 에이전트가 직접 화면을 조작합니다. **jev** 모드는 UI 시나리오마다 [Jego](https://github.com/cskwork/ego-jev-ultrafast)에 평범한 문장의 목표와 반드시 보여야 할 문구를 넘기고, 결과를 새 탭에서 다시 확인한 뒤, 시나리오별 캡처·소요 시간·비용이 담긴 HTML 보고서 하나를 ship 게이트용으로 만듭니다. `tools/qa-mode.sh set jev`로 바꾸며(되돌릴 때까지 모든 프로젝트에 기억됨, `--project`는 이 프로젝트만), 자세한 내용은 [`docs/jev-qa.md`](docs/jev-qa.md)에 있습니다. Jego를 쓸 수 없는 환경이면 검증자가 그 이유를 밝히고 agent 모드로 진행합니다.
+
 ### 실패한 실행도 지식을 남긴다
 
 ```bash
@@ -337,10 +339,11 @@ init.sh          멱등 프로젝트 시드
 skills/1-6/      단계별 지시서
 roles/           verifier · adversary · researcher 계약
 gates/           approve · check · close · status · stats · selftest (공용 헬퍼 _common.sh, _auto.sh 포함)
-tools/           auto(기계 상태) · verify(영수증, python3 필요) · handoff(리뷰 브랜치) · _run.py(제한된 실행) · tripwire · refcheck
+tools/           auto(기계 상태) · verify(영수증, python3 필요) · handoff(리뷰 브랜치) · qa-mode(agent/jev QA 전환) · _run.py(제한된 실행) · tripwire · refcheck
 templates/       intent · spec · plan · evidence · delivery · verify (+ verify-feature) · lesson
 docs/index.html  EN/KO 랜딩 페이지
 docs/automation.md  기계 계약: status JSON, 영수증, 핸드오프, 체크포인트
+docs/jev-qa.md   Jev QA 모드: 전환, 시나리오, 보고서
 ```
 
 ## 킷 검증
