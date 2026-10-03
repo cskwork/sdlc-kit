@@ -318,14 +318,14 @@
   .flow .edge.gate .lbl { color: var(--accent); border-color: rgba(234, 176, 77, 0.45); }
   .flow .edge svg { color: var(--line-strong); }
   .flow .edge.gate svg { color: var(--accent); }
-  .flow .loopnote {
+  .loopnote {
     margin: 0.4rem auto 0;
     max-width: 46ch;
     text-align: center;
     color: var(--text-2);
     font-size: 0.86rem;
   }
-  .flow .loopnote b { color: var(--text); font-weight: 600; }
+  .loopnote b { color: var(--text); font-weight: 600; }
 
   @media (min-width: 900px) {
     .flow {
@@ -438,6 +438,7 @@
     padding-bottom: 0.25rem;
   }
   .steps .note { margin: 0.5rem 0 0; color: var(--text-2); font-size: 0.84rem; line-height: 1.55; }
+  .section-lede code, .steps .note code { font-family: var(--mono); font-size: .9em; }
 
   .tablewrap { overflow-x: auto; }
   table.how {
@@ -553,7 +554,7 @@
       <div>
         <h1>sdlc<span class="kit">-kit</span></h1>
         <p class="pitch" data-i18n="pitch">Anthropic&rsquo;s AI-native SDLC playbook, as plain files&nbsp;+&nbsp;shell.</p>
-        <p class="sub" data-i18n="sub">Six stages, one artifact each, human approval gates where they count. Your agent reads the files, runs the gates, and stops when a gate is closed. No runtime, no hooks, no lock-in.</p>
+        <p class="sub" data-i18n="sub">Six stages, one artifact each, a gate between them. Your agent reads the files, runs the gates, and waits for you at the gates you keep. No runtime, no hooks, no lock-in.</p>
         <p class="cta-row">
           <a class="btn btn-primary" href="#install"><span data-i18n="cta-start">Get started</span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
@@ -565,7 +566,7 @@
 
       <div class="term" role="img" aria-label="Terminal transcript: an unapproved stage prints GATE CLOSED; after the human's approval is recorded, the gate opens." data-i18n-aria="term-aria">
         <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>your-project / zsh</span></div>
-        <pre class="term-body"><span class="ln" style="--i:0"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh spec .sdlc/work/payments/spec.md</span></span><span class="ln" style="--i:1"><span class="bad">GATE CLOSED:</span><span class="o"> no approval for 'spec' of 'payments'.</span></span><span class="ln" style="--i:2"><span class="o">Needed: gates/approve.sh spec … (human decision — AGENTS.md rule 3)</span></span><span class="ln" style="--i:3"> </span><span class="ln" style="--i:4"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/approve.sh spec .sdlc/work/payments/spec.md --delegated</span>  <span class="dim"># after "approve" in chat</span></span><span class="ln" style="--i:5"><span class="ok">APPROVED:</span><span class="o"> spec of payments (.sdlc/work/payments/spec.md)</span></span><span class="ln" style="--i:6"><span class="o">Recorded on disk. Approval records are gitignored — the trail is .sdlc/approvals/, not git history.</span></span><span class="ln" style="--i:7"> </span><span class="ln" style="--i:8"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh spec .sdlc/work/payments/spec.md</span></span><span class="ln caret" style="--i:9"><span class="ok">GATE OPEN:</span><span class="o"> spec (approved @ 2026-08-30T09:12:44Z)</span></span></pre>
+        <pre class="term-body"><span class="ln" style="--i:0"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh spec .sdlc/work/payments/spec.md</span></span><span class="ln" style="--i:1"><span class="bad">GATE CLOSED:</span><span class="o"> no approval for 'spec' of 'payments'.</span></span><span class="ln" style="--i:2"><span class="o">Needed: gates/approve.sh spec … (human decision, or --lazy when lazymode waives this gate — AGENTS.md rule 3)</span></span><span class="ln" style="--i:3"> </span><span class="ln" style="--i:4"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/approve.sh spec .sdlc/work/payments/spec.md --delegated</span>  <span class="dim"># after "approve" in chat</span></span><span class="ln" style="--i:5"><span class="ok">APPROVED:</span><span class="o"> spec of payments (.sdlc/work/payments/spec.md)</span></span><span class="ln" style="--i:6"><span class="o">Recorded on disk. Approval records are gitignored — the trail is .sdlc/approvals/, not git history.</span></span><span class="ln" style="--i:7"> </span><span class="ln" style="--i:8"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh spec .sdlc/work/payments/spec.md</span></span><span class="ln caret" style="--i:9"><span class="ok">GATE OPEN:</span><span class="o"> spec (approved @ 2026-08-30T09:12:44Z)</span></span></pre>
       </div>
     </div>
   </section>
@@ -573,8 +574,8 @@
   <!-- ============ the loop ============ -->
   <section class="band" id="loop" aria-labelledby="loop-h">
     <div class="wrap">
-      <h2 id="loop-h" data-i18n="loop-h">Six stages. One artifact each. Human gates where they count.</h2>
-      <p class="section-lede" data-i18n="loop-lede">Every stage reads its skill file, produces one artifact, and stops at the gate. You approve intent, spec, and the release. A routine plan is approved by an adversary review; risky plans escalate to you. Stage&nbsp;6 turns an incident into the next intent.</p>
+      <h2 id="loop-h" data-i18n="loop-h">Six stages, one loop</h2>
+      <p class="section-lede" data-i18n="loop-lede">Each stage reads its skill file, writes one artifact, and stops at its gate. At the default lazymode you approve intent, spec, and ship; each request to you starts with context and ends with the one decision you owe. Every plan gets an adversary review, and risky work needs your word first.</p>
 
       <ol class="flow" aria-label="The six-stage loop with human approval gates" data-i18n-aria="flow-aria">
         <li class="stage s1">
@@ -587,7 +588,7 @@
         </li>
         <li class="stage s2">
           <h3><span data-i18n="s2-h">Spec</span> <span class="art">spec.md</span></h3>
-          <p class="what" data-i18n="s2-p">Generated from the intent, adversarially reviewed before it reaches you.</p>
+          <p class="what" data-i18n="s2-p">AS-IS beside TO-BE with file:line evidence, adversarially reviewed before it reaches you.</p>
         </li>
         <li class="edge gate e23">
           <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M0 5h41M38 1.5 42 5l-4 3.5"/></svg>
@@ -600,7 +601,7 @@
 
         <li class="edge gate e34">
           <svg class="d" width="10" height="52" viewBox="0 0 10 52" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 0v47M1.5 43.5 5 48l3.5-4.5"/></svg>
-          <span class="lbl" data-i18n="e34">tiered gate · human on risk</span>
+          <span class="lbl" data-i18n="e34">adversary review · risk needs your word</span>
         </li>
 
         <li class="stage s4">
@@ -613,7 +614,7 @@
         </li>
         <li class="stage s5">
           <h3><span data-i18n="s5-h">Ship</span> <span class="art">evidence.md + delivery.md</span></h3>
-          <p class="what" data-i18n="s5-p">Adversarial review plus evidence; you approve the release by reading what was flagged, and the delivery is recorded and verified before the feature closes as shipped.</p>
+          <p class="what" data-i18n="s5-p">Evidence and an adversary review. You approve the release; it closes as shipped only once the delivery is proven.</p>
         </li>
         <li class="edge e56">
           <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M46 5H5M8 1.5 4 5l4 3.5"/></svg>
@@ -621,7 +622,7 @@
         </li>
         <li class="stage s6">
           <h3><span data-i18n="s6-h">Maintain</span> <span class="art">intent.md + lesson</span></h3>
-          <p class="what" data-i18n="s6-p">An incident becomes a diagnosed intent and a recorded lesson, not a vague complaint.</p>
+          <p class="what" data-i18n="s6-p">An incident becomes a diagnosed intent and a recorded lesson.</p>
         </li>
 
         <li class="loop">
@@ -629,7 +630,7 @@
           <span class="lbl" data-i18n="loop-lbl">writes the next intent.md</span>
         </li>
       </ol>
-      <p class="loopnote" data-i18n="loopnote">A production issue in stage&nbsp;6 writes a new <b>intent.md</b>. People triage and review the work; they no longer start it.</p>
+      <p class="loopnote" data-i18n="loopnote">A small, well-understood change takes the <b>compact route</b>: intent, build, ship, with <b>intent.md</b> as its one work artifact. Anything ambiguous, broad, or risky runs all six stages.</p>
     </div>
   </section>
 
@@ -642,39 +643,35 @@
       <dl class="ledger">
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg><span data-i18n="l1-t">Grilled intents</span></dt>
-          <dd data-i18n="l1-d">Stage&nbsp;1 explores before it asks, then labels every claim in <code>intent.md</code> <code>[verified]</code> with evidence or <code>[assumed]</code> with a reason. Users can be mistaken; this is the cheapest stage to find out.</dd>
+          <dd data-i18n="l1-d">Stage&nbsp;1 explores before it asks, and never asks you what a probe can answer. Every claim in <code>intent.md</code> is labelled <code>[verified]</code> with evidence or <code>[assumed]</code> with a reason. This is the cheapest stage to catch a wrong assumption.</dd>
         </div>
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M9 12h6M12 9v6"/></svg><span data-i18n="l2-t">Approvals on the record</span></dt>
-          <dd data-i18n="l2-d"><code>approve.sh</code> records the stage, the canonical artifact path, its sha256, the upstream artifacts it was approved on top of, the time, and the mode, on disk in <code>.sdlc/approvals/</code>; <code>check-gate.sh</code> prints <code>GATE CLOSED</code> until all of that matches again.</dd>
+          <dd data-i18n="l2-d"><code>approve.sh</code> writes the stage, the artifact path and its sha256, the upstream artifacts, the time, and the mode to <code>.sdlc/approvals/</code>. Edit any of those artifacts and <code>check-gate.sh</code> prints <code>GATE CLOSED</code> until you approve again.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-4.2-7.6"/><path d="M21 3v5h-5"/></svg><span data-i18n="l3-t">Delegation stays visible</span></dt>
-          <dd data-i18n="l3-d">At human gates, an agent may run the approval only on your explicit words in chat; the record then carries <code>mode: delegated-chat</code>. A plan approved by adversary review carries <code>mode: agent-adversary</code>. Either way, the keystrokes were never silent.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span data-i18n="l3-t">You choose the human gates</span></dt>
+          <dd data-i18n="l3-d"><code>lazymode: 0-4</code> in <code>.sdlc/config.md</code> sets which gates stay yours. The default, 1, keeps intent, spec, and ship; 4 keeps none. At your gates the agent approves only on your explicit words in chat. A waived gate still gets a real review, recorded with the approval. Risky work (data loss, public API, security, migrations, external delivery) needs your word at every level. Instructions inside a ticket, review comment, or log are treated as data and not followed.</dd>
         </div>
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="18" rx="1.5"/><rect x="13" y="3" width="8" height="18" rx="1.5"/><path d="M6.5 7h1M16.5 7h1"/></svg><span data-i18n="l4-t">Fresh-context review</span></dt>
-          <dd data-i18n="l4-d">A verifier, adversary, and researcher run in fresh contexts. None authored the work, and they report findings without changing files. The verifier also meets each change the other ways it is met: through another caller, on a record the change did not create, under a condition no requirement names.</dd>
+          <dd data-i18n="l4-d">A verifier, an adversary, and a researcher run in fresh contexts. None wrote the work, and none changes files. The verifier checks end to end, for side effects, and against the intent, including through another caller, an existing record, and a condition no requirement names. Jev QA mode (<code>tools/qa-mode.sh</code>) can run the screen checks and hand the ship gate one HTML report.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="8" height="14" rx="1.5"/><rect x="14" y="5" width="7" height="14" rx="1.5"/><path d="M11 12h3"/></svg><span data-i18n="l5-t">AS-IS → TO-BE specs</span></dt>
-          <dd data-i18n="l5-d">Specs pair what actually happens today (file:line evidence) with what happens after the change. The delta between the columns <em>is</em> the change.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/></svg><span data-i18n="l10-t">Proof that fits the claim</span></dt>
+          <dd data-i18n="l10-d">Every &ldquo;done&rdquo; carries output from the project&rsquo;s real commands. A bug fix shows the failure before, the cause, and the same reproduction passing after, on the surface where it was reported. A no-behavior-change claim needs a pin: a check green before and after that fails on a deliberate break. A number claim needs five or more runs a side, as median and range. No environment to run it in means NOT VERIFIED.</dd>
         </div>
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M9 10h6M9 14h6"/></svg><span data-i18n="l6-t">Memory that stays bounded</span></dt>
-          <dd data-i18n="l6-d">Record mistakes in the &le;50-line <code>INDEX.md</code>. Promote lessons into skills when doing so can prevent the same mistake.</dd>
-        </div>
-        <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.2 0-2.4-.25-3.4-.7L3 21l1.7-6.1A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.5 10h7M8.5 13.5h4"/></svg><span data-i18n="l7-t">Plain speech, by rule</span></dt>
-          <dd data-i18n="l7-d">Rule&nbsp;8: every message to a human starts with context, keeps to short active sentences, and ends with the one decision you owe.</dd>
+          <dd data-i18n="l6-d">Lessons go in a &le;50-line <code>INDEX.md</code>. Each product area gets a page with its business rules and a <code>Drive:</code> line on how to reach and prove it. A recurring lesson becomes a project test, lint rule, or check before any stage-skill edit. <code>tools/kb.sh search</code> finds open and closed features.</dd>
         </div>
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span data-i18n="l9-t">Drivable by a host</span></dt>
-          <dd data-i18n="l9-d"><code>gates/status.sh --json</code> reports stage, <code>ready | needs-human | blocked | complete</code>, the next action, and the blockers, so a scheduler never parses prose. <code>tools/verify.sh</code> executes every check in the project's own verification recipe — bounded, isolated, stdin closed — and binds the receipt to the source it ran over, so a check that never ran or a log edited afterwards is detectable (change detection, not authentication). With a recipe, ship refuses a receipt that is not <code>ok</code>; a <code>blocked</code> run ships only with the human's own words (<code>--accept-gap</code>). <code>tools/handoff.sh</code> re-runs the whole ship gate immediately before it pushes, and proves the review branch is on the remote. The loop ends at a pushed feature branch: merging or deploying stays a separate human approval, and neither is something the kit can verify from here.</dd>
+          <dd data-i18n="l9-d"><code>gates/status.sh --json</code> reports each feature&rsquo;s stage, <code>ready | needs-human | blocked | complete</code>, next action, and blockers. <code>tools/verify.sh</code> runs the project&rsquo;s verification recipe and binds the receipt to the source it ran; ship needs that receipt <code>ok</code>, or your words accepting the gap. <code>tools/handoff.sh</code> re-checks the ship gate, pushes the review branch you authorized, and proves it is on the remote. A review comment or CI failure after that is a finding to fix and ship again. Merging and deploying stay separate human approvals.</dd>
         </div>
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg><span data-i18n="l8-t">Every run gets an ending</span></dt>
-          <dd data-i18n="l8-d"><code>close.sh</code> records <code>shipped</code>, <code>abandoned</code>, <code>dead-end</code>, or <code>handed-off</code>, then archives the feature and its approvals to <code>.sdlc/archive/</code>. <code>shipped</code> requires a verified delivery record; failed work requires a lesson; handoffs require the external ticket or PR.</dd>
+          <dd data-i18n="l8-d"><code>close.sh</code> records <code>shipped</code>, <code>abandoned</code>, <code>dead-end</code>, or <code>handed-off</code>, then archives the feature and its approvals to <code>.sdlc/archive/</code>. <code>shipped</code> needs a proven delivery; failed work needs a lesson; a handoff needs the ticket or PR.</dd>
         </div>
       </dl>
     </div>
@@ -684,17 +681,17 @@
   <section class="band" id="install" aria-labelledby="install-h">
     <div class="wrap">
       <h2 id="install-h" data-i18n="inst-h">Three commands, then hand it your harness</h2>
-      <p class="section-lede" data-i18n="inst-lede">No installer, no daemon. The kit directory stays framework-only; your project gets a <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code> whose intent, plan, and memory version with your code.</p>
+      <p class="section-lede" data-i18n="inst-lede">No installer, no daemon. The kit directory stays framework-only; your project gets a gitignored <code>.sdlc/</code> for its records.</p>
 
       <ol class="steps">
         <li>
           <span class="cmd">git clone https://github.com/cskwork/sdlc-kit ~/sdlc-kit</span>
-          <p class="note" data-i18n="st1-n">Once per machine. That&rsquo;s the whole install. On Windows, run this and every later kit command in Git Bash or WSL.</p>
+          <p class="note" data-i18n="st1-n">Once per machine. On Windows, run this and every later kit command in Git Bash or WSL.</p>
         </li>
         <li>
           <span class="cmd">cd /path/to/project
 ~/sdlc-kit/init.sh</span>
-          <p class="note" data-i18n="st2-n">Seeds <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code> (work, approvals, memory, config) and adds one anchored <code style="font-family:var(--mono);font-size:.9em">/.sdlc</code> rule to your <code style="font-family:var(--mono);font-size:.9em">.gitignore</code>: the records are the project&rsquo;s knowledge, not its source, so a clone of the application does not carry them and you back them up yourself. Read them back with <code style="font-family:var(--mono);font-size:.9em">tools/kb.sh</code>, or keep them outside the checkout entirely with <code style="font-family:var(--mono);font-size:.9em">init.sh . --area &lt;folder&gt;</code>. Then fill in your real build, test, and lint commands in <code style="font-family:var(--mono);font-size:.9em">.sdlc/config.md</code>.</p>
+          <p class="note" data-i18n="st2-n">Seeds <code>.sdlc/</code> and gitignores it with one <code>/.sdlc</code> line. Back the records up yourself, or keep them outside the checkout with <code>init.sh . --area &lt;folder&gt;</code>. Your agent then fills the build, test, and lint commands in <code>.sdlc/config.md</code> from the repo and asks which lazymode level you want.</p>
         </li>
         <li>
           <span class="cmd">tell your harness:
@@ -710,11 +707,10 @@
             <tr><th scope="col" data-i18n="how-h1">Harness</th><th scope="col" data-i18n="how-h2">How</th></tr>
           </thead>
           <tbody>
-            <tr><th scope="row">pi</th><td data-i18n="r-pi"><code>ln -s ~/sdlc-kit/AGENTS.md .sdlc/SDLC.md</code>, then tell pi to run the SDLC in that file, or add a pointer line to your project <code>AGENTS.md</code></td></tr>
             <tr><th scope="row">Claude Code</th><td data-i18n="r-cc">Add to project <code>CLAUDE.md</code>: <code>For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.</code></td></tr>
-            <tr><th scope="row">Codex CLI</th><td data-i18n="r-cx">Same one-liner in project <code>AGENTS.md</code></td></tr>
+            <tr><th scope="row">pi, Codex CLI</th><td data-i18n="r-cx">Same one-liner in project <code>AGENTS.md</code></td></tr>
             <tr><th scope="row">Gemini CLI</th><td data-i18n="r-gm">Same one-liner in <code>GEMINI.md</code></td></tr>
-            <tr><th scope="row">Anything else</th><td data-i18n="r-else">Paste <code>AGENTS.md</code> into the session; the contract is files + scripts, not harness features</td></tr>
+            <tr><th scope="row">Cursor, others</th><td data-i18n="r-else">Put it in the instruction file your harness loads, or paste <code>AGENTS.md</code> into the session</td></tr>
           </tbody>
         </table>
       </div>
@@ -729,7 +725,7 @@
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
           <span data-i18n="lim-h">Honest limit: change detection, not authentication</span>
         </h2>
-        <p data-i18n="lim-p">Approval records bind the artifact's bytes, so an edit after approval closes the gate. The ship approval also binds the project's whole source snapshot as the review saw it — tracked plus unignored untracked files, minus <code>.sdlc/</code>, by path, content, and executable bit — so committing the reviewed bytes keeps it valid while any later change, including in an unnamed file, closes the gate, and a <code>pr</code> or <code>deploy</code> source commit must actually contain that source. That is change detection, not authentication: anything able to write the artifact can write the record beside it, so the records do not prove who approved. They are gitignored, so the audit trail is the <code>.sdlc/approvals/</code> files on disk plus the agent rules, not git history. A fresh clone carries none of them; re-cloning mid-feature means approving again.</p>
+        <p data-i18n="lim-p">Approvals bind the artifact&rsquo;s bytes and, at ship, the whole source snapshot the review saw, so any later change closes the gate. Anything that can write the artifact can also write the record beside it, so the records do not prove who approved. They are gitignored: the audit trail is <code>.sdlc/approvals/</code> on disk, and a fresh clone mid-feature must approve again.</p>
       </div>
     </div>
   </section>
@@ -752,65 +748,62 @@
   var KO = {
     "skip": '본문으로 건너뛰기',
     "pitch": 'Anthropic의 AI 네이티브 SDLC 플레이북, 평문 파일 + 셸.',
-    "sub": '여섯 단계, 단계마다 산출물 하나, 꼭 필요한 곳에 사람의 승인 게이트. 에이전트는 파일을 읽고 게이트를 실행하고, 게이트가 닫혀 있으면 멈춥니다. 런타임도 훅도 종속성도 없습니다.',
+    "sub": '여섯 단계, 단계마다 산출물 하나, 단계 사이에 게이트. 에이전트는 파일을 읽고 게이트를 실행하며, 당신이 맡은 게이트에서는 당신을 기다립니다. 런타임도 훅도 종속성도 없습니다.',
     "cta-start": '시작하기',
     "harness-note": '어느 것이든 파일을 읽고 셸 명령을 실행할 수 있습니다.',
-    "loop-h": '여섯 단계. 단계마다 산출물 하나. 꼭 필요한 곳에 사람 게이트.',
-    "loop-lede": '각 단계는 스킬 파일을 읽고 산출물 하나를 만든 뒤 게이트에서 멈춥니다. intent·spec·출시는 사람이 승인합니다. 일상적인 plan은 적대적 검토가 승인하고, 위험한 plan만 사람에게 올라옵니다. 6단계는 장애를 다음 intent로 바꿉니다.',
+    "loop-h": '여섯 단계, 하나의 루프',
+    "loop-lede": '각 단계는 스킬 파일을 읽고 산출물 하나를 쓴 뒤 게이트에서 멈춥니다. 기본 lazymode에서는 intent·spec·ship을 당신이 승인하며, 당신에게 오는 요청은 맥락으로 시작해 당신이 내릴 단 하나의 결정으로 끝납니다. 모든 plan은 적대적 검토를 거치며, 위험한 작업은 먼저 당신의 허락이 필요합니다.',
     "s1-h": '의도',
     "s1-p": '에이전트는 먼저 탐색한 뒤, 의도가 정확하고 근거를 갖출 때까지 당신을 심문합니다.',
     "e12": '사람 승인 게이트 · intent 승인',
     "s2-h": '명세',
-    "s2-p": '의도에서 생성되며, 당신에게 전달되기 전에 적대적 검토를 거칩니다.',
+    "s2-p": 'AS-IS와 TO-BE를 file:line 근거와 함께 나란히 적고, 당신에게 오기 전에 적대적 검토를 거칩니다.',
     "e23": '사람 승인 게이트 · spec 승인',
     "s3-h": '계획',
     "s3-p": '읽기 전용: 어떤 파일을 어떤 순서로 바꾸고, 동작을 무엇으로 증명할지.',
-    "e34": '단계형 게이트 · 위험 시 사람 승인',
+    "e34": '적대적 검토 · 위험 작업은 사람 허락',
     "s4-h": '빌드',
     "s4-p": '빌드는 계획을 따르고 각 단계에서 검증합니다.',
     "e45": '검사 통과 · 게이트 없음',
     "s5-h": '출시',
-    "s5-p": '적대적 검토와 증거. 지적된 내용을 직접 읽고 출시를 승인하며, 전달 기록을 남기고 검증해야 피처가 shipped로 종결됩니다.',
+    "s5-p": '증거와 적대적 검토. 출시는 당신이 승인하고, 전달이 증명되어야 shipped로 종결됩니다.',
     "e56": '장애 발생 · 게이트 없음',
     "s6-h": '유지보수',
-    "s6-p": '장애는 막연한 불만이 아니라, 원인을 진단한 의도와 기록된 교훈으로 남습니다.',
+    "s6-p": '장애는 원인을 진단한 의도와 기록된 교훈이 됩니다.',
     "loop-lbl": '다음 intent.md 작성',
-    "loopnote": '6단계의 운영 장애는 새 <b>intent.md</b>를 작성합니다. 사람은 일을 분류하고 검토할 뿐, 직접 시작하지 않습니다.',
+    "loopnote": '작고 잘 이해된 변경은 <b>compact 경로</b>로 갑니다: intent, build, ship, 작업 산출물은 <b>intent.md</b> 하나입니다. 모호하거나 넓거나 위험한 작업은 여섯 단계를 모두 거칩니다.',
     "why-h": '승인 게이트가 하는 일',
     "why-lede": '이 키트는 다음 단계의 실행을 통제하는 데 필요한 파일, 스크립트, 게이트만 추가합니다.',
     "l1-t": '의도 심문',
-    "l1-d": '1단계는 묻기 전에 먼저 탐색하고, <code>intent.md</code>의 모든 주장에 근거가 있으면 <code>[verified]</code>, 근거가 없으면 그 이유와 함께 <code>[assumed]</code>로 표시합니다. 사용자도 틀릴 수 있습니다. 가장 저렴하게 확인할 수 있는 단계가 바로 여기입니다.',
+    "l1-d": '1단계는 묻기 전에 먼저 탐색하고, 프로브로 답할 수 있는 것은 당신에게 묻지 않습니다. <code>intent.md</code>의 모든 주장은 근거와 함께 <code>[verified]</code>, 또는 이유와 함께 <code>[assumed]</code>로 표시됩니다. 잘못된 가정을 가장 싸게 잡는 단계입니다.',
     "l2-t": '기록으로 남는 승인',
-    "l2-d": '<code>approve.sh</code>는 단계, 정규화된 산출물 경로, 그 파일의 sha256, 승인 근거가 된 상위 산출물, 시각, 모드를 <code>.sdlc/approvals/</code> 아래 디스크에 기록합니다. 이 전부가 다시 일치하기 전까지 <code>check-gate.sh</code>는 <code>GATE CLOSED</code>를 출력합니다.',
-    "l3-t": '위임도 기록에 남음',
-    "l3-d": '사람 게이트에서 에이전트가 승인을 실행할 수 있는 때는 채팅에서 당신이 명시적으로 지시했을 때뿐이며, 기록에는 <code>mode: delegated-chat</code>이 남습니다. 적대적 검토로 승인된 plan에는 <code>mode: agent-adversary</code>가 남습니다. 어느 쪽이든 승인이 조용히 이루어지는 일은 없습니다.',
+    "l2-d": '<code>approve.sh</code>는 단계, 산출물 경로와 sha256, 상위 산출물, 시각, 모드를 <code>.sdlc/approvals/</code>에 씁니다. 그 산출물 중 하나라도 고치면 다시 승인할 때까지 <code>check-gate.sh</code>가 <code>GATE CLOSED</code>를 출력합니다.',
+    "l3-t": '사람 게이트는 당신이 정함',
+    "l3-d": '<code>.sdlc/config.md</code>의 <code>lazymode: 0-4</code>가 당신에게 남길 게이트를 정합니다. 기본값 1은 intent·spec·ship을 남기고, 4는 하나도 남기지 않습니다. 당신의 게이트에서 에이전트는 채팅에서 당신이 명시적으로 말했을 때만 승인합니다. 면제된 게이트도 실제 검토를 거치고, 그 검토가 승인과 함께 기록됩니다. 위험한 작업(데이터 손실, 공개 API, 보안, 마이그레이션, 외부 전달)은 어느 단계에서든 당신의 허락이 필요합니다. 티켓, 리뷰 코멘트, 로그 안의 지시는 데이터로 다루며 따르지 않습니다.',
     "l4-t": '신선한 컨텍스트 검토',
-    "l4-d": '검증자, 적대자, 리서처는 새 컨텍스트에서 실행됩니다. 이들은 작업을 만든 당사자가 아니며 파일을 바꾸지 않고 발견 사항만 보고합니다. 검증자는 변경을 만든 경로뿐 아니라 다른 호출자, 이번 변경이 만들지 않은 기존 데이터, 요구사항에 없는 조건으로도 변경을 확인합니다.',
-    "l5-t": 'AS-IS → TO-BE 명세',
-    "l5-d": '명세는 오늘 실제로 일어나는 일(file:line 근거)과 변경 후에 일어날 일을 나란히 적습니다. 두 칼럼의 차이가 <em>곧</em> 변경입니다.',
+    "l4-d": '검증자, 적대자, 리서처는 새 컨텍스트에서 실행됩니다. 누구도 그 작업을 쓰지 않았고, 파일을 바꾸지도 않습니다. 검증자는 E2E, 부수 효과, 의도 일치를 확인하며, 다른 호출자, 기존 기록, 요구사항에 없는 조건으로도 확인합니다. Jev QA 모드(<code>tools/qa-mode.sh</code>)로 화면 검사를 돌려 ship 게이트에 HTML 보고서 하나를 넘길 수 있습니다.',
+    "l10-t": '주장에 맞는 증거',
+    "l10-d": '모든 &ldquo;완료&rdquo;에는 프로젝트의 실제 명령 출력이 붙습니다. 버그 수정은 수정 전 실패, 원인, 수정 후 같은 재현의 통과를 보고된 곳에서 보여 줍니다. 동작 변경이 없다는 주장에는 핀이 필요합니다. 전후 모두 통과하고 일부러 깨뜨리면 실패하는 검사입니다. 수치 주장은 양쪽 다섯 번 이상 실행한 중앙값과 범위로 보입니다. 실행할 환경이 없으면 NOT VERIFIED입니다.',
     "l6-t": '한도를 지키는 교훈 메모리',
-    "l6-d": '실수는 ≤50줄짜리 <code>INDEX.md</code>에 기록합니다. 같은 실수를 막을 수 있을 때 교훈을 스킬로 승격합니다.',
-    "l7-t": '규칙이 된 평문 원칙',
-    "l7-d": '규칙 8: 사람에게 보내는 모든 메시지는 맥락으로 시작하고, 짧은 능동문을 유지하며, 마지막은 당신이 내려야 할 단 하나의 결정입니다.',
+    "l6-d": '교훈은 50줄 이하의 <code>INDEX.md</code>에 둡니다. 제품 영역마다 업무 규칙과 <code>Drive:</code> 줄(그 영역에 도달해 증명하는 방법)을 담은 페이지가 있습니다. 반복되는 교훈은 스테이지 스킬을 고치기 전에 먼저 프로젝트의 테스트, 린트 규칙, 검사가 됩니다. <code>tools/kb.sh search</code>는 열린 피처와 닫힌 피처를 찾습니다.',
     "l9-t": '호스트가 구동할 수 있음',
-    "l9-d": '<code>gates/status.sh --json</code>이 단계, <code>ready | needs-human | blocked | complete</code>, 다음 액션, 차단 사유를 보고하므로 스케줄러가 산문을 파싱할 일이 없습니다. <code>tools/verify.sh</code>는 프로젝트 자신의 검증 레시피에 설정된 모든 검사를 시간 제한과 프로세스 그룹 격리 아래 실행하고 그 영수증을 실행 대상 소스에 결합합니다 — 실행되지 않은 검사나 나중에 수정된 로그가 드러납니다(인증이 아니라 변경 탐지입니다). 레시피가 있으면 영수증이 <code>ok</code>가 아닐 때 ship이 거부되고, <code>blocked</code>인 실행은 사람이 직접 한 말(<code>--accept-gap</code>)이 있어야만 배포됩니다. <code>tools/handoff.sh</code>는 푸시 직전에 ship 게이트 전체를 다시 실행하고 리뷰용 브랜치가 원격에 있음을 증명합니다. 루프는 푸시된 피처 브랜치에서 끝납니다. 머지와 배포는 별도의 사람 승인이며, 킷이 여기서 검증할 수 있는 사실도 아닙니다.',
+    "l9-d": '<code>gates/status.sh --json</code>은 피처마다 단계, <code>ready | needs-human | blocked | complete</code>, 다음 액션, 차단 사유를 보고합니다. <code>tools/verify.sh</code>는 프로젝트의 검증 레시피를 실행하고 그 영수증을 실행 대상 소스에 묶으며, ship에는 그 영수증이 <code>ok</code>이거나 공백을 받아들인다는 당신의 말이 필요합니다. <code>tools/handoff.sh</code>는 ship 게이트를 다시 확인하고, 당신이 허락한 리뷰 브랜치를 푸시한 뒤 원격에 있음을 증명합니다. 그 뒤의 리뷰 코멘트나 CI 실패는 고쳐서 다시 ship할 발견 사항입니다. 머지와 배포는 별도의 사람 승인으로 남습니다.',
     "l8-t": '모든 실행에 끝 상태 기록',
-    "l8-d": '<code>close.sh</code>는 <code>shipped</code>, <code>abandoned</code>, <code>dead-end</code>, <code>handed-off</code> 중 하나를 기록한 뒤 피처와 승인 기록을 <code>.sdlc/archive/</code>로 옮깁니다. <code>shipped</code>는 검증된 전달 기록을 요구하고, 실패한 작업은 교훈을, 이관한 작업은 외부 티켓이나 PR을 남겨야 합니다.',
+    "l8-d": '<code>close.sh</code>는 <code>shipped</code>, <code>abandoned</code>, <code>dead-end</code>, <code>handed-off</code> 중 하나를 기록한 뒤 피처와 승인 기록을 <code>.sdlc/archive/</code>로 옮깁니다. <code>shipped</code>는 증명된 전달을, 실패한 작업은 교훈을, 이관은 티켓이나 PR을 요구합니다.',
     "inst-h": '명령 세 줄, 그다음은 하네스에 맡김',
-    "inst-lede": '설치 프로그램도 데몬도 없습니다. 키트 디렉터리는 프레임워크 전용으로 남고, 프로젝트에는 intent·plan·memory가 코드와 함께 버전 관리되는 <code style="font-family:var(--mono);font-size:.9em">.sdlc/</code>가 생깁니다.',
-    "st1-n": '머신당 한 번. 설치는 이것이 전부입니다. Windows에서는 이 명령과 이후 모든 키트 명령을 Git Bash나 WSL에서 실행하세요.',
-    "st2-n": '<code style="font-family:var(--mono);font-size:.9em">.sdlc/</code>를 생성하고(work, approvals, memory, config), <code style="font-family:var(--mono);font-size:.9em">.gitignore</code>에 <code style="font-family:var(--mono);font-size:.9em">/.sdlc</code> 규칙 한 줄을 추가합니다. 기록은 애플리케이션의 소스가 아니라 프로젝트의 지식이므로, 애플리케이션을 클론해도 따라오지 않으며 백업은 사용자가 직접 관리합니다. 기록은 <code style="font-family:var(--mono);font-size:.9em">tools/kb.sh</code>로 다시 찾아 읽고, <code style="font-family:var(--mono);font-size:.9em">init.sh . --area &lt;폴더&gt;</code>를 쓰면 체크아웃 바깥에 보관할 수 있습니다. 이어서 <code style="font-family:var(--mono);font-size:.9em">.sdlc/config.md</code>에 실제 빌드·테스트·린트 명령을 채워 넣으세요.',
+    "inst-lede": '설치 프로그램도 데몬도 없습니다. 키트 디렉터리는 프레임워크 전용으로 남고, 프로젝트에는 기록을 담는 gitignore된 <code>.sdlc/</code>가 생깁니다.',
+    "st1-n": '머신당 한 번. Windows에서는 이 명령과 이후 모든 키트 명령을 Git Bash나 WSL에서 실행하세요.',
+    "st2-n": '<code>.sdlc/</code>를 만들고 <code>/.sdlc</code> 한 줄로 gitignore합니다. 기록은 직접 백업하거나, <code>init.sh . --area &lt;폴더&gt;</code>로 체크아웃 바깥에 두세요. 이어서 에이전트가 저장소에서 빌드·테스트·린트 명령을 찾아 <code>.sdlc/config.md</code>에 채우고, 원하는 lazymode 단계를 묻습니다.',
     "st3-n": '프로젝트의 에이전트 파일에 포인터 한 줄이면 끝입니다. 아래 표에서 하네스를 고르세요.',
     "how-cap": '하네스를 라우팅 계약에 연결하기',
     "how-h1": '하네스',
     "how-h2": '방법',
-    "r-pi": '<code>ln -s ~/sdlc-kit/AGENTS.md .sdlc/SDLC.md</code>로 연결한 뒤 pi에게 이 파일의 SDLC를 실행하라고 알려 주거나, 프로젝트 <code>AGENTS.md</code>에 포인터 한 줄을 추가합니다.',
     "r-cc": '프로젝트 <code>CLAUDE.md</code>에 다음을 추가합니다: <code>For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.</code>',
     "r-cx": '프로젝트 <code>AGENTS.md</code>에 같은 한 줄을 추가합니다.',
     "r-gm": '<code>GEMINI.md</code>에 같은 한 줄을 추가합니다.',
-    "r-else": '세션에 <code>AGENTS.md</code>를 붙여 넣으세요. 계약은 파일 + 스크립트이며 하네스 기능이 아닙니다.',
+    "r-else": '하네스가 읽는 지침 파일에 넣거나, 세션에 <code>AGENTS.md</code>를 붙여 넣으세요.',
     "lim-h": '정직한 한계: 인증이 아니라 변경 감지',
-    "lim-p": '승인 기록은 산출물의 바이트를 함께 묶습니다. 승인 뒤에 파일을 고치면 게이트가 닫힙니다. ship 승인은 리뷰가 본 프로젝트 소스 전체 스냅샷(추적 파일과 무시되지 않은 미추적 파일에서 <code>.sdlc/</code>를 뺀 집합의 경로·내용·실행 비트)까지 묶습니다. 리뷰한 바이트를 그대로 커밋하면 유효하지만, 이후의 어떤 변경이든 — 리뷰가 이름을 대지 않은 파일이라도 — 게이트를 닫고, <code>pr</code>·<code>deploy</code>의 소스 커밋은 그 소스를 실제로 담고 있어야 합니다. 다만 이것은 변경 감지일 뿐 인증이 아닙니다. 산출물을 쓸 수 있는 주체는 그 옆의 기록도 쓸 수 있으므로, 누가 승인했는지는 증명하지 못합니다. 이 기록은 gitignore 대상이라, 감사 추적은 git 히스토리가 아니라 디스크에 있는 <code>.sdlc/approvals/</code> 파일과 에이전트 규칙이 담당합니다. 새로 클론하면 이 기록은 따라오지 않아, 피처를 진행하던 중에 다시 클론하면 승인을 다시 받아야 합니다.',
+    "lim-p": '승인은 산출물의 바이트와, ship에서는 리뷰가 본 소스 전체 스냅샷까지 묶으므로 이후의 어떤 변경이든 게이트를 닫습니다. 산출물을 쓸 수 있는 주체는 그 옆의 기록도 쓸 수 있으므로, 기록은 누가 승인했는지 증명하지 못합니다. 기록은 gitignore 대상이라 감사 추적은 디스크의 <code>.sdlc/approvals/</code>이며, 피처 진행 중에 새로 클론하면 다시 승인해야 합니다.',
     "foot-p": 'sdlc-kit: 평문 파일 + 셸. 훅 없음, 런타임 없음, 종속성 없음.',
     "foot-gh": 'GitHub 저장소',
     "foot-pb": 'Anthropic의 플레이북',
