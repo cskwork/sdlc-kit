@@ -40,7 +40,8 @@ exploration stays out of the main context. Then fill `templates/plan.md`:
   what every caller sends today: that change is a contract change (AGENTS.md
   rule 3).
 - **Order of work.** Make each step keep the configured checks passing. Add
-  tests with the code they test.
+  tests with the code they test. Where two steps would write one file, plan
+  separate targets if the design allows; otherwise order them.
 - **Risks.** Record rate limits, migrations, shared state, and important quirks.
 - **Proof.** For each spec requirement, name the test or command that proves it
   (bug fix: the regression test — AGENTS.md rule 6).

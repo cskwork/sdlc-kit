@@ -101,7 +101,7 @@ printf -- '%s\n' '# Area: 교사 > 학생 > 학급 분석' '- Menu: 교사 > 학
 #    the Obsidian form of the evidence block: a folded callout, lines prefixed "> "
 printf -- '%s\n' '- Menu: 학생 > 과제' '## Business rules (정책)' '| # | Rule |' '|---|---|' '| P1 | 마감 후 제출 불가 |' \
   '## History' '| Date | Feature | What changed |' '|---|---|---|' '| 2026-09-02 | f4 | 마감 표시 |' \
-  '> [!info]- 근거 · 코드 위치 (개발자용)' '> - Where: HomeworkApi#submit' '>' '> | # | Source | Set by | Verified |' '> |---|---|---|---|' \
+  '> [!info]- 근거 · 코드 위치 (개발자용)' '> - Where: HomeworkApi#submit' '> - Drive: open Homework, press Submit' '>' '> | # | Source | Set by | Verified |' '> |---|---|---|---|' \
   '> | P1 | 기획서 | f4 | test — 2026-09-02 |' '> | P2 | 증거 행은 규칙이 아니다 | f4 | — |' > ".sdlc/memory/areas/학생 - 과제.md"
 LC_ALL=en_US.UTF-8 bash "$kit/tools/kb.sh" index >/dev/null
 grep -qF '| [교사 > 학생 > 학급 분석](memory/areas/교사%20-%20학생%20-%20학급%20분석.md) | 2 | 2026-09-01 | f3 |' .sdlc/README.md \
@@ -115,6 +115,9 @@ done
 out=$(bash "$kit/tools/kb.sh" show "학생 > 과제") || fail "show found no callout page"
 case "$out" in (*"| P1 | 마감 후"*"History:"*"근거 · 코드 위치 (개발자용):"*"  - Where: HomeworkApi#submit"*"  | P1 | 기획서 | f4 |"*) ;; (*) fail "callout evidence not read last: $out";; esac
 printf '%s\n' "$out" | grep -q '^ *>' && fail "callout prefix printed: $out"
+#    the Drive line sits at the bottom of the page: show prints it first, once
+case "$out" in (*"  Drive: open Homework, press Submit"*"| P1 | 마감 후"*) ;; (*) fail "show did not print the Drive line first: $out";; esac
+[ "$(printf '%s\n' "$out" | grep -c 'Drive:')" = 1 ] || fail "Drive line printed twice: $out"
 fns=$(sed -n -e '/^kb_field() {/,/^}/p' -e '/^kb_get() {/,/^}/p' "$kit/tools/kb.sh")
 where=$(eval "$fns"; kb_get ".sdlc/memory/areas/학생 - 과제.md" Where)
 [ "$where" = "HomeworkApi#submit" ] || fail "kb_get did not read Where inside the callout: '$where'"

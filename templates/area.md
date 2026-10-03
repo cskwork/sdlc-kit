@@ -62,6 +62,7 @@
      callout instead, every line prefixed "> ":
        > [!info]- 근거 · 코드 위치 (개발자용)
        > - Where: <…>
+       > - Drive: <…>
        >
        > | # | Source | Set by | Verified |
        > |---|---|---|---|
@@ -70,6 +71,7 @@
 <summary>근거 · 코드 위치 (개발자용)</summary>
 
 - Where: <route · file:symbol · endpoint · job>
+- Drive: <how a user reaches it · the command or tool that drives it · the end state that proves it · traps>
 
 | # | Source | Set by | Verified |
 |---|---|---|---|
