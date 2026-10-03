@@ -12,4 +12,4 @@
 <what to do instead, as an instruction to a future agent>
 
 ## Promote?
-<none | skills/<n>: exact edit that would prevent recurrence>
+<none | a project check (test, lint) or skills/<n>: exact edit that would prevent recurrence>

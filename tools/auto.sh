@@ -142,7 +142,7 @@ evaluate() { # <slug>
   fi
   if [ ! -f "$dir/intent.md" ] && [ -f "$dir/plan.md" ]; then
     EV_STAGE=intent; EV_STATUS=ready
-    set_next write "" "legacy compressed feature: write $dir/intent.md (Track: compact), then pass the intent gate"
+    set_next write "" "legacy compressed feature: write $dir/intent.md (Track: compact, carrying plan.md's files and proof), then pass the intent gate"
     return 0
   fi
 
