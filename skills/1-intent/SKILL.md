@@ -72,6 +72,10 @@ uncertainty.
 the human include reusing it, with its evidence, or say why it does not fit.
 Ask about the change the user sees before asking which mechanism to build.
 
+**Run it, don't ask it.** A question a probe or a throwaway run can answer —
+behavior, output, timing, compatibility — is never put to the human.
+Throwaway code lives in `scratch/`, answers one question, and never ships.
+
 ## Grill protocol
 
 Interview the user one question at a time. Each answer shapes the next
@@ -209,9 +213,8 @@ write them or go full.
 
 Record the verdict in the `Track:` line with the reasons
 (`- Track: compact — two known files, existing test covers it`) BEFORE the
-intent gate; the approval freezes it (`micro` is the older spelling and
-still parses). Ship keeps its full adversary review — the only review that
-diff gets.
+intent gate; the approval freezes it. Ship keeps its full adversary review —
+the only review that diff gets.
 
 **Upgrade (any build surprise → full):** STOP, rewrite the Track line to
 `- Track: full — upgraded from compact (<reason>)`, re-approve intent, then

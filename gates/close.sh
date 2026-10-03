@@ -405,15 +405,15 @@ echo "ARCHIVED: $dir → $archive (approvals included)"
 # touched, so no approved artifact can change.
 bash "$kit/tools/kb.sh" index || echo "note: contents page not refreshed (see the reason above)"
 
-# promotion reminder: a lesson tag repeating 3+ times means the stage skill
-# should absorb the fix, not the memory (see skills/6-maintain lesson format)
+# promotion reminder: a lesson tag repeating 3+ times means a mechanism should
+# absorb the fix, not the memory (skills/6-maintain: strongest mechanism first)
 if [ -f .sdlc/memory/INDEX.md ]; then
   rep=$(awk '!/^#/ && match($0, /\[[^]]+\]/) {
       s = substr($0, RSTART+1, RLENGTH-2); n = split(s, t, /[, ]+/)
       for (i = 1; i <= n; i++) if (t[i] != "") c[t[i]]++
     } END { for (k in c) if (c[k] >= 3) print "  " k " (" c[k] "x)" }' .sdlc/memory/INDEX.md)
   if [ -n "$rep" ]; then
-    echo "PROMOTE: these lesson tags repeat 3+ times — fold the fix into the stage skill:"
+    echo "PROMOTE: these lesson tags repeat 3+ times — promote the fix, a project check before a stage-skill edit (skills/6-maintain):"
     echo "$rep"
   fi
 fi
