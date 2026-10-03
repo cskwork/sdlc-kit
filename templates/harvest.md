@@ -10,14 +10,11 @@
      - [area: <menu path>] figure new | N<n> changed | N<n> retired: <label on screen> — what it counts — evidence: source · [verified: how — YYYY-MM-DD]
      - [area: <menu path>] fact: <holds for this area only> — [verified: how — YYYY-MM-DD]
      - [area: <menu path>] history: YYYY-MM-DD <slug> — <what changed for the user>
+     - [area: <menu path>] drive: <how a user reaches it · command or tool · end state that proves it · traps> — [verified: how — YYYY-MM-DD]
      Rules, figures, and history merge only when the feature closes shipped;
-     a stale merge leaves them here (rule 4). The merge numbers a new rule
-     or figure, writes the plain sentence as a table row on top of the area
-     page (history as a History row) and the evidence part as its evidence
-     row in the <details> block at the bottom,
-     or the folded callout in an Obsidian store (index_style: obsidian;
-     templates/area.md).
-     Code identifiers belong only in the evidence part. -->
+     a stale merge leaves them here (rule 4). Where each part lands on the
+     page: templates/area.md. Code identifiers belong only in the evidence
+     part. -->
 
 ## Domain candidates
 <!-- - fact / term / constraint that spans areas — [verified: how — YYYY-MM-DD]

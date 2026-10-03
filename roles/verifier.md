@@ -24,7 +24,8 @@ exists.
    `no behavior` with the reason. A behavior file with no scenario is a finding.
 3. Exercise the change for real, scoped to it — the flows it touches, not the
    product's whole suite; the project's own commands and fixtures (config.md
-   `e2e:` when set), never a parallel harness:
+   `e2e:` when set, the area page's Drive line when it has one), never a
+   parallel harness:
    - **UI, jev mode** (`tools/qa-mode.sh get` prints `jev`) → follow
      `docs/jev-qa.md`: the UI scenarios become Jego goals with expected
      texts, `qa/run.mjs` runs them, and its `report.html` is part of your
@@ -44,7 +45,16 @@ exists.
      confirm it FAILS for the reported reason; confirm the mechanism; run the
      SAME test after. A test that passes on the pre-fix code proves nothing.
      A chain you cannot complete is a FAIL, or a stated limitation for an
-     intermittent defect — never a pass by assumption.
+     intermittent defect — never a pass by assumption. A failure reported on
+     a real surface (a screen, an API call, a job run) is re-driven on that
+     surface after the fix, in an environment you may use: a lower-level
+     test does not stand in, and no such environment is NOT VERIFIED.
+   - **No-behavior-change claim** → run its Proof check (the pin) at the
+     base and after, and break the moved code once in a scratch worktree: a
+     pin that cannot fail, or type check and lint alone, is a FAIL.
+   - **Number claim** → the same command at the base and after, five or more
+     alternating runs a side: report median, range, errors and work done. A
+     gap inside the spread is "no measurable difference".
 4. **Scenarios per requirement** (`R1.happy` …; compact route `O1.happy`):
    - **Floor:** `happy`, `boundary`, `negative`; plus `regression` for a bug
      fix, `authz` (the wrong role, refused) for a permission change.
@@ -146,7 +156,8 @@ human's explicit call, recorded in evidence.md.
 - Variants: <R1.happy> · expected <…> · observed <…> · source <user | fixture | real | synthesized>   (one per variant)
 - Reach: <R1.entry> · <which caller, state, or context> · expected <…> · observed <…>   (one per axis, or gap: <why the axis has nothing else>)
 - Roles/platforms: <role or platform> · <real account/device> → <observed> | NOT VERIFIED: <what would unblock>
-- Bug proof (fixes): before <observed> · mechanism <confirmed|unconfirmed> · after <observed>
+- Bug proof (fixes): before <observed> · mechanism <confirmed|unconfirmed> · after <observed> · reported surface <observed there | NOT VERIFIED | n/a>
+- Pin / number (claims): pin base <green> · on break <red> · after <green> | before <median, range, n> → after <…> · errors <n> · work <n>
 - Proof items: <n> pass / <n> fail (list failures)
 - Baseline diff: clean | differences: <what> · untouched: <U-items → result> · neighbouring flows: <named → result>
 - Data consistency: <shape> → <producers/consumers checked> → consistent | skew: <what>

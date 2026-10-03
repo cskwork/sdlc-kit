@@ -13,8 +13,8 @@ Heartbeat throughout: AGENTS.md rule 9.
 ## Before you start
 
 1. Run `gates/check-gate.sh plan .sdlc/work/<slug>/plan.md`. STOP if closed.
-   Compact-route features (intent.md `Track: compact`, older spelling
-   `micro`) have no spec or plan and never need one: check
+   Compact-route features (intent.md `Track: compact`) have no spec or plan
+   and never need one: check
    `gates/check-gate.sh intent .sdlc/work/<slug>/intent.md` instead, and
    treat intent.md's Compact route section (Files · Proof · Risk · Baseline · Delivery
    target) plus its success criteria as the plan.
@@ -24,7 +24,8 @@ Heartbeat throughout: AGENTS.md rule 9.
    baseline commands from plan.md (compact route: intent.md's Baseline line)
    and save output to
    `.sdlc/work/<slug>/baseline.txt`. Without a baseline, you cannot prove that
-   existing behavior stayed unchanged. With a `.sdlc/verify.md` recipe, also
+   existing behavior stayed unchanged. A pin or a before-measurement
+   (AGENTS.md rule 6) is captured here too. With a `.sdlc/verify.md` recipe, also
    run `tools/verify.sh baseline <slug>` once the new tests exist, and again
    after editing them.
 
@@ -61,7 +62,8 @@ Heartbeat throughout: AGENTS.md rule 9.
   the regression test (AGENTS.md rule 6; the one stage 6 drafted, if any)
   and watch it fail on the current code for the reported reason. Save that
   output under `scratch/`; ship quotes its deciding lines in evidence.md's
-  Bug proof. A test you never saw fail is not proof.
+  Bug proof. A test you never saw fail is not proof. The fix carries only
+  what the confirmed mechanism justifies; "might also help" is a hypothesis.
 - **With a recipe, write the checks with the code** in
   `.sdlc/work/<slug>/verify.md` (templates/verify-feature.md): one `check:`
   per requirement variant and per reach scenario plan.md picked

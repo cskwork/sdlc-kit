@@ -26,6 +26,7 @@
 - Before: `<that test, or the reproduction steps>` on the pre-fix code → <the observed failure, verbatim>
 - Mechanism: <why that code produced that failure — the causal chain, not a guess>
 - After: `<the SAME reproduction>` → <passing output>
+- Reported surface: <the screen, request or job the failure was reported on> → <observed there after the fix | NOT VERIFIED: what would unblock | n/a — the test is where it was reported>
 - Adjacent flows: <other paths through the changed code> → <checked; result>
 - Intermittent? <the logs/traces or isolated deterministic repro used instead, and what it does NOT prove>
 

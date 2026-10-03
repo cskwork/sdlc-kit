@@ -57,7 +57,10 @@ Fill `templates/evidence.md` → `.sdlc/work/<slug>/evidence.md`:
   same verdict-lines-and-scratch-citation rule.
 - Adversary findings + resolutions.
 - State anything not verified, including environment limits and skipped checks.
-  Record a gap instead of marking the check as passed.
+  Record a gap instead of marking the check as passed. A gap this project has
+  hit before (`tools/kb.sh search "PASS WITH GAP"`) also gets a proposal for
+  the human: a feature that builds the missing piece in the project repo — a
+  launch command, a doctor, a fixture, a driver script.
 
 ## Retrospective
 
@@ -67,19 +70,13 @@ what would help the next agent — but only what a future run could REUSE
 no lesson. Write what there is into the feature's
 `.sdlc/work/<slug>/harvest.md` (lesson candidates in the skill 6 format;
 durable terms, verified facts, and constraints as domain candidates;
-AGENTS.md rule 4). **Every business rule this feature set, changed, or
-retired is an area candidate** — the rule in one plain, testable sentence a
-non-developer can read, the P-number it changes or retires, and, as its
-evidence, the source (the origin, the spec R-item or compact intent O-item)
-and how it was verified — plus one history line per area it changed. **A
-figure the area page shows a Numbers section for is treated the same way**:
-the N-number it sets, changes, or retires, named on screen, with what it
-counts, and its source as evidence. The close merge writes the sentence as
-a table row on top of the area page (a history candidate as a History row)
-and the evidence as its evidence row in the `<details>` block at the bottom (or the folded callout in an Obsidian store,
-index_style: obsidian); a page it creates is named by its menu path — the Menu with each
-` > ` written ` - ` and any of `/ \ : * ? " < > |` replaced with `-`
-(templates/area.md). Then finish the feature's `summary.md`:
+AGENTS.md rule 4). **Every business rule or on-screen figure this feature
+set, changed, or retired is an area candidate** — one plain, testable
+sentence a non-developer can read, with its source (the origin, the spec
+R-item or compact intent O-item) and how it was verified as evidence — plus
+one history line per area it changed and **the drive recipe the E2E lens
+used** (line shapes: templates/harvest.md). Then finish the feature's
+`summary.md`:
 `Status` says only what delivery.md confirms (a pushed review branch is not
 a deployment), Before → After and How to check match what was actually
 built and proven, Remember holds the one thing worth knowing next time.
@@ -87,8 +84,8 @@ built and proven, Remember holds the one thing worth knowing next time.
 reader. Domain facts describe the system; lessons describe mistakes. If a
 stage skill should have prevented a mistake, add `promote: skills/<n>` to
 the lesson candidate. A tag that appears three or more times in INDEX.md
-must be promoted: propose the stage-skill change to the human (`close.sh`
-prints these).
+must be promoted: propose the change to the human, strongest mechanism first
+(skills/6-maintain; `close.sh` prints these).
 
 ## Gate
 
@@ -142,6 +139,12 @@ refuses a commit whose tree does not CONTAIN the reviewed source, and repeats
 no push that already happened. Merging that branch or deploying it is a
 separate human approval, recorded as delivery.md's `Authorized-by:` — the ship
 approval is not that authorization.
+
+**After the handoff, a review comment or a CI failure is a finding.** Feature
+still open: accept or decline it with a reason, fix it under skills/4-build,
+re-run the lenses the fix touches, then the ship review, re-approve,
+`handoff.sh push`, and update delivery.md. Feature already closed: it is a
+new slug with the comment as its origin.
 
 1. Stage named paths only: the changed source files. Do not use `git add -A`
    or `git add .` because they can include unrelated files. **The record
