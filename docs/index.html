@@ -1,13 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Audience: anyone. Page copy uses no coding terms or jargon; commands and file names appear only in the install section. -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>sdlc-kit | Gated SDLC for AI coding agents</title>
-<meta name="description" content="Anthropic's AI-native SDLC playbook as plain files + shell: six stages, one artifact each, human approval gates on the record. Works with pi, Claude Code, Codex CLI, Gemini CLI, Cursor.">
+<title>sdlc-kit | Building software with AI, one approved step at a time</title>
+<meta name="description" content="With sdlc-kit, an AI that writes software works in six stages and writes down its plan. A person approves at set checkpoints before it goes on.">
 <meta property="og:type" content="website">
-<meta property="og:title" content="sdlc-kit | Gated SDLC for AI coding agents">
-<meta property="og:description" content="Six stages, one artifact each, human approval gates on the record. Plain files + shell, any harness.">
+<meta property="og:title" content="sdlc-kit | Building software with AI, one approved step at a time">
+<meta property="og:description" content="An AI that writes software works in six stages, and a person approves at set checkpoints before it goes on.">
 <meta property="og:url" content="https://github.com/cskwork/sdlc-kit">
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#14110d">
@@ -80,6 +81,7 @@
   section { scroll-margin-top: 2rem; }
 
   h1, h2, h3 { font-family: var(--slab); font-weight: 600; letter-spacing: -0.015em; text-wrap: balance; }
+  html:lang(ko) body { word-break: keep-all; }
 
   h2 {
     font-size: clamp(1.55rem, 1.1rem + 2vw, 2.3rem);
@@ -228,12 +230,12 @@
     overflow-x: auto;
   }
   .term-body .ln { display: block; white-space: pre; }
+  .term-body .who { display: inline-block; min-width: 7em; }
   .term-body .p { color: var(--accent); font-weight: 700; }
   .term-body .c { color: var(--text); }
   .term-body .o { color: var(--text-2); }
   .term-body .ok { color: var(--accent); font-weight: 700; }
   .term-body .bad { color: var(--danger); font-weight: 700; }
-  .term-body .dim { color: #8f8672; }
 
   @media (prefers-reduced-motion: no-preference) {
     .term-body .ln {
@@ -384,16 +386,6 @@
   }
   .ledger dt svg { color: var(--accent); flex: none; }
   .ledger dd { margin: 0; color: var(--text-2); max-width: 62ch; }
-  .ledger dd code {
-    font-family: var(--mono);
-    font-size: 0.84em;
-    color: var(--text);
-    background: rgba(255, 251, 240, 0.05);
-    border: 1px solid var(--line);
-    border-radius: 5px;
-    padding: 0.08em 0.35em;
-    white-space: nowrap;
-  }
   @media (min-width: 780px) {
     .ledger > div { grid-template-columns: 17.5rem 1fr; align-items: baseline; }
   }
@@ -438,7 +430,7 @@
     padding-bottom: 0.25rem;
   }
   .steps .note { margin: 0.5rem 0 0; color: var(--text-2); font-size: 0.84rem; line-height: 1.55; }
-  .section-lede code, .steps .note code { font-family: var(--mono); font-size: .9em; }
+  .steps .note code { font-family: var(--mono); font-size: .9em; }
 
   .tablewrap { overflow-x: auto; }
   table.how {
@@ -491,7 +483,6 @@
     border-radius: 10px;
     padding: 1.15rem 1.3rem 1.25rem;
     background: var(--bg-raised);
-    margin-bottom: 2.75rem;
   }
   .honest h2 {
     font-size: 1.12rem;
@@ -502,15 +493,6 @@
   }
   .honest h2 svg { color: var(--accent); flex: none; }
   .honest p { margin: 0; color: var(--text-2); max-width: 72ch; font-size: 0.92rem; }
-  .honest code {
-    font-family: var(--mono);
-    font-size: 0.85em;
-    color: var(--text);
-    background: rgba(255, 251, 240, 0.05);
-    border: 1px solid var(--line);
-    border-radius: 5px;
-    padding: 0.08em 0.35em;
-  }
 
   footer.site { border-top: 1px solid var(--line); padding-block: 2.25rem 2.75rem; }
   footer.site .wrap {
@@ -525,12 +507,9 @@
 </style>
 </head>
 <body>
-<!-- Design contract
-     Purpose: show the six-stage loop, human gates, and the approval record.
-     Visual system: warm dark background, light text, brass accent, Bitter
-     headings, monospace for files and commands, and thin ledger rules.
-     First view: introduction and actions on the left; approval terminal on the
-     right. -->
+<!-- Design contract: show the six stages and the checkpoints where a person
+     approves. Warm dark background, brass accent, Bitter headings, monospace
+     labels, thin ledger rules; intro left, example chat right. -->
 <noscript><style>.top-actions .lang { display: none; }</style></noscript>
 <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
 
@@ -553,20 +532,20 @@
     <div class="wrap">
       <div>
         <h1>sdlc<span class="kit">-kit</span></h1>
-        <p class="pitch" data-i18n="pitch">Anthropic&rsquo;s AI-native SDLC playbook, as plain files&nbsp;+&nbsp;shell.</p>
-        <p class="sub" data-i18n="sub">Six stages, one artifact each, a gate between them. Your agent reads the files, runs the gates, and waits for you at the gates you keep. No runtime, no hooks, no lock-in.</p>
+        <p class="pitch" data-i18n="pitch">A step-by-step way for AI to build software, with your approval at the checkpoints you choose.</p>
+        <p class="sub" data-i18n="sub">AI tools that write software are fast, and they often skip steps. They guess what you meant and grade their own work. With sdlc-kit the AI works in six stages and writes down what it will do before it changes anything. At the checkpoints you keep, it waits for your approval.</p>
         <p class="cta-row">
-          <a class="btn btn-primary" href="#install"><span data-i18n="cta-start">Get started</span>
+          <a class="btn btn-primary" href="#loop"><span data-i18n="cta-how">See how it works</span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
           </a>
-          <a class="btn btn-ghost" href="https://github.com/cskwork/sdlc-kit">GitHub repository</a>
+          <a class="btn btn-ghost" href="#install" data-i18n="cta-setup">How to set it up</a>
         </p>
-        <p class="harnesses"><b>pi</b><span class="dot">·</span><b>Claude Code</b><span class="dot">·</span><b>Codex CLI</b><span class="dot">·</span><b>Gemini CLI</b><span class="dot">·</span><b>Cursor</b><br><span data-i18n="harness-note">any of them can read files and run shell commands.</span></p>
+        <p class="harnesses"><b>Claude Code</b><span class="dot">·</span><b>Codex</b><span class="dot">·</span><b>Gemini</b><span class="dot">·</span><b>Cursor</b><span class="dot">·</span><b>pi</b><br><span data-i18n="tools-note">Works with the common AI tools for writing software, including these.</span></p>
       </div>
 
-      <div class="term" role="img" aria-label="Terminal transcript: an unapproved stage prints GATE CLOSED; after the human's approval is recorded, the gate opens." data-i18n-aria="term-aria">
-        <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>your-project / zsh</span></div>
-        <pre class="term-body"><span class="ln" style="--i:0"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh spec .sdlc/work/payments/spec.md</span></span><span class="ln" style="--i:1"><span class="bad">GATE CLOSED:</span><span class="o"> no approval for 'spec' of 'payments'.</span></span><span class="ln" style="--i:2"><span class="o">Needed: gates/approve.sh spec … (human decision, or --lazy when lazymode waives this gate — AGENTS.md rule 3)</span></span><span class="ln" style="--i:3"> </span><span class="ln" style="--i:4"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/approve.sh spec .sdlc/work/payments/spec.md --delegated</span>  <span class="dim"># after "approve" in chat</span></span><span class="ln" style="--i:5"><span class="ok">APPROVED:</span><span class="o"> spec of payments (.sdlc/work/payments/spec.md)</span></span><span class="ln" style="--i:6"><span class="o">Recorded on disk. Approval records are gitignored — the trail is .sdlc/approvals/, not git history.</span></span><span class="ln" style="--i:7"> </span><span class="ln" style="--i:8"><span class="p">$</span> <span class="c">~/sdlc-kit/gates/check-gate.sh spec .sdlc/work/payments/spec.md</span></span><span class="ln caret" style="--i:9"><span class="ok">GATE OPEN:</span><span class="o"> spec (approved @ 2026-08-30T09:12:44Z)</span></span></pre>
+      <div class="term" role="img" aria-label="Example chat: the AI waits at a checkpoint until a person approves." data-i18n-aria="term-aria">
+        <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span data-i18n="term-title">Work chat</span></div>
+        <pre class="term-body"><span class="ln" style="--i:0"><span class="p who" data-i18n="t-ai">AI</span><span class="c" data-i18n="t1">I wrote down what I understood. Starting now.</span></span><span class="ln" style="--i:1"><span class="p who" data-i18n="t-check">Checkpoint</span><span data-i18n="t2"><span class="bad">Not yet.</span><span class="o"> A person has not approved this.</span></span></span><span class="ln" style="--i:2"> </span><span class="ln" style="--i:3"><span class="p who" data-i18n="t-you">You</span><span class="c" data-i18n="t3">Read it. That is what I want. Approved.</span></span><span class="ln" style="--i:4"><span class="p who" data-i18n="t-ai">AI</span><span class="c" data-i18n="t4">Approval saved, with the date and time.</span></span><span class="ln" style="--i:5"> </span><span class="ln" style="--i:6"><span class="p who" data-i18n="t-check">Checkpoint</span><span data-i18n="t5"><span class="ok">Approved.</span><span class="o"> Work can go on.</span></span></span><span class="ln caret" style="--i:7"><span class="p who" data-i18n="t-ai">AI</span><span class="c" data-i18n="t6">Starting the work.</span></span></pre>
       </div>
     </div>
   </section>
@@ -574,158 +553,146 @@
   <!-- ============ the loop ============ -->
   <section class="band" id="loop" aria-labelledby="loop-h">
     <div class="wrap">
-      <h2 id="loop-h" data-i18n="loop-h">Six stages, one loop</h2>
-      <p class="section-lede" data-i18n="loop-lede">Each stage reads its skill file, writes one artifact, and stops at its gate. At the default lazymode you approve intent, spec, and ship; each request to you starts with context and ends with the one decision you owe. Every plan gets an adversary review, and risky work needs your word first.</p>
+      <h2 id="loop-h" data-i18n="loop-h">Six stages, with checkpoints between them</h2>
+      <p class="section-lede" data-i18n="loop-lede">At each stage the AI writes down what it found or will do, then stops at a checkpoint. By default a person approves three of them: the request summary, the change description, and the delivery.</p>
 
-      <ol class="flow" aria-label="The six-stage loop with human approval gates" data-i18n-aria="flow-aria">
+      <ol class="flow" aria-label="The six stages, with the checkpoints where a person approves" data-i18n-aria="flow-aria">
         <li class="stage s1">
-          <h3><span data-i18n="s1-h">Intent</span> <span class="art">intent.md</span></h3>
-          <p class="what" data-i18n="s1-p">The agent explores first, then grills you until the intent is exact and evidenced.</p>
+          <h3><span data-i18n="s1-h">Understand</span> <span class="art" data-i18n="s1-a">request summary</span></h3>
+          <p class="what" data-i18n="s1-p">The AI looks around first and asks only what it cannot find out itself. It writes down what you want, marking what it checked and what it assumed.</p>
         </li>
         <li class="edge gate e12">
           <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M0 5h41M38 1.5 42 5l-4 3.5"/></svg>
-          <span class="lbl" data-i18n="e12">human gate · approve intent</span>
+          <span class="lbl" data-i18n="e-you">checkpoint · a person approves</span>
         </li>
         <li class="stage s2">
-          <h3><span data-i18n="s2-h">Spec</span> <span class="art">spec.md</span></h3>
-          <p class="what" data-i18n="s2-p">AS-IS beside TO-BE with file:line evidence, adversarially reviewed before it reaches you.</p>
+          <h3><span data-i18n="s2-h">Describe</span> <span class="art" data-i18n="s2-a">now and after</span></h3>
+          <p class="what" data-i18n="s2-p">It describes how things work now and after the change, with a source for each fact. A second AI looks for gaps before you see it.</p>
         </li>
         <li class="edge gate e23">
           <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M0 5h41M38 1.5 42 5l-4 3.5"/></svg>
-          <span class="lbl" data-i18n="e23">human gate · approve spec</span>
+          <span class="lbl" data-i18n="e-you">checkpoint · a person approves</span>
         </li>
         <li class="stage s3">
-          <h3><span data-i18n="s3-h">Plan</span> <span class="art">plan.md</span></h3>
-          <p class="what" data-i18n="s3-p">Read-only: which files change, in what order, with what proof it worked.</p>
+          <h3><span data-i18n="s3-h">Plan</span> <span class="art" data-i18n="s3-a">step-by-step plan</span></h3>
+          <p class="what" data-i18n="s3-p">It lists what will change, in what order, and how it will show that each part works. Nothing is changed yet.</p>
         </li>
 
         <li class="edge gate e34">
           <svg class="d" width="10" height="52" viewBox="0 0 10 52" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 0v47M1.5 43.5 5 48l3.5-4.5"/></svg>
-          <span class="lbl" data-i18n="e34">adversary review · risk needs your word</span>
+          <span class="lbl" data-i18n="e34">second AI reviews · risky work waits for you</span>
         </li>
 
         <li class="stage s4">
-          <h3><span data-i18n="s4-h">Build</span> <span class="art">code + tests</span></h3>
-          <p class="what" data-i18n="s4-p">The build follows the plan, with verification at each step.</p>
+          <h3><span data-i18n="s4-h">Build</span> <span class="art" data-i18n="s4-a">the changes</span></h3>
+          <p class="what" data-i18n="s4-p">It makes the changes in the planned order and checks each step as it goes.</p>
         </li>
         <li class="edge e45">
           <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M46 5H5M8 1.5 4 5l4 3.5"/></svg>
-          <span class="lbl" data-i18n="e45">checks green · no gate</span>
+          <span class="lbl" data-i18n="e45">checks pass · goes on</span>
         </li>
         <li class="stage s5">
-          <h3><span data-i18n="s5-h">Ship</span> <span class="art">evidence.md + delivery.md</span></h3>
-          <p class="what" data-i18n="s5-p">Evidence and an adversary review. You approve the release; it closes as shipped only once the delivery is proven.</p>
+          <h3><span data-i18n="s5-h">Deliver</span> <span class="art" data-i18n="s5-a">proof + delivery record</span></h3>
+          <p class="what" data-i18n="s5-p">Separate AI reviewers test the result and collect proof. A person approves the delivery. The work counts as delivered only once delivery is confirmed.</p>
         </li>
         <li class="edge e56">
           <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M46 5H5M8 1.5 4 5l4 3.5"/></svg>
-          <span class="lbl" data-i18n="e56">incident triggers · no gate</span>
+          <span class="lbl" data-i18n="e56">a problem appears later</span>
         </li>
         <li class="stage s6">
-          <h3><span data-i18n="s6-h">Maintain</span> <span class="art">intent.md + lesson</span></h3>
-          <p class="what" data-i18n="s6-p">An incident becomes a diagnosed intent and a recorded lesson.</p>
+          <h3><span data-i18n="s6-h">Follow up</span> <span class="art" data-i18n="s6-a">new request + lesson</span></h3>
+          <p class="what" data-i18n="s6-p">When something goes wrong after delivery, the AI finds the cause, writes the fix up as a new request, and records the lesson.</p>
         </li>
 
         <li class="loop">
           <svg width="10" height="52" viewBox="0 0 10 52" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 52V5M1.5 8.5 5 4l3.5 4.5"/></svg>
-          <span class="lbl" data-i18n="loop-lbl">writes the next intent.md</span>
+          <span class="lbl" data-i18n="loop-lbl">starts over with a new request</span>
         </li>
       </ol>
-      <p class="loopnote" data-i18n="loopnote">A small, well-understood change takes the <b>compact route</b>: intent, build, ship, with <b>intent.md</b> as its one work artifact. Anything ambiguous, broad, or risky runs all six stages.</p>
+      <p class="loopnote" data-i18n="loopnote">A small, clear change takes a <b>short route</b>: understand, build, deliver. Everything else, and anything in doubt, goes through all six stages.</p>
     </div>
   </section>
 
-  <!-- ============ why ============ -->
+  <!-- ============ what you get ============ -->
   <section class="band band-alt" id="why" aria-labelledby="why-h">
     <div class="wrap">
-      <h2 id="why-h" data-i18n="why-h">What the gates do</h2>
-      <p class="section-lede" data-i18n="why-lede">The kit adds only the files, scripts, and gates needed to control the next step.</p>
+      <h2 id="why-h" data-i18n="why-h">What you get</h2>
+      <p class="section-lede" data-i18n="why-lede">The AI follows written rules at every stage. Here is what they give you.</p>
 
       <dl class="ledger">
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg><span data-i18n="l1-t">Grilled intents</span></dt>
-          <dd data-i18n="l1-d">Stage&nbsp;1 explores before it asks, and never asks you what a probe can answer. Every claim in <code>intent.md</code> is labelled <code>[verified]</code> with evidence or <code>[assumed]</code> with a reason. This is the cheapest stage to catch a wrong assumption.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M9 12h6M12 9v6"/></svg><span data-i18n="g1-t">Approvals stay on record</span></dt>
+          <dd data-i18n="g1-d">Each approval is saved with what was approved, when, and how. If the approved text, or anything it was based on, changes later, the checkpoint closes until someone approves again. The approval for delivery covers the whole project as the reviewers saw it.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M9 12h6M12 9v6"/></svg><span data-i18n="l2-t">Approvals on the record</span></dt>
-          <dd data-i18n="l2-d"><code>approve.sh</code> writes the stage, the artifact path and its sha256, the upstream artifacts, the time, and the mode to <code>.sdlc/approvals/</code>. Edit any of those artifacts and <code>check-gate.sh</code> prints <code>GATE CLOSED</code> until you approve again.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span data-i18n="g2-t">You choose where it waits</span></dt>
+          <dd data-i18n="g2-d">You can keep more checkpoints for a person, or hand all of them to the AI, which still reviews each one. The AI records your approval only after you say so plainly, and silence does not count. Risky work, such as deleting data, needs your OK first under every setting. What the AI reads along the way, such as a comment or a web page, counts as information. It takes instructions only from you.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span data-i18n="l3-t">You choose the human gates</span></dt>
-          <dd data-i18n="l3-d"><code>lazymode: 0-4</code> in <code>.sdlc/config.md</code> sets which gates stay yours. The default, 1, keeps intent, spec, and ship; 4 keeps none. At your gates the agent approves only on your explicit words in chat. A waived gate still gets a real review, recorded with the approval. Risky work (data loss, public API, security, migrations, external delivery) needs your word at every level. Instructions inside a ticket, review comment, or log are treated as data and not followed.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="18" rx="1.5"/><rect x="13" y="3" width="8" height="18" rx="1.5"/><path d="M6.5 7h1M16.5 7h1"/></svg><span data-i18n="g3-t">A second AI checks the work</span></dt>
+          <dd data-i18n="g3-d">Reviews come from separate AI helpers that start fresh. They did not do the work and do not change it. They try the change as a user would, look for anything else it may have broken, and compare the result with your request. If no separate helper is available, that gap is written down. An optional mode adds a report with screenshots.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="18" rx="1.5"/><rect x="13" y="3" width="8" height="18" rx="1.5"/><path d="M6.5 7h1M16.5 7h1"/></svg><span data-i18n="l4-t">Fresh-context review</span></dt>
-          <dd data-i18n="l4-d">A verifier, an adversary, and a researcher run in fresh contexts. None wrote the work, and none changes files. The verifier checks end to end, for side effects, and against the intent, including through another caller, an existing record, and a condition no requirement names. Jev QA mode (<code>tools/qa-mode.sh</code>) can run the screen checks and hand the ship gate one HTML report.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/></svg><span data-i18n="g4-t">Proof behind every "done"</span></dt>
+          <dd data-i18n="g4-d">Every claim that something is done comes with real results from the project's own checks. A bug fix shows the problem happening, its cause, and the same steps working afterwards. If there is nowhere to try the change, the work is marked as not verified.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/></svg><span data-i18n="l10-t">Proof that fits the claim</span></dt>
-          <dd data-i18n="l10-d">Every &ldquo;done&rdquo; carries output from the project&rsquo;s real commands. A bug fix shows the failure before, the cause, and the same reproduction passing after, on the surface where it was reported. A no-behavior-change claim needs a pin: a check green before and after that fails on a deliberate break. A number claim needs five or more runs a side, as median and range. No environment to run it in means NOT VERIFIED.</dd>
-        </div>
-        <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M9 10h6M9 14h6"/></svg><span data-i18n="l6-t">Memory that stays bounded</span></dt>
-          <dd data-i18n="l6-d">Lessons go in a &le;50-line <code>INDEX.md</code>. Each product area gets a page with its business rules and a <code>Drive:</code> line on how to reach and prove it. A recurring lesson becomes a project test, lint rule, or check before any stage-skill edit. <code>tools/kb.sh search</code> finds open and closed features.</dd>
-        </div>
-        <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span data-i18n="l9-t">Drivable by a host</span></dt>
-          <dd data-i18n="l9-d"><code>gates/status.sh --json</code> reports each feature&rsquo;s stage, <code>ready | needs-human | blocked | complete</code>, next action, and blockers. <code>tools/verify.sh</code> runs the project&rsquo;s verification recipe and binds the receipt to the source it ran; ship needs that receipt <code>ok</code>, or your words accepting the gap. <code>tools/handoff.sh</code> re-checks the ship gate, pushes the review branch you authorized, and proves it is on the remote. A review comment or CI failure after that is a finding to fix and ship again. Merging and deploying stay separate human approvals.</dd>
-        </div>
-        <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg><span data-i18n="l8-t">Every run gets an ending</span></dt>
-          <dd data-i18n="l8-d"><code>close.sh</code> records <code>shipped</code>, <code>abandoned</code>, <code>dead-end</code>, or <code>handed-off</code>, then archives the feature and its approvals to <code>.sdlc/archive/</code>. <code>shipped</code> needs a proven delivery; failed work needs a lesson; a handoff needs the ticket or PR.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg><span data-i18n="g5-t">Every job ends with a clear result</span></dt>
+          <dd data-i18n="g5-d">Each job closes as delivered, dropped, stuck, or handed on to others. Delivered work needs proof of delivery. Dropped or stuck work must leave a written lesson for later jobs. On its own, the AI goes no further than handing its changes over for review, with your permission. Putting them into the live product is always a separate decision by a person.</dd>
         </div>
       </dl>
     </div>
   </section>
 
-  <!-- ============ install ============ -->
-  <section class="band" id="install" aria-labelledby="install-h">
+  <!-- ============ honest limit ============ -->
+  <section class="band" id="limits" aria-labelledby="limits-h">
     <div class="wrap">
-      <h2 id="install-h" data-i18n="inst-h">Three commands, then hand it your harness</h2>
-      <p class="section-lede" data-i18n="inst-lede">No installer, no daemon. The kit directory stays framework-only; your project gets a gitignored <code>.sdlc/</code> for its records.</p>
+      <div class="honest">
+        <h2 id="limits-h">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+          <span data-i18n="lim-h">What it cannot do</span>
+        </h2>
+        <p data-i18n="lim-p">The kit notices when anything you approved is changed later, and closes the checkpoint again. It cannot prove who gave an approval, because anything that can edit the work can also edit the record beside it. The records stay on the computer where the work runs, so back them up. The kit does not replace your team's own testing or security review.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ install ============ -->
+  <section class="band band-alt" id="install" aria-labelledby="install-h">
+    <div class="wrap">
+      <h2 id="install-h" data-i18n="inst-h">For the person who sets it up</h2>
+      <p class="section-lede" data-i18n="inst-lede">This part uses commands. Three steps set it up in a project, and the <a href="https://github.com/cskwork/sdlc-kit#quick-start">README on GitHub</a> has the details.</p>
 
       <ol class="steps">
         <li>
           <span class="cmd">git clone https://github.com/cskwork/sdlc-kit ~/sdlc-kit</span>
-          <p class="note" data-i18n="st1-n">Once per machine. On Windows, run this and every later kit command in Git Bash or WSL.</p>
+          <p class="note" data-i18n="st1-n">Once per computer. On Windows, run this and every later kit command in Git Bash or WSL.</p>
         </li>
         <li>
           <span class="cmd">cd /path/to/project
 ~/sdlc-kit/init.sh</span>
-          <p class="note" data-i18n="st2-n">Seeds <code>.sdlc/</code> and gitignores it with one <code>/.sdlc</code> line. Back the records up yourself, or keep them outside the checkout with <code>init.sh . --area &lt;folder&gt;</code>. Your agent then fills the build, test, and lint commands in <code>.sdlc/config.md</code> from the repo and asks which lazymode level you want.</p>
+          <p class="note" data-i18n="st2-n">Creates the record folder <code>.sdlc/</code>, kept out of git. Back it up, or keep it elsewhere with <code>init.sh . --area &lt;folder&gt;</code>. Your agent then fills in <code>.sdlc/config.md</code> and asks how many checkpoints stay human (<code>lazymode</code>).</p>
         </li>
         <li>
-          <span class="cmd">tell your harness:
+          <span class="cmd">tell your agent:
 &ldquo;read ~/sdlc-kit/AGENTS.md and follow it&rdquo;</span>
-          <p class="note" data-i18n="st3-n">One pointer line in your project&rsquo;s agent file does it. Pick your harness below.</p>
+          <p class="note" data-i18n="st3-n">Or add <code>For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.</code> to your tool's file below.</p>
         </li>
       </ol>
 
       <div class="tablewrap">
         <table class="how">
-          <caption data-i18n="how-cap">Point your harness at the routing contract</caption>
+          <caption data-i18n="how-cap">Where the line goes</caption>
           <thead>
-            <tr><th scope="col" data-i18n="how-h1">Harness</th><th scope="col" data-i18n="how-h2">How</th></tr>
+            <tr><th scope="col" data-i18n="how-h1">Tool</th><th scope="col" data-i18n="how-h2">File</th></tr>
           </thead>
           <tbody>
-            <tr><th scope="row">Claude Code</th><td data-i18n="r-cc">Add to project <code>CLAUDE.md</code>: <code>For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.</code></td></tr>
-            <tr><th scope="row">pi, Codex CLI</th><td data-i18n="r-cx">Same one-liner in project <code>AGENTS.md</code></td></tr>
-            <tr><th scope="row">Gemini CLI</th><td data-i18n="r-gm">Same one-liner in <code>GEMINI.md</code></td></tr>
-            <tr><th scope="row">Cursor, others</th><td data-i18n="r-else">Put it in the instruction file your harness loads, or paste <code>AGENTS.md</code> into the session</td></tr>
+            <tr><th scope="row">Claude Code</th><td><code>CLAUDE.md</code></td></tr>
+            <tr><th scope="row">pi, Codex CLI</th><td><code>AGENTS.md</code></td></tr>
+            <tr><th scope="row">Gemini CLI</th><td><code>GEMINI.md</code></td></tr>
+            <tr><th scope="row">Cursor, others</th><td data-i18n="r-else">The instruction file your tool loads, or paste <code>AGENTS.md</code> into the chat</td></tr>
           </tbody>
         </table>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ honest limit ============ -->
-  <section class="band band-alt" id="limits" aria-labelledby="limits-h">
-    <div class="wrap">
-      <div class="honest">
-        <h2 id="limits-h">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
-          <span data-i18n="lim-h">Honest limit: change detection, not authentication</span>
-        </h2>
-        <p data-i18n="lim-p">Approvals bind the artifact&rsquo;s bytes and, at ship, the whole source snapshot the review saw, so any later change closes the gate. Anything that can write the artifact can also write the record beside it, so the records do not prove who approved. They are gitignored: the audit trail is <code>.sdlc/approvals/</code> on disk, and a fresh clone mid-feature must approve again.</p>
       </div>
     </div>
   </section>
@@ -733,11 +700,11 @@
 
 <footer class="site">
   <div class="wrap">
-    <p data-i18n="foot-p">sdlc-kit: plain files + shell. No hooks, no runtime, no lock-in.</p>
+    <p data-i18n="foot-p">sdlc-kit is an independent project based on a guide published by Anthropic. It is not affiliated with Anthropic.</p>
     <nav aria-label="Footer" data-i18n-aria="foot-aria">
-      <a href="https://github.com/cskwork/sdlc-kit" data-i18n="foot-gh">GitHub repository</a>
-      <a href="https://claude.com/blog/the-ai-native-sdlc-playbook" data-i18n="foot-pb">Anthropic&rsquo;s playbook</a>
-      <a href="#install" data-i18n="foot-start">Get started</a>
+      <a href="https://github.com/cskwork/sdlc-kit" data-i18n="foot-gh">Project on GitHub</a>
+      <a href="https://claude.com/blog/the-ai-native-sdlc-playbook" data-i18n="foot-pb">Anthropic&rsquo;s guide</a>
+      <a href="#install" data-i18n="cta-setup">How to set it up</a>
     </nav>
   </div>
 </footer>
@@ -747,73 +714,79 @@
   var KEY = "sdlc-kit-lang";
   var KO = {
     "skip": '본문으로 건너뛰기',
-    "pitch": 'Anthropic의 AI 네이티브 SDLC 플레이북, 평문 파일 + 셸.',
-    "sub": '여섯 단계, 단계마다 산출물 하나, 단계 사이에 게이트. 에이전트는 파일을 읽고 게이트를 실행하며, 당신이 맡은 게이트에서는 당신을 기다립니다. 런타임도 훅도 종속성도 없습니다.',
-    "cta-start": '시작하기',
-    "harness-note": '어느 것이든 파일을 읽고 셸 명령을 실행할 수 있습니다.',
-    "loop-h": '여섯 단계, 하나의 루프',
-    "loop-lede": '각 단계는 스킬 파일을 읽고 산출물 하나를 쓴 뒤 게이트에서 멈춥니다. 기본 lazymode에서는 intent·spec·ship을 당신이 승인하며, 당신에게 오는 요청은 맥락으로 시작해 당신이 내릴 단 하나의 결정으로 끝납니다. 모든 plan은 적대적 검토를 거치며, 위험한 작업은 먼저 당신의 허락이 필요합니다.',
-    "s1-h": '의도',
-    "s1-p": '에이전트는 먼저 탐색한 뒤, 의도가 정확하고 근거를 갖출 때까지 당신을 심문합니다.',
-    "e12": '사람 승인 게이트 · intent 승인',
-    "s2-h": '명세',
-    "s2-p": 'AS-IS와 TO-BE를 file:line 근거와 함께 나란히 적고, 당신에게 오기 전에 적대적 검토를 거칩니다.',
-    "e23": '사람 승인 게이트 · spec 승인',
-    "s3-h": '계획',
-    "s3-p": '읽기 전용: 어떤 파일을 어떤 순서로 바꾸고, 동작을 무엇으로 증명할지.',
-    "e34": '적대적 검토 · 위험 작업은 사람 허락',
-    "s4-h": '빌드',
-    "s4-p": '빌드는 계획을 따르고 각 단계에서 검증합니다.',
-    "e45": '검사 통과 · 게이트 없음',
-    "s5-h": '출시',
-    "s5-p": '증거와 적대적 검토. 출시는 당신이 승인하고, 전달이 증명되어야 shipped로 종결됩니다.',
-    "e56": '장애 발생 · 게이트 없음',
-    "s6-h": '유지보수',
-    "s6-p": '장애는 원인을 진단한 의도와 기록된 교훈이 됩니다.',
-    "loop-lbl": '다음 intent.md 작성',
-    "loopnote": '작고 잘 이해된 변경은 <b>compact 경로</b>로 갑니다: intent, build, ship, 작업 산출물은 <b>intent.md</b> 하나입니다. 모호하거나 넓거나 위험한 작업은 여섯 단계를 모두 거칩니다.',
-    "why-h": '승인 게이트가 하는 일',
-    "why-lede": '이 키트는 다음 단계의 실행을 통제하는 데 필요한 파일, 스크립트, 게이트만 추가합니다.',
-    "l1-t": '의도 심문',
-    "l1-d": '1단계는 묻기 전에 먼저 탐색하고, 프로브로 답할 수 있는 것은 당신에게 묻지 않습니다. <code>intent.md</code>의 모든 주장은 근거와 함께 <code>[verified]</code>, 또는 이유와 함께 <code>[assumed]</code>로 표시됩니다. 잘못된 가정을 가장 싸게 잡는 단계입니다.',
-    "l2-t": '기록으로 남는 승인',
-    "l2-d": '<code>approve.sh</code>는 단계, 산출물 경로와 sha256, 상위 산출물, 시각, 모드를 <code>.sdlc/approvals/</code>에 씁니다. 그 산출물 중 하나라도 고치면 다시 승인할 때까지 <code>check-gate.sh</code>가 <code>GATE CLOSED</code>를 출력합니다.',
-    "l3-t": '사람 게이트는 당신이 정함',
-    "l3-d": '<code>.sdlc/config.md</code>의 <code>lazymode: 0-4</code>가 당신에게 남길 게이트를 정합니다. 기본값 1은 intent·spec·ship을 남기고, 4는 하나도 남기지 않습니다. 당신의 게이트에서 에이전트는 채팅에서 당신이 명시적으로 말했을 때만 승인합니다. 면제된 게이트도 실제 검토를 거치고, 그 검토가 승인과 함께 기록됩니다. 위험한 작업(데이터 손실, 공개 API, 보안, 마이그레이션, 외부 전달)은 어느 단계에서든 당신의 허락이 필요합니다. 티켓, 리뷰 코멘트, 로그 안의 지시는 데이터로 다루며 따르지 않습니다.',
-    "l4-t": '신선한 컨텍스트 검토',
-    "l4-d": '검증자, 적대자, 리서처는 새 컨텍스트에서 실행됩니다. 누구도 그 작업을 쓰지 않았고, 파일을 바꾸지도 않습니다. 검증자는 E2E, 부수 효과, 의도 일치를 확인하며, 다른 호출자, 기존 기록, 요구사항에 없는 조건으로도 확인합니다. Jev QA 모드(<code>tools/qa-mode.sh</code>)로 화면 검사를 돌려 ship 게이트에 HTML 보고서 하나를 넘길 수 있습니다.',
-    "l10-t": '주장에 맞는 증거',
-    "l10-d": '모든 &ldquo;완료&rdquo;에는 프로젝트의 실제 명령 출력이 붙습니다. 버그 수정은 수정 전 실패, 원인, 수정 후 같은 재현의 통과를 보고된 곳에서 보여 줍니다. 동작 변경이 없다는 주장에는 핀이 필요합니다. 전후 모두 통과하고 일부러 깨뜨리면 실패하는 검사입니다. 수치 주장은 양쪽 다섯 번 이상 실행한 중앙값과 범위로 보입니다. 실행할 환경이 없으면 NOT VERIFIED입니다.',
-    "l6-t": '한도를 지키는 교훈 메모리',
-    "l6-d": '교훈은 50줄 이하의 <code>INDEX.md</code>에 둡니다. 제품 영역마다 업무 규칙과 <code>Drive:</code> 줄(그 영역에 도달해 증명하는 방법)을 담은 페이지가 있습니다. 반복되는 교훈은 스테이지 스킬을 고치기 전에 먼저 프로젝트의 테스트, 린트 규칙, 검사가 됩니다. <code>tools/kb.sh search</code>는 열린 피처와 닫힌 피처를 찾습니다.',
-    "l9-t": '호스트가 구동할 수 있음',
-    "l9-d": '<code>gates/status.sh --json</code>은 피처마다 단계, <code>ready | needs-human | blocked | complete</code>, 다음 액션, 차단 사유를 보고합니다. <code>tools/verify.sh</code>는 프로젝트의 검증 레시피를 실행하고 그 영수증을 실행 대상 소스에 묶으며, ship에는 그 영수증이 <code>ok</code>이거나 공백을 받아들인다는 당신의 말이 필요합니다. <code>tools/handoff.sh</code>는 ship 게이트를 다시 확인하고, 당신이 허락한 리뷰 브랜치를 푸시한 뒤 원격에 있음을 증명합니다. 그 뒤의 리뷰 코멘트나 CI 실패는 고쳐서 다시 ship할 발견 사항입니다. 머지와 배포는 별도의 사람 승인으로 남습니다.',
-    "l8-t": '모든 실행에 끝 상태 기록',
-    "l8-d": '<code>close.sh</code>는 <code>shipped</code>, <code>abandoned</code>, <code>dead-end</code>, <code>handed-off</code> 중 하나를 기록한 뒤 피처와 승인 기록을 <code>.sdlc/archive/</code>로 옮깁니다. <code>shipped</code>는 증명된 전달을, 실패한 작업은 교훈을, 이관은 티켓이나 PR을 요구합니다.',
-    "inst-h": '명령 세 줄, 그다음은 하네스에 맡김',
-    "inst-lede": '설치 프로그램도 데몬도 없습니다. 키트 디렉터리는 프레임워크 전용으로 남고, 프로젝트에는 기록을 담는 gitignore된 <code>.sdlc/</code>가 생깁니다.',
-    "st1-n": '머신당 한 번. Windows에서는 이 명령과 이후 모든 키트 명령을 Git Bash나 WSL에서 실행하세요.',
-    "st2-n": '<code>.sdlc/</code>를 만들고 <code>/.sdlc</code> 한 줄로 gitignore합니다. 기록은 직접 백업하거나, <code>init.sh . --area &lt;폴더&gt;</code>로 체크아웃 바깥에 두세요. 이어서 에이전트가 저장소에서 빌드·테스트·린트 명령을 찾아 <code>.sdlc/config.md</code>에 채우고, 원하는 lazymode 단계를 묻습니다.',
-    "st3-n": '프로젝트의 에이전트 파일에 포인터 한 줄이면 끝입니다. 아래 표에서 하네스를 고르세요.',
-    "how-cap": '하네스를 라우팅 계약에 연결하기',
-    "how-h1": '하네스',
-    "how-h2": '방법',
-    "r-cc": '프로젝트 <code>CLAUDE.md</code>에 다음을 추가합니다: <code>For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.</code>',
-    "r-cx": '프로젝트 <code>AGENTS.md</code>에 같은 한 줄을 추가합니다.',
-    "r-gm": '<code>GEMINI.md</code>에 같은 한 줄을 추가합니다.',
-    "r-else": '하네스가 읽는 지침 파일에 넣거나, 세션에 <code>AGENTS.md</code>를 붙여 넣으세요.',
-    "lim-h": '정직한 한계: 인증이 아니라 변경 감지',
-    "lim-p": '승인은 산출물의 바이트와, ship에서는 리뷰가 본 소스 전체 스냅샷까지 묶으므로 이후의 어떤 변경이든 게이트를 닫습니다. 산출물을 쓸 수 있는 주체는 그 옆의 기록도 쓸 수 있으므로, 기록은 누가 승인했는지 증명하지 못합니다. 기록은 gitignore 대상이라 감사 추적은 디스크의 <code>.sdlc/approvals/</code>이며, 피처 진행 중에 새로 클론하면 다시 승인해야 합니다.',
-    "foot-p": 'sdlc-kit: 평문 파일 + 셸. 훅 없음, 런타임 없음, 종속성 없음.',
-    "foot-gh": 'GitHub 저장소',
-    "foot-pb": 'Anthropic의 플레이북',
-    "foot-start": '시작하기'
+    "pitch": 'AI가 소프트웨어를 한 단계씩 만들고, 정해 둔 확인 지점에서 사람의 승인을 받는 방식입니다.',
+    "sub": '소프트웨어를 만드는 AI는 빠르지만 단계를 자주 건너뜁니다. 요청을 짐작으로 해석하고, 자기 숙제를 스스로 채점합니다. sdlc-kit을 쓰면 AI는 여섯 단계로 일하며, 무언가를 바꾸기 전에 할 일부터 글로 적습니다. 사람이 맡은 확인 지점에서는 승인을 기다립니다.',
+    "cta-how": '작동 방식 보기',
+    "cta-setup": '설치 방법',
+    "tools-note": '위 도구를 비롯해 소프트웨어를 만드는 주요 AI 도구와 함께 쓸 수 있습니다.',
+    "term-title": '작업 대화',
+    "t-ai": 'AI',
+    "t-check": '확인 지점',
+    "t-you": '담당자',
+    "t1": '이해한 내용을 글로 적었습니다. 이제 시작합니다.',
+    "t2": '<span class="bad">아직 안 됩니다.</span><span class="o"> 사람의 승인이 없습니다.</span>',
+    "t3": '읽어 봤습니다. 원하던 내용이 맞습니다. 승인합니다.',
+    "t4": '승인을 날짜, 시각과 함께 저장했습니다.',
+    "t5": '<span class="ok">승인 확인.</span><span class="o"> 다음으로 넘어가도 됩니다.</span>',
+    "t6": '작업을 시작합니다.',
+    "loop-h": '여섯 단계와 그 사이의 확인 지점',
+    "loop-lede": '각 단계에서 AI는 알아낸 것이나 할 일을 글로 적고, 확인 지점에서 멈춥니다. 기본 설정에서 사람이 승인하는 것은 요청 요약, 변경 내용, 전달 세 가지입니다.',
+    "s1-h": '요청 이해',
+    "s1-a": '요청 요약',
+    "s1-p": 'AI가 먼저 프로젝트를 살펴보고, 스스로 알아낼 수 없는 것만 묻습니다. 원하는 내용을 글로 적고, 확인한 것과 짐작한 것을 나눠 표시합니다.',
+    "e-you": '확인 지점 · 사람이 승인',
+    "s2-h": '변경 내용',
+    "s2-a": '지금과 바뀐 뒤',
+    "s2-p": '지금의 동작과 바뀐 뒤의 동작을 각 사실의 출처와 함께 적습니다. 사람이 보기 전에 다른 AI가 빠진 곳을 찾습니다.',
+    "s3-h": '작업 계획',
+    "s3-a": '단계별 계획',
+    "s3-p": '무엇을 어떤 순서로 바꿀지, 제대로 됐다는 것을 무엇으로 보여 줄지 적습니다. 아직 아무것도 바꾸지 않습니다.',
+    "e34": '다른 AI가 검토 · 위험한 작업은 사람이 허락',
+    "s4-h": '만들기',
+    "s4-a": '실제 변경',
+    "s4-p": '계획한 순서대로 바꾸고, 단계마다 제대로 됐는지 확인합니다.',
+    "e45": '점검 통과 · 바로 진행',
+    "s5-h": '전달',
+    "s5-a": '증거와 전달 기록',
+    "s5-p": '별도의 AI가 결과를 시험하고 증거를 모읍니다. 전달은 사람이 승인합니다. 실제로 전달된 것이 확인되어야 완료로 기록됩니다.',
+    "e56": '나중에 문제가 생기면',
+    "s6-h": '사후 대응',
+    "s6-a": '새 요청과 교훈',
+    "s6-p": '전달한 뒤 문제가 생기면 AI가 원인을 찾고, 고칠 내용을 새 요청으로 적고, 교훈을 기록합니다.',
+    "loop-lbl": '새 요청으로 다시 시작',
+    "loopnote": '작고 분명한 변경은 요청 이해, 만들기, 전달만 거치는 <b>짧은 경로</b>로 갑니다. 그 밖의 작업과 조금이라도 애매한 작업은 여섯 단계를 모두 거칩니다.',
+    "why-h": '달라지는 점',
+    "why-lede": 'AI는 모든 단계에서 글로 적힌 규칙을 따릅니다. 그래서 다음이 달라집니다.',
+    "g1-t": '승인은 기록으로 남습니다',
+    "g1-d": '승인할 때마다 무엇을, 언제, 어떻게 승인했는지 저장합니다. 승인한 글이나 그 바탕이 된 글이 나중에 바뀌면, 다시 승인할 때까지 확인 지점이 닫힙니다. 전달 승인은 검토한 AI가 본 프로젝트 전체에 걸립니다.',
+    "g2-t": '어디서 기다릴지는 직접 정합니다',
+    "g2-d": '사람이 맡는 확인 지점은 늘릴 수도, 모두 AI에게 맡길 수도 있습니다. 맡겨도 검토는 그대로 거칩니다. AI는 승인한다는 분명한 말을 들어야만 승인을 기록하며, 아무 말이 없으면 승인으로 치지 않습니다. 데이터 삭제처럼 위험한 작업은 어떤 설정에서든 사람의 허락이 먼저 필요합니다. 작업 중에 읽은 댓글이나 웹 페이지의 글은 참고 자료로만 다루고, 지시는 사람에게서만 받습니다.',
+    "g3-t": '다른 AI가 따로 점검합니다',
+    "g3-d": '검토는 작업에 참여하지 않은 별도의 AI가 처음부터 새로 맡고, 결과를 고치지는 않습니다. 사용자처럼 바뀐 기능을 써 보고, 다른 곳이 망가지지 않았는지 살피고, 요청과 결과를 맞춰 봅니다. 별도의 AI를 못 쓰면 그 빈틈을 기록합니다. 원하면 화면 사진이 담긴 보고서도 받을 수 있습니다.',
+    "g4-t": '"완료"에는 증거가 붙습니다',
+    "g4-d": '"다 됐다"는 말에는 프로젝트의 실제 점검 결과가 붙습니다. 오류를 고쳤다면 문제가 일어나는 모습, 원인, 같은 절차로 다시 했을 때 문제가 사라진 모습을 보여 줍니다. 시험해 볼 곳이 없으면 그 작업은 "검증 안 됨"으로 표시됩니다.',
+    "g5-t": '모든 작업은 분명한 결과로 끝납니다',
+    "g5-d": '작업은 전달 완료, 중단, 막힘, 다른 곳으로 넘김 중 하나로 끝납니다. 전달 완료에는 전달된 증거가 필요합니다. 중단되거나 막힌 작업은 다음 작업을 위해 배운 점을 글로 남깁니다. AI는 허락을 받아 변경 내용을 검토용으로 넘기는 데까지만 혼자 합니다. 실제 서비스에 반영하는 일은 언제나 사람이 따로 결정합니다.',
+    "lim-h": '할 수 없는 일',
+    "lim-p": '승인한 내용이 나중에 바뀌면 키트가 알아채고 확인 지점을 다시 닫습니다. 하지만 누가 승인했는지는 증명하지 못합니다. 작업을 고칠 수 있는 쪽은 승인 기록도 고칠 수 있기 때문입니다. 기록은 작업하는 컴퓨터에만 남으니 따로 백업해 두세요. 팀의 테스트나 보안 검토를 대신하지도 않습니다.',
+    "inst-h": '설치하는 분께',
+    "inst-lede": '여기부터는 명령어를 씁니다. 세 단계면 프로젝트에 설치되며, 자세한 내용은 <a href="https://github.com/cskwork/sdlc-kit/blob/main/README.ko.md#빠른-시작">GitHub의 README</a>에 있습니다.',
+    "st1-n": '컴퓨터마다 한 번. Windows에서는 이 명령과 이후의 모든 키트 명령을 Git Bash나 WSL에서 실행하세요.',
+    "st2-n": '기록 폴더 <code>.sdlc/</code>를 만들고 git에서 제외합니다. 직접 백업하거나 <code>init.sh . --area &lt;폴더&gt;</code>로 밖에 두세요. 이어서 에이전트가 <code>.sdlc/config.md</code>를 채우고, 사람이 맡을 확인 지점 수(<code>lazymode</code>)를 묻습니다.',
+    "st3-n": '또는 <code>For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.</code> 한 줄을 아래 표의 파일에 넣으세요.',
+    "how-cap": '한 줄을 넣는 곳',
+    "how-h1": '도구',
+    "how-h2": '파일',
+    "r-else": '도구가 읽는 지침 파일, 또는 <code>AGENTS.md</code> 내용을 대화에 붙여 넣기',
+    "foot-p": 'sdlc-kit은 Anthropic이 공개한 안내서를 바탕으로 만든 독립 프로젝트로, Anthropic과는 관계가 없습니다.',
+    "foot-gh": 'GitHub에서 보기',
+    "foot-pb": 'Anthropic의 안내서'
   };
   var KO_ARIA = {
     "hero-aria": 'sdlc-kit 소개',
-    "term-aria": '터미널 화면: 승인 기록이 없는 단계는 GATE CLOSED를 출력하고, 사람의 승인이 기록되면 게이트가 열립니다.',
-    "flow-aria": '사람 승인 게이트가 있는 여섯 단계 루프',
-    "foot-aria": '푸터'
+    "term-aria": '대화 예시: AI는 사람이 승인할 때까지 확인 지점에서 기다립니다.',
+    "flow-aria": '사람이 승인하는 확인 지점이 있는 여섯 단계',
+    "foot-aria": '바닥글'
   };
   var enText = new WeakMap();
   var enAria = new WeakMap();
