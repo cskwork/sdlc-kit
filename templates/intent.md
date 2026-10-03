@@ -7,7 +7,7 @@
        frozen by its approval, summary.md is meant to be kept current. -->
 - Date: YYYY-MM-DD
 - Type: greenfield | brownfield
-- Track: full (default) | compact — <compact only when ALL criteria in skills/1-intent hold; `micro` is the older spelling of compact>
+- Track: full (default) | compact — <compact only when ALL criteria in skills/1-intent hold>
 - Requested by: <who>
 - Refs: <ticket/PR/incident key or URL, 기획서 path — snapshotted in origin.md
   (templates/origin.md) BEFORE this gate, which binds it. Omit if none>

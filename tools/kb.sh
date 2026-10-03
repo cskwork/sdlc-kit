@@ -513,12 +513,15 @@ kb_show() { # <store> <slug> → 0 when found
 # One product area: its page, bounded, then every feature that names it. An
 # area features name that has no page yet is shown with those features.
 kb_show_area() { # <store> <name> → 0 when found
-  local store="$1" page menu refs
+  local store="$1" page menu refs drive
   page=$(kb_area_find "$store" "$2")
   if [ -n "$page" ]; then
     menu=$(kb_area_menu "$page")
     printf '%s/memory/areas/%s — product area\n  %s\n' "$(kb_label "$store")" "$(basename "$page")" "$menu"
-    kb_body "$page" | awk '!/^[ \t]*[-*] *Menu:/' | kb_print_bounded "$AREA_MAX" "  " "memory/areas/$(basename "$page")"
+    # the Drive line sits in the evidence block at the bottom, which a long page's bound cuts: print it first
+    drive=$(kb_get "$page" Drive)
+    [ -z "$drive" ] || printf '  Drive: %s\n' "$drive"
+    kb_body "$page" | awk '!/^[ \t]*[-*] *(Menu|Drive):/' | kb_print_bounded "$AREA_MAX" "  " "memory/areas/$(basename "$page")"
     refs=$(kb_area_refs "$store" | kb_area_of "$menu" "$(basename "$page" .md)")
   else
     refs=$(kb_area_refs "$store" | kb_area_of "$2" "")

@@ -125,11 +125,12 @@ for dir in .sdlc/work/*/; do
   # A feature started under the OLD compressed maintain loop has a plan.md (and
   # maybe its approval) but no intent.md. It is not lost and its gates are not
   # waived: name the continuation path instead of demanding an artifact nobody
-  # wrote (skills/6-maintain "Continuing older compressed work").
+  # wrote. No skill repeats this: the lines below carry the instruction.
   if [ ! -f "${dir}intent.md" ] && [ -f "${dir}plan.md" ]; then
     echo "   LEGACY COMPRESSED: plan.md without intent.md (pre-compact-route feature)"
-    echo "   continue → write intent.md (Track: compact) and pass the intent gate; the existing plan approval stays on record but does not open build"
-    [ -z "$next_action" ] && next_action="write intent.md for $slug (skills/6-maintain 'Continuing older compressed work')"
+    echo "   continue → write intent.md (Track: compact), carrying plan.md's files and proof into its Compact route section, and pass the intent gate; the existing plan approval stays on record but does not open build"
+    echo "   wider than compact allows → write spec.md and run the full route; the intent gate still comes first"
+    [ -z "$next_action" ] && next_action="write intent.md for $slug (Track: compact, from its plan.md) and pass the intent gate"
   fi
   loop_stages="$stages"
   if [ -n "$micro" ]; then loop_stages="intent ship"; fi
