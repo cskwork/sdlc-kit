@@ -341,7 +341,8 @@ lazymode: 1"
 $kit_lines
 $lazy_block
 # Real commands agents must use for proof (fill these in — brownfield: copy from CI/Makefile).
-# AGENTS: if a command below is empty when you need it, STOP and ask the human to fill it in.
+# AGENTS: a command you need is empty? Find it in the repo (package scripts, Makefile, CI), run it
+# once, and record it here; ask the human only for what the repo cannot show.
 build:
 test:
 lint:

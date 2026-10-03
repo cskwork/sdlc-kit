@@ -90,7 +90,11 @@ explicitly (see Evidence tracking below).
    timeout — probes 7, 8), *wrong result* (logic or data: which query,
    which record, which version — probes 2, 3), *looks wrong* (rendering
    until proven otherwise), *intermittent* (concurrency, caching,
-   environment, data-dependent).
+   environment, data-dependent). No cause from the probes? List the rival
+   causes first, then eliminate them by runtime observation, each pass
+   taking the check that removes the most. Record each rival and what killed
+   it in intent.md's Evidence; a trial change a refuted one motivated is
+   discarded, never carried into the fix.
 6. **Class sweep and caller audit** (probes 4, 5): one instance is a bug;
    the count table is the scope, and it decides fix ordering.
 7. Check the feature's `evidence.md` — a shipped feature is archived, so it
@@ -158,17 +162,6 @@ one contract"). There is no separate compressed loop.
   radius, or risky ground. Create `.sdlc/work/<new-slug>/intent.md` from
   `templates/intent.md` with `- Track: full` and run Stage 1.
 
-### Continuing older compressed work
-
-A fix slug created by an older kit has a `plan.md` (perhaps an approved one)
-and no `intent.md`. Nothing is lost and no gate is waived: write `intent.md`
-with `- Track: compact`, carry the plan's files and proof into its Compact
-route section, and pass the intent gate. The old plan approval stays on
-record as history — it does not open build, because build on the compact
-route checks the intent gate. `status.sh` prints this path for any such
-feature. If the work turned out to be wider than compact allows, write
-spec.md and run the full route instead; the intent gate still comes first.
-
 **Recurrence cap: three fix loops for one symptom.** Before opening a
 fix-slug, grep the symptom's tags in INDEX.md AND open features' harvests
 (`tools/kb.sh harvest`, `tools/kb.sh search "<tag>"`) — in-flight lessons
@@ -189,7 +182,10 @@ non-obvious constraint, a wrong assumption that cost time. An incident whose
 cause was local and obvious leaves no lesson, and "no lesson from this one"
 is a valid, complete answer — INDEX.md is a 50-line budget, and filler
 crowds out the entries that matter. Durable facts about the system are
-domain candidates, not lessons.
+domain candidates, not lessons. A human correction, or context the human
+supplied that a tool could have fetched, is a candidate at once. What a
+skill already says is an execution miss, not a lesson: propose sharpening or
+moving that rule instead.
 
 When there is one, draft it in the fix feature's
 `.sdlc/work/<fix-slug>/harvest.md` (AGENTS.md rule 4). The close merge materializes it as `.sdlc/memory/lessons/YYYY-MM-DD-<slug>.md`
@@ -203,10 +199,14 @@ Memory discipline (context stays bounded):
 
 - Keep INDEX.md at 50 lines or fewer. If it grows past the limit, merge
   near-duplicates, drop superseded entries (their subject changed), and
-  replace promoted entries with one line — `- [tags] promoted →
-  skills/<n> (was 3×)` — so the recurrence count survives the prune.
-- When the same lesson recurs for a second time, propose the exact skill edit
-  that would prevent it. (Distinct from the 3× tag rule in skills/5-ship:
+  replace promoted entries with one line — `- [tags] promoted → <the
+  project check, or skills/<n>> (was 3×)` — so the recurrence count survives
+  the prune.
+- When the same lesson recurs for a second time, propose the exact edit that
+  would prevent it — the strongest mechanism that fits: a test, lint rule, or
+  check in the project first (it enforces without being read), then a
+  `check:` line in the verify recipe, a stage-skill edit last.
+  (Distinct from the 3× tag rule in skills/5-ship:
   this fires on the same lesson, that one on the same tag.)
 - State the trap and the correct move in each lesson. Keep it short and
   specific enough to change behavior.
