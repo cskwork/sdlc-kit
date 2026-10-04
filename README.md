@@ -173,7 +173,7 @@ Per feature, inside the **target project**:
 
 `init.sh` adds one anchored line, `/.sdlc`, to the project's `.gitignore`, so a clone of the application does not carry the records. While a feature is open, `status.sh` shows its heartbeat as a `now →` line with its age.
 
-**Written to be skimmed.** The parts a person reads (gate requests, the Human summary of spec and plan, `summary.md`) lead with the bottom line, then give each point as a `**→ bold lead-in**` paragraph, so the bold alone carries the answer and every warning. The records (evidence, plan body, logs) open each section with its conclusion and state each fact once. Exact numbers, scoped conditions, and warnings are never cut for length. The rules are AGENTS.md rule 8, adapted from the [Attention-kind](https://github.com/alexgreensh/attention-span) output style.
+**Written to be skimmed.** Gate requests and Human summaries lead with the bottom line, then one bold `→` point each, so the bold alone carries the answer and every warning; records state each fact once. AGENTS.md rule 8, adapted from [Attention-kind](https://github.com/alexgreensh/attention-span).
 
 **Where the records live is your choice.** By default they sit in the project's working copy. `init.sh . --area ~/knowledge` puts them in `<area>/<unit>-<checkout-id>/` instead, with `.sdlc` linked to it: one store per checkout, so two worktrees never share approvals. Every script that writes to the store or reports a gate verdict refuses when `<store>/PROJECT` names another checkout, so a copied working copy cannot open or close the original's features. Reading is not bound: `tools/kb.sh show|search|list` still works. Nothing is ever moved for you, and **the store is yours to back up**. The kit directory stays framework-only.
 

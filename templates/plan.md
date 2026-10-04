@@ -4,10 +4,8 @@
 
 ## Human summary (read this first)
 
-<First line: the bottom line in one sentence. Then three
-`**→ Lead-in.** rest` paragraphs or fewer: what changes, the main risk, how
-it is proven. Plain words, bold carries the gist (AGENTS.md rule 8). Write it
-last, place it first.>
+<The bottom line, then three or fewer `**→**` points (AGENTS.md rule 8): what
+changes, the main risk, how it is proven. Write it last, place it first.>
 
 ## Gate tier
 
