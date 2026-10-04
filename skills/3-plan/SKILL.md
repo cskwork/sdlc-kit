@@ -55,9 +55,10 @@ exploration stays out of the main context. Then fill `templates/plan.md`:
   record the verdict in the template's **Gate tier** section, with reasons.
   Run `<kit>/tools/tripwire.sh .sdlc/work/<slug>/plan.md` and include its
   output in the adversary dispatch.
-- **Human summary.** Five short sentences or fewer at the top, in plain words
-  a non-technical reader can follow: what changes,
-  the main risk, how it is proven. Write it last, place it first.
+- **Human summary.** The bottom line in one sentence, then three `**→**`
+  points or fewer, in plain words a non-technical reader can follow: what
+  changes, the main risk, how it is proven (AGENTS.md rule 8). Write it last,
+  place it first.
 
 Constraints the code does not show (ownership, forbidden areas, deploy
 windows) are collected at the spec gate, not here. If a missing constraint
