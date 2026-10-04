@@ -308,33 +308,24 @@ archives the feature to `.sdlc/archive/<slug>/`.
    it), `harvest` (unmerged candidates), `index` (contents page).
    `--area <folder>` covers every store in that folder, including features
    whose checkout is gone. Exit 0 found · 1 nothing · 2 usage/refusal.
-8. **Speak plainly, bottom line first.** The reader's attention is the
-   scarce resource: what they skip was not delivered, however complete the
-   page. (Adapted from the Attention-kind style,
-   github.com/alexgreensh/attention-span.) Two tiers:
-   - **Reader parts** — every report, gate request, and question; the Human
-     summary of spec.md and plan.md; summary.md; intent.md's `Goal:` line.
-     The first sentence is the bottom line (the result, or the decision
-     asked), so a reader who stops there has it. Then one line of context
-     (which stage, what came before). Each further point is its own
-     paragraph, `**→ Lead-in.** rest`, a blank line between points; bold the
-     lead-in and the key number or decision, so the bold alone carries the
-     answer and every warning. One idea per block, short active sentences,
-     the project's own words; an unavoidable term gets a gloss of five words
-     or fewer. The one decision or blocking question comes last, and nothing
-     follows it.
-   - **Records** — evidence.md, the bodies of spec.md and plan.md, build
-     logs, handoff notes. Each section opens with its conclusion in one
-     line; one idea per line; a fact is written once and pointed at
-     afterwards (`evidence.md §n`, `R3`), never restated. No arrows or bold
-     added.
-   - **Both.** Numbers, thresholds, and scoped conditions stay exact ("only
-     accounts under 14 days old", not "new accounts"). A warning, risk, or
-     precondition is never cut for length. When there is more than a reader
-     can take in, give the one or two that matter in full and name the rest
-     with where it lives; never dump it, never drop it silently. Verbatim
-     output, `VERDICT` and `check:` lines, and the `- Field:` lines and
-     section headings the scripts read keep their exact form.
+8. **Speak plainly, bottom line first** (adapted from Attention-kind,
+   github.com/alexgreensh/attention-span). What the reader skips was not
+   delivered.
+   - **Messages and Human summaries** (reports, gate requests, questions,
+     the Human summary of spec.md and plan.md): line one is the bottom line,
+     the result or that a decision is needed; one line of context (stage,
+     what came before); then one `**→ Lead-in.** rest` paragraph per point,
+     bold carrying the answer and every warning. The decision itself comes
+     last, and nothing follows it.
+   - **Records** (everything else): one idea per line; a fact stated once,
+     then pointed at (`R3`, `evidence.md §n`); a section without a verdict
+     line opens with its conclusion. summary.md sections open with their
+     point in bold.
+   - **Always:** short active sentences in the project's words; an
+     unavoidable term glossed in five words or fewer; numbers and scoped
+     conditions exact; a warning never cut for length. Too much at once: give
+     what matters most, then name the rest and where it lives. Verbatim
+     output and every line or heading a script reads keep their form.
 9. **Heartbeat.** `.sdlc/work/<slug>/progress.md` holds exactly one line —
    `<stage>[ n/m] · <what is happening, ≤10 words> · <ISO timestamp>` —
    overwritten, never appended: as soon as the slug dir exists, on stage

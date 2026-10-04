@@ -5,17 +5,11 @@
 
 ## Human summary (read this first)
 
-<First line: the bottom line in one sentence — what gets built, for whom.
-Then five or fewer `**→ Lead-in.** rest` paragraphs, a blank line between
-them: the problem, what will be built, what will not change, and each flagged
-concern with your recommendation (more than fits: name them and point at
-Flagged concerns). Bold the lead-in and the key number or decision, so the
-bold alone carries the summary. Write for a reader with NO technical
-background: no code identifiers, no jargon (gloss an unavoidable term in five
-words or fewer), what a user can or cannot do — not system internals. If a
-non-developer colleague could not follow a sentence, rewrite it. The human
-should be able to approve the spec from this section and Flagged concerns
-alone. AGENTS.md rule 8.>
+<The bottom line, then five or fewer `**→**` points (AGENTS.md rule 8): the
+problem, what gets built, what stays unchanged, each flagged concern with your
+recommendation. For a reader with no technical background: what a user can or
+cannot do, not system internals. Approvable from this section and Flagged
+concerns alone.>
 
 ## Requirements
 <each cites the intent.md O-item it fulfils; each machine-checkable. An O-item
