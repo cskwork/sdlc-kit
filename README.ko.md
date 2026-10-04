@@ -173,7 +173,7 @@ agent  APPROVED: intent of claims-status (.sdlc/work/claims-status/intent.md)
 
 `init.sh`는 프로젝트 `.gitignore`에 루트에 고정된 한 줄, `/.sdlc`만 추가합니다. 그래서 애플리케이션을 클론해도 기록은 따라오지 않습니다. 피처가 열려 있는 동안 `status.sh`가 하트비트를 나이와 함께 `now →` 줄로 보여줍니다.
 
-**훑어 읽도록 씁니다.** 사람이 읽는 부분(게이트 요청, spec과 plan의 Human summary, `summary.md`)은 결론을 첫 줄에 쓰고, 요점마다 `**→ 굵은 첫머리**` 문단으로 나눕니다. 그래서 굵은 글씨만 읽어도 답과 경고가 모두 잡힙니다. 기록 문서(evidence, plan 본문, 로그)는 섹션마다 결론을 먼저 쓰고 같은 사실을 두 번 쓰지 않습니다. 정확한 숫자, 적용 조건, 경고는 길이 때문에 빼지 않습니다. 규칙은 AGENTS.md 8번이며 [Attention-kind](https://github.com/alexgreensh/attention-span) 출력 스타일을 바탕으로 했습니다.
+**훑어 읽도록 씁니다.** 게이트 요청과 Human summary는 결론을 첫 줄에 쓰고 요점마다 굵은 `→` 문단을 하나씩 둡니다. 굵은 글씨만 읽어도 답과 경고가 모두 잡히고, 기록 문서는 같은 사실을 한 번만 씁니다. AGENTS.md 8번 규칙이며 [Attention-kind](https://github.com/alexgreensh/attention-span)를 바탕으로 했습니다.
 
 **기록을 어디에 둘지는 사용자가 정합니다.** 기본값은 프로젝트 작업 사본 안입니다. `init.sh . --area ~/knowledge`를 쓰면 `<area>/<unit>-<checkout-id>/`에 저장하고 `.sdlc`를 그곳으로 연결합니다. 체크아웃마다 저장소가 하나씩이라 워크트리 두 개가 승인을 공유하지 않습니다. 저장소에 쓰거나 게이트 판정을 보고하는 스크립트는 모두 `<store>/PROJECT`에 다른 체크아웃이 적혀 있으면 거부하므로, 복사한 작업 사본이 원본의 피처를 열거나 닫을 수 없습니다. 읽기는 이 제약을 받지 않아 `tools/kb.sh show|search|list`는 그대로 동작합니다. 킷이 대신 옮겨 주는 것은 없고, **저장소 백업은 사용자의 몫입니다.** 킷 디렉터리에는 프레임워크만 남습니다.
 

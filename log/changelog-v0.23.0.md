@@ -1,58 +1,37 @@
-# v0.23.0 — records written to be skimmed: bottom line first, bold carries the answer
+# v0.23.0 — written to be skimmed: bottom line first
 
-The documents the loop writes were complete but hard to read: a spec's Human
-summary could be ten sentences with no bottom line, and a long plan restated
-the same facts across sections. This release adapts the Attention-kind output
-style (github.com/alexgreensh/attention-span) to the kit's artifacts. That
-project is AGPL-3.0; nothing is copied from it, the principles are restated
-in the kit's own words. No new file, axis, gate, or check; scripts read
-nothing that changed.
+Human summaries could run ten sentences with no bottom line, and long
+records restated facts. AGENTS.md rule 8 now adapts the Attention-kind
+output style (github.com/alexgreensh/attention-span, AGPL-3.0: principles
+restated, no text copied). No new file, axis, gate, or check; no
+script-read line changed.
 
 ## Changes
 
-- **AGENTS.md rule 8 — "Speak plainly, bottom line first."** Two tiers.
-  *Reader parts* (reports, gate requests, questions, the Human summary of
-  spec.md and plan.md, summary.md, intent.md's Goal line): the first sentence
-  is the bottom line, then one line of context, then each point as a
-  `**→ Lead-in.** rest` paragraph whose bold alone carries the answer and
-  every warning; the decision or blocking question comes last.
-  *Records* (evidence.md, spec and plan bodies, logs, handoff notes): each
-  section opens with its conclusion, one idea per line, a fact written once
-  and pointed at afterwards; no arrows or bold added. *Both*: numbers,
-  thresholds, and scoped conditions stay exact; a warning is never cut for
-  length; breadth is named and pointed at, never dumped or silently dropped;
-  verbatim output and every line a script reads keep their exact form.
-- **Changed from v0.22.0:** a report or gate request used to *start* with a
-  context paragraph. It now starts with the bottom line; context follows in
-  one line.
-- **templates/spec.md, templates/plan.md** — the Human summary placeholder
-  asks for a one-sentence bottom line plus five (spec) or three (plan)
-  `**→**` points, instead of "ten short sentences" / "five short sentences".
-  skills/2-spec and skills/3-plan say the same.
-- **templates/summary.md** — each section opens with its point in bold; the
-  `- Field:` lines kb.sh reads keep their form.
-- **README.md, README.ko.md** — one paragraph, "Written to be skimmed".
+- **Rule 8, three parts.** Messages and Human summaries: the bottom line
+  first, one line of context, one `**→ Lead-in.**` paragraph per point,
+  the decision last. Records: one idea per line, each fact stated once
+  and then pointed at; a section without a verdict line opens with its
+  conclusion. Always: numbers and scoped conditions exact, warnings never
+  cut, verbatim output and script-read lines untouched.
+- **Changed:** a message used to start with a context paragraph; it now
+  starts with the bottom line.
+- **templates/spec.md, plan.md:** the Human summary is the bottom line plus
+  five (spec) or three (plan) `**→**` points, pointing at rule 8 instead of
+  restating it. skills/3-plan points at the template.
+- **templates/summary.md:** each section opens with its point in bold.
 
-## Before → after (a spec Human summary)
+## Example (spec Human summary)
 
-Before: eight unbroken sentences. The reader meets "drag handles", "the
-ordering column", and "the export format" before learning that a decision
-is being asked of them.
-
-After:
-
-> Teachers can re-order quiz questions by dragging them.
+> Teachers can re-order quiz questions by dragging them; one decision is
+> needed.
 >
-> **→ Students see the new order** from their next attempt; answers already
-> submitted keep the order they were given in.
+> **→ Students see the new order** from their next attempt; submitted
+> answers keep theirs.
 >
 > **→ Reports and exports are unchanged.**
 >
-> **→ Decision needed:** quizzes with **more than 200 questions** would load
-> slowly in the editor. Recommendation: allow re-ordering only below 200
-> for this release.
+> **→ Decision:** quizzes over **200 questions** load slowly in the editor.
+> Recommend re-ordering only below 200 for now.
 
-## Upgrading
-
-Nothing to migrate. Artifacts written before v0.23.0 stay valid; the new
-shape applies to what is written next.
+Nothing to migrate: older artifacts stay valid.
