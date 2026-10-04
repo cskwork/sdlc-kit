@@ -26,10 +26,11 @@ Fill `templates/spec.md`. Rules:
 - **Human summary first.** The spec body is an agent-facing contract. The
   gate reviewer is a human — possibly one with no technical background.
   Write the top "Human summary" section so ANYONE can follow it (extends
-  hard rule 8): no code identifiers, no jargon (gloss an unavoidable term in the same
-  sentence), visible behavior rather than system internals — what problem,
-  what gets built, what stays unchanged, and each flagged concern as a
-  one-line decision with your recommendation. Test: would a non-developer
+  hard rule 8): the bottom line first, then `**→**` points whose bold alone
+  carries the summary; no code identifiers, no jargon (gloss an unavoidable
+  term in five words or fewer), visible behavior rather than system
+  internals — what problem, what gets built, what stays unchanged, and each
+  flagged concern as a one-line decision with your recommendation. Test: would a non-developer
   colleague understand every sentence? If not, rewrite. Write it LAST
   (after the adversarial pass), place it FIRST.
 - Every requirement cites the intent.md O-item it fulfils (`R1: … (O1)`). An
