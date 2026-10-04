@@ -5,14 +5,11 @@
 
 ## Human summary (read this first)
 
-<Use no more than 10 short sentences. Write for a reader with NO technical
-background: no code identifiers, no jargon (explain an unavoidable term in
-the same sentence), describe what a user can or cannot do — not system
-internals. State the problem, what will be built, what will not change, and
-each flagged concern with your recommendation. One idea per sentence. If a
-non-developer colleague could not follow a sentence, rewrite it. The human
-should be able to approve the spec from this section and Flagged concerns
-alone.>
+<The bottom line, then five or fewer `**→**` points (AGENTS.md rule 8): the
+problem, what gets built, what stays unchanged, each flagged concern with your
+recommendation. For a reader with no technical background: what a user can or
+cannot do, not system internals. Approvable from this section and Flagged
+concerns alone.>
 
 ## Requirements
 <each cites the intent.md O-item it fulfils; each machine-checkable. An O-item

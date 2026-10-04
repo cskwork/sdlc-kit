@@ -4,8 +4,8 @@
 
 ## Human summary (read this first)
 
-<Five short sentences or fewer: what changes, the main risk, how it is
-proven. Write it last, place it first.>
+<The bottom line, then three or fewer `**→**` points (AGENTS.md rule 8): what
+changes, the main risk, how it is proven. Write it last, place it first.>
 
 ## Gate tier
 
