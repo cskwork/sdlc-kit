@@ -9,6 +9,7 @@
      (headings may be translated), short sentences, what a user sees rather
      than code. It STATES; the records PROVE — point at them (evidence.md §n,
      delivery.md) instead of pasting output. Twenty lines at most.
+     Each section opens with its point in bold (AGENTS.md rule 8).
      Guidance lives in comments like this one: a section with no text yet is
      left out of `kb.sh show`, so an unfinished summary prints only what is
      known. -->
