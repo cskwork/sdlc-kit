@@ -6,7 +6,8 @@ description: "Evidence assembly, adversarial review, ship gate, commit disciplin
 # Stage 5: Ship
 
 Goal: create `evidence.md` so a human can decide whether to release, then
-deliver and record what was delivered in `delivery.md`. Run agent reviews
+deliver, record what was delivered in `delivery.md`, and hand the human a
+`qa-guide.md` to check it themselves. Run agent reviews
 first. The human reviews findings about intent and risk.
 
 Heartbeat throughout: AGENTS.md rule 9.
@@ -176,8 +177,23 @@ new slug with the comment as its origin.
    target, the passing final suite over the delivered source is the result.
    Never write a result you did not observe — an unverified delivery is
    `Confirmed: no`, and the feature closes as handed-off, not shipped.
-4. Hand it to close: `gates/close.sh <slug> shipped "<reason>"`. It re-checks
+4. **Write the QA guide.** Fill `templates/qa-guide.md` →
+   `.sdlc/work/<slug>/qa-guide.md`: where to open it, which account and role
+   (the password's location, never the password), the menu path, and
+   numbered steps, each with what the tester should see — plus the
+   before-fix symptom for a bug fix. Take the steps from what the E2E lens
+   actually drove; a step it did not run is marked `[not run by agent]`. No
+   screen (API, job, CLI): the steps are the commands and their expected
+   output, with a placeholder (`$TOKEN`) and its source for any token,
+   cookie, or key — never the literal value; no review runs after this
+   step, so nothing else catches it. Point summary.md's How to check at it.
+5. Hand it to close: `gates/close.sh <slug> shipped "<reason>"`. It re-checks
    the ship approval, the delivery record, and the verification (a new gap
    needs the human's `--accept-gap` again). `scratch/` stays until then —
    the pruning happens at close, and anything evidence.md, delivery.md, or a
    lesson cites is kept (AGENTS.md rule 5).
+6. **Report to the human** (AGENTS.md rule 8): the bottom line — what was
+   delivered, where — then the QA guide as one quoted block that keeps its
+   form (rule 8), so the human can test it without opening a file, and its path
+   (`.sdlc/archive/<slug>/qa-guide.md` after close). A gap it lists under
+   Not checked by the agent stays in bold.

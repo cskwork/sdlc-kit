@@ -95,7 +95,7 @@ kb_stores() { # <store-or-empty> <area-or-empty>
 }
 
 # --- record fields -----------------------------------------------------------
-KB_DOCS="summary.md origin.md intent.md spec.md plan.md map.md evidence.md delivery.md CLOSED"
+KB_DOCS="summary.md origin.md intent.md spec.md plan.md map.md evidence.md delivery.md qa-guide.md CLOSED"
 
 kb_field() { # <file> <label> → the first "- <label>: value" line's value (raw); a "> " quote prefix (an Obsidian callout) is dropped first
   [ -f "$1" ] || return 1
