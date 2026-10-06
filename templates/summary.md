@@ -29,7 +29,8 @@
 
 ## How to check
 <!-- Where a person clicks, or the command they run, to see it working — and
-     the evidence that proved it (evidence.md §n). -->
+     the evidence that proved it (evidence.md §n). The full step-by-step, with
+     account and menu path, is qa-guide.md: point at it, do not copy it. -->
 
 ## Remember
 <!-- The one thing worth knowing next time — a trap, a rule, a limit — or
