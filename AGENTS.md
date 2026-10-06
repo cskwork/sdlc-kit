@@ -19,7 +19,7 @@ the loop.
 | 2 | Spec     | `skills/2-spec/SKILL.md`           | `spec.md`                                     | `intent`                     |
 | 3 | Plan     | `skills/3-plan/SKILL.md`           | `plan.md`                                     | `spec`                       |
 | 4 | Build    | `skills/4-build/SKILL.md`          | code + tests                                  | `plan` (tiered, rule 3)      |
-| 5 | Ship     | `skills/5-ship/SKILL.md`           | `evidence.md` + `delivery.md`                 | none; build done and checks pass |
+| 5 | Ship     | `skills/5-ship/SKILL.md`           | `evidence.md` + `delivery.md` + `qa-guide.md` | none; build done and checks pass |
 | 6 | Maintain | `skills/6-maintain/SKILL.md`       | new `intent.md` + lesson                      | none; triggered by incident |
 
 Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>/spec.md`.
@@ -297,10 +297,11 @@ archives the feature to `.sdlc/archive/<slug>/`.
    `init.sh <dir> --area <folder>`. A store another checkout owns is
    refused, never shared. **Backing the store up is the human's, not
    git's.** The durable record is `origin.md`, `intent.md`, `spec.md`,
-   `plan.md`, `map.md`, `evidence.md`, `delivery.md`, `CLOSED`, `memory/`,
-   and `config.md`; working residue (`approvals/`, `baseline.txt`,
-   `deviations.md`, `harvest.md`, `progress.md`, `scratch/`) is never quoted
-   into an artifact. The kit directory stays framework-only.
+   `plan.md`, `map.md`, `evidence.md`, `delivery.md`, `qa-guide.md`,
+   `CLOSED`, `memory/`, and `config.md`; working residue (`approvals/`,
+   `baseline.txt`, `deviations.md`, `harvest.md`, `progress.md`,
+   `scratch/`) is never quoted into an artifact. The kit directory stays
+   framework-only.
    **Records are read back, not just written**, through `tools/kb.sh`:
    `search "<text>"` (bounded, literal, open and closed features plus
    memory), `show <slug>` (summary.md first, then goal, delivery, lessons,
@@ -325,7 +326,8 @@ archives the feature to `.sdlc/archive/<slug>/`.
      unavoidable term glossed in five words or fewer; numbers and scoped
      conditions exact; a warning never cut for length. Too much at once: give
      what matters most, then name the rest and where it lives. Verbatim
-     output and every line or heading a script reads keep their form.
+     output, every line or heading a script reads, and a QA guide quoted
+     in a final report (skills/5-ship) keep their form.
 9. **Heartbeat.** `.sdlc/work/<slug>/progress.md` holds exactly one line —
    `<stage>[ n/m] · <what is happening, ≤10 words> · <ISO timestamp>` —
    overwritten, never appended: as soon as the slug dir exists, on stage

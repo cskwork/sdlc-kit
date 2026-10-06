@@ -160,6 +160,7 @@ Per feature, inside the **target project**:
 │   ├── plan.md                   # files · order · reach · risks · proof
 │   ├── evidence.md               # commands · outputs · observed behavior
 │   ├── delivery.md               # target · delivered source · how it was verified
+│   ├── qa-guide.md               # how a person checks it: account · menu · steps
 │   ├── summary.md                # the reader's page, kept current
 │   ├── harvest.md                # memory candidates, merged at close
 │   ├── deviations.md             # build-time differences
@@ -240,6 +241,8 @@ Screens can be checked two ways. The default **agent** mode drives a browser thr
 ### "Shipped" means delivered
 
 The ship approval decides to release; it is not a release. Closing as `shipped` requires `delivery.md`: the agreed target (`local`, `pr`, or `deploy`), the delivered source, the command or project tool actually run to check the result, and its verbatim output. `close.sh` re-checks that the approved evidence and the reviewed source are unchanged, and refuses an absent, mismatching, or unconfirmed delivery. A `pr` or `deploy` `Source` must be a commit whose tree contains the reviewed source. Local work needs no production step.
+
+The last message of a delivered feature hands the human a way to check it themselves: `qa-guide.md` gives where to open it, which account and role (where the password is kept, never the password), the menu path, and numbered steps, each with what the screen should show, plus the before-fix symptom for a bug fix. The report quotes it in full, and it is archived with the feature. Steps come from what the E2E check actually drove; a step the agent did not run is marked `[not run by agent]`. A command that needs a token or key carries a placeholder and where it comes from, never the value.
 
 The ship approval binds the project's whole source snapshot as the review saw it: every tracked file plus every untracked file git does not ignore, minus `.sdlc/`, by path, content, and executable bit. Committing those exact bytes keeps the binding valid. An edit, a new file, a deletion, a chmod, or a symlink swap afterwards breaks it, even in a file the review did not name, and `check-gate.sh`, `status.sh`, and `close.sh` name the files that changed. Submodule contents are not bound. Files are hashed in batches, so a shipped close on a repository of a few thousand files takes seconds.
 
