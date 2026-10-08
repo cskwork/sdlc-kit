@@ -373,7 +373,10 @@ baseline captured before changes, and a "what stays untouched" spec section.
    dispatch contract still apply.
 4. **Monorepos.** One `.sdlc/` per shipping unit — usually the service or
    package, not the repo root; a root `.sdlc/` only for cross-unit changes.
-   intent.md names the owning unit.
+   intent.md names the owning unit. A store covers its whole tree: a change
+   in a unit without its own `.sdlc/` runs the loop in the nearest store
+   above it, with gates run from that store's directory. A unit without a
+   store is never outside the loop.
 
 ## If your harness lacks a feature
 

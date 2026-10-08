@@ -14,7 +14,8 @@ before the first stage of a session, then return here.
 
 ## When this skill runs
 
-In a project with `.sdlc/`, any request that CHANGES the product runs through
+In a project with `.sdlc/` — in the changed files' directory or any directory
+above it (AGENTS.md "Monorepos") — any request that CHANGES the product runs through
 this loop — "add a filter to the report", "fix the login redirect", "make the
 export faster". No SDLC vocabulary is required; the words the human used are
 not the trigger, the change is.

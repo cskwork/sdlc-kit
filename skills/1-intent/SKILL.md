@@ -36,7 +36,12 @@ in parallel, then start the interview:
 
 - **History** for brownfield work. Check whether this was tried before. Read
   reverts, related tickets, prior fixes, and why they failed in git history
-  and commit messages.
+  and commit messages. At minimum run `git log --no-merges -i -E
+  --grep='revert|rollback|back out' -- <paths the change touches>` on the
+  branch that ships, adding the words the project's commits use for an undo
+  in their own language. Each hit names an attempt that was undone: read its
+  ticket for the side effect that forced it. intent.md's History line
+  records the command and the hits, or `none found` with the command.
 - **Affected area**: entry points, data shapes, callers, side effects of the
   code the request touches.
 - **Existing analogous flow**: before any option exists, find a flow the
