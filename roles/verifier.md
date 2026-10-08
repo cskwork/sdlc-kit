@@ -132,8 +132,14 @@ the origin text names — screens, fields, messages, roles, limits, error cases:
 2. **Missing** — an O-item or origin detail absent from the build. A detail
    dropped between the origin and spec.md is a finding even though spec.md was
    approved without it.
-3. **Beyond** — behavior no O-item asked for.
-4. intent.md's Goal line, checked the same way.
+3. **Contradicts** — an origin detail the build carries with a different
+   rule than the origin states: the origin says expired coupons show greyed
+   out, the build hides them. It is blocking unless spec.md's **Origin
+   overrides** (compact route: an intent.md Evidence line) records the origin
+   owner's decision — who, when, their words.
+   A rule the agent proposed is not an override.
+4. **Beyond** — behavior no O-item asked for.
+5. intent.md's Goal line, checked the same way.
 
 No origin.md → check O-items alone and report `origin NOT VERIFIED — none
 snapshotted`; live source unreachable → say so, the snapshot stands.
@@ -162,7 +168,7 @@ human's explicit call, recorded in evidence.md.
 - Baseline diff: clean | differences: <what> · untouched: <U-items → result> · neighbouring flows: <named → result>
 - Data consistency: <shape> → <producers/consumers checked> → consistent | skew: <what>
 - AS-IS → TO-BE: <pair> → <observed> · unlisted changes: <what, or none>
-- Origin: <ref> · live: unchanged | drifted: <what> | unreachable · O1 → R1 → <observed> … · Covered <n>/<n> · Missing: <list> · Beyond: <list>
+- Origin: <ref> · live: unchanged | drifted: <what> | unreachable · O1 → R1 → <observed> … · Covered <n>/<n> · Missing: <list> · Contradicts: <list> · Beyond: <list>
 VERDICT: PASS | FAIL (findings, each with evidence) | PASS WITH GAP (<what was NOT VERIFIED>)
 ```
 

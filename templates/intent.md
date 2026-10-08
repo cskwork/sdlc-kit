@@ -80,4 +80,5 @@ else the human's. Name a command or test where possible.>
 - <question>
 
 ## Researcher findings   <!-- brownfield: summary + pointer to full report -->
+- History: <the revert search run (skills/1-intent "History") → each undone attempt and the side effect that forced it | none found>
 <key facts; contradictions with user claims and how they were resolved>

@@ -16,6 +16,12 @@ concerns alone.>
 with no R is a flagged concern, never a silent drop.>
 - R1: <requirement> (O1)
 
+## Origin overrides   <!-- an R whose rule departs from origin.md's text; the adversary and the Intent match lens block on one missing here -->
+<R → the origin text it departs from → the origin owner's decision: who, date,
+their words. A rule the agent proposed stays a Flagged concern until the owner
+decides. `none` when every R matches the origin.>
+- none
+
 ## Data shapes
 <schemas, API contracts, migrations, and serialization end to end>
 
