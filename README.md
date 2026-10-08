@@ -322,7 +322,7 @@ sdlc-kit is a process layer, not a replacement for the project's existing rules:
 - **sdlc-kit wins on process:** stages, approval gates, evidence, memory.
 - **Existing knowledge wins:** `DOMAIN.md` points to existing glossaries, `CONTEXT.md`, and ADRs instead of copying them.
 - **Existing agents win:** local QA, browser, API, reviewer, or DB specialists execute the kit's role contract.
-- **Monorepos stay scoped:** use one `.sdlc/` per shipping unit; root only for cross-unit changes.
+- **Monorepos stay scoped:** use one `.sdlc/` per shipping unit; root only for cross-unit changes. A unit without its own store runs in the nearest one above it, never outside the loop.
 
 A genuine rule conflict is shown to the human with both texts quoted. The agent does not resolve it silently.
 
