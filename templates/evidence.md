@@ -41,7 +41,7 @@ VERDICT: <the E2E report's VERDICT line, verbatim>
 VERDICT: <the Side effects report's VERDICT line, verbatim>
 ### Intent match   <!-- per O-item, against origin.md — not only spec.md -->
 - O1 → R1 → <observed> · O2 → <none> → MISSING: <what>
-- Covered: <n>/<n> · Missing: <list or none> · Beyond: <list or none>
+- Covered: <n>/<n> · Missing: <list or none> · Contradicts: <list or none> · Beyond: <list or none>
 VERDICT: <the Intent match report's VERDICT line, verbatim>
 ### Fix loop   <!-- copied from deviations.md; cap 3 rounds -->
 - round 1/3: <lens> · accepted <findings> · declined <findings — reason each> · re-check: resolved | open: <what>
