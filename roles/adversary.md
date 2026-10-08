@@ -12,6 +12,9 @@ Attack, in order:
 1. **Traceability.** Does every element trace to the upstream artifact —
    every spec R to an intent O-item, every O-item to an R or a flagged
    concern? Flag added features and dropped requirements or questions.
+   A spec R that states a different rule than the origin.md text it traces
+   to is blocking at the spec gate unless spec.md's **Origin overrides**
+   records the origin owner's decision.
 2. **Domain and data shapes.** Check that schemas, contracts, migrations, and
    serialized data use the same shapes end to end.
 3. **User claims.** Do `[assumed]` claims carry enough risk to block? Does the
