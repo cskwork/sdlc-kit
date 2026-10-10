@@ -521,8 +521,14 @@ fi
 if [ -n "$(rfield doctor)" ]; then
   wait_s=$(rnum doctor_timeout 60)
   att_s=$(rnum doctor_attempt_timeout 30)
-  waited=0
+  # Bash's elapsed clock includes the doctor command, not just retry sleeps.
+  # This execution/retry budget excludes bounded process termination cleanup.
+  deadline=$((SECONDS + 10#$wait_s))
   while :; do
+    remaining=$((deadline - SECONDS))
+    [ "$remaining" -gt 0 ] || { doctor_state="fail (after ${wait_s}s)"; break; }
+    # Neither the final attempt nor the sleep below may exceed the budget left.
+    [ "$att_s" -le "$remaining" ] || att_s="$remaining"
     if runner exec --cmd "$(rfield doctor)" --log "$logdir/doctor.log" --timeout "$att_s" >/dev/null 2>&1; then
       # It answered. But if THIS run launched a runtime and that runtime is
       # already dead, the thing that answered is somebody else's process — an
@@ -541,8 +547,10 @@ if [ -n "$(rfield doctor)" ]; then
       doctor_state="fail (the launched runtime exited; see $logdir/launch.log)"
       break
     fi
-    [ "$waited" -ge "$wait_s" ] && { doctor_state="fail (after ${wait_s}s)"; break; }
-    sleep 2; waited=$((waited + 2))
+    remaining=$((deadline - SECONDS))
+    [ "$remaining" -gt 0 ] || { doctor_state="fail (after ${wait_s}s)"; break; }
+    [ "$remaining" -le 2 ] || remaining=2
+    sleep "$remaining"
   done
   echo "doctor: $doctor_state"
 elif [ "$runtime_instance" = owned ]; then

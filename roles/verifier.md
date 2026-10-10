@@ -34,6 +34,9 @@ exists.
      below for it and say why.
    - **UI** → drive the actual screen (`qa:` tool, else any browser tool in
      the harness): load it, do the user's steps, read the rendered result.
+     For changed interactions, check relevant loading, empty and error states,
+     keyboard/focus behavior, and labels on the layouts/platforms in scope
+     ([scoped quality](../docs/software-factory.md#spend-checks-where-failure-matters)).
    - **API / CLI / job** → the real request or command against a running
      instance (`run:`); read the response, exit status, and resulting state.
    - **Bug fix** → the proof chain (AGENTS.md rule 6): run the regression
@@ -69,6 +72,8 @@ exists.
      resting only on synthesized data is labelled so and cannot alone PASS.
    - **Writes:** read the state back before and after; success over unchanged
      state is a FAIL.
+     Where failure or retry touches that write, check for partial or duplicate
+     state as well as the visible error.
    - **New tests** are `must-fail-on-base` (no recipe: run against the base
      worktree, as for a bug fix). A test never seen failing is not proof.
 5. **Reach — three scenarios per change**, beyond the per-requirement floor.

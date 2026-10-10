@@ -20,6 +20,10 @@ Heartbeat throughout: AGENTS.md rule 9.
    target) plus its success criteria as the plan.
 2. Read plan.md and spec.md (compact route: intent.md), and memory
    (AGENTS.md rule 4).
+   On resume, compare the current branch, source changes, and runtime with the
+   recorded state before continuing. Re-run the smallest affected smoke check
+   when they differ; check completed external effects before retrying them
+   ([resume procedure](../../docs/software-factory.md#make-the-product-runnable-early)).
 3. **Brownfield: capture the regression baseline before editing.** Run the
    baseline commands from plan.md (compact route: intent.md's Baseline line)
    and save output to
@@ -31,6 +35,11 @@ Heartbeat throughout: AGENTS.md rule 9.
 
 ## Execute
 
+- **First runnable slice.** Prove the planned bootstrap and one real action
+  before expanding greenfield work; on brownfield work, drive the existing
+  affected path before editing. Record a missing runtime explicitly and use
+  the existing blocker/gap rules. A skeleton that only builds has not yet
+  proved the product path.
 - Follow plan.md's order. If reality differs, record a small deviation in
   `.sdlc/work/<slug>/deviations.md` and continue. Create the file from
   `templates/deviations.md` on first use — its numbered lines are the cap

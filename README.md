@@ -314,6 +314,9 @@ Three boundaries do not move:
 
 Full contract, drive/resume procedure, and a Symphony example: [`docs/automation.md`](docs/automation.md).
 
+For delivery-sized slices, early runnable proof, scoped quality checks, and
+efficient independent review, use the [software factory guide](docs/software-factory.md).
+
 ## Works in complex codebases
 
 sdlc-kit is a process layer, not a replacement for the project's existing rules:
@@ -359,6 +362,7 @@ gates/           approve · check-gate · close · status · stats · selftest (
 tools/           auto · verify (needs python3) · handoff · kb · qa-mode · tripwire · refcheck · _run.py
 templates/       artifacts, memory pages, verify recipe (intent, spec, plan, evidence, area, lesson, …)
 docs/            index.html (bilingual EN/KO site) · automation.md (machine contract) · jev-qa.md
+tests/           bounded runner tests · real CLI development lifecycle E2E
 log/             release notes
 .gitattributes   pins LF endings so scripts survive a Windows clone
 ```
@@ -366,10 +370,18 @@ log/             release notes
 ## Verify the kit
 
 ```bash
-./gates/selftest.sh   # a few seconds
+bash gates/selftest.sh
+python tests/test_runner.py
+bash tests/factory-e2e.sh
 ```
 
-One smoke test for a kit that is mostly instructions. It checks that every script parses and is LF-only, every SKILL.md has valid frontmatter, a gate opens only for the approved bytes, lazymode never goes beyond its level, `dead-end` needs a lesson and `shipped` a confirmed delivery, knowledge is filed under its own product area, and the verification receipt gates ship. CI runs it on Ubuntu, macOS, and Windows (Git Bash) for pull requests, and by hand.
+The selftest checks script syntax, LF endings, skill frontmatter, gate bindings,
+lazymode, closure, knowledge records, and verification receipts. CI runs that
+selftest on Ubuntu, macOS, and Windows (Git Bash). With Python 3, the runner
+tests check bounded execution and cleanup; the factory E2E drives a real task
+CLI through a feature, bug regression, verification, and local review-branch
+delivery. These are deterministic harness checks, not agent-quality scores or
+proof of every product behavior. See the [guide](docs/software-factory.md#check-the-kit-separately-from-an-agents-performance).
 
 ## What this is not
 
