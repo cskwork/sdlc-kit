@@ -44,6 +44,8 @@ Fill `templates/evidence.md` → `.sdlc/work/<slug>/evidence.md`:
 - For each spec requirement, include the exact command and real output. Keep
   every numerical result. For long successful logs, include the verdict lines
   and numbers and cite the full scratch output. Include all failure output.
+  Identify the final source and runtime that produced the proof; a later edit
+  needs fresh affected checks and, when configured, a new receipt before review or delivery.
 - **The three verifier reports** (roles/verifier.md — E2E, Side effects,
   Intent match) as reported, each with its `VERDICT:` line (ship refuses
   without it), each check as command/tool · environment · scenario · observed

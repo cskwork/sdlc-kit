@@ -39,9 +39,13 @@ exploration stays out of the main context. Then fill `templates/plan.md`:
   before (a new validation, a newly required field, a narrowed type), list
   what every caller sends today: that change is a contract change (AGENTS.md
   rule 3).
-- **Order of work.** Make each step keep the configured checks passing. Add
-  tests with the code they test. Where two steps would write one file, plan
-  separate targets if the design allows; otherwise order them.
+- **Order of work.** Use delivery-sized vertical slices, each tied to R-items
+  and an observable result through the real interface. Put the shortest
+  runnable path first; greenfield starts with bootstrap, readiness, one action,
+  and cleanup proved before expansion. Keep configured checks passing and add
+  tests with the code they test. Order steps that write the same file.
+  For slice sizing and scoped quality checks, read
+  [`docs/software-factory.md`](../../docs/software-factory.md).
 - **Risks.** Record rate limits, migrations, shared state, and important quirks.
 - **Proof.** For each spec requirement, name the test or command that proves it
   (bug fix: the regression test — AGENTS.md rule 6).
