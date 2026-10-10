@@ -20,8 +20,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       # the fixtures commit, so every runner needs an identity of its own
@@ -34,7 +34,7 @@ jobs:
           # Fixtures write LF bytes; do not convert their committed snapshots.
           git config --global core.autocrlf false
         shell: bash
-      - name: selftest (smoke test, a few seconds)
+      - name: gate and receipt selftest
         run: bash gates/selftest.sh
         shell: bash
       - name: bounded process runner regressions
