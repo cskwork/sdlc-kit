@@ -750,6 +750,10 @@ sdlc_verify_state() { # <slug>
   want=$(sdlc_field "$rec" feature_recipe_digest || true)
   if [ "${want:-none}" != "$(sdlc_verify_feature_recipe_digest "$slug")" ]; then
     echo "stale|$(sdlc_verify_feature_recipe "$slug") changed after the receipt was recorded — re-run tools/verify.sh run $slug"; return 0; fi
+  # A blocked run may lack checks; any rows it records must still be unique.
+  id=$(awk -F' *\\| *' 'index($0, "check: ") == 1 { sub(/^check: */, "", $1); if (seen[$1]++) { print $1; exit } }' "$rec")
+  if [ -n "$id" ]; then
+    echo "invalid|the receipt records check '$id' more than once — re-run tools/verify.sh run $slug"; return 0; fi
   case "$(sdlc_field "$rec" doctor || true)" in
     fail*) echo "blocked|the environment doctor command failed — no runnable environment, so nothing is verified"; return 0;;
     unowned-runtime*) echo "blocked|the doctor passed but the runtime this run launched was already dead: something else answered — re-run tools/verify.sh run $slug"; return 0;;
@@ -808,6 +812,10 @@ EOF
   # without git the source snapshot is empty: every receipt would look current
   if ! git rev-parse --git-dir >/dev/null 2>&1; then
     echo "blocked|not a git repository: the receipt cannot bind the source it ran over (every snapshot looks the same), so nothing shows these results are about the code on disk"; return 0; fi
+  # Baseline and pre-existing checks invoke git diff, whose clean filters may
+  # write source. Hash again before any strict gap can be accepted at ship/close.
+  if [ "$after" != "$(sdlc_source_digest 2>/dev/null || echo unbound)" ]; then
+    echo "stale|the source changed after the receipt was recorded — re-run tools/verify.sh run $slug"; return 0; fi
   if [ "$profile" = strict ]; then
     if [ "$(sdlc_field "$rec" runtime_evidence || true)" != yes ]; then
       echo "blocked|strict profile: no runtime or e2e check ran, so review-ready cannot be claimed"; return 0; fi
