@@ -171,20 +171,21 @@ snapshotted`; live source unreachable → say so, the snapshot stands.
 
 Record every check as **command or tool · environment · scenario · observed
 result** (deciding lines verbatim; bulk into `.sdlc/work/<slug>/scratch/`).
-Include report provenance: actual reviewer session/agent and tool-call IDs
-when exposed, author/reviewer relationship, source revision plus working-tree
-identity, recipe and upstream input identities, exact input paths, commands,
-exit codes, log paths and deciding lines. An unavailable identifier is
-`unknown — <why>`; never fabricate an ID or claim a signature proves review.
+Include report provenance — every item of the template's Provenance,
+Inputs/source and Evidence lines, with actual IDs when exposed. An
+unavailable identifier is `unknown — <why>`; never fabricate an ID or claim a
+signature proves review.
 Preserve the report unchanged in evidence.md, shared provenance once for a
-combined reviewer and separate per-lens observations and VERDICT lines.
-**No environment = NOT VERIFIED**: name what is missing (no runnable app, no
-browser tool, no reachable API, no permitted credentials). Never a pass, and
-never unit tests standing in for the real run; delivering over the gap is the
-human's explicit call, recorded in evidence.md.
+combined reviewer and separate per-lens observations and VERDICT lines. Head
+each lens exactly as below (`####` for sub-headings): the ship gate reads each
+VERDICT under its `###` lens heading.
+**No environment = NOT VERIFIED**: name what is missing (runnable app, browser
+tool, reachable API, permitted credentials) — never a pass, never unit tests
+in place of the real run; delivering over the gap is the human's explicit
+call, recorded in evidence.md.
 
 ```
-## Verifier report — <E2E | Side effects | Intent match>   (fill your lens's lines)
+### <E2E | Side effects | Intent match>   (fill your lens's lines)
 - Provenance: reviewer ID <actual ID | unknown — reason>; context ID <actual ID | unknown — reason>; tool calls <actual IDs | unknown — reason>; independent of implementer <observed relationship | unknown>
 - Inputs/source: <revision + current tree identity>; recipe <identity>; upstream <identities>; input paths <exact paths>
 - Evidence: executed <commands, exit codes, log paths, deciding lines>; independently inspected <current logs/receipts, or none>

@@ -50,7 +50,7 @@ budget='623 SKILL.md
 1816 skills/6-maintain/SKILL.md
 818 roles/adversary.md
 440 roles/researcher.md
-2422 roles/verifier.md'
+2420 roles/verifier.md'
 for p in "$kit"/SKILL.md "$kit"/AGENTS.md "$kit"/skills/*/SKILL.md "$kit"/roles/*.md; do
   rel=${p#"$kit"/}
   max=$(printf '%s\n' "$budget" | awk -v f="$rel" '$2 == f { print $1 }')
@@ -90,6 +90,15 @@ d=.sdlc/work/feat-c; mkdir -p "$d"; echo goal > "$d/intent.md"; lens "$d/evidenc
 sed '$d' "$d/evidence.md" > "$t/ev"; printf 'VERDICT: <PASS>\n' >> "$t/ev"; cp "$t/ev" "$d/evidence.md"
 out=$("$kit/gates/approve.sh" ship "$d/evidence.md" 2>&1) && fail "ship approved with the Intent match VERDICT missing"
 has "$out" "no VERDICT: line under ### Intent match." "the missing lens not named alone"
+#    a reviewer report written to roles/verifier.md's template, sub-headings
+#    included, is what ship reads — pasted unchanged, it passes
+grep -q '^### <E2E | Side effects | Intent match>' "$kit/roles/verifier.md" \
+  || fail "roles/verifier.md report heading no longer matches the ship gate's lens headings"
+r=.sdlc/work/feat-r; mkdir -p "$r"; echo goal > "$r/intent.md"; : > "$r/evidence.md"
+for l in 'E2E' 'Side effects' 'Intent match'; do
+  printf '### %s\n#### Executed checks\n- ran\nVERDICT: PASS\n' "$l" >> "$r/evidence.md"
+done
+"$kit/gates/approve.sh" ship "$r/evidence.md" >/dev/null 2>&1 || fail "ship refused a report in roles/verifier.md's own layout"
 printf 'no independent verification available: no subagent in this harness\n' > "$d/evidence.md"
 "$kit/gates/approve.sh" ship "$d/evidence.md" >/dev/null || fail "ship refused over the rule-5 gap line"
 lens "$d/evidence.md"
