@@ -23,9 +23,17 @@ requirements. Read memory (AGENTS.md rule 4).
 
 ## Adversarial code review (fresh context)
 
-Run this review at every lazymode before pushing (AGENTS.md rule 3).
+Complete this review at every lazymode before pushing (AGENTS.md rule 3).
+On approved compact work, retain the combined fresh review from build when
+its three complete lens reports and final adversarial diff check cover the
+unchanged final source, recipe and upstream inputs. Record it here once; do
+not dispatch another reviewer or rerun current commands merely for stage
+transition. Full work gets a separate fresh adversary. Any source, recipe or
+upstream review-input change needs fresh affected proof and a final diff
+review on the resulting source; preserve the existing round caps.
 
-Dispatch an adversary (`roles/adversary.md`) with: spec.md, plan.md,
+When a current diff review is still needed, dispatch `roles/adversary.md` with:
+spec.md, plan.md,
 `.sdlc/memory/POLICY.md` if present, and the diff (compact route: intent.md
 and the diff). Apply the role's complete diff checklist, one row per changed file;
 also check missing untouched checks and complexity that hides bugs.
@@ -44,10 +52,13 @@ Fill `templates/evidence.md` → `.sdlc/work/<slug>/evidence.md`:
   and numbers and cite the full scratch output. Include all failure output.
   Identify the final source and runtime that produced the proof; a later edit
   needs fresh affected checks and, when configured, a new receipt before review or delivery.
-- **The three verifier reports** (roles/verifier.md — E2E, Side effects,
+- **The three verifier lens reports** (roles/verifier.md — E2E, Side effects,
   Intent match) as reported, each with its `VERDICT:` line (ship refuses
   without it), each check as command/tool · environment · scenario · observed
-  result, with the fix-loop rounds from deviations.md. Preserve every
+  result, with the fix-loop rounds from deviations.md. Compact's single fresh
+  reviewer still supplies three sections and VERDICT lines; preserve actual
+  provenance, source/input identities, commands, exits, cited logs and deciding
+  lines as reported, with unavailable identifiers explicitly unknown. Preserve every
   NOT VERIFIED verdict and name its gap under Not verified (AGENTS.md rule 6).
 - **Bug fixes:** put the complete AGENTS.md rule 6 proof chain in Bug proof;
   preserve its diagnosis/confirmed-fix distinction here and in the report.

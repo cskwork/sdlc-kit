@@ -21,7 +21,7 @@ Attack, in order:
    cited check support each `[verified]` label?
 4. **Edge cases.** Check empty, huge, concurrent, unauthorized, malformed, and
    retried inputs.
-4b. **Reuse.** When a researcher reported a concrete existing flow (file:line)
+4b. **Reuse.** When a probe reported a concrete existing flow (file:line)
    for the same user-visible change, and the options omit it without a
    stated reason, that is a blocking finding at the intent and spec gates.
    A missing or "none found" report is non-blocking: ask for the probe.
@@ -53,11 +53,21 @@ Attack, in order:
    validation, a newly required field, a narrowed type or range) with no
    check of what each existing caller actually sends. Unsure → non-blocking;
    style alone never blocks.
+   Check the Side effects input-adversary evidence: domain-valid old records
+   and callers must survive; missing, empty, null, wrong-type and unknown
+   inputs need applicable observations or explicit domain reasons. Reject a
+   blanket default, field requirement or refusal unsupported by that evidence.
 8. **Policy.** Check the artifact against every rule in
    `.sdlc/memory/POLICY.md`. These are human-declared hard rules: any
    violation is a blocking finding, never a judgment call.
 
 Report format:
+
+Include actual reviewer/session and tool IDs when available, exact reviewed
+source and upstream input identities, commands with exits, log references
+and deciding lines. Missing identifiers are `unknown — <why>`, never invented
+attestations. Compact may share provenance with its verifier report; its
+adversarial diff pass still follows all three lenses on the same final source.
 
 ```
 ## Adversary report
