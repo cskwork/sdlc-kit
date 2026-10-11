@@ -1,9 +1,7 @@
 # sdlc-kit agent routing contract
 
-Anthropic's AI-Native SDLC playbook as plain Markdown and shell scripts. No
-runtime hooks, no vendor-specific features. The scripts enforce the mechanics
-and, when they refuse, print the reason and the fix; this file states only
-what an agent must decide or do.
+Portable SDLC contract. Scripts enforce mechanics and print refusal reasons
+and fixes; this file states what an agent must decide or do.
 
 ## The loop
 
@@ -60,12 +58,10 @@ archives the feature to `.sdlc/archive/<slug>/`.
    errors and silence — is closed: STOP and tell the human exactly what to
    approve. Where lazymode waives that gate, run the stage's review instead
    and approve with `--lazy` (rule 3).
-   **What a gate binds**: the artifact's content and the upstream artifacts
-   it was granted on — `origin.md`, the snapshot of the ticket or 기획서,
-   included (templates/origin.md). Editing any of them closes the gate and
-   the script prints the re-approval command; a downstream gate never
-   outlives the text it was granted for. The digest is CHANGE DETECTION, not
-   authentication.
+   **What a gate binds**: artifact and upstream content, including the
+   `origin.md` ticket/기획서 snapshot (templates/origin.md). An edit closes
+   downstream gates; follow the printed re-approval command. Digests detect
+   changes, not authorship.
 3. **Intent, spec, and ship approvals are human decisions** unless the
    project's lazymode waives one (compact route: no spec approval — the
    human approved the intent that chose compact). Run `gates/approve.sh
@@ -147,47 +143,19 @@ archives the feature to `.sdlc/archive/<slug>/`.
    own `harvest.md` if present; then open lesson files whose tags match the
    task. Stage skills do not repeat this.
 
-   | What | Where | Written by |
-   |---|---|---|
-   | A product's business rule (정책) — "a submitted answer cannot be edited" | `memory/areas/<menu path>.md` Business rules table, one row per rule — P1…, one plain sentence (templates/area.md) | close merge, shipped only |
-   | How an on-screen count, rate, score or chart figure is calculated | the same page's Numbers table, one row per figure — N1… (templates/area.md) | close merge, shipped only |
-   | Where a rule or figure came from, the code behind the area, and how to drive it | the same page's evidence block: the Where and Drive lines, then one evidence row per rule or figure | close merge |
-   | What changed in an area, when | the area page's History table, one row per feature | close merge, shipped only |
-   | A fact that holds for one area only | the area page's How it works | close merge |
-   | A term, or a system fact/constraint that spans areas | `memory/DOMAIN.md` (100 lines max) | close merge |
-   | A trap and the correct move | `memory/lessons/<date>-<slug>.md` + one `INDEX.md` line (50 lines max) | close merge |
-   | A hard rule for agents, in the human's words | `memory/POLICY.md` | only on the human's word |
-   | The story of one feature, for a reader | `work/<slug>/summary.md` (templates/summary.md) | any stage, kept current |
-
    A **product area** is what users navigate by: for a web app one menu,
    named by its menu path (`학습 > 평가 > 제출`); otherwise a module, API,
    job, or CLI command — not the `--area` knowledge folder of rule 7.
-   summary.md's `Area:` line and the page's `Menu:` line use the same words,
-   which is how `kb.sh` links them. File name, layout, and row shapes are in
-   templates/area.md, read when a page is written. DOMAIN over its limit: move
-   area-specific facts to their area page. INDEX over its limit: merge
-   near-duplicates, drop superseded entries, replace promoted ones
-   (skills/6-maintain).
    **memory/ has one writer: the close step** (POLICY.md aside). Mid-loop,
    stages and researchers append candidates — one line each — to
-   `.sdlc/work/<slug>/harvest.md` (templates/harvest.md). At close, merge
-   every candidate into its row above — creating an area page from
-   templates/area.md when none exists, and adding the feature's History row
-   to each area it changed — then delete harvest.md. Business
-   rules and History describe what the product DOES, so they merge only when
-   the feature closes `shipped`: any other close drops them (summary.md keeps
-   the story), and a stale merge leaves them in harvest.md for that close;
-   `close.sh` blocks while it
-   exists. A feature idle 30 days or more may have its harvest merged the
-   same way WITHOUT closing — one merge at a time, in the owning checkout
-   (`tools/kb.sh harvest` lists them); nothing in `kb.sh` writes `memory/`.
-   **Recency wins on merge, three guards.** A contradicting candidate
-   replaces the old entry with a fresh `[verified: how — YYYY-MM-DD]`; date
-   every fact. Weaker evidence never supersedes stronger (a code-read vs a
-   production capture goes to the human); both-true-in-different-scopes gets
-   qualified, not replaced; a `supersedes:` target already rewritten by a
-   parallel close is reconciled by evidence. Human-stated lines are never
-   deleted on recency alone — ask.
+   `.sdlc/work/<slug>/harvest.md`. Product rules, figures, and History merge
+   only on a `shipped` close. A feature idle 30 days or more may merge its
+   harvest without closing, with those product candidates held for close.
+   **Before any close or idle-harvest merge, read
+   [docs/memory-merge.md](docs/memory-merge.md)
+   and apply its destination table and complete merge procedure.** Merge one
+   feature at a time in its owning checkout; `kb.sh` only reports. Delete
+   harvest.md only after all candidates are reconciled; leftovers block close.
    **POLICY.md is written only on the human's word**: transcribe a hard rule
    they state in chat with the date and their words; never add, soften, or
    remove one on your own judgment. The adversary treats a violation as
