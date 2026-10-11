@@ -40,12 +40,12 @@ echo "ok: SKILL.md frontmatter"
 # 2b. prompt load only grows on purpose: every prompt a stage or role loads has
 #     a word ceiling here, so an addition shows in the diff that raises it
 #     (`wc -w`, the count the v0.26.0 prompt reduction was measured in)
-budget='628 SKILL.md
-3413 AGENTS.md
+budget='623 SKILL.md
+3285 AGENTS.md
 2335 skills/1-intent/SKILL.md
 663 skills/2-spec/SKILL.md
 901 skills/3-plan/SKILL.md
-1594 skills/4-build/SKILL.md
+1337 skills/4-build/SKILL.md
 1903 skills/5-ship/SKILL.md
 1816 skills/6-maintain/SKILL.md
 818 roles/adversary.md
