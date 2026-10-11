@@ -118,7 +118,7 @@ When all steps are done and the full configured suite is green over the final
 state, dispatch `roles/verifier.md` three times — one lens each, fresh context
 each, in parallel where the harness allows (AGENTS.md rule 5; full dispatch
 contract) — with intent.md and its `Refs:` origin, plan.md and spec.md (compact
-route: intent.md only), the changed-file list, `.sdlc/config.md`, and
+route: intent.md only), summary.md, the changed-file list, `.sdlc/config.md`, and
 `baseline.txt` when it exists:
 
 Name the lenses **E2E**, **Side effects**, and **Intent match**; each applies
