@@ -79,10 +79,10 @@ Not every ticket needs all six stages:
 
 | Route | When | Flow |
 |---|---|---|
-| Compact | Small and well understood: exact files known, success checkable by an existing command, no open questions, inside what you already authorized | `intent.md` is the only work artifact and carries files, proof, risk, baseline, and delivery target. Intent (gate) → build → ship; ship's adversary review is the diff's only review |
+| Compact | Small and well understood; meets all [compact criteria](skills/1-intent/SKILL.md#which-route-compact-or-full) | `intent.md` is the only work artifact and carries files, proof, Reach, risk, baseline, and delivery target. Intent (gate) → build → ship; ship's adversary review is the diff's only review |
 | Full | Anything ambiguous, broad, or risky | All six stages |
 
-The `Track:` line in `intent.md` records the route (criteria in `skills/1-intent`); incidents use the same routes. A surprise during build upgrades compact to full and re-approves the intent. A ticket too foggy to pin down starts with a **map** (`map.md`: destination · decided · unknown · out of scope) that resolves one unknown per session before `intent.md` is written.
+The `Track:` line in `intent.md` records the route; incidents use the same routes. Eligibility, upgrades and re-approval follow [stage 1](skills/1-intent/SKILL.md#which-route-compact-or-full); bounded deviations follow the [build rules](skills/4-build/SKILL.md#execute). A ticket too foggy to pin down starts with a **map** (`map.md`: destination · decided · unknown · out of scope) that resolves one unknown per session before `intent.md` is written.
 
 ## Quick start
 
