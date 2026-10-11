@@ -29,6 +29,10 @@ exploration stays out of the main context. Then fill `templates/plan.md`:
   type, event, file — with its other producers and consumers and what happens
   to records that predate the change. The adversary checks it is complete;
   the verifier's Side effects lens executes it.
+  Carry forward stage 1's caller/record evidence and domain-valid legacy
+  shapes. Proof covers applicable missing, empty, null, wrong-type and unknown
+  values with preserved valid results or safe invalid refusal; an inapplicable
+  case needs a domain reason.
 - **Reach.** Every caller of each changed behavior — search the other
   repositories and tiers that call it, not only this one — with what each
   sends; the states of existing records it meets; the conditions that change

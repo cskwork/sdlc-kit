@@ -23,6 +23,9 @@
 <Every factual claim, labeled:>
 - <claim> [verified: <command output, file:line, reproduction steps, or metric>]
 - <claim> [assumed: <why it could not be verified>]
+- Input compatibility: <BEFORE scope/Track: current callers and stored records,
+  accepted legacy shapes and domain meaning of missing/empty/null/wrong-type/
+  unknown inputs; exact probe, output and source, or inapplicable with reason>
 
 <For incidents — track requested evidence explicitly; do not let it evaporate.
 One line per request, updated in place; max 2 requests, then waived-by-agent
@@ -40,9 +43,9 @@ else the human's. Name a command or test where possible.>
 <!-- This is the whole work contract: no spec.md, no plan.md, and nothing
      downstream may ask for one (AGENTS.md "Two routes, one contract"). -->
 - Files: <exact paths and symbols that change>
-- Proof: <the existing command from .sdlc/config.md that proves it (bug fix: the regression test it runs — AGENTS.md rule 6), the variants it covers (O1.happy, O1.boundary, O1.negative — roles/verifier.md), and what its passing output means>
+- Proof: <the existing command from .sdlc/config.md that proves it (bug fix: the regression test it runs — AGENTS.md rule 6), the variants it covers (O1.happy, O1.boundary, O1.negative — roles/verifier.md), applicable legacy/invalid input checks from Evidence, and what its passing output means>
 - Reach: <the other callers, record states, and conditions that meet this change; the entry, state, and context scenario picked from them (O1.entry …) or gap: <axis — why nothing else exists> — roles/verifier.md>
-- Risk: <blast radius, what else touches this code, the single revert that undoes it>
+- Risk: <behavior and affected surfaces, compatibility evidence, what else touches this code, the single revert that undoes it; judge by risk and reversibility, never LOC>
 - Baseline: <brownfield: the command(s) whose output must not change, run before the edit into baseline.txt | none — greenfield>
 - Delivery target: local | pr | deploy   <!-- what "shipped" will have to prove; becomes delivery.md's Target -->
 

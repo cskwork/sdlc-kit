@@ -1,6 +1,6 @@
 ---
 name: sdlc-build
-description: "Plan execution with fresh-context verification and triaged fix loop. Triggers: plan gate approved."
+description: "Execute the approved full plan or compact intent, with fresh-context verification and a triaged fix loop. Triggers: plan gate approved, or approved compact intent."
 ---
 
 # Stage 4: Build
@@ -74,6 +74,13 @@ Heartbeat throughout: AGENTS.md rule 9.
   output under `scratch/`; ship quotes its deciding lines in evidence.md's
   Bug proof. A test you never saw fail is not proof. The fix carries only
   what the confirmed mechanism justifies; "might also help" is a hypothesis.
+- **Preserve accepted inputs.** Turn stage 1's caller and stored-record
+  evidence into focused executable checks before changing input handling.
+  Exercise applicable missing, empty, null, wrong-type and unknown values
+  through the real surface; preserve valid legacy results and check invalid
+  cases for safe refusal, no crash and no partial state. Record an inapplicable
+  case with its domain reason. A fallback or a new required field is correct
+  only when that evidence supports its meaning; no blanket patch recipe.
 - **With a recipe, write the checks with the code** in
   `.sdlc/work/<slug>/verify.md` (templates/verify-feature.md): one `check:`
   per requirement variant and per reach scenario plan.md picked
@@ -112,20 +119,34 @@ Heartbeat throughout: AGENTS.md rule 9.
   Stage 5, not the build step. When your harness can restrict subagent tools, copy
   each role's "Must not" list into the dispatch.
 
-## Verify (fresh context, three lenses in parallel)
+## Verify (fresh context, selected by approved Track)
 
 When all steps are done and the full configured suite is green over the final
-state, dispatch `roles/verifier.md` three times — one lens each, fresh context
-each, in parallel where the harness allows (AGENTS.md rule 5; full dispatch
-contract) — with intent.md and its `Refs:` origin, plan.md and spec.md (compact
-route: intent.md only), summary.md, the changed-file list, `.sdlc/config.md`, and
-`baseline.txt` when it exists:
+state, dispatch with intent.md and its `Refs:` origin, plan.md and spec.md
+(compact: intent.md only), summary.md, changed-file list, `.sdlc/config.md`,
+current proof and `baseline.txt` when present (AGENTS.md rule 5's full dispatch
+contract):
+
+- **Full:** three `roles/verifier.md` contexts, one lens each, in parallel.
+  Ship dispatches a separate fresh adversary.
+- **Approved compact:** one fresh reviewer gets `roles/verifier.md` AND
+  `roles/adversary.md`, applies all three complete lens sections, then the
+  complete adversarial diff checklist once on the same final source. Return
+  three named lens reports with VERDICT lines plus the adversary report and
+  per-file rows. Ship preserves these reports; unchanged source and inputs
+  need no duplicate review dispatch.
+  Log each adversarial diff pass in evidence.md's existing two-round counter,
+  even when performed during build; combining roles never resets either cap.
 
 Name the lenses **E2E**, **Side effects**, and **Intent match**; each applies
 its complete role section. AGENTS.md rules 5/6 govern independence, missing
 environments and proof. With a `.sdlc/verify.md` recipe the E2E lens runs
-`tools/verify.sh run <slug>`; quote the receipt's deciding lines in evidence.md
-and re-run after any code or recipe change.
+`tools/verify.sh run <slug>` unless current proof already covers that exact
+source, recipe and inputs; independently inspect its deciding logs and
+expectations. Quote the receipt's deciding lines in evidence.md. Changes to
+source, recipe or upstream review inputs need fresh affected proof and final
+diff review; keep live gate digest checks intact. Preserve reviewer provenance
+under the role's Report contract, including explicit unknown identifiers.
 
 A finding from any lens — a failing flow, a data skew, a missing origin
 detail — enters the **fix loop**:
@@ -137,7 +158,8 @@ detail — enters the **fix loop**:
 2. Fix only accepted findings. A finding that implies new scope — an origin
    detail intent.md never carried, a data model change — goes to the human as
    a decision, not into the fix.
-3. Re-dispatch the lenses that had findings, plus E2E whenever code changed,
+3. Re-dispatch the lenses that had findings, plus E2E whenever code changed
+   (compact: the combined reviewer, including a new final diff check),
    with two questions: is each named finding resolved, and did the fix create
    a defect in affected code? Update the round line's `re-check:` in place:
    `resolved`, or `open: <what>` and the next round begins.
@@ -149,5 +171,6 @@ detail — enters the **fix loop**:
 ## Exit
 
 There is no gate script here. Stage 5 evidence review is the build gate.
-Continue with ship (`skills/5-ship/SKILL.md`); dispatch it to a subagent when
-a fresh context helps the review, passing only the slug (AGENTS.md rule 5).
+Continue with ship (`skills/5-ship/SKILL.md`); evidence assembly stays with
+the author. Pass the current reports and source/input identities so ship can
+retain valid proof without repeating checks or the compact diff review.
