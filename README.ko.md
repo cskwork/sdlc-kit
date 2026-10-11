@@ -79,10 +79,10 @@ Intent → spec → plan → build → evidence → maintain. 사람 승인 게�
 
 | 루트 | 언제 | 흐름 |
 |---|---|---|
-| 컴팩트 | 작고 파악이 끝난 변경: 수정할 파일 확정, 기존 명령으로 성공 검증 가능, 미결 질문 없음, 이미 허가한 범위 안 | 작업 산출물은 `intent.md` 하나이고 파일, 증명, 위험, 베이스라인, 전달 목표를 함께 담음. intent(게이트) → build → ship. ship의 adversary 리뷰가 diff의 유일한 리뷰 |
+| 컴팩트 | 작고 파악이 끝난 변경으로 [컴팩트 기준](skills/1-intent/SKILL.md#which-route-compact-or-full)을 모두 충족 | 작업 산출물은 `intent.md` 하나이고 파일, 증명, Reach(관련 진입점·기존 레코드 상태·주변 조건), 위험, 베이스라인, 전달 목표를 함께 담음. intent(게이트) → build → ship. ship의 adversary 리뷰가 diff의 유일한 리뷰 |
 | 풀 | 모호하거나, 범위가 넓거나, 위험한 일 | 6단계 전부 |
 
-`intent.md`의 `Track:` 줄이 루트를 기록하고(기준은 `skills/1-intent`), 장애 대응도 같은 루트를 씁니다. build 중에 예상 밖의 일이 생기면 컴팩트를 풀로 승격하고 intent를 다시 승인받습니다. 범위를 잡기 어려울 만큼 흐릿한 티켓은 **map**(`map.md`: 목적지 · 정한 것 · 모르는 것 · 안 할 것)부터 만들고, 세션마다 모르는 것을 하나씩 풀어 `intent.md`를 쓸 수 있을 때까지 진행합니다.
+`intent.md`의 `Track:` 줄이 루트를 기록하고, 장애 대응도 같은 루트를 씁니다. 적용 기준·승격·재승인은 [1단계](skills/1-intent/SKILL.md#which-route-compact-or-full)를, 범위 안의 작은 변경은 [build 규칙](skills/4-build/SKILL.md#execute)을 따릅니다. 범위를 잡기 어려울 만큼 흐릿한 티켓은 **map**(`map.md`: 목적지 · 정한 것 · 모르는 것 · 안 할 것)부터 만들고, 세션마다 모르는 것을 하나씩 풀어 `intent.md`를 쓸 수 있을 때까지 진행합니다.
 
 ## 빠른 시작
 

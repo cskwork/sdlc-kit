@@ -189,13 +189,8 @@ copy verbatim into a status report ("teachers can re-order quiz questions").
 
 ## Which route: compact or full
 
-Two routes, one contract (AGENTS.md "Two routes, one contract"). Features
-and bug fixes both use them; incidents use the same compact route, not a
-separate compressed loop.
-
-**Compact** — for a small, well-understood, bounded change: intent (gate) →
-build → ship → close, with intent.md as the single work artifact. No spec,
-no plan, and nothing downstream may demand one. Take it only when ALL hold:
+Apply AGENTS.md "Two routes, one contract" to features, fixes and incidents.
+Choose **compact** only when ALL hold:
 
 - the change is bounded and you can name the single revert that undoes it;
 - the probes named the exact files and symbols to change;
@@ -210,18 +205,19 @@ no plan, and nothing downstream may demand one. Take it only when ALL hold:
 A single "maybe" means **full**. Ambiguity, breadth, and risk are exactly
 what the spec and plan gates exist for.
 
-A compact intent.md carries what spec and plan would have carried, in five
-extra lines (templates/intent.md): **Files** to change, **Proof** command,
-**Risk** and its blast radius, **Baseline** (brownfield), **Delivery
-target** (local | pr | deploy). Without those five it is not compact-ready —
-write them or go full.
+A compact intent.md replaces spec and plan with six fields
+(templates/intent.md): **Files**, **Proof**, **Reach**, **Risk**, **Baseline**
+(brownfield), **Delivery target** (local | pr | deploy). Fill all six or go full.
 
 Record the verdict in the `Track:` line with the reasons
 (`- Track: compact — two known files, existing test covers it`) BEFORE the
 intent gate; the approval freezes it. Ship keeps its full adversary review —
 the only review that diff gets.
 
-**Upgrade (any build surprise → full):** STOP, rewrite the Track line to
+**Upgrade:** a build surprise that breaks any compact criterion — unknown
+files or approach, broader risk, or an open question — requires full. Small
+deviations that preserve every criterion follow build's deviation rules.
+STOP, rewrite the Track line to
 `- Track: full — upgraded from compact (<reason>)`, re-approve intent, then
 write spec.md. The re-approval is not a formality: the human approved a
 route with no spec or plan gate, and that verdict has changed. `approve.sh`
@@ -243,9 +239,8 @@ objection, run:
   --review "<what you actually reviewed>" [--risk-authorized "<the human's words>"]
 ```
 
-Post the intent summary and any objections as FYI and continue (AGENTS.md
-rule 3 "A waived gate is not a stop"); an unresolved MATERIAL question
-stops the loop here, at every level.
+Post the intent summary and objections as FYI and continue under AGENTS.md
+rule 3; unresolved MATERIAL questions still stop every level.
 
 Below lazymode 4 the intent gate is the human's. Tell the user:
 

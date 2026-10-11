@@ -23,14 +23,12 @@ requirements. Read memory (AGENTS.md rule 4).
 
 ## Adversarial code review (fresh context)
 
-This review runs at every lazymode level — it is the last look at the diff
-before the push, and the only security pass (AGENTS.md rule 3).
+Run this review at every lazymode before pushing (AGENTS.md rule 3).
 
 Dispatch an adversary (`roles/adversary.md`) with: spec.md, plan.md,
 `.sdlc/memory/POLICY.md` if present, and the diff (compact route: intent.md
-and the diff). It checks spec mismatch, missing untouched checks, security issues,
-policy violations, tests that cannot fail, complexity that hides bugs, and
-its clean-code list, one row per changed file.
+and the diff). Apply the role's complete diff checklist, one row per changed file;
+also check missing untouched checks and complexity that hides bugs.
 Fix findings or record justified rejections, then re-run the adversary over
 the fixed diff — max 2 rounds, each logged in evidence.md's Adversary
 section. Blockers surviving round 2 go into evidence.md's not-verified list
@@ -49,13 +47,10 @@ Fill `templates/evidence.md` → `.sdlc/work/<slug>/evidence.md`:
 - **The three verifier reports** (roles/verifier.md — E2E, Side effects,
   Intent match) as reported, each with its `VERDICT:` line (ship refuses
   without it), each check as command/tool · environment · scenario · observed
-  result, with the fix-loop rounds from deviations.md. A
-  lens that reported NOT VERIFIED stays NOT VERIFIED here: name what is
-  missing; unit tests never stand in, and delivering over the gap is the
-  human's explicit call, recorded under Not verified.
-- **Bug fixes: the proof chain** (AGENTS.md rule 6) in the Bug proof section.
-  A chain with a missing link is a diagnosis, not a confirmed fix: label it
-  that way here and in the report.
+  result, with the fix-loop rounds from deviations.md. Preserve every
+  NOT VERIFIED verdict and name its gap under Not verified (AGENTS.md rule 6).
+- **Bug fixes:** put the complete AGENTS.md rule 6 proof chain in Bug proof;
+  preserve its diagnosis/confirmed-fix distinction here and in the report.
 - Include full test, lint, and build results. Long successful logs may use the
   same verdict-lines-and-scratch-citation rule.
 - Adversary findings + resolutions.
@@ -96,7 +91,7 @@ At lazymode ≥3 (AGENTS.md rule 3): after the adversary pass, run
 `<kit>/gates/approve.sh ship .sdlc/work/<slug>/evidence.md --lazy --review
 "<the diff review you ran>"` (add `--risk-authorized "<the human's words>"`
 for risky work), post the evidence summary as FYI, and continue to commit
-discipline in the same run: a waived gate is not a stop (AGENTS.md rule 3).
+discipline in the same run under AGENTS.md rule 3.
 A blocker surviving round 2 of the adversary still stops the loop here.
 
 Below lazymode 3 the ship gate is the human's:
@@ -189,7 +184,9 @@ new slug with the comment as its origin.
    output, with a placeholder (`$TOKEN`) and its source for any token,
    cookie, or key — never the literal value; no review runs after this
    step, so nothing else catches it. Point summary.md's How to check at it.
-5. Hand it to close: `gates/close.sh <slug> shipped "<reason>"`. It re-checks
+5. Before close, read [docs/memory-merge.md](../../docs/memory-merge.md) and
+   apply its complete merge procedure (AGENTS.md rule 4). Then run
+   `gates/close.sh <slug> shipped "<reason>"`. It re-checks
    the ship approval, the delivery record, and the verification (a new gap
    needs the human's `--accept-gap` again). `scratch/` stays until then —
    the pruning happens at close, and anything evidence.md, delivery.md, or a
