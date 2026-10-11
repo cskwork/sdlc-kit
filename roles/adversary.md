@@ -75,7 +75,7 @@ adversarial diff pass still follows all three lenses on the same final source.
 - <objection>; evidence: <file:line / quote>
 ### Non-blocking (flag to human at gate)
 - <concern>
-### Checked and clean
+### Checked and clean   (one line per area, no narrative)
 - <area>: <what you looked at>
 ### Per changed file   (diffs only)
 | File | Severity | Finding |
