@@ -5,34 +5,22 @@ description: "Gated SDLC loop with human approvals, for building features and fi
 
 # sdlc-kit router
 
-One loop, six stages, one artifact per stage, and a gate between stages:
-human at intent, spec, and ship; tiered at plan; `lazymode:` in
-`.sdlc/config.md` can waive human gates (AGENTS.md rule 3).
-This file routes requests. `AGENTS.md` in this directory is the full contract
-— gates, authority, memory, fresh-context review, proof. Read it completely
-before the first stage of a session, then return here.
+This file routes requests. Read this kit's `AGENTS.md` completely before the
+first stage of a session: it owns gates, authority, memory, review and proof.
 
 ## When this skill runs
 
-In a project with `.sdlc/` — in the changed files' directory or any directory
-above it (AGENTS.md "Monorepos") — any request that CHANGES the product runs through
-this loop — "add a filter to the report", "fix the login redirect", "make the
-export faster". No SDLC vocabulary is required; the words the human used are
-not the trigger, the change is.
-
-Read-only requests do NOT start the loop: explaining how something works,
-answering a question, reading logs, reviewing or auditing code without
-changing it. Answer those directly. If the answer turns into "…and here is
-what I would change", that is where stage 1 starts — say so, then start it.
-
-Specialist agents and project-local skills still do the implementation work;
-they do it under this contract (gates, artifacts, memory), not beside it.
+A requested product change in a directory with `.sdlc/`, or below one, runs
+this loop (AGENTS.md "Monorepos"); no SDLC wording is required. Read-only
+explanations, log reads, reviews and audits run directly. Proposing a patch
+alone does not authorize implementation: start stage 1 when the human requests
+the change. Project specialists implement under the same contract.
 
 ## Route by request
 
 | Request looks like | Do |
 |---|---|
-| any feature or change request, however worded — a fix whose cause is already known included | New slug. Read `skills/1-intent/SKILL.md`. Small and well understood → compact route (one work artifact: intent → build → ship); anything ambiguous, broad, or risky → full route; oversized → map first. |
+| a feature/change request, including a fix with a known cause | New slug. Read `skills/1-intent/SKILL.md` for compact/full eligibility and mapping oversized work. |
 | "explain X" / "why does Y happen" / read-only audit | Answer it. No slug, no artifacts, no gates. Propose stage 1 only if the human wants the change made. |
 | ticket too big or foggy for one intent pass | `map.md` in the same slug dir first (skills/1-intent "Chart a map first"); one Unknown per session, six sessions max. |
 | "continue <slug>" / "what's next" | Run `gates/status.sh <slug>` from the project root. Its `next →` line names the stage skill or gate command. |
