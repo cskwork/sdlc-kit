@@ -1,9 +1,9 @@
 # Harvest: <feature slug>
 
-<!-- Mid-loop staging for shared memory: one line per candidate, merged into
-     memory/ at close and then deleted — AGENTS.md rule 4 says what goes
-     where, and what a stale merge holds back. close.sh blocks while this
-     file exists. -->
+<!-- Mid-loop staging for shared memory: one line per candidate. AGENTS.md
+     rule 4 controls read/write authority. Before a close or idle-harvest
+     merge, read docs/memory-merge.md (kit-relative) completely; close.sh
+     blocks on leftovers. Keep merge reference in the kit, not this artifact. -->
 
 ## Area candidates
 <!-- - [area: <menu path>] rule new | P<n> changed | P<n> retired: <rule, one plain sentence> — evidence: source · [verified: how — YYYY-MM-DD] · why, if retired
@@ -18,8 +18,8 @@
 
 ## Domain candidates
 <!-- - fact / term / constraint that spans areas — [verified: how — YYYY-MM-DD]
-     Contradicts an existing DOMAIN.md entry? Add `supersedes: <old line>` —
-     the close merge REPLACES the old entry; recency wins, never keep both. -->
+     Contradicts an existing DOMAIN.md entry? Add `supersedes: <old line>`;
+     reconciliation follows docs/memory-merge.md (kit-relative). -->
 
 ## Lesson candidates
 <!-- - [tags] the trap and the correct move; add `promote: skills/<n>` when a
