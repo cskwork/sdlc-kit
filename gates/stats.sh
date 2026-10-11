@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # stats.sh [--all] — measurement: time per stage and approval counts, read
-# entirely from the on-disk approval records (this script calls no git; the
-# records are gitignored and git could not see them anyway). Leading
+# entirely from the on-disk records — approvals, the last verify receipt and
+# CLOSED (this script calls no git; the records are gitignored and git could
+# not see them anyway). Rows run in time order, so a re-approval shows where
+# it happened instead of as a negative interval. Leading
 # indicators per the AI-native SDLC playbook. Default output is BOUNDED:
 # open features + the 20 most recently closed. --all reads every archived
 # feature, so output grows with the archive — run it deliberately, not from
@@ -28,33 +30,54 @@ list_dirs() {
   fi
 }
 
-echo "feature            stage    approved_at            +hours_since_prev  mode"
+# field <file> <key> → the first "<key>: " value's first word, or nothing
+field() { awk -v k="$2: " 'index($0, k) == 1 { split(substr($0, length(k) + 1), w, " "); print w[1]; exit }' "$1"; }
+
+echo "feature            stage    at                     +hours_since_prev  mode"
 while IFS= read -r dir; do
   [ -n "$dir" ] && [ -d "$dir" ] || continue
   slug=$(basename "$dir")
-  prev=""
+  rows=""
+  # row <stage> <at> <mode>: a malformed or missing timestamp is skipped, never
+  # fatal — one bad record must not kill the whole report under pipefail
+  row() {
+    local ep
+    [ -n "$2" ] || return 0
+    ep=$(to_epoch "$2" 2>/dev/null) || return 0
+    rows="${rows}${ep} $1 $2 $3
+"
+  }
   for stage in intent spec plan ship; do
     rec=".sdlc/approvals/${slug}.${stage}.approval"
     [ -f "$rec" ] || rec="${dir}approvals/${slug}.${stage}.approval"
     [ -f "$rec" ] || continue
-    # || true + skip: a malformed record (no approved_at) must not kill the
-    # whole report under pipefail
-    at=$(grep '^approved_at: ' "$rec" | awk '{print $2}' || true)
-    [ -n "$at" ] || continue
     # every agent-run mode must read as itself — a lazy approval reported as
     # "direct" would disguise an autonomous loop as four human decisions
-    mode=$(awk -F': ' '/^mode: /{print $2; exit}' "$rec" | awk '{print $1}')
-    [ -n "$mode" ] || mode="direct"
-    delta="—"
-    if [ -n "$prev" ]; then
-      delta=$(awk "BEGIN{printf \"%.1f\", ($(to_epoch "$at") - $prev)/3600}")
-    fi
-    printf "%-18s %-8s %-22s %-18s %s\n" "$slug" "$stage" "$at" "$delta" "$mode"
-    prev=$(to_epoch "$at")
+    mode=$(field "$rec" mode)
+    row "$stage" "$(field "$rec" approved_at)" "${mode:-direct}"
   done
+  # the last verify run splits plan→ship into building and reviewing; the
+  # receipt is rewritten on every run, so this is the final proof, not the first
+  rec="${dir}verify-receipt.md"
+  [ -f "$rec" ] && row proof "$(field "$rec" recorded_at)" "$(field "$rec" result)"
+  rec="${dir}CLOSED"
+  if [ -f "$rec" ]; then
+    mode=$(field "$rec" mode)
+    row close "$(field "$rec" closed_at)" "${mode:-direct}"
+  fi
+  prev=""
+  # time order; a tie keeps stage order (sort -s)
+  while read -r ep stage at mode; do
+    delta="—"
+    [ -n "$prev" ] && delta=$(awk "BEGIN{printf \"%.1f\", ($ep - $prev)/3600}")
+    printf "%-18s %-8s %-22s %-18s %s\n" "$slug" "$stage" "$at" "$delta" "$mode"
+    prev=$ep
+  done < <(printf '%s' "$rows" | sort -s -n -k1,1)
 done < <(list_dirs)
 
-narch=$(ls -1d .sdlc/archive/*/ 2>/dev/null | wc -l | tr -d ' ')
+# || true: a store with nothing archived yet has no archive dir, and ls's
+# failure must not end the report under pipefail
+narch=$( (ls -1d .sdlc/archive/*/ 2>/dev/null || true) | wc -l | tr -d ' ')
 if [ -z "$all" ] && [ "${narch:-0}" -gt "$recent" ]; then
   echo "(… showing the $recent most recently closed of $narch archived — stats.sh --all for everything)"
 fi
