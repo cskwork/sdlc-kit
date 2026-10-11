@@ -27,8 +27,9 @@ Stage names double as gate names: `gates/check-gate.sh spec .sdlc/work/<feature>
 - **Compact** — small and well understood. `intent.md` is the single work
   artifact and carries the files to change, the proof, the risk, the
   baseline, and the delivery target (templates/intent.md). Flow: intent (gate) → build → ship
-  → close. No spec, no plan, and none is ever demanded of it. Ship keeps its
-  full adversary review — the only review that diff gets. Criteria:
+  → close. No spec, no plan, and none is ever demanded of it. One fresh
+  reviewer covers all three verifier lenses and the complete adversarial
+  diff check on the final source (rules 5/6). Criteria:
   skills/1-intent.
 - **Full** — all six stages, for anything ambiguous, broad, or risky. Any
   doubt means full.
@@ -51,7 +52,8 @@ archives the feature to `.sdlc/archive/<slug>/`.
 1. **Read the stage skill file COMPLETELY before acting.** Resolve paths
    relative to this kit's directory. On Windows run `gates/*.sh` and
    `tools/*.sh` through Git Bash or WSL; `.sdlc/config.md` records a native
-   path as `kit_windows:` when one is needed.
+   path as `kit_windows:` when one is needed. Before the first Windows command,
+   run the actual-shell [preflight](docs/windows.md); reuse its proven context.
 2. **Check the gate first** for stages 2-4: `gates/check-gate.sh
    <prev-stage> <artifact>` from the project root (compact route: build
    checks the `intent` gate). Anything but a printed `GATE OPEN` — including
@@ -203,8 +205,13 @@ archives the feature to `.sdlc/archive/<slug>/`.
    the real commands in `.sdlc/config.md`.
 
    **Verification runs the real thing, through three lenses** — E2E, Side
-   effects, Intent match — each in its own fresh context, in parallel
-   (roles/verifier.md defines them), each requirement by variants with
+   effects, Intent match (roles/verifier.md defines them). Full route: three
+   fresh verifier contexts in parallel, plus a separate fresh adversary.
+   Approved compact Track: one fresh reviewer applies all three complete
+   lens sections, then roles/adversary.md's complete diff checklist once on
+   that same final source. It reports three lens VERDICT lines and the
+   adversary verdict; fewer delegates never means less coverage. No author
+   self-review substitutes for either route. Each requirement by variants with
    expectations written first, for every role and platform in scope, plus
    three **reach** scenarios per change — another caller (entry), an
    existing record (state), another surrounding condition (context) —
@@ -215,6 +222,12 @@ archives the feature to `.sdlc/archive/<slug>/`.
    only when the human accepts that gap explicitly. A finding from any lens
    enters the build fix loop (skills/4-build): three rounds, then the human
    at every lazymode (`tools/auto.sh` reports `fixloop.exhausted`).
+   Reuse current proof instead of rerunning unchanged commands or rewriting
+   reports. Record the reviewed source, recipe and upstream input identities
+   and reviewer provenance (roles/verifier.md). A source, recipe or upstream
+   review-input change invalidates reuse: run affected proof and repeat the
+   final diff review on the new source. This is an evidence rule, never a
+   source-digest cache or a replacement for live gate validation.
    A project that fills `.sdlc/verify.md` (templates/verify.md) gets a
    receipt from `tools/verify.sh run <slug>` that makes "this never ran" and
    "this was edited afterwards" detectable (docs/automation.md §4). It does
@@ -319,8 +332,11 @@ verification recipe, and handoff boundary: `docs/automation.md`.
 ## Greenfield vs brownfield
 
 Stage 1 records the classification in `intent.md`; downstream skills branch
-on it. Brownfield adds a researcher pass over existing code, a regression
-baseline captured before changes, and a "what stays untouched" spec section.
+on it. Brownfield adds evidence of existing callers and stored inputs before
+scope is frozen, a regression baseline before changes, and a "what stays
+untouched" section (compact: intent.md). Exact known compact probes may be
+conducted by the author; uncertain or broad areas need fresh research under
+stage 1. This changes research dispatch, never review independence.
 
 ## Running beside other AGENTS.md files, skills, and agents
 

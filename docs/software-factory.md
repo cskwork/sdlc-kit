@@ -21,6 +21,10 @@ are proven on the final source and its agreed delivery target is confirmed.
 Split an oversized request into independently useful outcomes in `map.md`;
 record dependencies there instead of creating parallel unfinished layers.
 Use the compact route when its existing criteria fit.
+Before scope and Track are frozen, establish current caller and saved-record
+compatibility evidence (stage 1). Judge boundedness by risk, affected surfaces
+and reversibility. Exact known compact probes may be run by the author;
+uncertain or broad behavior needs fresh research.
 
 ## Make the product runnable early
 
@@ -57,6 +61,12 @@ choose additional checks from the touched behavior and its reach:
 | Authentication or permissions | Intended role succeeds; wrong role is refused; protected data and state stay protected |
 | API, CLI, or job | Real invocation, exact values and exit/status behavior, invalid input, and affected callers |
 
+The Side effects lens owns input-adversary checks: domain-applicable missing,
+empty, null, wrong-type and unknown values, valid legacy shapes still accepted,
+invalid inputs safely refused without crash or partial writes. Use observed
+caller/record evidence and the domain contract to choose behavior, including
+any default; a missing example does not authorize a new required field.
+
 Choose the smallest existing solution that meets these expectations.
 Additional architecture, redesign, performance work, or unrelated cleanup
 needs a demonstrated requirement and authorization. Keep one author carrying
@@ -68,7 +78,16 @@ reviews with bounded inputs. Stage names are not separate implementation jobs.
 Run narrow checks during each slice, then the configured full checks on the
 final source. The independent verifier drives the real path and its failure
 cases; the adversary reviews that final diff. A later source or recipe edit
-requires fresh affected proof and, when configured, a new receipt before ship. Record the source
+or upstream review-input change requires fresh affected proof and final diff
+review and, when configured, a new receipt before ship. Full uses three fresh
+verifiers in parallel plus a separate adversary; approved compact uses one
+fresh reviewer for all three complete lenses followed by the complete final
+diff check on the same source. Keep three lens VERDICT lines and the adversary
+verdict. Inspect and reuse current evidence rather than rerunning unchanged
+commands or dispatching another compact diff review. Record actual reviewer
+and tool IDs where available, otherwise explicit unknowns, exact input paths,
+commands/exits/logs and deciding lines. Provenance is not authentication.
+Record the source
 identity beside the deciding outputs in evidence.md, and confirm the delivered
 source in delivery.md. A successful command alone does not prove its expected
 value or resulting state.
@@ -89,7 +108,8 @@ python tests/test_runner.py
 bash tests/factory-e2e.sh
 ```
 
-On Windows, run these commands in Git Bash; `selftest.sh` also requires native symbolic-link creation permission and the Git/MSYS settings in [.github/workflows/selftest.yml](../.github/workflows/selftest.yml).
+On Windows, first run the [actual-shell preflight](windows.md), then these
+commands in that Git Bash context; `selftest.sh` also requires native symbolic-link creation permission and the Git/MSYS settings in [.github/workflows/selftest.yml](../.github/workflows/selftest.yml).
 
 `selftest.sh` checks gate and artifact mechanics. `test_runner.py` checks
 bounded command execution and cleanup. `factory-e2e.sh` exercises a deterministic
