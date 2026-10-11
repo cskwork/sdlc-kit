@@ -58,15 +58,13 @@ Fill `templates/spec.md`. Rules:
 
 ## Adversarial verification (automated, before the human)
 
-This review runs at every lazymode — lazymode changes who decides at the
-gate, not whether the spec is reviewed (AGENTS.md rule 3). Include
-`tools/tripwire.sh` output over the draft as evidence.
+At every lazymode, include `tools/tripwire.sh` output over the draft as evidence
+and dispatch the review below (AGENTS.md rule 3).
 
 Dispatch a fresh-context adversary (`roles/adversary.md`) with ONLY:
 intent.md, draft spec.md, `.sdlc/memory/POLICY.md` if present, the area
-pages summary.md names, and the researcher report if any. It checks intent mismatch, wrong data shapes,
-missing edge cases, scope creep, untestable requirements, and policy
-violations.
+pages summary.md names, and the researcher report if any. Apply the role's
+complete spec checklist.
 
 - Fix what it catches; note each objection + resolution in spec.md's
   **Adversarial review** section (proof for the human that review happened).

@@ -22,8 +22,9 @@ Heartbeat throughout: AGENTS.md rule 9.
    (AGENTS.md rule 4).
    On resume, compare the current branch, source changes, and runtime with the
    recorded state before continuing. Re-run the smallest affected smoke check
-   when they differ; check completed external effects before retrying them
-   ([resume procedure](../../docs/software-factory.md#make-the-product-runnable-early)).
+   when they differ; check completed external effects before retrying them.
+   If recovering attempt counts or external effects, read the
+   [checkpoint procedure](../../docs/automation.md#6-checkpoint-retries-pause-and-resume).
 3. **Brownfield: capture the regression baseline before editing.** Run the
    baseline commands from plan.md (compact route: intent.md's Baseline line)
    and save output to
@@ -47,18 +48,18 @@ Heartbeat throughout: AGENTS.md rule 9.
   Do not edit plan.md to match reality: the plan gate binds its content, so an
   edit closes the gate and check-gate.sh will say so (AGENTS.md rule 2). Small
   deviations belong in deviations.md. For a
-  structural deviation such as different files or a different approach, STOP,
-  tell the human, and re-gate the plan. When the deviation's root cause is a
+  structural deviation such as different files or a different approach,
+  re-gate the plan under AGENTS.md rule 3 before continuing. When its cause is a
   factual error in spec.md (wrong data shape, wrong AS-IS claim), re-gate the
-  spec first — with the evidence — then the plan: an artifact that no longer
-  says what the human approved needs a fresh ask (AGENTS.md rule 3).
-- **Deviation cap: five small deviations per feature.** The sixth means the
-  plan no longer describes the work: re-gate the plan (counts against the
-  re-gate cap below) or STOP. Small deviations are individually cheap and
-  collectively a rewrite.
-- **Compact route:** any structural surprise upgrades to full — STOP, rewrite
-  the Track line, re-approve intent (the approval froze the compact verdict),
-  and write spec.md (skills/1-intent).
+  spec first — with the evidence — then the plan. Re-review changed artifacts;
+  rule 3 decides whether approval is human or waived, and authority still bounds scope.
+- **Deviation cap: five small deviations per feature.** On the sixth,
+  full-route work re-gates the plan (counts against the re-gate cap below)
+  or STOPs. Compact work STOPs and asks the human to reassess intent/route,
+  at every lazymode. Small deviations are individually cheap and collectively a rewrite.
+- **Compact route:** a surprise breaking compact eligibility upgrades to full
+  (skills/1-intent "Which route"). STOP, rewrite Track, re-approve intent,
+  then write spec.md. Small deviations preserving every criterion stay compact.
 - **Re-gate cap: two per stage, per feature.** A third re-gate request for
   the same stage means stage 1 got the facts wrong, not that the plan needs
   another pass. STOP, show the human the trail (deviations.md + the
@@ -120,20 +121,11 @@ contract) — with intent.md and its `Refs:` origin, plan.md and spec.md (compac
 route: intent.md only), the changed-file list, `.sdlc/config.md`, and
 `baseline.txt` when it exists:
 
-1. **E2E** — the change works through the real interface; a bug fix carries
-   its proof chain (AGENTS.md rule 6).
-2. **Side effects** — AS-IS → TO-BE beyond the requirement: baseline, untouched
-   items, data consistency across every producer and consumer of the shapes
-   the diff touches.
-3. **Intent match** — the build read back against the ticket or 기획서 the
-   request came from: covered, missing, beyond.
-
-You do not verify your own work in your own context; a harness that cannot
-give a fresh context records the gap in evidence.md ("no independent
-verification available: <reason>"). A lens with no environment reports NOT
-VERIFIED, never a pass. With a `.sdlc/verify.md` recipe the E2E lens runs
+Name the lenses **E2E**, **Side effects**, and **Intent match**; each applies
+its complete role section. AGENTS.md rules 5/6 govern independence, missing
+environments and proof. With a `.sdlc/verify.md` recipe the E2E lens runs
 `tools/verify.sh run <slug>`; quote the receipt's deciding lines in evidence.md
-and re-run it after any code or recipe change (it goes `stale`).
+and re-run after any code or recipe change.
 
 A finding from any lens — a failing flow, a data skew, a missing origin
 detail — enters the **fix loop**:

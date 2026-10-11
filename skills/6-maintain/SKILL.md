@@ -145,22 +145,14 @@ standing assignments — each has caught real errors:
 
 ## Route by size
 
-Incidents use the same two routes as everything else (AGENTS.md "Two routes,
-one contract"). There is no separate compressed loop.
-
-- **Compact route.** Use it when one cause is reproduced, the changed file
-  set is known, and affected behavior is limited. Create a new
-  `.sdlc/work/<fix-slug>/` directory so prior approvals stay intact, and
-  write ONE work artifact: `intent.md` with `- Track: compact`, carrying the
-  reproduction and diagnosis as verified evidence plus the Compact route
-  section (Files · Proof · Risk · Baseline · Delivery target), and a
-  summary.md naming the product area (skills/1-intent "Write the
-  artifact"). Pass the intent gate,
-  then build and verify under skill 4, then ship. No spec.md, no plan.md, and
-  nothing downstream asks for one.
-- **Full route.** Use it for everything else — an unclear cause, a wide blast
-  radius, or risky ground. Create `.sdlc/work/<new-slug>/intent.md` from
-  `templates/intent.md` with `- Track: full` and run Stage 1.
+Read skills/1-intent "Which route: compact or full" and apply every criterion
+under AGENTS.md "Two routes, one contract". One reproduced cause, known files
+and limited affected behavior may qualify for compact; otherwise use full.
+Create a new fix-slug so prior approvals stay intact. Write intent.md from
+templates/intent.md with verified reproduction/diagnosis evidence and the chosen Track,
+plus summary.md naming the product area (skills/1-intent "Write the artifact").
+Compact fills all six Compact route fields, passes intent, then build/verify
+and ship; full runs Stage 1. No compact spec or plan is required.
 
 **Recurrence cap: three fix loops for one symptom.** Before opening a
 fix-slug, grep the symptom's tags in INDEX.md AND open features' harvests
