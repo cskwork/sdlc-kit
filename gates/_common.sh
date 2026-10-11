@@ -380,13 +380,8 @@ sdlc__tree_entries_unsorted() { # <commit>; ls-tree lines on stdin — helper of
   return $rc
 }
 sdlc_entries_digest() { sdlc_sha256_stdin; }           # entry lines on stdin
-# close.sh sets this to the digest sdlc_source_state has just computed, so its
-# verification check does not walk the whole source a second time. Cleared on
-# every load: a value inherited from the environment is never trusted.
-SDLC_SOURCE_DIGEST_NOW=""
 sdlc_source_digest() { # → digest of the current snapshot; non-zero when it could not be taken
   local s
-  if [ -n "$SDLC_SOURCE_DIGEST_NOW" ]; then printf '%s\n' "$SDLC_SOURCE_DIGEST_NOW"; return 0; fi
   s=$(sdlc_source_snapshot) || return 1
   printf '%s\n' "$s" | sdlc_sha256_stdin
 }

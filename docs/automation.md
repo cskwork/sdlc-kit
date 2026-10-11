@@ -448,7 +448,9 @@ again before `check` confirms one:
 - the **complete ship gate**, by running `gates/check-gate.sh ship` itself — the
   same program, the same words. An `evidence.md` edited after approval, a stale
   upstream, source drift: the push refuses and quotes the gate.
-- the **verification**: a configured recipe must read `ok`.
+- the **verification**: a configured recipe must read `ok`, or `blocked` with
+  the same gap the human explicitly accepted at ship (§4). A different gap
+  requires new acceptance; other states are fixed, never accepted.
 - **authority**: `--authorized` is required, *and* `intent.md`'s
   `- Scope authorization:` must actually name publishing a branch (push, PR, MR,
   review branch). An agent typing a flag does not authorize an external effect
