@@ -540,13 +540,21 @@ sdlc_verify_coverage() { # <slug>
 # (sdlc_verify_baseline_issue). One for another recipe, or at a base no longer
 # in HEAD's history, is ignored: it is not about this change.
 sdlc_verify_baseline_usable() { # <slug> → 0 when a baseline exists for THIS recipe and base
-  local b bsha; b=$(sdlc_verify_baseline "$1")
+  local b bsha id osha log; b=$(sdlc_verify_baseline "$1")
   [ -f "$b" ] || return 1
   [ "$(sdlc_field "$b" baseline_schema || true)" = "sdlc-kit/verify-baseline@1" ] || return 1
   [ "$(sdlc_field "$b" recipe_digest || true)" = "$(sdlc_verify_recipe_digest)" ] || return 1
   [ "$(sdlc_field "$b" feature_recipe_digest || true)" = "$(sdlc_verify_feature_recipe_digest "$1")" ] || return 1
   bsha=$(sdlc_field "$b" base_sha || true)
   [ -n "$bsha" ] && git merge-base --is-ancestor "$bsha" HEAD 2>/dev/null || return 1
+  # Before-fix output is proof too: the recorded exit alone cannot replace it.
+  while IFS='	' read -r id osha log; do
+    [ -n "$id" ] || continue
+    [ -n "$osha" ] && [ -f "$log" ] || return 1
+    [ "$(sdlc_sha256_file "$log" 2>/dev/null || true)" = "$osha" ] || return 1
+  done <<EOF
+$(awk -F' *\\| *' 'index($0, "check: ") == 1 { print $1 "\t" $6 "\t" $7 }' "$b")
+EOF
   return 0
 }
 sdlc_verify_baseline_label() { # <slug> → "<base ref> @ <sha8>" of the recorded baseline

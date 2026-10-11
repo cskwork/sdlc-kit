@@ -326,14 +326,12 @@ def _kill_tree(pid, sig):
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return rc == 0
     try:
-        os.killpg(os.getpgid(pid), sig)
+        # _spawn starts a new session: its PID is the recorded PGID, even after
+        # the leader exits. Looking it up through the dead leader loses children.
+        os.killpg(pid, sig)
         return True
-    except (ProcessLookupError, PermissionError, OSError):
-        try:
-            os.kill(pid, sig)
-            return True
-        except OSError:
-            return False
+    except OSError:
+        return False
 
 
 def _group_alive(pid):
@@ -344,14 +342,12 @@ def _group_alive(pid):
     if WINDOWS:
         return _win_alive(pid)
     try:
-        os.killpg(os.getpgid(pid), 0)
+        os.killpg(pid, 0)
         return True
-    except (ProcessLookupError, PermissionError, OSError):
-        try:
-            os.kill(pid, 0)
-            return True
-        except OSError:
-            return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
 
 
 def _stop(p):
@@ -360,6 +356,10 @@ def _stop(p):
     try:
         p.wait(timeout=5)
     except subprocess.TimeoutExpired:
+        pass
+    # Waiting for the leader is insufficient: a child may ignore TERM even
+    # though the leader has exited. Escalate the surviving group as well.
+    if _group_alive(p.pid):
         _kill_tree(p.pid, SIGKILL)
         try:
             p.wait(timeout=5)

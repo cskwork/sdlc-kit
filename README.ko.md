@@ -314,6 +314,9 @@ tools/kb.sh index|show|search|list|harvest   # 기록 다시 읽기
 
 전체 계약, 구동·재개 절차, Symphony 예시: [`docs/automation.md`](docs/automation.md).
 
+전달 가능한 크기로 작업 나누기, 초기에 실행 증명하기, 변경 범위에 맞는 품질
+검사와 효율적인 독립 리뷰는 [소프트웨어 팩토리 가이드](docs/software-factory.md)를 참고하세요.
+
 ## 복잡한 코드베이스에서도
 
 sdlc-kit은 프로세스 계층이지 프로젝트 규칙의 대체물이 아닙니다.
@@ -359,6 +362,7 @@ gates/           approve · check-gate · close · status · stats · selftest (
 tools/           auto · verify (python3 필요) · handoff · kb · qa-mode · tripwire · refcheck · _run.py
 templates/       산출물, 메모리 페이지, 검증 레시피 (intent, spec, plan, evidence, area, lesson, …)
 docs/            index.html (EN/KO 사이트) · automation.md (기계 계약) · jev-qa.md
+tests/           실행 시간 제한 테스트 · 실제 CLI 개발 수명주기 E2E
 log/             릴리스 노트
 .gitattributes   LF 줄 끝 고정, Windows 클론에서도 스크립트가 동작
 ```
@@ -366,10 +370,18 @@ log/             릴리스 노트
 ## 킷 검증
 
 ```bash
-./gates/selftest.sh   # 몇 초
+bash gates/selftest.sh
+python tests/test_runner.py
+bash tests/factory-e2e.sh
 ```
 
-대부분이 지침 문서인 킷이라 스모크 테스트 하나만 둡니다. 모든 스크립트가 문법 오류 없이 LF로 저장돼 있는지, 모든 SKILL.md의 frontmatter가 올바른지, 게이트가 승인된 바이트에서만 열리는지, lazymode가 설정 레벨을 넘지 않는지, `dead-end`에는 교훈이, `shipped`에는 확인된 전달이 필요한지, 지식이 제 제품 영역에 정리되는지, 검증 영수증이 ship을 막는지 확인합니다. CI는 PR과 수동 실행 때 Ubuntu, macOS, Windows(Git Bash)에서 돌립니다.
+selftest는 스크립트 문법, LF 줄 끝, 스킬 frontmatter, 승인 결합, lazymode,
+종료 조건, 지식 기록, 검증 영수증을 확인합니다. CI는 이 selftest를 Ubuntu,
+macOS, Windows(Git Bash)에서 실행합니다. Python 3가 있으면 runner 테스트로
+실행 시간 제한과 정리를 확인하고, factory E2E로 실제 작업 CLI의 기능 추가,
+버그 회귀, 검증, 로컬 리뷰 브랜치 전달까지 실행합니다. 이는 결정적 하네스
+검사이며 에이전트 품질 점수나 제품의 모든 동작에 대한 증명은 아닙니다.
+자세한 구분은 [가이드](docs/software-factory.md#check-the-kit-separately-from-an-agents-performance)를 참고하세요.
 
 ## 이것이 아닌 것
 
