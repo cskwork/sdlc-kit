@@ -171,6 +171,8 @@ snapshotted`; live source unreachable → say so, the snapshot stands.
 
 Record every check as **command or tool · environment · scenario · observed
 result** (deciding lines verbatim; bulk into `.sdlc/work/<slug>/scratch/`).
+A current receipt stands for the recipe checks it covers: cite it once, and
+list a recipe check alone only when it failed or you read its log.
 Include report provenance — every item of the template's Provenance,
 Inputs/source and Evidence lines, with actual IDs when exposed. An
 unavailable identifier is `unknown — <why>`; never fabricate an ID or claim a
@@ -188,8 +190,8 @@ call, recorded in evidence.md.
 ### <E2E | Side effects | Intent match>   (fill your lens's lines)
 - Provenance: reviewer ID <actual ID | unknown — reason>; context ID <actual ID | unknown — reason>; tool calls <actual IDs | unknown — reason>; independent of implementer <observed relationship | unknown>
 - Inputs/source: <revision + current tree identity>; recipe <identity>; upstream <identities>; input paths <exact paths>
-- Evidence: executed <commands, exit codes, log paths, deciding lines>; independently inspected <current logs/receipts, or none>
-- Ran: <command> → <verdict line(s)> · receipt: <VERIFY line · coverage line>
+- Evidence: executed <commands beyond the receipt, exit codes, log paths, deciding lines>; independently inspected <current logs/receipts, or none>
+- Ran: receipt <path · recorded_at · VERIFY line · coverage line> · <other command> → <verdict line(s)>
 - Failures: pre-existing <ids> at <base ref @ sha> | none · regressions <ids> | none
 - Changed files: <path> → <R/scenario> | no behavior: <reason>   (one per file)
 - E2E: <command/tool> · <environment> · <scenario> → <observed>

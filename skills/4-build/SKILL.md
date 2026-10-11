@@ -122,6 +122,10 @@ With a `.sdlc/verify.md` recipe the E2E lens runs `tools/verify.sh run <slug>`
 unless rule 6's proof reuse applies, inspects deciding logs and
 expectations itself, and evidence.md quotes the receipt's deciding lines.
 
+While reviewers run, draft what does not wait on their reports — qa-guide.md,
+harvest.md, and evidence.md outside Verification and Adversarial code review —
+so ship adds the reports and approves. A finding or gap revises the drafts.
+
 A finding from any lens — a failing flow, a data skew, a missing origin
 detail — enters the **fix loop**:
 
