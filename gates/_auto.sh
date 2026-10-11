@@ -703,7 +703,7 @@ EOF
 #   unconfigured  — no .sdlc/verify.md in this project
 sdlc_verify_state() { # <slug>
   local slug="$1" rec cur profile before after issue n conf run line id kind rc csha osha log label want flag
-  local all cov unc weak gapl pre="" detail rf
+  local all cov unc weak gapl pre="" pre_ran="" detail rf
   [ -f "$(sdlc_verify_recipe)" ] || { echo "unconfigured|no .sdlc/verify.md (templates/verify.md) — runtime proof is not machine-checked here"; return 0; }
   issue=$(sdlc_verify_recipe_issue "$slug")
   [ -z "$issue" ] || { echo "recipe|the verification recipe is not usable: ${issue#* } — fix it, then re-run tools/verify.sh run $slug"; return 0; }
@@ -798,6 +798,7 @@ EOF
     # a failure passes only as pre-existing, re-derived from the baseline: the
     # receipt's own label is never enough
     if [ "$rc" != 0 ]; then
+      pre_ran=1
       if sdlc_verify_preexisting_ok "$slug" "$id" "$kind" "$csha" "$flag" "$rc"; then
         pre="$pre${pre:+, }$id"
       elif [ "$label" = pre-existing ]; then
@@ -812,9 +813,10 @@ EOF
   # without git the source snapshot is empty: every receipt would look current
   if ! git rev-parse --git-dir >/dev/null 2>&1; then
     echo "blocked|not a git repository: the receipt cannot bind the source it ran over (every snapshot looks the same), so nothing shows these results are about the code on disk"; return 0; fi
-  # Baseline and pre-existing checks invoke git diff, whose clean filters may
-  # write source. Hash again before any strict gap can be accepted at ship/close.
-  if [ "$after" != "$(sdlc_source_digest 2>/dev/null || echo unbound)" ]; then
+  # Pre-existing checks invoke git diff, whose clean filters may write source.
+  # Hash again before any strict gap can be accepted at ship/close. The
+  # baseline issue check ran before `cur` was taken, so `cur` already covers it.
+  if [ -n "$pre_ran" ] && [ "$after" != "$(sdlc_source_digest 2>/dev/null || echo unbound)" ]; then
     echo "stale|the source changed after the receipt was recorded — re-run tools/verify.sh run $slug"; return 0; fi
   if [ "$profile" = strict ]; then
     if [ "$(sdlc_field "$rec" runtime_evidence || true)" != yes ]; then
