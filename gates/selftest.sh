@@ -37,6 +37,29 @@ for p in "$kit"/SKILL.md "$kit"/skills/*/SKILL.md; do
 done
 echo "ok: SKILL.md frontmatter"
 
+# 2b. prompt load only grows on purpose: every prompt a stage or role loads has
+#     a word ceiling here, so an addition shows in the diff that raises it
+#     (`wc -w`, the count the v0.26.0 prompt reduction was measured in)
+budget='628 SKILL.md
+3413 AGENTS.md
+2335 skills/1-intent/SKILL.md
+663 skills/2-spec/SKILL.md
+901 skills/3-plan/SKILL.md
+1594 skills/4-build/SKILL.md
+1903 skills/5-ship/SKILL.md
+1816 skills/6-maintain/SKILL.md
+818 roles/adversary.md
+440 roles/researcher.md
+2422 roles/verifier.md'
+for p in "$kit"/SKILL.md "$kit"/AGENTS.md "$kit"/skills/*/SKILL.md "$kit"/roles/*.md; do
+  rel=${p#"$kit"/}
+  max=$(printf '%s\n' "$budget" | awk -v f="$rel" '$2 == f { print $1 }')
+  [ -n "$max" ] || fail "no word budget for prompt $rel — add it to the budget in gates/selftest.sh"
+  n=$(wc -w < "$p" | tr -d ' ')
+  [ "$n" -le "$max" ] || fail "$rel has $n words, over its budget of $max — cut elsewhere, or raise the budget in gates/selftest.sh and say why"
+done
+echo "ok: prompt files within their word budgets"
+
 # 3. a gate opens only for the approved bytes, and an upstream edit closes the gate below it
 "$kit/init.sh" . >/dev/null
 d=.sdlc/work/feat-a; mkdir -p "$d"; a=$d/intent.md; s=$d/spec.md
