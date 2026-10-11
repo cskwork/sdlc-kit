@@ -30,9 +30,12 @@ Heartbeat throughout: AGENTS.md rule 9.
 ## Explore before asking questions
 
 Do not ask questions until you have evidence. Without evidence, the user cannot
-answer well and you cannot assess options. Once the request is clear, run
-fresh-context researchers under `roles/researcher.md`. Run independent probes
-in parallel, then start the interview:
+answer well and you cannot assess options. Before freezing scope or choosing
+compact, establish the probes below. For bounded work with exact known files,
+symbols and evidence, the author may run and cite them directly. Unknown,
+contradictory or broad behavior needs fresh-context research under
+`roles/researcher.md`; independent probes may run in parallel. Then interview
+only about decisions the evidence cannot answer:
 
 - **History** for brownfield work. Check whether this was tried before. Read
   reverts, related tickets, prior fixes, and why they failed in git history
@@ -44,6 +47,15 @@ in parallel, then start the interview:
   records the command and the hits, or `none found` with the command.
 - **Affected area**: entry points, data shapes, callers, side effects of the
   code the request touches.
+- **Input compatibility before scope.** Trace current callers and persisted
+  records through the real interface. Capture accepted legacy shapes and
+  domain meaning for missing, empty, null, wrong-type and unknown values;
+  distinguish valid old inputs from invalid ones using the existing contract
+  and observed behavior. Record source and exact output in Evidence, with
+  safe/redacted fixtures. An absent example is unknown, not permission to
+  require a field. Plan acceptance checks that preserve valid legacy inputs
+  and safely refuse invalid inputs without crashes or partial writes. A
+  newly narrowed contract needs explicit scope authorization (rule 3).
 - **Existing analogous flow**: before any option exists, find a flow the
   product ALREADY runs for the same kind of user-visible change the request
   describes — in every repository and tier the request crosses, not only the
@@ -202,6 +214,10 @@ Choose **compact** only when ALL hold:
   (AGENTS.md rule 3 "Autonomy is not authority"). A clean `tools/tripwire.sh`
   run does not establish this; reading the affected code does.
 
+Judge boundedness by behavior, affected surfaces, risk and reversibility,
+never line count or file count alone. Legacy compatibility evidence above
+must support that judgment before compact is selected.
+
 A single "maybe" means **full**. Ambiguity, breadth, and risk are exactly
 what the spec and plan gates exist for.
 
@@ -211,8 +227,9 @@ A compact intent.md replaces spec and plan with six fields
 
 Record the verdict in the `Track:` line with the reasons
 (`- Track: compact — two known files, existing test covers it`) BEFORE the
-intent gate; the approval freezes it. Ship keeps its full adversary review —
-the only review that diff gets.
+intent gate; the approval freezes it. One fresh compact reviewer covers the
+three complete verifier lenses, then the full adversarial diff checklist on
+the same final source (AGENTS.md rule 6); no new mode or independence waiver.
 
 **Upgrade:** a build surprise that breaks any compact criterion — unknown
 files or approach, broader risk, or an open question — requires full. Small

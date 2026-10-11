@@ -132,6 +132,7 @@ printf -- '- R1: the report lists overdue items first\n' > "$t/loose.md"
 out=$(bash "$kit/tools/tripwire.sh" "$t/loose.md") || true
 has "$out" "no trip-wire candidates" "an unrelated plan tripped a wire"
 echo "ok: contract tightening trips the plan gate"
+bash "$kit/tests/tripwire.sh"
 }
 
 # 7. verification: the receipt gates ship; a baseline separates pre-existing

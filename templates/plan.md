@@ -23,6 +23,9 @@ Policy: AGENTS.md rule 3.>
 file — with its OTHER producers and consumers, and what happens to records
 that predate the change.>
 - <shape> · written | read · also produced/consumed by: <list> · pre-existing records: <what happens>
+- Input compatibility: <stage 1 caller/record evidence; applicable missing,
+  empty, null, wrong-type and unknown values → valid legacy result or safe
+  invalid refusal; inapplicable case and domain reason>
 
 ## Reach   <!-- the E2E lens runs one scenario per axis (roles/verifier.md) -->
 <How else the changed behavior is met. Search every repository and tier that

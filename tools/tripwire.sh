@@ -14,17 +14,41 @@ plan="$1"
 # work, and matching "auth" in it would make every intent.md trip the security
 # wire. Only the LABEL is neutralized — the human's words after the colon are
 # scanned like any other text, and line numbers stay the file's own.
-scanfile="$plan"
-tmpscan=""
-if grep -qiE '^- *scope authorization:' "$plan" 2>/dev/null; then
-  tmpscan=$(mktemp) && trap 'rm -f "$tmpscan"' EXIT
-  sed 's/^\(- *[Ss]cope \)[Aa]uthorization:/\1mandate:/' "$plan" > "$tmpscan"
-  scanfile="$tmpscan"
-fi
+# Two exact neutral phrases caused confirmed false positives. Mask the bounded
+# word and standalone prohibition clause only, never a negated line or a quoted
+# policy being changed: other risky words still count. Clean clears nothing.
+scanfile=$(mktemp); trap 'rm -f "$scanfile"' EXIT
+awk '
+  BEGIN {
+    prohibition = "(^[[:space:]]*([-*+][[:space:]]+)?|[.;][[:space:]]+)do not access credentials([[:space:]]*[.;]|[[:space:]]*$)"
+  }
+  function mask(pattern) {
+    while (match(tolower($0), pattern))
+      $0 = substr($0, 1, RSTART-1) sprintf("%*s", RLENGTH, "") substr($0, RSTART+RLENGTH)
+  }
+  # A later or earlier clause may remove the boundary without repeating its
+  # security noun. Keep the noun when an override/access verb occurs anywhere
+  # outside the exact exclusion, including another line. Conservative lexical
+  # evidence only: an unrelated override may still require a real risk review.
+  NR==FNR {
+    mask(prohibition)
+    if (tolower($0) ~ /(^|[^[:alnum:]_])(remov|delet|discard|revok|waiv|undo|disregard|drop|ignor|overrid|replac|lift|allow|enabl|access|disabl|bypass|permit|grant|relax|unrestrict)[[:alpha:]]*([^[:alnum:]_]|$)/)
+      overriding = 1
+    next
+  }
+  {
+    mask("^- *scope authorization:")
+    mask("(^|[^[:alnum:]_])authorized([^[:alnum:]_]|$)")
+    if (!overriding) mask(prohibition)
+    print
+  }
+' "$plan" "$plan" > "$scanfile"
 hits=0
 scan() { # <label> <extended-regex>
   local m
-  m=$(grep -inE "$2" "$scanfile" | head -3 || true)
+  # Report the original words and line numbers, not the masked scan copy.
+  m=$(grep -inE "$2" "$scanfile" | head -3 |
+    awk -F: 'NR==FNR { lines[NR]=$0; next } { print $1 ":" lines[$1] }' "$plan" - || true)
   if [ -n "$m" ]; then
     hits=1
     echo "TRIP-WIRE? $1"

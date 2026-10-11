@@ -67,8 +67,9 @@ explicitly (see Evidence tracking below).
 1. Run the cheap probes in `probes.md` (same directory) that match the
    symptom BEFORE dispatching researcher fan-out. Probes cost seconds and
    set direction; fan-out is for breadth the probes cannot cover.
-2. Before forming a hypothesis or offering options, run fresh-context history
-   and feasibility research under skill 1. Check whether this failure was fixed
+2. Before forming a hypothesis or offering options, establish history and
+   feasibility evidence under skill 1; exact known bounded probes may be run
+   by the author, uncertainty or breadth requires fresh research. Check whether this failure was fixed
    or reverted before, why, and whether it can be reproduced here.
 3. Reproduce the issue first, as a failing test wherever one can reach the
    defect (AGENTS.md rule 6). Draft it in `scratch/` or a disposable
