@@ -33,7 +33,7 @@ It is adapted from [Anthropic's AI-Native SDLC playbook](https://claude.com/blog
 | Starts coding from the first request | Explores history, code, feasibility, and the live product first, including any flow that already makes the same change; asks only what it cannot check itself |
 | Treats the user's diagnosis as truth | Labels claims `[verified: evidence]` or `[assumed: reason]` |
 | Keeps the plan inside one chat | Writes `intent.md`, `spec.md`, `plan.md`, `evidence.md`, and `delivery.md` to a searchable record store (`tools/kb.sh`), outside the application's git history |
-| Author checks its own work | A fresh-context adversary attacks the spec, plan, and diff; a separate verifier checks the build end to end, for side effects, and against the ticket |
+| Author checks its own work | Fresh review checks E2E, side effects, intent match and the final diff: one combined reviewer for approved compact work; three parallel verifiers and a separate adversary for full work |
 | A green test suite stands in for every claim | Each claim carries its own proof: a test that failed before the fix, a pin for a refactor, a measurement for a number |
 | Approval is a chat message that disappears | Approval records name the stage, artifact, time, and mode, and stay on disk in `.sdlc/approvals/` |
 | Failed attempt becomes forgotten context | Lessons go to a bounded index, business rules to their product area's page, durable facts to `DOMAIN.md`; a recurring lesson is promoted, a project check first |
@@ -79,7 +79,7 @@ Not every ticket needs all six stages:
 
 | Route | When | Flow |
 |---|---|---|
-| Compact | Small and well understood; meets all [compact criteria](skills/1-intent/SKILL.md#which-route-compact-or-full) | `intent.md` is the only work artifact and carries files, proof, Reach, risk, baseline, and delivery target. Intent (gate) → build → ship; ship's adversary review is the diff's only review |
+| Compact | Bounded and well understood; meets all [compact criteria](skills/1-intent/SKILL.md#which-route-compact-or-full) | `intent.md` carries files, proof, Reach, risk, baseline, and delivery target. Intent (gate) → build → ship. One fresh reviewer covers all three lenses, then the complete final diff check once on the same source |
 | Full | Anything ambiguous, broad, or risky | All six stages |
 
 The `Track:` line in `intent.md` records the route; incidents use the same routes. Eligibility, upgrades and re-approval follow [stage 1](skills/1-intent/SKILL.md#which-route-compact-or-full); bounded deviations follow the [build rules](skills/4-build/SKILL.md#execute). A ticket too foggy to pin down starts with a **map** (`map.md`: destination · decided · unknown · out of scope) that resolves one unknown per session before `intent.md` is written.
@@ -87,6 +87,10 @@ The `Track:` line in `intent.md` records the route; incidents use the same route
 ## Quick start
 
 Requires `bash`, `git`, and coreutils, which macOS and Linux already have. On Windows, use **Git Bash** (bundled with [Git for Windows](https://gitforwindows.org/)) or WSL, and run every kit command there, including the ones your agent runs. PowerShell and cmd cannot execute the scripts.
+
+Before the first Windows command, run the [actual-shell preflight](docs/windows.md)
+for executable selection, paths with spaces, native Python and Git ownership.
+Use its proven shell context; repairs stay process-scoped to exact paths.
 
 ```bash
 # 1. Install once
@@ -216,7 +220,14 @@ One delegate carries the loop; subagents are dispatched only where they buy some
 
 ### Verification runs the real thing
 
-After build, three verifier lenses run in parallel, each in a fresh context:
+After build, full work uses three fresh verifiers in parallel and a separate
+fresh adversary. The approved compact Track uses one fresh reviewer for all
+three complete lenses below, followed by the complete adversarial diff check
+on the same final source. It still reports three lens `VERDICT:` lines and the
+adversary verdict; unchanged source, recipe and upstream inputs need no repeat
+dispatch or duplicate command run. Changes require fresh affected proof and
+final diff review. Record actual session/tool IDs when exposed (otherwise
+`unknown`), input/source identities, commands, exits, logs and deciding lines.
 
 | Lens | What it checks |
 |---|---|
@@ -225,6 +236,14 @@ After build, three verifier lenses run in parallel, each in a fresh context:
 | Intent match | The build read back against `origin.md`, the ticket or 기획서 snapshot the intent gate bound: covered, missing, and beyond, per success criterion |
 
 Each requirement runs happy, boundary, and negative cases, expectations written first, for every role and platform in scope. Three **reach** scenarios per change also vary how the change is met: another caller of the same behavior (entry), a record the change did not create (state), and a condition no requirement names (context). The plan lists every caller across the repositories and tiers that call the behavior; a change that refuses input those callers send today is a contract change and trips the plan gate.
+
+Before freezing scope, stage 1 captures actual callers and accepted stored
+inputs. The Side effects lens attacks applicable missing, empty, null,
+wrong-type and unknown values: valid legacy shapes remain accepted; invalid
+ones are safely refused without crashes or partial writes. Inapplicable cases
+need domain reasons. Compact eligibility depends on risk, affected surfaces
+and reversibility, never LOC. Exact known compact probes may be run by the
+author; uncertain or broad areas need fresh researchers. Review stays fresh.
 
 Three kinds of claim carry their own proof:
 

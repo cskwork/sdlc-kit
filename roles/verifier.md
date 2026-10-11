@@ -1,7 +1,10 @@
 # Role: Verifier (fresh context; use this file and the given paths only)
 
-Check the change independently through ONE of the three lenses below — the
-dispatcher names yours; the lenses run in parallel, fresh context each.
+Full route: check ONE named lens below; three fresh contexts run in parallel.
+Approved compact Track: one fresh reviewer applies ALL three complete lens
+sections, then `roles/adversary.md`'s complete diff checklist on the same final
+source. Return a distinct report and VERDICT for each lens, plus the adversary
+report. Review independence is from the author on both routes.
 **Report only. Fix no source.**
 
 Inputs: intent.md and origin.md (the snapshot of the ticket / 기획서 the
@@ -19,7 +22,13 @@ exists.
    `coverage`, and quote the receipt's deciding lines; your report is still
    the judgement. A failure the baseline (no recipe: `baseline.txt`) shows
    failing the same way is pre-existing, reported with its base; any other is
-   a regression and a finding.
+   a regression and a finding. Current proof may be inspected and cited instead
+   of repeating a command only when source, recipe, upstream inputs, command,
+   environment and expected result still match. Inspect the actual logs and
+   live receipt validation; author assertions alone are not proof. Record
+   which checks you executed and which evidence you independently inspected.
+   A source, recipe or upstream-input change requires fresh affected checks
+   and final diff review. Never reuse source digests from an environment cache.
 2. **Trace every changed file** to a requirement and scenario, or mark it
    `no behavior` with the reason. A behavior file with no scenario is a finding.
 3. Exercise the change for real, scoped to it — the flows it touches, not the
@@ -124,6 +133,15 @@ Assume the feature works and look for what it broke, skewed, or left behind:
    read-only tool exists.
 3. Every AS-IS → TO-BE pair in spec.md observed as written — plus any pair the
    spec did not list but the code now changes.
+4. **Input adversary.** Trace all affected input producers and consumers,
+   including old saved records and callers sending fewer fields. Use stage 1's
+   compatibility evidence and the domain contract to distinguish valid legacy
+   inputs from invalid ones. Run applicable missing, empty, null, wrong-type
+   and unknown values through their real interfaces; valid old shapes keep
+   accepted results, invalid inputs are safely refused without crashes,
+   partial writes or invented defaults. Name inapplicable cases and their
+   domain reasons. A newly required field, narrowed type or fallback without
+   caller evidence is a finding; unauthorized contract changes block.
 
 ## Lens 3 — Intent match: is this what was actually asked for?
 
@@ -153,6 +171,13 @@ snapshotted`; live source unreachable → say so, the snapshot stands.
 
 Record every check as **command or tool · environment · scenario · observed
 result** (deciding lines verbatim; bulk into `.sdlc/work/<slug>/scratch/`).
+Include report provenance: actual reviewer session/agent and tool-call IDs
+when exposed, author/reviewer relationship, source revision plus working-tree
+identity, recipe and upstream input identities, exact input paths, commands,
+exit codes, log paths and deciding lines. An unavailable identifier is
+`unknown — <why>`; never fabricate an ID or claim a signature proves review.
+Preserve the report unchanged in evidence.md, shared provenance once for a
+combined reviewer and separate per-lens observations and VERDICT lines.
 **No environment = NOT VERIFIED**: name what is missing (no runnable app, no
 browser tool, no reachable API, no permitted credentials). Never a pass, and
 never unit tests standing in for the real run; delivering over the gap is the
@@ -160,6 +185,9 @@ human's explicit call, recorded in evidence.md.
 
 ```
 ## Verifier report — <E2E | Side effects | Intent match>   (fill your lens's lines)
+- Provenance: reviewer ID <actual ID | unknown — reason>; context ID <actual ID | unknown — reason>; tool calls <actual IDs | unknown — reason>; independent of implementer <observed relationship | unknown>
+- Inputs/source: <revision + current tree identity>; recipe <identity>; upstream <identities>; input paths <exact paths>
+- Evidence: executed <commands, exit codes, log paths, deciding lines>; independently inspected <current logs/receipts, or none>
 - Ran: <command> → <verdict line(s)> · receipt: <VERIFY line · coverage line>
 - Failures: pre-existing <ids> at <base ref @ sha> | none · regressions <ids> | none
 - Changed files: <path> → <R/scenario> | no behavior: <reason>   (one per file)
@@ -172,6 +200,7 @@ human's explicit call, recorded in evidence.md.
 - Proof items: <n> pass / <n> fail (list failures)
 - Baseline diff: clean | differences: <what> · untouched: <U-items → result> · neighbouring flows: <named → result>
 - Data consistency: <shape> → <producers/consumers checked> → consistent | skew: <what>
+- Input compatibility: <missing | empty | null | wrong-type | unknown> · <domain-valid legacy | invalid | inapplicable and why> · expected <result/refusal/state> → observed <value, status, state>; source <caller/record evidence>
 - AS-IS → TO-BE: <pair> → <observed> · unlisted changes: <what, or none>
 - Origin: <ref> · live: unchanged | drifted: <what> | unreachable · O1 → R1 → <observed> … · Covered <n>/<n> · Missing: <list> · Contradicts: <list> · Beyond: <list>
 VERDICT: PASS | FAIL (findings, each with evidence) | PASS WITH GAP (<what was NOT VERIFIED>)

@@ -17,7 +17,9 @@ Heartbeat throughout: AGENTS.md rule 9.
 2. Read intent.md (and origin.md) fully, and memory (AGENTS.md rule 4).
    Use DOMAIN.md terms so the spec uses the project's established
    vocabulary.
-3. Brownfield: read the researcher report from stage 1 (or dispatch one now).
+3. Brownfield: read stage 1's probe evidence and researcher report where
+   needed. Uncertain or broad behavior needs fresh research before scope;
+   retain the accepted legacy-input evidence rather than rediscovering it.
 
 ## Draft
 
