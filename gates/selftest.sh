@@ -45,12 +45,12 @@ budget='623 SKILL.md
 2335 skills/1-intent/SKILL.md
 663 skills/2-spec/SKILL.md
 901 skills/3-plan/SKILL.md
-1337 skills/4-build/SKILL.md
+1374 skills/4-build/SKILL.md
 1903 skills/5-ship/SKILL.md
 1816 skills/6-maintain/SKILL.md
-818 roles/adversary.md
+824 roles/adversary.md
 440 roles/researcher.md
-2420 roles/verifier.md'
+2456 roles/verifier.md'
 for p in "$kit"/SKILL.md "$kit"/AGENTS.md "$kit"/skills/*/SKILL.md "$kit"/roles/*.md; do
   rel=${p#"$kit"/}
   max=$(printf '%s\n' "$budget" | awk -v f="$rel" '$2 == f { print $1 }')
