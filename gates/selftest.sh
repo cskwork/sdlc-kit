@@ -595,9 +595,34 @@ printf 'qa_mode: robot\n' > .sdlc/config.md
 echo "ok: qa mode switch is remembered, overridable per project, and fails closed"
 }
 
+# 11. stats reads time in the order things happened: a re-approval after a later
+#     gate is no negative interval, the last receipt and CLOSED are rows, and a
+#     store with nothing archived still reports
+stats_order() {
+mkdir -p .sdlc/approvals .sdlc/work/f1
+ap() { printf 'approved_at: %s\nmode: %s\n' "$3" "$4" > "$1/$2.approval"; }
+ap .sdlc/approvals f1.intent 2026-01-01T10:00:00Z lazy
+ap .sdlc/approvals f1.plan 2026-01-01T10:30:00Z lazy
+ap .sdlc/approvals f1.spec 2026-01-01T11:00:00Z delegated-chat
+ap .sdlc/approvals f1.ship 2026-01-01T12:00:00Z lazy
+printf 'recorded_at: 2026-01-01T11:30:00Z\nresult: pass\n' > .sdlc/work/f1/verify-receipt.md
+out=$("$kit/gates/stats.sh") || fail "stats exits non-zero with no archive dir: $out"
+has "$out" "none listed" "stats did not reach re-approvals with no archive dir"
+order=$(printf '%s\n' "$out" | awk '$1 == "f1" { printf "%s:%s:%s ", $2, $4, $5 }')
+[ "$order" = "intent:—:lazy plan:0.5:lazy spec:0.5:delegated-chat proof:0.5:pass ship:0.5:lazy " ] \
+  || fail "stats rows out of time order or proof row wrong: $order"
+mkdir -p .sdlc/archive/f0/approvals
+ap .sdlc/archive/f0/approvals f0.ship 2026-01-02T09:00:00Z direct
+printf 'state: shipped\nclosed_at: 2026-01-02T10:30:00Z\nmode: delegated-chat (agent-run)\n' > .sdlc/archive/f0/CLOSED
+out=$("$kit/gates/stats.sh") || fail "stats exits non-zero with an archive: $out"
+row=$(printf '%s\n' "$out" | awk '$1 == "f0" && $2 == "close" { print $4, $5 }')
+[ "$row" = "1.5 delegated-chat" ] || fail "close row missing or wrong: $row"
+echo "ok: stats rows in time order, with proof and close"
+}
+
 # Every section at once, each in its own dir and output file; the output is
 # printed in this order, and any failed section fails the run.
-sections="basics verify_ship verify_vacuous verify_strict verify_reads verify_baseline verify_receipt_ids verify_cleanup_ids verify_close_source verify_late_source verify_gap_source source_hashing qa_mode"
+sections="basics verify_ship verify_vacuous verify_strict verify_reads verify_baseline verify_receipt_ids verify_cleanup_ids verify_close_source verify_late_source verify_gap_source source_hashing qa_mode stats_order"
 set --
 for s in $sections; do
   t="$tmp/$s"; mkdir "$t"
