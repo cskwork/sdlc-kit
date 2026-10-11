@@ -371,6 +371,146 @@ wtclean "after a failed baseline"
 echo "ok: verification reads ids and baselines strictly; cleans up"
 }
 
+# A changed tracked test and source, with two independent baseline obligations.
+proof_repo() {
+git init -q .; "$kit/init.sh" . >/dev/null
+mkdir tests; printf 'old\n' > app.txt; printf 'stable\n' > other.txt
+printf 'exit 1\n' > lint.sh; printf 'exit 1\n' > tests/proof.sh; commit
+printf 'new\n' > app.txt; printf 'grep -q new app.txt\n' > tests/proof.sh
+printf '%s\n' 'test_paths: tests/*' \
+  'check: O1.happy | unit | sh tests/proof.sh | must-fail-on-base' \
+  'check: O1.context | unit | sh tests/proof.sh | must-fail-on-base' > .sdlc/verify.md
+case "${1-}" in preexisting|gap-preexisting)
+  printf '%s\n' 'check: O1 | unit | sh tests/proof.sh' 'check: lint | lint | sh lint.sh' > .sdlc/verify.md
+;; esac
+case "${1-}" in gap-*) printf 'profile: strict\ngap: O1 | no runtime in this fixture\n' >> .sdlc/verify.md;; esac
+case "${1-}" in cleanup-gap) printf 'cleanup: false\n' >> .sdlc/verify.md;; esac
+intent proof
+"$V" baseline proof >/dev/null || fail "proof baseline failed"
+rc=0; out=$("$V" run proof) || rc=$?
+case "${1-}" in
+  gap-*|cleanup-gap) has "$out" "VERIFY blocked" "gap fixture was not blocked: $out";;
+  *) [ "$rc" = 0 ] || fail "proof receipt failed: $out";;
+esac
+}
+
+verify_cleanup_ids() {
+proof_repo cleanup-gap
+rec=.sdlc/work/proof/verify-receipt.md; ev=.sdlc/work/proof/evidence.md
+cp "$rec" .git/original-receipt
+lens "$ev"
+"$A" ship "$ev" --accept-gap "human: accept the cleanup failure only" >/dev/null || fail "cleanup gap approval failed"
+src=$(awk '/^code_digest: /{print $2}' .sdlc/approvals/proof.ship.approval)
+printf -- '- Target: local\n- Source: worktree:%s\n- Verified-by: selftest\n- Evidence: ok\n- Confirmed: yes\n' "$src" > .sdlc/work/proof/delivery.md
+awk '/^check: / { if (!first) first=$0; print first; next } { print }' .git/original-receipt > "$rec"
+check_rc=0; check_out=$("$V" check proof 2>&1) || check_rc=$?
+gate_rc=0; gate_out=$("$kit/gates/check-gate.sh" ship "$ev" 2>&1) || gate_rc=$?
+close_rc=0; close_out=$("$C" proof shipped "cleanup gap integrity" 2>&1) || close_rc=$?
+has "$check_out" "VERIFY invalid: the receipt records check 'O1.happy' more than once" \
+  "duplicate cleanup receipt did not become invalid (check exit $check_rc: $check_out; ship gate exit $gate_rc: $gate_out; close exit $close_rc: $close_out)"
+[ "$check_rc" != 0 ] && [ "$gate_rc" != 0 ] && [ "$close_rc" != 0 ] || fail "an accepted cleanup gap allowed duplicate receipt IDs"
+has "$gate_out" "GATE CLOSED: verification invalid" "ship gate did not reject duplicate IDs"
+has "$close_out" "it is invalid:" "close did not reject duplicate IDs"
+[ ! -e .sdlc/archive/proof ] && [ ! -e .sdlc/work/proof/CLOSED ] || fail "duplicate cleanup receipt wrote a terminal record"
+# Restoring only the distinct rows restores the same accepted cleanup gap.
+cp .git/original-receipt "$rec"
+out=$("$V" check proof) && fail "cleanup failure stopped being blocked: $out"
+has "$out" "VERIFY blocked: the run could not stop what it started" "the real cleanup gap changed"
+"$kit/gates/check-gate.sh" ship "$ev" >/dev/null || fail "valid accepted cleanup gap refused by ship gate"
+"$C" proof shipped "valid cleanup gap" >/dev/null || fail "valid accepted cleanup gap refused by close"
+grep -q '^verify_state: blocked$' .sdlc/archive/proof/CLOSED || fail "cleanup gap close lost its blocked state"
+echo "ok: accepted cleanup gaps cannot hide duplicate receipt IDs; distinct rows still close"
+}
+
+verify_receipt_ids() {
+proof_repo
+rec=.sdlc/work/proof/verify-receipt.md; base=.sdlc/work/proof/verify-baseline.md
+stash=.git/proof-fixture; mkdir "$stash"
+cp "$rec" "$stash/receipt"; cp "$base" "$stash/baseline"
+# Row order is immaterial; each configured ID still occurs exactly once.
+for f in "$rec" "$base"; do
+  awk '/^check: / { row[++n]=$0; next } { print } END { for (i=n;i>0;i--) print row[i] }' "$f" > "$stash/rows"
+  cat "$stash/rows" > "$f"
+done
+out=$("$V" check proof) || fail "valid reordered proof refused: $out"
+cp "$stash/receipt" "$rec"; cp "$stash/baseline" "$base"
+# A baseline must supply every required ID, even when its row count is unchanged.
+awk '/^check: / { if (!first) first=$0; print first; next } { print }' "$base" > "$stash/rows"
+cat "$stash/rows" > "$base"
+out=$("$V" check proof) && fail "a duplicate baseline replaced a required ID: $out"
+has "$out" "current command of O1.context" "the missing baseline ID was not named"
+cp "$stash/baseline" "$base"
+sed 's/^check: O1.happy |/check: unknown |/' "$stash/receipt" > "$rec"
+out=$("$V" check proof) && fail "unknown receipt ID accepted: $out"
+has "$out" "a check 'unknown' the recipe does not configure" "unknown receipt ID not named"
+# Same row count and valid logs cannot let one ID replace a different proof.
+awk '/^check: / { if (!first) first=$0; print first; next } { print }' "$stash/receipt" > "$rec"
+out=$("$V" check proof) && fail "a duplicate receipt replaced a configured ID: $out"
+has "$out" "records check 'O1.happy' more than once" "duplicate receipt ID not named"
+cp "$stash/receipt" "$rec"
+"$V" check proof >/dev/null || fail "restored receipt refused"
+echo "ok: receipts require distinct configured IDs; reordered receipts and baselines remain valid"
+}
+
+verify_close_source_case() {
+mode="$1"
+  mkdir "$mode"
+  (
+    cd "$mode"; proof_repo "$mode"
+    lens .sdlc/work/proof/evidence.md
+    case "$mode" in
+      gap-*) "$A" ship .sdlc/work/proof/evidence.md --accept-gap "human: no runtime in this fixture" >/dev/null || fail "proof gap approval failed";;
+      *) "$A" ship .sdlc/work/proof/evidence.md >/dev/null || fail "proof ship approval failed";;
+    esac
+    src=$(awk '/^code_digest: /{print $2}' .sdlc/approvals/proof.ship.approval)
+    printf -- '- Target: local\n- Source: worktree:%s\n- Verified-by: selftest\n- Evidence: ok\n- Confirmed: yes\n' "$src" > .sdlc/work/proof/delivery.md
+    cp tests/proof.sh "$t/test.$mode"
+    # Local Git metadata is outside the approved source; clean returns stdin
+    # unchanged. Only the mutating counterexample writes a different source file.
+    filter='cat; printf "run\n" >> .git/filter-ran'
+    case "$mode" in neutral|gap-neutral) ;; *) filter="$filter; printf 'drift\n' > other.txt";; esac
+    git config filter.proof.clean "$filter"
+    printf 'tests/proof.sh filter=proof\n' > .git/info/attributes
+    case "$mode" in preexisting|gap-preexisting)
+      check_rc=0; check_out=$("$V" check proof 2>&1) || check_rc=$?
+      [ -s .git/filter-ran ] && [ "$(cat other.txt)" = drift ] || fail "pre-existing validation never changed source: $check_out"
+      # Restore the reviewed bytes so close must detect its own later mutation.
+      printf 'stable\n' > other.txt
+    ;; esac
+    rc=0; out=$("$C" proof shipped "proof integrity" 2>&1) || rc=$?
+    [ -s .git/filter-ran ] || fail "close never exercised the clean filter: $out"
+    cmp tests/proof.sh "$t/test.$mode" || fail "the filter changed the baselined test bytes"
+    if [ "$mode" = neutral ] || [ "$mode" = gap-neutral ]; then
+      [ "$rc" = 0 ] || fail "neutral filter blocked close: $out"
+      [ -f .sdlc/archive/proof/CLOSED ] || fail "neutral close not archived"
+    else
+      [ "$(cat other.txt)" = drift ] || fail "the counterexample did not change source: $out"
+      [ "$rc" != 0 ] || fail "close shipped source changed during baseline validation: $out"
+      has "$out" "it is stale:" "close did not reject the changed source"
+      [ ! -e .sdlc/archive/proof ] && [ ! -e .sdlc/work/proof/CLOSED ] || fail "a refused close wrote a terminal record"
+      case "$mode" in preexisting|gap-preexisting)
+        [ "$check_rc" != 0 ] || fail "check accepted source changed during pre-existing validation: $check_out"
+        has "$check_out" "VERIFY stale" "check did not reject the changed source: $check_out"
+      ;; esac
+    fi
+  )
+}
+verify_close_source() {
+verify_close_source_case neutral || return 1
+verify_close_source_case mustfail || return 1
+echo "ok: close detects source changed during baseline validation; neutral clean filters remain valid"
+}
+verify_late_source() {
+verify_close_source_case preexisting || return 1
+echo "ok: check and close detect source changed during pre-existing failure validation"
+}
+verify_gap_source() {
+verify_close_source_case gap-neutral || return 1
+verify_close_source_case gap-mustfail || return 1
+verify_close_source_case gap-preexisting || return 1
+echo "ok: accepted blocked gaps cannot hide source changes; an unchanged accepted gap closes"
+}
+
 # 10. source hashing is batched, and every read of the same source agrees: the
 # worktree snapshot, a commit read through one checkout, and the same commit
 # read blob by blob (the fallback) — including after a failed batch
@@ -401,7 +541,7 @@ tree=$(GIT_INDEX_FILE=.git/clash git update-index --add --cacheinfo "100644,$x,C
 c=$(echo clash | git -c user.email=t@t.invalid -c user.name=t commit-tree "$tree")
 git ls-tree "$c" | sdlc__tree_entries_checkout "$c" >/dev/null 2>&1 && fail "a case clash was read through one checkout"
 [ "$(sdlc_tree_entries "$c" | grep -c '^f - ')" = 2 ] || fail "a case clash lost an entry"
-#    a digest reused by close.sh is never taken from the environment
+#    source digests are never taken from the environment
 out=$(SDLC_SOURCE_DIGEST_NOW=forged bash -c '. "$1"; sdlc_source_digest' _ "$kit/gates/_common.sh")
 [ "$out" != forged ] || fail "sdlc_source_digest trusted an inherited SDLC_SOURCE_DIGEST_NOW"
 echo "ok: source hashing is batched; worktree, checkout and blob reads agree"
@@ -433,7 +573,7 @@ echo "ok: qa mode switch is remembered, overridable per project, and fails close
 
 # Every section at once, each in its own dir and output file; the output is
 # printed in this order, and any failed section fails the run.
-sections="basics verify_ship verify_vacuous verify_strict verify_reads verify_baseline source_hashing qa_mode"
+sections="basics verify_ship verify_vacuous verify_strict verify_reads verify_baseline verify_receipt_ids verify_cleanup_ids verify_close_source verify_late_source verify_gap_source source_hashing qa_mode"
 set --
 for s in $sections; do
   t="$tmp/$s"; mkdir "$t"
