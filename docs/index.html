@@ -4,11 +4,11 @@
 <!-- Audience: anyone. Page copy uses no coding terms or jargon; commands and file names appear only in the install section. -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>sdlc-kit | Building software with AI, one approved step at a time</title>
-<meta name="description" content="With sdlc-kit, an AI that writes software works in six stages and writes down its plan. A person approves at set checkpoints before it goes on.">
+<title>sdlc-kit | Four phases for AI that builds software: intent, plan, build, evidence</title>
+<meta name="description" content="With sdlc-kit, an AI that writes software works in four phases: intent, plan, build and evidence. Separate AIs check the work, a score decides what happens next, and a person confirms at the checkpoints.">
 <meta property="og:type" content="website">
-<meta property="og:title" content="sdlc-kit | Building software with AI, one approved step at a time">
-<meta property="og:description" content="An AI that writes software works in six stages, and a person approves at set checkpoints before it goes on.">
+<meta property="og:title" content="sdlc-kit | Four phases for AI that builds software">
+<meta property="og:description" content="Intent, plan, build, evidence. Separate AIs check the work, a score decides whether it is done, and a person confirms at the checkpoints.">
 <meta property="og:url" content="https://github.com/cskwork/sdlc-kit">
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#14110d">
@@ -32,14 +32,9 @@
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
     --slab: "Bitter", "Iowan Old Style", Georgia, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
   }
-
   * { box-sizing: border-box; }
-
   html { -webkit-text-size-adjust: 100%; }
-  @media (prefers-reduced-motion: no-preference) {
-    html { scroll-behavior: smooth; }
-  }
-
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
   body {
     margin: 0;
     background: var(--bg);
@@ -49,130 +44,54 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
   }
-
   ::selection { background: var(--accent); color: var(--accent-ink); }
-
   a { color: var(--accent); text-underline-offset: 0.2em; text-decoration-thickness: 1px; }
   a:hover { color: #f4c36e; }
-
-  :focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 3px;
-    border-radius: 3px;
-  }
-
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
   .skip {
-    position: absolute;
-    left: 1rem;
-    top: -3.5rem;
-    z-index: 10;
-    background: var(--accent);
-    color: var(--accent-ink);
-    font-weight: 600;
-    padding: 0.55rem 0.9rem;
-    border-radius: 6px;
-    text-decoration: none;
-    transition: top 120ms ease-out;
+    position: absolute; left: 1rem; top: -3.5rem; z-index: 10;
+    background: var(--accent); color: var(--accent-ink);
+    font-weight: 600; padding: 0.55rem 0.9rem; border-radius: 6px;
+    text-decoration: none; transition: top 120ms ease-out;
   }
   .skip:focus { top: 1rem; }
-
   .wrap { max-width: 74rem; margin-inline: auto; padding-inline: clamp(1.25rem, 4.5vw, 2.75rem); }
-
   section { scroll-margin-top: 2rem; }
-
   h1, h2, h3 { font-family: var(--slab); font-weight: 600; letter-spacing: -0.015em; text-wrap: balance; }
   html:lang(ko) body { word-break: keep-all; }
-
-  h2 {
-    font-size: clamp(1.55rem, 1.1rem + 2vw, 2.3rem);
-    line-height: 1.2;
-    margin: 0 0 0.9rem;
-  }
-
+  h2 { font-size: clamp(1.55rem, 1.1rem + 2vw, 2.3rem); line-height: 1.2; margin: 0 0 0.9rem; }
   .section-lede { color: var(--text-2); max-width: 58ch; margin: 0 0 2.75rem; }
 
   /* ---------- top bar ---------- */
-
   .topbar { border-bottom: 1px solid var(--line); }
-  .topbar .wrap {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding-block: 0.85rem;
-  }
-  .wordmark {
-    font-family: var(--mono);
-    font-size: 0.92rem;
-    font-weight: 600;
-    color: var(--text);
-    text-decoration: none;
-    letter-spacing: 0.01em;
-  }
+  .topbar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 0.85rem; }
+  .wordmark { font-family: var(--mono); font-size: 0.92rem; font-weight: 600; color: var(--text); text-decoration: none; letter-spacing: 0.01em; }
   .wordmark b { color: var(--accent); font-weight: 600; }
-  .topbar .gh {
-    font-size: 0.85rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-  }
+  .topbar .gh { font-size: 0.85rem; display: inline-flex; align-items: center; gap: 0.45rem; }
   .top-actions { display: inline-flex; align-items: center; gap: 1.2rem; }
   .lang {
-    font-family: var(--mono);
-    font-size: 0.78rem;
-    font-weight: 500;
-    line-height: 1;
-    color: var(--text-2);
-    background: transparent;
-    border: 1px solid var(--line-strong);
-    border-radius: 99px;
-    padding: 0.34rem 0.8rem;
-    cursor: pointer;
+    font-family: var(--mono); font-size: 0.78rem; font-weight: 500; line-height: 1;
+    color: var(--text-2); background: transparent;
+    border: 1px solid var(--line-strong); border-radius: 99px;
+    padding: 0.34rem 0.8rem; cursor: pointer;
     transition: color 120ms ease-out, border-color 120ms ease-out;
   }
   .lang:hover { color: var(--accent); border-color: var(--accent); }
 
   /* ---------- hero ---------- */
-
   .hero { padding-block: clamp(3.25rem, 8vw, 6.5rem) clamp(3rem, 7vw, 5.5rem); }
-  .hero .wrap {
-    display: grid;
-    gap: clamp(2.5rem, 5vw, 4rem);
-    align-items: center;
-  }
+  .hero .wrap { display: grid; gap: clamp(2.5rem, 5vw, 4rem); align-items: center; }
   .hero .wrap > * { min-width: 0; }
-  @media (min-width: 940px) {
-    .hero .wrap { grid-template-columns: 1.02fr 0.98fr; }
-  }
-
-  .hero h1 {
-    font-size: clamp(2.6rem, 1.4rem + 5.6vw, 4.4rem);
-    line-height: 1.02;
-    letter-spacing: -0.025em;
-    margin: 0 0 1.1rem;
-  }
+  @media (min-width: 940px) { .hero .wrap { grid-template-columns: 1.02fr 0.98fr; } }
+  .hero h1 { font-size: clamp(2.6rem, 1.4rem + 5.6vw, 4.4rem); line-height: 1.02; letter-spacing: -0.025em; margin: 0 0 1.1rem; }
   .hero h1 .kit { color: var(--accent); }
-  .pitch {
-    font-family: var(--slab);
-    font-weight: 500;
-    font-size: clamp(1.2rem, 1rem + 1vw, 1.5rem);
-    line-height: 1.35;
-    margin: 0 0 0.9rem;
-    max-width: 30ch;
-  }
+  .pitch { font-family: var(--slab); font-weight: 500; font-size: clamp(1.2rem, 1rem + 1vw, 1.5rem); line-height: 1.35; margin: 0 0 0.9rem; max-width: 30ch; }
   .hero .sub { color: var(--text-2); max-width: 46ch; margin: 0 0 1.9rem; }
-
   .cta-row { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; }
   .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-weight: 600;
-    font-size: 0.95rem;
-    padding: 0.72rem 1.25rem;
-    border-radius: 8px;
-    text-decoration: none;
-    border: 1px solid transparent;
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-weight: 600; font-size: 0.95rem; padding: 0.72rem 1.25rem;
+    border-radius: 8px; text-decoration: none; border: 1px solid transparent;
     transition: transform 120ms ease-out, background-color 120ms ease-out, border-color 120ms ease-out;
   }
   .btn:active { transform: translateY(1px); }
@@ -181,54 +100,17 @@
   .btn-ghost { border-color: var(--line-strong); color: var(--text); }
   .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
   .btn svg { flex: none; }
-
-  .harnesses {
-    margin: 2rem 0 0;
-    font-family: var(--mono);
-    font-size: 0.78rem;
-    color: var(--text-2);
-    line-height: 2;
-  }
+  .harnesses { margin: 2rem 0 0; font-family: var(--mono); font-size: 0.78rem; color: var(--text-2); line-height: 2; }
   .harnesses b { color: var(--text); font-weight: 600; }
   .harnesses .dot { color: #8f8672; padding-inline: 0.35rem; }
 
   /* ---------- terminal ---------- */
-
-  .term {
-    background: var(--bg-term);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 32px 56px -32px rgba(0, 0, 0, 0.65);
-  }
-  .term-bar {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.65rem 0.95rem;
-    border-bottom: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.02);
-  }
-  .term-bar i {
-    width: 10px; height: 10px; border-radius: 50%;
-    background: var(--line-strong);
-  }
+  .term { background: var(--bg-term); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 32px 56px -32px rgba(0, 0, 0, 0.65); }
+  .term-bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.65rem 0.95rem; border-bottom: 1px solid var(--line); background: rgba(255, 255, 255, 0.02); }
+  .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-strong); }
   .term-bar i:first-child { background: #6b5a37; }
-  .term-bar span {
-    margin-inline: auto;
-    font-family: var(--mono);
-    font-size: 0.7rem;
-    color: var(--text-2);
-    transform: translateX(-24px);
-  }
-  .term-body {
-    margin: 0;
-    padding: 1.05rem 1.15rem 1.3rem;
-    font-family: var(--mono);
-    font-size: 0.78rem;
-    line-height: 1.75;
-    overflow-x: auto;
-  }
+  .term-bar span { margin-inline: auto; font-family: var(--mono); font-size: 0.7rem; color: var(--text-2); transform: translateX(-24px); }
+  .term-body { margin: 0; padding: 1.05rem 1.15rem 1.3rem; font-family: var(--mono); font-size: 0.78rem; line-height: 1.75; overflow-x: auto; }
   .term-body .ln { display: block; white-space: pre; }
   .term-body .who { display: inline-block; min-width: 7em; }
   .term-body .p { color: var(--accent); font-weight: 700; }
@@ -236,280 +118,93 @@
   .term-body .o { color: var(--text-2); }
   .term-body .ok { color: var(--accent); font-weight: 700; }
   .term-body .bad { color: var(--danger); font-weight: 700; }
-
   @media (prefers-reduced-motion: no-preference) {
-    .term-body .ln {
-      opacity: 0;
-      transform: translateY(5px);
-      animation: ln-in 420ms ease-out forwards;
-      animation-delay: calc(var(--i) * 480ms);
-    }
+    .term-body .ln { opacity: 0; transform: translateY(5px); animation: ln-in 420ms ease-out forwards; animation-delay: calc(var(--i) * 480ms); }
     @keyframes ln-in { to { opacity: 1; transform: none; } }
-    .caret::after {
-      content: "";
-      display: inline-block;
-      width: 0.55em; height: 1.05em;
-      margin-left: 0.15em;
-      background: var(--accent);
-      vertical-align: text-bottom;
-      animation: blink 1.1s steps(1) infinite;
-    }
+    .caret::after { content: ""; display: inline-block; width: 0.55em; height: 1.05em; margin-left: 0.15em; background: var(--accent); vertical-align: text-bottom; animation: blink 1.1s steps(1) infinite; }
     @keyframes blink { 50% { opacity: 0; } }
   }
 
   /* ---------- sections ---------- */
-
   .band { padding-block: clamp(3.25rem, 7vw, 5.75rem); }
   .band + .band { border-top: 1px solid var(--line); }
   .band-alt { background: linear-gradient(rgba(255, 251, 240, 0.016), rgba(255, 251, 240, 0.016)); }
 
   /* ---------- the loop ---------- */
-
-  .flow {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.55rem;
-  }
-  .flow .stage {
-    background: var(--bg-raised);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 1rem 1.15rem 1.1rem;
-  }
-  .flow h3 {
-    margin: 0 0 0.3rem;
-    font-size: 1.08rem;
-    display: flex;
-    align-items: baseline;
-    gap: 0.6rem;
-    flex-wrap: wrap;
-  }
+  .flow { list-style: none; margin: 0 0 2.75rem; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+  .flow .stage { background: var(--bg-raised); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.15rem 1.1rem; }
+  .flow h3 { margin: 0 0 0.3rem; font-size: 1.08rem; display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
   .flow h3 .art {
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    font-weight: 500;
-    color: var(--accent);
-    background: rgba(234, 176, 77, 0.09);
-    border: 1px solid rgba(234, 176, 77, 0.28);
-    padding: 0.14rem 0.5rem;
-    border-radius: 99px;
-    letter-spacing: 0;
+    font-family: var(--mono); font-size: 0.72rem; font-weight: 500; color: var(--accent);
+    background: rgba(234, 176, 77, 0.09); border: 1px solid rgba(234, 176, 77, 0.28);
+    padding: 0.14rem 0.5rem; border-radius: 99px; letter-spacing: 0;
   }
   .flow .what { margin: 0; color: var(--text-2); font-size: 0.86rem; line-height: 1.55; }
-
-  .flow .edge {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.3rem;
-    padding-block: 0.15rem;
-  }
+  .flow .edge { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; padding-block: 0.15rem; }
   .flow .edge .lbl {
-    font-family: var(--mono);
-    font-size: 0.66rem;
-    letter-spacing: 0.02em;
-    text-align: center;
-    color: var(--text-2);
-    border: 1px dashed var(--line-strong);
-    border-radius: 99px;
-    padding: 0.2rem 0.7rem;
+    font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.02em; text-align: center;
+    color: var(--text-2); border: 1px dashed var(--line-strong); border-radius: 99px; padding: 0.2rem 0.7rem;
   }
   .flow .edge.gate .lbl { color: var(--accent); border-color: rgba(234, 176, 77, 0.45); }
   .flow .edge svg { color: var(--line-strong); }
   .flow .edge.gate svg { color: var(--accent); }
-  .loopnote {
-    margin: 0.4rem auto 0;
-    max-width: 46ch;
-    text-align: center;
-    color: var(--text-2);
-    font-size: 0.86rem;
-  }
+  .loopnote { margin: 1rem 0 0; max-width: 62ch; color: var(--text-2); font-size: 0.86rem; }
   .loopnote b { color: var(--text); font-weight: 600; }
-
   @media (min-width: 900px) {
     .flow {
-      display: grid;
-      gap: 1.1rem 0.5rem;
-      grid-template-columns: 1fr 5.2rem 1fr 5.2rem 1fr;
-      grid-template-areas:
-        "s1 e12 s2 e23 s3"
-        "lp .  .  .  dn"
-        "s6 e56 s5 e45 s4";
-      align-items: stretch;
+      display: grid; gap: 1.1rem 0.5rem; align-items: stretch;
+      grid-template-columns: 1fr 5.2rem 1fr;
+      grid-template-areas: "s1 e12 s2" ". . e23" "s4 e34 s3";
     }
-    .s1 { grid-area: s1; } .s2 { grid-area: s2; } .s3 { grid-area: s3; }
-    .s4 { grid-area: s4; } .s5 { grid-area: s5; } .s6 { grid-area: s6; }
-    .e12 { grid-area: e12; } .e23 { grid-area: e23; } .e34 { grid-area: dn; }
-    .e45 { grid-area: e45; } .e56 { grid-area: e56; }
-    .flow .loop { grid-area: lp; }
+    .s1 { grid-area: s1; } .s2 { grid-area: s2; } .s3 { grid-area: s3; } .s4 { grid-area: s4; }
+    .e12 { grid-area: e12; } .e23 { grid-area: e23; } .e34 { grid-area: e34; }
     .flow .edge { justify-content: center; }
-    .flow .loop {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 0.35rem;
-      text-align: center;
-    }
-    .flow .loop .lbl {
-      font-family: var(--mono);
-      font-size: 0.66rem;
-      color: var(--accent);
-      border: 1px dashed rgba(234, 176, 77, 0.45);
-      border-radius: 99px;
-      padding: 0.2rem 0.55rem;
-    }
   }
-  @media (max-width: 899.98px) {
-    .flow .loop, .flow .edge .d { display: none; }
-  }
+  @media (max-width: 899.98px) { .flow .edge .d { display: none; } }
 
-  /* ---------- why (ledger) ---------- */
+  /* ---------- routing table ---------- */
+  .tablewrap { overflow-x: auto; }
+  table.how { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  table.how caption { text-align: left; font-family: var(--slab); font-weight: 600; font-size: 1.12rem; padding-bottom: 0.8rem; }
+  table.how th, table.how td { text-align: left; padding: 0.75rem 1rem 0.75rem 0; border-top: 1px solid var(--line); vertical-align: top; }
+  table.how thead th { font-family: var(--mono); font-size: 0.7rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-2); }
+  table.how tbody th { font-weight: 600; white-space: nowrap; font-family: var(--mono); font-size: 0.84rem; }
+  table.how td { color: var(--text-2); }
 
+  /* ---------- what you get (ledger) ---------- */
   .ledger { margin: 0; border-bottom: 1px solid var(--line); }
-  .ledger > div {
-    display: grid;
-    gap: 0.35rem 2.25rem;
-    padding-block: 1.35rem;
-    border-top: 1px solid var(--line);
-  }
-  .ledger dt {
-    font-family: var(--slab);
-    font-weight: 600;
-    font-size: 1.12rem;
-    display: flex;
-    align-items: center;
-    gap: 0.7rem;
-  }
+  .ledger > div { display: grid; gap: 0.35rem 2.25rem; padding-block: 1.35rem; border-top: 1px solid var(--line); }
+  .ledger dt { font-family: var(--slab); font-weight: 600; font-size: 1.12rem; display: flex; align-items: center; gap: 0.7rem; }
   .ledger dt svg { color: var(--accent); flex: none; }
   .ledger dd { margin: 0; color: var(--text-2); max-width: 62ch; }
-  @media (min-width: 780px) {
-    .ledger > div { grid-template-columns: 17.5rem 1fr; align-items: baseline; }
-  }
+  @media (min-width: 780px) { .ledger > div { grid-template-columns: 17.5rem 1fr; align-items: baseline; } }
 
-  /* ---------- install ---------- */
-
-  .steps {
-    list-style: none;
-    margin: 0 0 2.5rem;
-    padding: 0;
-    counter-reset: step;
-    display: grid;
-    gap: 1rem;
-  }
-  @media (min-width: 900px) {
-    .steps { grid-template-columns: repeat(3, 1fr); }
-  }
-  .steps li {
-    counter-increment: step;
-    min-width: 0;
-    background: var(--bg-raised);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 1.1rem 1.2rem 1.25rem;
-  }
-  .steps li::before {
-    content: counter(step, decimal-leading-zero);
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    color: var(--accent);
-    display: block;
-    margin-bottom: 0.55rem;
-  }
-  .steps .cmd {
-    display: block;
-    font-family: var(--mono);
-    font-size: 0.8rem;
-    line-height: 1.6;
-    color: var(--text);
-    overflow-x: auto;
-    white-space: pre;
-    padding-bottom: 0.25rem;
-  }
-  .steps .note { margin: 0.5rem 0 0; color: var(--text-2); font-size: 0.84rem; line-height: 1.55; }
-  .steps .note code { font-family: var(--mono); font-size: .9em; }
-
-  .tablewrap { overflow-x: auto; }
-  table.how {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
-  }
-  table.how caption {
-    text-align: left;
-    font-family: var(--slab);
-    font-weight: 600;
-    font-size: 1.12rem;
-    padding-bottom: 0.8rem;
-  }
-  table.how th, table.how td {
-    text-align: left;
-    padding: 0.75rem 1rem 0.75rem 0;
-    border-top: 1px solid var(--line);
-    vertical-align: top;
-  }
-  table.how thead th {
-    font-family: var(--mono);
-    font-size: 0.7rem;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-2);
-  }
-  table.how tbody th {
-    font-weight: 600;
-    white-space: nowrap;
-    font-family: var(--mono);
-    font-size: 0.84rem;
-  }
-  table.how td { color: var(--text-2); }
-  table.how td code {
-    font-family: var(--mono);
-    font-size: 0.8rem;
-    color: var(--text);
-    background: rgba(255, 251, 240, 0.05);
-    border: 1px solid var(--line);
-    border-radius: 5px;
-    padding: 0.1em 0.4em;
-  }
-
-  /* ---------- footer ---------- */
-
-  .honest {
-    border: 1px solid var(--line-strong);
-    border-radius: 10px;
-    padding: 1.15rem 1.3rem 1.25rem;
-    background: var(--bg-raised);
-  }
-  .honest h2 {
-    font-size: 1.12rem;
-    margin: 0 0 0.5rem;
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
+  /* ---------- limits ---------- */
+  .honest { border: 1px solid var(--line-strong); border-radius: 10px; padding: 1.15rem 1.3rem 1.25rem; background: var(--bg-raised); }
+  .honest h2 { font-size: 1.12rem; margin: 0 0 0.5rem; display: flex; align-items: center; gap: 0.6rem; }
   .honest h2 svg { color: var(--accent); flex: none; }
   .honest p { margin: 0; color: var(--text-2); max-width: 72ch; font-size: 0.92rem; }
 
+  /* ---------- install ---------- */
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; display: grid; gap: 1rem; }
+  @media (min-width: 900px) { .steps { grid-template-columns: repeat(3, 1fr); } }
+  .steps li { counter-increment: step; min-width: 0; background: var(--bg-raised); border: 1px solid var(--line); border-radius: 10px; padding: 1.1rem 1.2rem 1.25rem; }
+  .steps li::before { content: counter(step, decimal-leading-zero); font-family: var(--mono); font-size: 0.72rem; color: var(--accent); display: block; margin-bottom: 0.55rem; }
+  .steps .cmd { display: block; font-family: var(--mono); font-size: 0.8rem; line-height: 1.6; color: var(--text); overflow-x: auto; white-space: pre; padding-bottom: 0.25rem; }
+  .steps .note { margin: 0.5rem 0 0; color: var(--text-2); font-size: 0.84rem; line-height: 1.55; }
+  .steps .note code { font-family: var(--mono); font-size: .9em; }
+
+  /* ---------- footer ---------- */
   footer.site { border-top: 1px solid var(--line); padding-block: 2.25rem 2.75rem; }
-  footer.site .wrap {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem 2.5rem;
-    align-items: baseline;
-    justify-content: space-between;
-  }
+  footer.site .wrap { display: flex; flex-wrap: wrap; gap: 1rem 2.5rem; align-items: baseline; justify-content: space-between; }
   footer.site p { margin: 0; color: var(--text-2); font-size: 0.86rem; }
   footer.site nav { display: flex; gap: 1.6rem; font-size: 0.86rem; flex-wrap: wrap; }
 </style>
 </head>
 <body>
-<!-- Design contract: show the six stages and the checkpoints where a person
-     approves. Warm dark background, brass accent, Bitter headings, monospace
-     labels, thin ledger rules; intro left, example chat right. -->
+<!-- Design contract: show the four phases, the checkpoints between them and
+     the routing after Evidence. Warm dark background, brass accent, Bitter
+     headings, monospace labels, thin ledger rules; intro left, example chat right. -->
 <noscript><style>.top-actions .lang { display: none; }</style></noscript>
 <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
 
@@ -518,10 +213,10 @@
     <a class="wordmark" href="#top">sdlc<b>-kit</b></a>
     <span class="top-actions">
       <button type="button" class="lang" id="lang-toggle" aria-pressed="false">한국어</button>
-    <a class="gh" href="https://github.com/cskwork/sdlc-kit">
-      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-      GitHub
-    </a>
+      <a class="gh" href="https://github.com/cskwork/sdlc-kit">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
     </span>
   </div>
 </header>
@@ -532,20 +227,20 @@
     <div class="wrap">
       <div>
         <h1>sdlc<span class="kit">-kit</span></h1>
-        <p class="pitch" data-i18n="pitch">A step-by-step way for AI to build software, with your approval at the checkpoints you choose.</p>
-        <p class="sub" data-i18n="sub">AI tools that write software are fast, and they often skip steps. They guess what you meant and grade their own work. With sdlc-kit the AI works in six stages and writes down what it will do before it changes anything. At the checkpoints you keep, it waits for your approval.</p>
+        <p class="pitch" data-i18n="pitch">Four phases for AI that builds software: understand first, prove last.</p>
+        <p class="sub" data-i18n="sub">AI tools that write software are fast, and being wrong is still expensive. They guess what you meant and grade their own work. With sdlc-kit the AI confirms what you asked, explores before it changes anything, has its work checked by separate AIs, and lets a score decide whether it is done.</p>
         <p class="cta-row">
           <a class="btn btn-primary" href="#loop"><span data-i18n="cta-how">See how it works</span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
           </a>
           <a class="btn btn-ghost" href="#install" data-i18n="cta-setup">How to set it up</a>
         </p>
-        <p class="harnesses"><b>Claude Code</b><span class="dot">·</span><b>Codex</b><span class="dot">·</span><b>Gemini</b><span class="dot">·</span><b>Cursor</b><span class="dot">·</span><b>pi</b><br><span data-i18n="tools-note">Works with the common AI tools for writing software, including these.</span></p>
+        <p class="harnesses"><b>Claude Code</b><span class="dot">·</span><b>Codex</b><span class="dot">·</span><b>Gemini</b><span class="dot">·</span><b>pi</b><br><span data-i18n="tools-note">Works in any project and any field, with any AI tool for writing software that can read files and run commands.</span></p>
       </div>
 
-      <div class="term" role="img" aria-label="Example chat: the AI waits at a checkpoint until a person approves." data-i18n-aria="term-aria">
+      <div class="term" role="img" aria-label="Example chat: a person confirms the request, separate AIs review the work, and a score decides that it is delivered." data-i18n-aria="term-aria">
         <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span data-i18n="term-title">Work chat</span></div>
-        <pre class="term-body"><span class="ln" style="--i:0"><span class="p who" data-i18n="t-ai">AI</span><span class="c" data-i18n="t1">I wrote down what I understood. Starting now.</span></span><span class="ln" style="--i:1"><span class="p who" data-i18n="t-check">Checkpoint</span><span data-i18n="t2"><span class="bad">Not yet.</span><span class="o"> A person has not approved this.</span></span></span><span class="ln" style="--i:2"> </span><span class="ln" style="--i:3"><span class="p who" data-i18n="t-you">You</span><span class="c" data-i18n="t3">Read it. That is what I want. Approved.</span></span><span class="ln" style="--i:4"><span class="p who" data-i18n="t-ai">AI</span><span class="c" data-i18n="t4">Approval saved, with the date and time.</span></span><span class="ln" style="--i:5"> </span><span class="ln" style="--i:6"><span class="p who" data-i18n="t-check">Checkpoint</span><span data-i18n="t5"><span class="ok">Approved.</span><span class="o"> Work can go on.</span></span></span><span class="ln caret" style="--i:7"><span class="p who" data-i18n="t-ai">AI</span><span class="c" data-i18n="t6">Starting the work.</span></span></pre>
+        <pre class="term-body"><span class="ln" style="--i:0"><span class="p who" data-i18n="t-you">You</span><span class="c" data-i18n="t1">Add a download button to the sales report.</span></span><span class="ln" style="--i:1"><span class="p who" data-i18n="t-ai">AI</span><span class="c" data-i18n="t2">Here is what I understood, and its risks. Right?</span></span><span class="ln" style="--i:2"><span class="p who" data-i18n="t-you">You</span><span class="c" data-i18n="t3">Yes, that is what I want. Approved.</span></span><span class="ln" style="--i:3"> </span><span class="ln" style="--i:4"><span class="p who" data-i18n="t-ai">AI</span><span class="c" data-i18n="t4">Plan ready: before, after, 8 test scenarios.</span></span><span class="ln" style="--i:5"><span class="p who" data-i18n="t-rev">Reviewer</span><span data-i18n="t5"><span class="bad">Failed.</span><span class="o"> One side effect is not handled.</span></span></span><span class="ln" style="--i:6"><span class="p who" data-i18n="t-rev">Reviewer</span><span data-i18n="t6"><span class="ok">Passed</span><span class="o"> on the second round.</span></span></span><span class="ln" style="--i:7"> </span><span class="ln caret" style="--i:8"><span class="p who" data-i18n="t-score">Score</span><span data-i18n="t7"><span class="ok">8 of 8 passed.</span><span class="o"> Deliver.</span></span></span></pre>
       </div>
     </div>
   </section>
@@ -553,63 +248,55 @@
   <!-- ============ the loop ============ -->
   <section class="band" id="loop" aria-labelledby="loop-h">
     <div class="wrap">
-      <h2 id="loop-h" data-i18n="loop-h">Six stages, with checkpoints between them</h2>
-      <p class="section-lede" data-i18n="loop-lede">At each stage the AI writes down what it found or will do, then stops at a checkpoint. By default a person approves three of them: the request summary, the change description, and the delivery.</p>
+      <h2 id="loop-h" data-i18n="loop-h">Four phases, with checkpoints between them</h2>
+      <p class="section-lede" data-i18n="loop-lede">Each phase writes down what it found or did, and the next one starts only when its checkpoint opens. By default a person confirms the request. A plan with a risk flag also waits for a person, and you can choose to approve every plan yourself.</p>
 
-      <ol class="flow" aria-label="The six stages, with the checkpoints where a person approves" data-i18n-aria="flow-aria">
+      <ol class="flow" aria-label="The four phases, with the checkpoints between them" data-i18n-aria="flow-aria">
         <li class="stage s1">
-          <h3><span data-i18n="s1-h">Understand</span> <span class="art" data-i18n="s1-a">request summary</span></h3>
-          <p class="what" data-i18n="s1-p">The AI looks around first and asks only what it cannot find out itself. It writes down what you want, marking what it checked and what it assumed.</p>
+          <h3><span data-i18n="s1-h">1 · Intent</span> <span class="art" data-i18n="s1-a">what you asked</span></h3>
+          <p class="what" data-i18n="s1-p">The AI writes down what you asked, what it understood, and the risks in that understanding. It asks only the questions whose answers would change what gets built.</p>
         </li>
         <li class="edge gate e12">
           <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M0 5h41M38 1.5 42 5l-4 3.5"/></svg>
-          <span class="lbl" data-i18n="e-you">checkpoint · a person approves</span>
+          <span class="lbl" data-i18n="e12">checkpoint · a person confirms</span>
         </li>
         <li class="stage s2">
-          <h3><span data-i18n="s2-h">Describe</span> <span class="art" data-i18n="s2-a">now and after</span></h3>
-          <p class="what" data-i18n="s2-p">It describes how things work now and after the change, with a source for each fact. A second AI looks for gaps before you see it.</p>
+          <h3><span data-i18n="s2-h">2 · Plan</span> <span class="art" data-i18n="s2-a">one plan page</span></h3>
+          <p class="what" data-i18n="s2-p">Several helper AIs explore at the same time: the rules that decide the behaviour, the data, the logic, and how users reach it today. Each writes notes. One plan page holds before and after, side effects, and the scenarios that will be tested. A separate AI checks it for gaps.</p>
         </li>
         <li class="edge gate e23">
-          <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M0 5h41M38 1.5 42 5l-4 3.5"/></svg>
-          <span class="lbl" data-i18n="e-you">checkpoint · a person approves</span>
+          <svg class="d" width="10" height="52" viewBox="0 0 10 52" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 0v47M1.5 43.5 5 48l3.5-4.5"/></svg>
+          <span class="lbl" data-i18n="e23">risk flag · a person approves</span>
         </li>
         <li class="stage s3">
-          <h3><span data-i18n="s3-h">Plan</span> <span class="art" data-i18n="s3-a">step-by-step plan</span></h3>
-          <p class="what" data-i18n="s3-p">It lists what will change, in what order, and how it will show that each part works. Nothing is changed yet.</p>
+          <h3><span data-i18n="s3-h">3 · Build</span> <span class="art" data-i18n="s3-a">the smallest complete change</span></h3>
+          <p class="what" data-i18n="s3-p">The AI makes the smallest change that fully does what the plan says. A separate AI then reviews it, assuming it is wrong. After three failed reviews the work stops for a person.</p>
         </li>
-
-        <li class="edge gate e34">
-          <svg class="d" width="10" height="52" viewBox="0 0 10 52" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 0v47M1.5 43.5 5 48l3.5-4.5"/></svg>
-          <span class="lbl" data-i18n="e34">second AI reviews · risky work waits for you</span>
+        <li class="edge e34">
+          <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M46 5H5M8 1.5 4 5l4 3.5"/></svg>
+          <span class="lbl" data-i18n="e34">review passes · goes on</span>
         </li>
-
         <li class="stage s4">
-          <h3><span data-i18n="s4-h">Build</span> <span class="art" data-i18n="s4-a">the changes</span></h3>
-          <p class="what" data-i18n="s4-p">It makes the changes in the planned order and checks each step as it goes.</p>
-        </li>
-        <li class="edge e45">
-          <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M46 5H5M8 1.5 4 5l4 3.5"/></svg>
-          <span class="lbl" data-i18n="e45">checks pass · goes on</span>
-        </li>
-        <li class="stage s5">
-          <h3><span data-i18n="s5-h">Deliver</span> <span class="art" data-i18n="s5-a">proof, delivery record, QA guide</span></h3>
-          <p class="what" data-i18n="s5-p">Separate AI reviewers test the result and collect proof. A person approves the delivery. The work counts as delivered only once delivery is confirmed. The last report gives you the account, the menu, and the steps to check it yourself.</p>
-        </li>
-        <li class="edge e56">
-          <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M46 5H5M8 1.5 4 5l4 3.5"/></svg>
-          <span class="lbl" data-i18n="e56">a problem appears later</span>
-        </li>
-        <li class="stage s6">
-          <h3><span data-i18n="s6-h">Follow up</span> <span class="art" data-i18n="s6-a">new request + lesson</span></h3>
-          <p class="what" data-i18n="s6-p">When something goes wrong after delivery, the AI finds the cause, writes the fix up as a new request, and records the lesson.</p>
-        </li>
-
-        <li class="loop">
-          <svg width="10" height="52" viewBox="0 0 10 52" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 52V5M1.5 8.5 5 4l3.5 4.5"/></svg>
-          <span class="lbl" data-i18n="loop-lbl">starts over with a new request</span>
+          <h3><span data-i18n="s4-h">4 · Evidence</span> <span class="art" data-i18n="s4-a">scored proof</span></h3>
+          <p class="what" data-i18n="s4-p">The project's real checks run first. Then every scenario is played as its user, through the same screens and commands that user really works with. A script scores the result, so the AI cannot grade its own work.</p>
         </li>
       </ol>
-      <p class="loopnote" data-i18n="loopnote">A small, clear change takes a <b>short route</b>: understand, build, deliver. Everything else, and anything in doubt, goes through all six stages.</p>
+
+      <div class="tablewrap">
+        <table class="how">
+          <caption data-i18n="rt-cap">After Evidence, the score decides where the work goes</caption>
+          <thead>
+            <tr><th scope="col" data-i18n="rt-h1">Goes to</th><th scope="col" data-i18n="rt-h2">When</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row" data-i18n="rt1-to">Plan</th><td data-i18n="rt1">The plan was wrong or missed something, or the same failure happened twice.</td></tr>
+            <tr><th scope="row" data-i18n="rt2-to">Deliver</th><td data-i18n="rt2">Every must-pass scenario passed, and at least 95% of all scenarios passed.</td></tr>
+            <tr><th scope="row" data-i18n="rt3-to">A person</th><td data-i18n="rt3">Scenarios could not be run, because there was nowhere to run them, and that is what stops delivery.</td></tr>
+            <tr><th scope="row" data-i18n="rt4-to">Build</th><td data-i18n="rt4">Anything else.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="loopnote" data-i18n="loopnote">The rules are checked in this order. Each kind of return happens <b>at most three times</b>, then a person decides. A scenario that could not run counts as failed, and only a person can remove a scenario.</p>
     </div>
   </section>
 
@@ -617,34 +304,34 @@
   <section class="band band-alt" id="why" aria-labelledby="why-h">
     <div class="wrap">
       <h2 id="why-h" data-i18n="why-h">What you get</h2>
-      <p class="section-lede" data-i18n="why-lede">The AI follows written rules at every stage. Here is what they give you.</p>
+      <p class="section-lede" data-i18n="why-lede">The AI follows the same written rules in every phase. Here is what they give you.</p>
 
       <dl class="ledger">
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M9 12h6M12 9v6"/></svg><span data-i18n="g1-t">Approvals stay on record</span></dt>
-          <dd data-i18n="g1-d">Each approval is saved with what was approved, when, and how. If the approved text, or anything it was based on, changes later, the checkpoint closes until someone approves again. The approval for delivery covers the whole project as the reviewers saw it.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M9 12h6M12 9v6"/></svg><span data-i18n="g1-t">You confirm what matters</span></dt>
+          <dd data-i18n="g1-d">The AI records your approval only after you say so plainly. Silence, "continue" or its own judgement do not count. If an approved page is edited later, its checkpoint and every one after it close again.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span data-i18n="g2-t">You choose where it waits</span></dt>
-          <dd data-i18n="g2-d">You can keep more checkpoints for a person, or hand all of them to the AI, which still reviews each one. The AI records your approval only after you say so plainly, and silence does not count. Risky work, such as deleting data, needs your OK first under every setting. What the AI reads along the way, such as a comment or a web page, counts as information. It takes instructions only from you.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/></svg><span data-i18n="g2-t">Side effects found before any change</span></dt>
+          <dd data-i18n="g2-d">The helpers look at everything else that reads or writes the same data before anything is changed, and each side effect gets a scenario that checks it. Facts that earlier work verified are kept, and the next job reads them first.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="18" rx="1.5"/><rect x="13" y="3" width="8" height="18" rx="1.5"/><path d="M6.5 7h1M16.5 7h1"/></svg><span data-i18n="g3-t">A second AI checks the work</span></dt>
-          <dd data-i18n="g3-d">Reviews come from separate AI helpers that start fresh. They did not do the work and do not change it. They try the change as a user would, look for anything else it may have broken, and compare the result with your request. If no separate helper is available, that gap is written down. An optional mode adds a report with screenshots.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="18" rx="1.5"/><rect x="13" y="3" width="8" height="18" rx="1.5"/><path d="M6.5 7h1M16.5 7h1"/></svg><span data-i18n="g3-t">Separate AIs check the work</span></dt>
+          <dd data-i18n="g3-d">The helpers who explore, the reviewer and the tester each start fresh. None of them is the AI that wrote what it checks, and none of them changes it. If no separate helper is available, that gap is written down.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/></svg><span data-i18n="g4-t">Proof behind every "done"</span></dt>
-          <dd data-i18n="g4-d">Every claim that something is done comes with real results from the project's own checks. A bug fix shows the problem happening, its cause, and the same steps working afterwards. If there is nowhere to try the change, the work is marked as not verified.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span data-i18n="g4-t">Proof behind every "passed"</span></dt>
+          <dd data-i18n="g4-d">Every pass points to the record of what was run or seen. If there is nowhere to try something, it is marked as blocked, never as passed. A bug fix needs a test that failed before the fix and passes after it. The list of scenarios becomes your own checklist.</dd>
         </div>
         <div>
-          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg><span data-i18n="g5-t">Every job ends with a clear result</span></dt>
-          <dd data-i18n="g5-d">Each job closes as delivered, dropped, stuck, or handed on to others. Delivered work needs proof of delivery. Dropped or stuck work must leave a written lesson for later jobs. On its own, the AI goes no further than handing its changes over for review, with your permission. Putting them into the live product is always a separate decision by a person.</dd>
+          <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg><span data-i18n="g5-t">Delivered means what was verified</span></dt>
+          <dd data-i18n="g5-d">Closing a job is refused if what was delivered differs from the version that was checked. Risky work always needs your word first, under every setting: deleting data, reshaping stored data, changing what other systems rely on, security, infrastructure, and sending the work beyond this computer. What the AI reads along the way counts as information; it takes instructions only from you.</dd>
         </div>
       </dl>
     </div>
   </section>
 
-  <!-- ============ honest limit ============ -->
+  <!-- ============ honest limits ============ -->
   <section class="band" id="limits" aria-labelledby="limits-h">
     <div class="wrap">
       <div class="honest">
@@ -652,7 +339,7 @@
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
           <span data-i18n="lim-h">What it cannot do</span>
         </h2>
-        <p data-i18n="lim-p">The kit notices when anything you approved is changed later, and closes the checkpoint again. It cannot prove who gave an approval, because anything that can edit the work can also edit the record beside it. The records stay on the computer where the work runs, so back them up. The kit does not replace your team's own testing or security review.</p>
+        <p data-i18n="lim-p">The kit records and counts; it never runs an AI itself, so the work is only as careful as the AI tool you use. It saves the words of each approval but cannot prove who said them. A scenario with nowhere to run cannot pass, so some work stops and waits for you. The records stay on the computer where the work runs and are not saved with the project, so back them up.</p>
       </div>
     </div>
   </section>
@@ -661,39 +348,24 @@
   <section class="band band-alt" id="install" aria-labelledby="install-h">
     <div class="wrap">
       <h2 id="install-h" data-i18n="inst-h">For the person who sets it up</h2>
-      <p class="section-lede" data-i18n="inst-lede">This part uses commands. Three steps set it up in a project, and the <a href="https://github.com/cskwork/sdlc-kit#quick-start">README on GitHub</a> has the details.</p>
+      <p class="section-lede" data-i18n="inst-lede">This part uses commands. Three steps set it up in a project, and the <a href="https://github.com/cskwork/sdlc-kit#quick-start">README on GitHub</a> has the details. After that, ask for a change in plain words.</p>
 
       <ol class="steps">
         <li>
-          <span class="cmd">git clone https://github.com/cskwork/sdlc-kit ~/sdlc-kit</span>
-          <p class="note" data-i18n="st1-n">Once per computer. On Windows, run this and every later kit command in Git Bash or WSL.</p>
+          <span class="cmd">git clone https://github.com/cskwork/sdlc-kit ~/sdlc-kit
+ln -s ~/sdlc-kit ~/.claude/skills/sdlc-kit</span>
+          <p class="note" data-i18n="st1-n">Once per computer. The link is for Claude Code; use your tool's skills folder. Without one, add <code>For SDLC work, read ~/sdlc-kit/SKILL.md and follow it.</code> to <code>AGENTS.md</code>, <code>CLAUDE.md</code> or <code>GEMINI.md</code>.</p>
         </li>
         <li>
-          <span class="cmd">cd /path/to/project
-~/sdlc-kit/init.sh</span>
-          <p class="note" data-i18n="st2-n">Creates the record folder <code>.sdlc/</code>, kept out of git. Back it up, or keep it elsewhere with <code>init.sh . --area &lt;folder&gt;</code>. Your agent then fills in <code>.sdlc/config.md</code> and asks how many checkpoints stay human (<code>lazymode</code>).</p>
+          <span class="cmd">cd /path/to/your-project
+~/sdlc-kit/sdlc.sh init</span>
+          <p class="note" data-i18n="st2-n">Once per project, or per shipping unit of a monorepo. Creates <code>.sdlc/</code>, which git ignores. On Windows, run <code>sdlc.sh</code> in Git Bash or WSL.</p>
         </li>
         <li>
-          <span class="cmd">tell your agent:
-&ldquo;read ~/sdlc-kit/AGENTS.md and follow it&rdquo;</span>
-          <p class="note" data-i18n="st3-n">Or add <code>For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.</code> to your tool's file below.</p>
+          <span class="cmd">$EDITOR .sdlc/config.md</span>
+          <p class="note" data-i18n="st3-n">The only project-specific file: the <code>build</code>, <code>test</code>, <code>lint</code>, <code>run</code> and <code>e2e</code> commands, the <code>qa</code> tool, <code>human_gates</code> (default <code>intent</code>; add <code>plan</code> to approve every plan) and the <code>knowledge</code> folder.</p>
         </li>
       </ol>
-
-      <div class="tablewrap">
-        <table class="how">
-          <caption data-i18n="how-cap">Where the line goes</caption>
-          <thead>
-            <tr><th scope="col" data-i18n="how-h1">Tool</th><th scope="col" data-i18n="how-h2">File</th></tr>
-          </thead>
-          <tbody>
-            <tr><th scope="row">Claude Code</th><td><code>CLAUDE.md</code></td></tr>
-            <tr><th scope="row">pi, Codex CLI</th><td><code>AGENTS.md</code></td></tr>
-            <tr><th scope="row">Gemini CLI</th><td><code>GEMINI.md</code></td></tr>
-            <tr><th scope="row">Cursor, others</th><td data-i18n="r-else">The instruction file your tool loads, or paste <code>AGENTS.md</code> into the chat</td></tr>
-          </tbody>
-        </table>
-      </div>
     </div>
   </section>
 </main>
@@ -714,78 +386,79 @@
   var KEY = "sdlc-kit-lang";
   var KO = {
     "skip": '본문으로 건너뛰기',
-    "pitch": 'AI가 소프트웨어를 한 단계씩 만들고, 정해 둔 확인 지점에서 사람의 승인을 받는 방식입니다.',
-    "sub": '소프트웨어를 만드는 AI는 빠르지만 단계를 자주 건너뜁니다. 요청을 짐작으로 해석하고, 자기 숙제를 스스로 채점합니다. sdlc-kit을 쓰면 AI는 여섯 단계로 일하며, 무언가를 바꾸기 전에 할 일부터 글로 적습니다. 사람이 맡은 확인 지점에서는 승인을 기다립니다.',
+    "pitch": 'AI가 소프트웨어를 만드는 네 단계. 이해는 맨 앞에, 증명은 맨 뒤에.',
+    "sub": '소프트웨어를 만드는 AI는 빠르지만, 틀렸을 때 드는 비용은 여전히 큽니다. AI는 요청을 짐작으로 해석하고 자기 숙제를 스스로 채점합니다. sdlc-kit을 쓰면 AI는 요청을 먼저 확인받고, 무엇이든 바꾸기 전에 조사하고, 다른 AI에게 작업을 검사받으며, 끝났는지는 점수가 정합니다.',
     "cta-how": '작동 방식 보기',
     "cta-setup": '설치 방법',
-    "tools-note": '위 도구를 비롯해 소프트웨어를 만드는 주요 AI 도구와 함께 쓸 수 있습니다.',
+    "tools-note": '파일을 읽고 명령을 실행할 수 있는 AI 개발 도구라면 어떤 프로젝트, 어떤 분야에서든 쓸 수 있습니다.',
     "term-title": '작업 대화',
-    "t-ai": 'AI',
-    "t-check": '확인 지점',
     "t-you": '담당자',
-    "t1": '이해한 내용을 글로 적었습니다. 이제 시작합니다.',
-    "t2": '<span class="bad">아직 안 됩니다.</span><span class="o"> 사람의 승인이 없습니다.</span>',
-    "t3": '읽어 봤습니다. 원하던 내용이 맞습니다. 승인합니다.',
-    "t4": '승인을 날짜, 시각과 함께 저장했습니다.',
-    "t5": '<span class="ok">승인 확인.</span><span class="o"> 다음으로 넘어가도 됩니다.</span>',
-    "t6": '작업을 시작합니다.',
-    "loop-h": '여섯 단계와 그 사이의 확인 지점',
-    "loop-lede": '각 단계에서 AI는 알아낸 것이나 할 일을 글로 적고, 확인 지점에서 멈춥니다. 기본 설정에서 사람이 승인하는 것은 요청 요약, 변경 내용, 전달 세 가지입니다.',
-    "s1-h": '요청 이해',
-    "s1-a": '요청 요약',
-    "s1-p": 'AI가 먼저 프로젝트를 살펴보고, 스스로 알아낼 수 없는 것만 묻습니다. 원하는 내용을 글로 적고, 확인한 것과 짐작한 것을 나눠 표시합니다.',
-    "e-you": '확인 지점 · 사람이 승인',
-    "s2-h": '변경 내용',
-    "s2-a": '지금과 바뀐 뒤',
-    "s2-p": '지금의 동작과 바뀐 뒤의 동작을 각 사실의 출처와 함께 적습니다. 사람이 보기 전에 다른 AI가 빠진 곳을 찾습니다.',
-    "s3-h": '작업 계획',
-    "s3-a": '단계별 계획',
-    "s3-p": '무엇을 어떤 순서로 바꿀지, 제대로 됐다는 것을 무엇으로 보여 줄지 적습니다. 아직 아무것도 바꾸지 않습니다.',
-    "e34": '다른 AI가 검토 · 위험한 작업은 사람이 허락',
-    "s4-h": '만들기',
-    "s4-a": '실제 변경',
-    "s4-p": '계획한 순서대로 바꾸고, 단계마다 제대로 됐는지 확인합니다.',
-    "e45": '점검 통과 · 바로 진행',
-    "s5-h": '전달',
-    "s5-a": '증거, 전달 기록, QA 안내',
-    "s5-p": '별도의 AI가 결과를 시험하고 증거를 모읍니다. 전달은 사람이 승인합니다. 실제로 전달된 것이 확인되어야 완료로 기록됩니다. 마지막 보고에는 직접 확인할 계정, 메뉴, 단계가 담깁니다.',
-    "e56": '나중에 문제가 생기면',
-    "s6-h": '사후 대응',
-    "s6-a": '새 요청과 교훈',
-    "s6-p": '전달한 뒤 문제가 생기면 AI가 원인을 찾고, 고칠 내용을 새 요청으로 적고, 교훈을 기록합니다.',
-    "loop-lbl": '새 요청으로 다시 시작',
-    "loopnote": '작고 분명한 변경은 요청 이해, 만들기, 전달만 거치는 <b>짧은 경로</b>로 갑니다. 그 밖의 작업과 조금이라도 애매한 작업은 여섯 단계를 모두 거칩니다.',
+    "t-ai": 'AI',
+    "t-rev": '검토 AI',
+    "t-score": '점수',
+    "t1": '매출 보고서에 다운로드 버튼을 넣어 주세요.',
+    "t2": '이렇게 이해했고, 이런 위험이 있습니다. 맞나요?',
+    "t3": '네, 원하던 내용이 맞습니다. 승인합니다.',
+    "t4": '계획 완료: 바뀌기 전과 후, 시험할 시나리오 8개.',
+    "t5": '<span class="bad">불합격.</span><span class="o"> 부작용 하나를 처리하지 않았습니다.</span>',
+    "t6": '<span class="ok">통과.</span><span class="o"> 두 번째 검토입니다.</span>',
+    "t7": '<span class="ok">8개 중 8개 통과.</span><span class="o"> 납품합니다.</span>',
+    "loop-h": '네 단계와 그 사이의 확인 지점',
+    "loop-lede": '각 단계는 알아낸 것이나 한 일을 글로 남기고, 다음 단계는 확인 지점이 열려야 시작합니다. 기본 설정에서는 사람이 요청 내용을 확인합니다. 위험 표시가 붙은 계획도 사람을 기다리며, 원하면 모든 계획을 직접 승인할 수 있습니다.',
+    "s1-h": '1 · 의도',
+    "s1-a": '요청한 것',
+    "s1-p": 'AI가 요청한 내용, 자신이 이해한 내용, 그 이해에 숨은 위험을 글로 적습니다. 답에 따라 만들 것이 달라지는 질문만 묻습니다.',
+    "e12": '확인 지점 · 사람이 확인',
+    "s2-h": '2 · 계획',
+    "s2-a": '계획 한 장',
+    "s2-p": '여러 보조 AI가 동시에 조사합니다. 동작을 정하는 규칙, 데이터, 처리 흐름, 사용자가 지금 그 기능에 닿는 경로를 살피고 각자 기록을 남깁니다. 계획 한 장에 바뀌기 전과 후, 부작용, 시험할 시나리오를 담고, 다른 AI가 빠진 곳을 찾습니다.',
+    "e23": '위험 표시 · 사람이 승인',
+    "s3-h": '3 · 만들기',
+    "s3-a": '가장 작은 완전한 변경',
+    "s3-p": '계획이 말하는 일을 빠짐없이 해내는 가장 작은 변경을 만듭니다. 이어서 다른 AI가 틀렸다고 가정하고 검토합니다. 검토에서 세 번 떨어지면 작업을 멈추고 사람에게 넘깁니다.',
+    "e34": '검토 통과 · 다음으로',
+    "s4-h": '4 · 검증',
+    "s4-a": '점수가 매겨진 증거',
+    "s4-p": '먼저 프로젝트의 실제 점검을 돌립니다. 그다음 모든 시나리오를 그 사용자가 되어, 사용자가 실제로 쓰는 화면과 명령으로 해 봅니다. 결과는 스크립트가 채점하므로 AI가 스스로 채점할 수 없습니다.',
+    "rt-cap": '검증이 끝나면 점수가 다음 행선지를 정합니다',
+    "rt-h1": '다음 단계',
+    "rt-h2": '조건',
+    "rt1-to": '계획',
+    "rt1": '계획이 틀렸거나 무언가를 놓쳤을 때, 또는 같은 실패가 두 번 났을 때',
+    "rt2-to": '납품',
+    "rt2": '반드시 통과해야 할 시나리오가 모두 통과하고, 전체 시나리오의 95% 이상이 통과했을 때',
+    "rt3-to": '사람',
+    "rt3": '돌려 볼 환경이 없어 시나리오를 실행하지 못했고, 그 때문에 납품할 수 없을 때',
+    "rt4-to": '만들기',
+    "rt4": '그 밖의 모든 경우',
+    "loopnote": '조건은 위에서부터 차례로 따집니다. 같은 종류의 되돌아가기는 <b>최대 세 번</b>이며, 그 뒤에는 사람이 정합니다. 실행하지 못한 시나리오는 실패로 치고, 시나리오를 지우는 것은 사람만 할 수 있습니다.',
     "why-h": '달라지는 점',
-    "why-lede": 'AI는 모든 단계에서 글로 적힌 규칙을 따릅니다. 그래서 다음이 달라집니다.',
-    "g1-t": '승인은 기록으로 남습니다',
-    "g1-d": '승인할 때마다 무엇을, 언제, 어떻게 승인했는지 저장합니다. 승인한 글이나 그 바탕이 된 글이 나중에 바뀌면, 다시 승인할 때까지 확인 지점이 닫힙니다. 전달 승인은 검토한 AI가 본 프로젝트 전체에 걸립니다.',
-    "g2-t": '어디서 기다릴지는 직접 정합니다',
-    "g2-d": '사람이 맡는 확인 지점은 늘릴 수도, 모두 AI에게 맡길 수도 있습니다. 맡겨도 검토는 그대로 거칩니다. AI는 승인한다는 분명한 말을 들어야만 승인을 기록하며, 아무 말이 없으면 승인으로 치지 않습니다. 데이터 삭제처럼 위험한 작업은 어떤 설정에서든 사람의 허락이 먼저 필요합니다. 작업 중에 읽은 댓글이나 웹 페이지의 글은 참고 자료로만 다루고, 지시는 사람에게서만 받습니다.',
+    "why-lede": 'AI는 모든 단계에서 같은 규칙을 따릅니다. 그래서 다음이 달라집니다.',
+    "g1-t": '중요한 것은 사람이 확인합니다',
+    "g1-d": 'AI는 승인한다는 분명한 말을 들어야만 승인을 기록합니다. 아무 말이 없거나 "계속해"라고 한 것, AI 자신의 판단은 승인으로 치지 않습니다. 승인한 문서가 나중에 고쳐지면 그 확인 지점과 이후의 확인 지점이 모두 다시 닫힙니다.',
+    "g2-t": '부작용은 바꾸기 전에 찾습니다',
+    "g2-d": '무엇이든 바꾸기 전에, 같은 데이터를 읽거나 쓰는 다른 곳을 보조 AI가 모두 살핍니다. 부작용마다 그것을 점검할 시나리오가 붙습니다. 앞선 작업에서 검증한 사실은 남겨 두고, 다음 작업이 가장 먼저 읽습니다.',
     "g3-t": '다른 AI가 따로 점검합니다',
-    "g3-d": '검토는 작업에 참여하지 않은 별도의 AI가 처음부터 새로 맡고, 결과를 고치지는 않습니다. 사용자처럼 바뀐 기능을 써 보고, 다른 곳이 망가지지 않았는지 살피고, 요청과 결과를 맞춰 봅니다. 별도의 AI를 못 쓰면 그 빈틈을 기록합니다. 원하면 화면 사진이 담긴 보고서도 받을 수 있습니다.',
-    "g4-t": '"완료"에는 증거가 붙습니다',
-    "g4-d": '"다 됐다"는 말에는 프로젝트의 실제 점검 결과가 붙습니다. 오류를 고쳤다면 문제가 일어나는 모습, 원인, 같은 절차로 다시 했을 때 문제가 사라진 모습을 보여 줍니다. 시험해 볼 곳이 없으면 그 작업은 "검증 안 됨"으로 표시됩니다.',
-    "g5-t": '모든 작업은 분명한 결과로 끝납니다',
-    "g5-d": '작업은 전달 완료, 중단, 막힘, 다른 곳으로 넘김 중 하나로 끝납니다. 전달 완료에는 전달된 증거가 필요합니다. 중단되거나 막힌 작업은 다음 작업을 위해 배운 점을 글로 남깁니다. AI는 허락을 받아 변경 내용을 검토용으로 넘기는 데까지만 혼자 합니다. 실제 서비스에 반영하는 일은 언제나 사람이 따로 결정합니다.',
+    "g3-d": '조사하는 보조 AI, 검토 AI, 시험 AI는 모두 처음부터 새로 시작합니다. 점검하는 대상을 만든 AI가 맡는 일은 없고, 결과를 고치지도 않습니다. 별도의 AI를 쓸 수 없으면 그 빈틈을 기록합니다.',
+    "g4-t": '"통과"에는 증거가 붙습니다',
+    "g4-d": '모든 통과에는 무엇을 실행하거나 보았는지 기록이 붙습니다. 시험해 볼 곳이 없으면 통과가 아니라 "막힘"으로 표시합니다. 오류 수정에는 고치기 전에는 실패하고 고친 뒤에는 통과하는 테스트가 있어야 합니다. 시나리오 목록은 그대로 담당자의 확인 목록이 됩니다.',
+    "g5-t": '검증한 것만 납품합니다',
+    "g5-d": '납품한 결과가 검사한 버전과 다르면 작업을 닫을 수 없습니다. 위험한 작업은 어떤 설정에서든 사람의 허락이 먼저 필요합니다. 데이터 삭제, 저장된 데이터의 구조 변경, 다른 시스템이 기대는 약속의 변경, 보안, 인프라, 이 컴퓨터 밖으로 작업을 내보내는 일이 여기에 해당합니다. 작업 중에 읽은 글은 참고 자료로만 다루고, 지시는 사람에게서만 받습니다.',
     "lim-h": '할 수 없는 일',
-    "lim-p": '승인한 내용이 나중에 바뀌면 키트가 알아채고 확인 지점을 다시 닫습니다. 하지만 누가 승인했는지는 증명하지 못합니다. 작업을 고칠 수 있는 쪽은 승인 기록도 고칠 수 있기 때문입니다. 기록은 작업하는 컴퓨터에만 남으니 따로 백업해 두세요. 팀의 테스트나 보안 검토를 대신하지도 않습니다.',
+    "lim-p": '키트는 기록하고 셀 뿐 AI를 직접 돌리지 않습니다. 그래서 작업의 꼼꼼함은 쓰는 AI 도구에 달려 있습니다. 승인할 때의 말은 저장하지만 누가 말했는지는 증명하지 못합니다. 실행할 곳이 없는 시나리오는 통과할 수 없으므로, 어떤 작업은 멈춰서 사람을 기다립니다. 기록은 작업하는 컴퓨터에만 남고 프로젝트와 함께 저장되지 않으니 따로 백업해 두세요.',
     "inst-h": '설치하는 분께',
-    "inst-lede": '여기부터는 명령어를 씁니다. 세 단계면 프로젝트에 설치되며, 자세한 내용은 <a href="https://github.com/cskwork/sdlc-kit/blob/main/README.ko.md#빠른-시작">GitHub의 README</a>에 있습니다.',
-    "st1-n": '컴퓨터마다 한 번. Windows에서는 이 명령과 이후의 모든 키트 명령을 Git Bash나 WSL에서 실행하세요.',
-    "st2-n": '기록 폴더 <code>.sdlc/</code>를 만들고 git에서 제외합니다. 직접 백업하거나 <code>init.sh . --area &lt;폴더&gt;</code>로 밖에 두세요. 이어서 에이전트가 <code>.sdlc/config.md</code>를 채우고, 사람이 맡을 확인 지점 수(<code>lazymode</code>)를 묻습니다.',
-    "st3-n": '또는 <code>For SDLC work, read ~/sdlc-kit/AGENTS.md and follow it.</code> 한 줄을 아래 표의 파일에 넣으세요.',
-    "how-cap": '한 줄을 넣는 곳',
-    "how-h1": '도구',
-    "how-h2": '파일',
-    "r-else": '도구가 읽는 지침 파일, 또는 <code>AGENTS.md</code> 내용을 대화에 붙여 넣기',
+    "inst-lede": '여기부터는 명령어를 씁니다. 세 단계면 프로젝트에 설치되며, 자세한 내용은 <a href="https://github.com/cskwork/sdlc-kit/blob/main/README.ko.md#빠른-시작">GitHub의 README</a>에 있습니다. 그다음에는 평소 말로 변경을 요청하면 됩니다.',
+    "st1-n": '컴퓨터마다 한 번. 두 번째 줄은 Claude Code 기준이며, 쓰는 도구의 스킬 폴더에 연결하세요. 스킬 폴더가 없으면 <code>AGENTS.md</code>, <code>CLAUDE.md</code>, <code>GEMINI.md</code> 중 해당 파일에 <code>For SDLC work, read ~/sdlc-kit/SKILL.md and follow it.</code>을 넣으세요.',
+    "st2-n": '프로젝트마다, 또는 모노레포의 배포 단위마다 한 번. <code>.sdlc/</code> 폴더를 만들며 git은 이 폴더를 무시합니다. Windows에서는 <code>sdlc.sh</code>를 Git Bash나 WSL에서 실행하세요.',
+    "st3-n": '프로젝트마다 다른 값은 이 파일 한 곳에만 둡니다. <code>build</code>, <code>test</code>, <code>lint</code>, <code>run</code>, <code>e2e</code> 명령, <code>qa</code> 도구, <code>human_gates</code>(기본값 <code>intent</code>, 모든 계획을 직접 승인하려면 <code>plan</code> 추가), <code>knowledge</code> 폴더입니다.',
     "foot-p": 'sdlc-kit은 Anthropic이 공개한 안내서를 바탕으로 만든 독립 프로젝트로, Anthropic과는 관계가 없습니다.',
     "foot-gh": 'GitHub에서 보기',
     "foot-pb": 'Anthropic의 안내서'
   };
   var KO_ARIA = {
     "hero-aria": 'sdlc-kit 소개',
-    "term-aria": '대화 예시: AI는 사람이 승인할 때까지 확인 지점에서 기다립니다.',
-    "flow-aria": '사람이 승인하는 확인 지점이 있는 여섯 단계',
+    "term-aria": '대화 예시: 사람이 요청을 확인하고, 다른 AI가 작업을 검토하고, 점수가 납품을 정합니다.',
+    "flow-aria": '네 단계와 그 사이의 확인 지점',
     "foot-aria": '바닥글'
   };
   var enText = new WeakMap();
