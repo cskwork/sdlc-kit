@@ -4,6 +4,3 @@
 .sdlc/
 scratch/
 .DS_Store
-# tools/_run.py is executed, never imported; this only appears if someone
-# byte-compiles it by hand
-__pycache__/
