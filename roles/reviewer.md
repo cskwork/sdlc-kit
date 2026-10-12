@@ -13,7 +13,8 @@ Inputs: intent.md, PLAN.md, `refs/`. Blocking:
 
 ## Diff mode (phase 3)
 
-Inputs: intent.md, PLAN.md, `refs/`, the commit. Read every changed file.
+Inputs: intent.md, PLAN.md, `refs/`, the commit or uncommitted diff
+(untracked files included). Read every changed file.
 Blocking:
 - it does not do what PLAN.md says, or does more;
 - a side effect PLAN.md names is left unhandled; input that callers send
