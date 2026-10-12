@@ -1,45 +1,29 @@
 name: selftest
 on:
-  # Gate, runner, and real product lifecycle checks run on pull requests because branch
-  # protection requires its three checks to merge; by hand from the Actions tab.
   pull_request:
   workflow_dispatch:
 permissions:
   contents: read
 env:
-  # Git Bash otherwise COPIES on `ln -s`, which would make the symlink gate
-  # fixtures pass for the wrong reason; ignored on macOS/Linux
+  # Git Bash otherwise copies on `ln -s`, and the symlink store checks would skip; ignored on macOS/Linux
   MSYS: winsymlinks:nativestrict
 jobs:
   selftest:
     strategy:
       fail-fast: false
       matrix:
-        # windows runs under Git Bash — the documented first-class Windows target
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-      # the fixtures commit, so every runner needs an identity of its own
       - name: git identity for the throwaway fixtures
         run: |
           git config --global user.email ci@sdlc-kit.invalid
           git config --global user.name "sdlc-kit CI"
-          # fixture repos must record symlinks as links, not as their contents
           git config --global core.symlinks true
-          # Fixtures write LF bytes; do not convert their committed snapshots.
           git config --global core.autocrlf false
         shell: bash
-      - name: gate and receipt selftest
-        run: bash gates/selftest.sh
-        shell: bash
-      - name: bounded process runner regressions
-        run: python tests/test_runner.py
-        shell: bash
-      - name: real product factory lifecycle E2E
-        run: bash tests/factory-e2e.sh
+      - name: selftest
+        run: bash tests/selftest.sh
         shell: bash
