@@ -121,7 +121,8 @@ v2는 새 계약입니다. 기록은 있던 자리에 그대로 남습니다.
   (`git -C ~/sdlc-kit checkout v0.27.0`)로 마치거나
   `sdlc.sh close <slug> dropped "<이유>"`로 닫으세요.
 - `lazymode`는 계속 읽힙니다. 0–1 → `human_gates: intent plan`, 2–3 → `intent`,
-  4 → 없음. 직접 정하려면 `human_gates:`를 쓰세요.
+  4 → 없음. 직접 정하려면 `human_gates:`를 쓰세요. `intent`, `plan`이 아닌
+  값은 둘 다로 처리합니다.
 - `knowledge:`를 정하기 전까지 `.sdlc/memory/`를 knowledge 폴더로 읽습니다.
 - `init.sh` → `sdlc.sh init`, `gates/status.sh --json`과 `tools/auto.sh next` →
   `sdlc.sh status --json`과 `sdlc.sh next`(종료 코드 동일). spec.md, summary.md,

@@ -32,8 +32,9 @@ dispatch the reviewer (`roles/reviewer.md`, diff mode) with intent.md,
 PLAN.md, `refs/` and the commit. It appends a round to `review.md` ending in
 `VERDICT: PASS` or `VERDICT: FAIL`. Record it with `sdlc.sh review <slug>
 pass|fail "<one line>"`: the script reads the verdict of the newest round
-(every recording needs a new one) and binds a PASS to the project repo's
-commit. Code changed after a PASS needs a new commit and a new round.
+(every recording needs a new one) and binds a PASS to the HEAD of every
+repository under the project root. Code changed after a PASS needs a new
+commit and a new round.
 FAIL → fix the blocking findings, commit, review again. The third FAIL stops
 the loop: show the human the trail; only `sdlc.sh approve plan <slug>
 --human` resumes it. Then phase 4.
