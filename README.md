@@ -94,7 +94,9 @@ Closed features move to `.sdlc/archive/`. Verified facts move to the
 `.sdlc/config.md` is the only project-specific file: the `build`, `test`,
 `lint`, `run` and `e2e` commands, the `qa` tool that drives screens or APIs,
 `human_gates` (default `intent`; add `plan` to approve every plan yourself — a
-plan with a risk flag always asks), and the `knowledge` folder. `.sdlc/` stays
+plan with a risk flag always asks), the `knowledge` folder, and `repos` (the
+repositories a review binds — list them when the project root holds many;
+empty means every one under it). `.sdlc/` stays
 out of git through `.git/info/exclude`; point `knowledge:` at a tracked folder
 to share what the team learns.
 

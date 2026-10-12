@@ -14,3 +14,5 @@ qa:
 human_gates: intent
 # durable knowledge: scouts read it first, Evidence adds verified facts to it
 knowledge: .sdlc/knowledge
+# repositories a review PASS binds: space-separated top folders of repositories under the project root (relative, no spaces in a path), "." for the repository holding the root; empty = every repository under the root
+repos:

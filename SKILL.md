@@ -55,7 +55,9 @@ finds `.git`.
    subagents, open a new session with only the role file and paths; if that
    is impossible too, write `no independent review: <reason>` in the
    artifact. Every dispatch states the goal, input paths, what it may write,
-   the config.md commands, the output format, and when to stop.
+   the config.md commands, the output format, and when to stop. A role that
+   cannot write the feature folder writes to a temporary folder and reports
+   its path; you copy the files in.
 5. **Proof, not claims.** Every PASS cites what was run or observed and its
    log. No environment to run it in is BLOCKED, never PASS; a unit test never
    stands in for the real interface. A bug fix needs a test that fails before
@@ -74,7 +76,9 @@ finds `.git`.
 
 `.sdlc/config.md` holds every project value: `build`, `test`, `lint`, `run`,
 `e2e`, `qa` (the tool that drives screens or APIs), `human_gates` (default
-`intent`) and `knowledge` (the durable knowledge folder). Records are working
+`intent`), `knowledge` (the durable knowledge folder) and `repos` (the
+repositories a review binds; empty means every one under the project root).
+Records are working
 knowledge, not source: `init` keeps `.sdlc/` out of git through
 `.git/info/exclude`, changing no tracked file. Closed features move
 to `.sdlc/archive/<slug>/`. Scouts read `knowledge` first; Evidence adds what
