@@ -123,7 +123,8 @@ v2 is a new contract. Your records stay where they are.
   with the old kit (`git -C ~/sdlc-kit checkout v0.27.0`) or close them:
   `sdlc.sh close <slug> dropped "<reason>"`.
 - `lazymode` keeps working: 0–1 → `human_gates: intent plan`, 2–3 → `intent`,
-  4 → none. Write `human_gates:` to choose explicitly.
+  4 → none. Write `human_gates:` to choose explicitly; a word other than
+  `intent` or `plan` means both.
 - `.sdlc/memory/` is read as the knowledge folder until you set `knowledge:`.
 - `init.sh` → `sdlc.sh init`; `gates/status.sh --json` and `tools/auto.sh
   next` → `sdlc.sh status --json` and `sdlc.sh next` (same exit codes).

@@ -42,22 +42,23 @@ under v2.
 - **One script.** `sdlc.sh` (init, new, status, next, check, approve, review,
   score, close) replaces `init.sh`, `gates/` and `tools/`. Gates bind
   `intent.md` and `PLAN.md` by hash. A review PASS needs a new round in
-  `review.md` and binds to the reviewed commit. `close shipped` re-checks the
-  gates, refuses a delivered tree that differs from the verified commit, and
-  needs `Authorized: yes …` for pr or deploy (a target other than intent.md's
-  needs its own). `init` keeps `.sdlc/` out of git through `.git/info/exclude`
-  and changes no tracked file.
+  `review.md` and binds to the HEAD of every repository under the project
+  root; a Commit in a repository the review did not see is refused.
+  `close shipped` re-checks the gates, refuses a delivered tree that differs
+  from the verified commit, and needs `Authorized: yes …` for pr or deploy (a
+  target other than intent.md's needs its own). `init` keeps `.sdlc/` out of
+  git through `.git/info/exclude` and changes no tracked file.
 - **Three roles** — scout, reviewer, QA — replace researcher, verifier and
   adversary. Build carries the ponytail rules (smallest complete change)
   inline, so no other skill is needed.
-- **Smaller everything.** Prompts and templates: 3,902 words (was about
-  23,700); the heaviest phase loads 2,065. Scripts: 448 lines (was about
+- **Smaller everything.** Prompts and templates: 3,922 words (was about
+  23,700); the heaviest phase loads 2,080. Scripts: 477 lines (was about
   7,000). Five templates instead of fifteen. `status` on the 12-feature legacy
   store above: 0.2 s.
 - **Knowledge stays simple.** Scouts read the `knowledge` folder first;
   Evidence moves verified facts into it. Lessons, harvest, memory-merge and
   area pages are gone.
-- **Selftest** (87 checks) covers prompt budgets, gates, stops, routing
+- **Selftest** (95 checks) covers prompt budgets, gates, stops, routing
   boundaries and caps, scenario history, review binding, delivery authority and
   legacy stores, and drives one real feature through all four phases on a CLI
   fixture, on Linux, macOS and Windows.
@@ -83,8 +84,9 @@ full, and config.md says what `qa:` holds.
 - **v0 features show as `legacy`** (`next` exits 20). Finish them with
   `v0.27.0` or close them: `sdlc.sh close <slug> dropped "<reason>"`.
 - **`lazymode` still reads**: 0–1 → `human_gates: intent plan`, 2–3 →
-  `intent`, 4 → none. `.sdlc/memory/` is the knowledge folder until
-  `knowledge:` is set. An existing `/.sdlc` line in `.gitignore` keeps working.
+  `intent`, 4 → none; an unknown `human_gates` word means both.
+  `.sdlc/memory/` is the knowledge folder until `knowledge:` is set. An
+  existing `/.sdlc` line in `.gitignore` keeps working.
 - Hosts: `sdlc.sh status --json` and `sdlc.sh next` replace
   `gates/status.sh --json` and `tools/auto.sh next`, with the same exit codes
   (0 ready, 10 needs the human, 20 blocked, 30 done).

@@ -61,4 +61,6 @@ Summary, AS-IS → TO-BE and the flags, then `sdlc.sh approve plan <slug>
 `sdlc.sh next` names the failing scenarios the plan got wrong. Re-scout only
 that gap, update `refs/` and PLAN.md (add a missed scenario under the ID QA
 gave it), and approve again. An unchanged PLAN.md is refused unless the
-human approves it. Only the human can remove a scenario or drop its must.
+human approves it. Only the human can remove a scenario or drop its must; a
+scenario only QA added goes by deleting its `evidence.md` row before the
+human approves.

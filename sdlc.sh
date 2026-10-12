@@ -23,12 +23,18 @@ one_line() { printf '%s' "$1" | tr '\r\n' '  ' | awk '{$1=$1;print}'; }
 is_slug() { [[ ${#1} -le 80 && $1 =~ ^[a-z0-9][a-z0-9._-]*$ ]]; }
 valid_slug() { is_slug "$1" || die 'invalid slug: lowercase letters, digits, ".", "_" and "-", starting with a letter or digit, up to 80 characters' 2; }
 joined() { printf '%s' "$1" | awk 'NF{printf "%s%s", (n++ ? "; " : ""), $0} END{print ""}'; }
+# Shared by every markdown reader: drops CR and each <!-- --> span, keeping the text around it.
+# True when nothing but a comment was on the line, so the caller skips it.
+UNCOMMENT='function uncomment(  s,out,i,touched){gsub(/\r/,"");s=$0;out="";touched=comment
+  while(s!=""){if(comment){i=index(s,"-->");if(!i)break;s=substr(s,i+3);comment=0}
+    else{i=index(s,"<!--");if(!i){out=out s;break}touched=1;out=out substr(s,1,i-1);s=substr(s,i+4);comment=1}}
+  $0=out;return touched&&out!~/[^ \t]/}
+'
 value() {
-  awk -v key="$2" -v presence="${3:-0}" '
-  {gsub(/\r/,"");if(comment){if(index($0,"-->"))comment=0;next}
-   if(index($0,"<!--")){if(!index($0,"-->"))comment=1;next}
+  awk -v key="$2" -v presence="${3:-0}" "$UNCOMMENT"'
+  {if(uncomment())next
    gsub(/[`*]/,"");if(tolower($0) ~ "^[ \t]*" key "[ \t]*:"){
-     sub(/^[^:]*:[ \t]*/,"");sub(/ #.*/,"");sub(/[ \t]+$/,"");if(presence)print "present";else print;exit}}
+     sub(/^[^:]*:[ \t]*/,"");sub(/(^|[ \t])#.*/,"");sub(/[ \t]+$/,"");if(presence)print "present";else print;exit}}
   ' "$1"
 }
 config() {
@@ -37,7 +43,9 @@ config() {
     lazy=$(value "$STORE/config.md" lazymode)
     case "$lazy" in 0|1) gates='intent plan';; 2|3) gates=intent;; 4) gates=;; '') if [ -n "$(value "$STORE/config.md" lazymode 1)" ]; then gates='intent plan'; else gates=intent; fi;; *) gates='intent plan';; esac
   fi
-  gates=$(printf '%s' "$gates" | awk '{gsub(/,/," ");for(i=1;i<=NF;i++){v=tolower($i);if(v=="intent"||v=="plan")printf "%s%s",sep,v;sep=" "}}')
+  # An unknown word fails closed, as an unknown lazymode does.
+  gates=$(printf '%s' "$gates" | awk '{gsub(/,/," ");for(i=1;i<=NF;i++){v=tolower($i);if(v!="intent"&&v!="plan"){bad=$i;break}if(!seen[v]++)out=out (out==""?"":" ") v}}END{if(bad!="")print "!" bad;else print out}')
+  case "$gates" in '!'*) err "unknown human_gates value '${gates#!}' (write intent, plan, or leave it empty): the human approves intent and plan"; gates='intent plan';; esac
   knowledge=$(value "$STORE/config.md" knowledge)
   if [ -z "$knowledge" ]; then
     if [ -d "$STORE/memory" ]; then knowledge=.sdlc/memory; else knowledge=.sdlc/knowledge; fi
@@ -47,8 +55,9 @@ human_gate() { case " $gates " in *" $1 "*) return 0;; *) return 1;; esac; }
 find_store() {
   ROOT=$PWD
   while [ ! -f "$ROOT/.sdlc/config.md" ]; do
-    [ "$ROOT" != / ] || die 'no .sdlc/config.md found' 2
-    ROOT=$(dirname "$ROOT")
+    # dirname of a root returns the root itself ('/', and '//' for a Git Bash UNC path).
+    parent=$(dirname "$ROOT"); [ "$parent" != "$ROOT" ] || die 'no .sdlc/config.md found' 2
+    ROOT=$parent
   done
   STORE=$ROOT/.sdlc
   config
@@ -60,11 +69,11 @@ feature() {
   load_state
 }
 load_state() {
-  seq=0; entry=0; fails=0; rp=0; rb=0; lastfail=; intent=; plan=; review=; route=; score=; closed=; planned=; scored=; rounds=0; withdrawn=
+  seq=0; entry=0; fails=0; rp=0; rb=0; lastfail=; intent=; plan=; review=; route=; score=; closed=; planned=; scored=; rounds=0; withdrawn=; heads=
   if [ -f "$F/.state" ]; then
     while IFS= read -r line; do
       key=${line%%:*}; val=${line#*:}; val=${val# }
-      case "$key" in seq) seq=$val;; entry) entry=$val;; fails) fails=$val;; returns_plan) rp=$val;; returns_build) rb=$val;; lastfail) lastfail=$val;; intent) intent=$val;; plan) plan=$val;; review) review=$val;; route) route=$val;; score) score=$val;; closed) closed=$val;; planned) planned=$val;; scored) scored=$val;; rounds) rounds=$val;; withdrawn) withdrawn=$val;; esac
+      case "$key" in seq) seq=$val;; entry) entry=$val;; fails) fails=$val;; returns_plan) rp=$val;; returns_build) rb=$val;; lastfail) lastfail=$val;; intent) intent=$val;; plan) plan=$val;; review) review=$val;; route) route=$val;; score) score=$val;; closed) closed=$val;; planned) planned=$val;; scored) scored=$val;; rounds) rounds=$val;; withdrawn) withdrawn=$val;; heads) heads=$val;; esac
     done < "$F/.state"
   fi
   read -r ish iwho iseq its inote <<< "$intent"
@@ -77,7 +86,7 @@ save_state() {
   {
     printf 'seq: %s\nentry: %s\nfails: %s\nreturns_plan: %s\nreturns_build: %s\nlastfail: %s\n' "$seq" "$entry" "$fails" "$rp" "$rb" "$lastfail"
     printf 'planned: %s\nscored: %s\nrounds: %s\nwithdrawn: %s\n' "$planned" "$scored" "$rounds" "$withdrawn"
-    for key in intent plan review route score closed; do eval 'val=$'"$key"; [ -z "$val" ] || printf '%s: %s\n' "$key" "$val"; done
+    for key in intent plan review route score closed heads; do eval 'val=$'"$key"; [ -z "$val" ] || printf '%s: %s\n' "$key" "$val"; done
   } > "$tmp"
   mv "$tmp" "$F/.state"
 }
@@ -85,14 +94,13 @@ mutable() { [ -z "$closed" ] && [ "$F" = "$STORE/work/$slug" ] || die 'feature i
 event() { seq=$((seq+1)); ts=$(date -u +%Y-%m-%dT%H:%M:%SZ); }
 parse() {
   [ -f "$2" ] || { printf 'X\034%s missing\n' "$(basename "$2")"; return; }
-  awk -v mode="$1" -v objectives="$objectives" -v scenarios="$scenarios" -v scored="$scored" -v withdrawn="$withdrawn" '
+  awk -v mode="$1" -v objectives="$objectives" -v scenarios="$scenarios" -v scored="$scored" -v withdrawn="$withdrawn" "$UNCOMMENT"'
   function trim(s){sub(/^[ \t]+/,"",s);sub(/[ \t]+$/,"",s);return s}
   function problem(s){print "X\034" s}
   function question(){if(q!=""){l=tolower(trim(q));if(l!="none"&&l!="n/a"&&l!~/^resolved:/&&l!~/— resolved:/&&l!~/-- resolved:/)print "Q\034" q;q=""}}
   function fields(s, c,j){for(j in a)delete a[j];nfields=1;for(j=1;j<=length(s);j++){c=substr(s,j,1);if(c=="\\"&&substr(s,j+1,1)=="|"){a[nfields]=a[nfields] "|";j++}else if(c=="|")nfields++;else a[nfields]=a[nfields] c}for(j=1;j<=nfields;j++)a[j]=trim(a[j]);return a[2]}
   {
-    gsub(/\r/,"");if(comment){if(index($0,"-->"))comment=0;next}
-    if(index($0,"<!--")){if(!index($0,"-->"))comment=1;next}
+    if(uncomment())next
     sub(/^[ \t]*\*[ \t]+/,"- ");gsub(/[`*]/,"");raw=$0;line=trim(raw);low=tolower(line)
     if(mode=="plan"&&low~/<three lines for the human|<file or symbol>|<another reader or writer|<…>/)problem("PLAN.md contains template placeholder")
     if(low~/^## /){question();section=substr(low,4);next}
@@ -102,7 +110,7 @@ parse() {
     }
     if(section~/^delivery/){v=line;sub(/^- /,"",v);if(tolower(v)~/^(target|authorized|checked with|output):/){key=v;sub(/:.*/,"",key);sub(/^[^:]*:[ \t]*/,"",v);key=tolower(key);if(key=="target"){target=tolower(v);print "T\034" target}if(key=="authorized")print "A\034" v;if(key=="checked with")print "K\034" v;if(key=="output")print "U\034" v}}
     if(mode=="plan"&&low~/risk flags:/){flags++;v=line;sub(/^.*[Rr][Ii][Ss][Kk] [Ff][Ll][Aa][Gg][Ss]:[ \t]*/,"",v);n=split(v,segments,"·");for(i=1;i<=n;i++)if(tolower(segments[i])~/(^|[^a-z0-9_])yes([^a-z0-9_]|$)/)print "R\034" trim(segments[i])}
-    if(mode=="evidence"&&(low~/^- commit:/||(section~/^delivery/&&low~/^- delivered:/))){kind=low~/^- commit:/?"C":"D";v=line;sub(/^[^:]*:[ \t]*/,"",v);hash=v;sub(/[ \t].*/,"",hash);repo=v;sub(/^[^ \t]+[ \t]*/,"",repo);if(repo==v||repo=="")repo=".";if(hash!~/^[a-fA-F0-9]+$/||length(hash)<7||length(hash)>40){if(kind=="C")problem("invalid Commit: " hash)}else{print kind "\034" tolower(hash) "\034" repo;if(kind=="C")commits++}}
+    if(mode=="evidence"&&(low~/^- commit:/||(section~/^delivery/&&low~/^- delivered:/))){kind=low~/^- commit:/?"C":"D";v=line;sub(/^[^:]*:[ \t]*/,"",v);hash=v;sub(/[ \t].*/,"",hash);repo=v;sub(/^[^ \t]+[ \t]*/,"",repo);if(repo==v||repo=="")repo=".";if(hash!~/^[a-fA-F0-9]+$/||length(hash)<7||length(hash)>64){if(kind=="C")problem("invalid Commit: " hash)}else{print kind "\034" tolower(hash) "\034" repo;if(kind=="C")commits++}}
     if(line!~/^\|/)next
     id=fields(line);if(tolower(id)=="id"||line~/^[| :\t-]+$/)next
     if(mode=="plan"&&section~/^scenarios/){
@@ -191,13 +199,20 @@ plan_history() {
       *) removed="${removed}${removed:+; }$id"; violations="${violations}$id removed"$'\n';;
     esac
   done
+  # A scenario only QA added is removed by deleting its evidence.md row.
+  [ -f "$F/evidence.md" ] || return 0
+  rows=" $(parse evidence "$F/evidence.md" | awk -F'\034' '$1=="E"{printf "%s ", $2}')"
+  for id in $scored; do
+    case " $scenarios $planned " in *" $id "*|*" $id:"*) continue;; esac
+    case "$rows" in *" $id "*) :;; *) removed="${removed}${removed:+; }$id"; violations="${violations}$id removed"$'\n';; esac
+  done
 }
 
 filled() { [ -n "$1" ] && [[ $1 != \<* ]]; }
 # Prints the number of VERDICT lines in review.md (HTML comments skipped) and the newest verdict word.
 verdicts() {
   [ -f "$F/review.md" ] || { printf '0\n'; return; }
-  awk '{gsub(/\r|[`*]/,"");if(comment){if(index($0,"-->"))comment=0;next}if(index($0,"<!--")){if(!index($0,"-->"))comment=1;next}if(tolower($0)~/^[ \t]*verdict[ \t]*:/){n++;sub(/^[^:]*:[ \t]*/,"");v=toupper($0);if(v~/(PASS|FAIL)[ \t]*[|\/][ \t]*(PASS|FAIL)/)v="UNDECIDED";else sub(/[^A-Z].*$/,"",v)}}END{print n+0, v}' "$F/review.md"
+  awk "$UNCOMMENT"'{if(uncomment())next;gsub(/[`*]/,"");if(tolower($0)~/^[ \t]*verdict[ \t]*:/){n++;sub(/^[^:]*:[ \t]*/,"");v=toupper($0);if(v~/(PASS|FAIL)[ \t]*[|\/][ \t]*(PASS|FAIL)/)v="UNDECIDED";else sub(/[^A-Z].*$/,"",v)}}END{print n+0, v}' "$F/review.md"
 }
 qa_action() {
   local need= id
@@ -261,15 +276,24 @@ validate_evidence() {
   problems "$eproblems" || return 1
   for ((i=0;i<${#ids[@]};i++)); do
     if [ "${results[i]}" != BLOCKED ]; then
-      path=${logs[i]}; case "$path" in ''|/*|[A-Za-z]:*|\<*) err "${ids[i]} needs a relative non-empty log"; return 1;; esac
+      path=${logs[i]}; case "/${path//\\//}/" in //|//*|/[A-Za-z]:*|/\<*|*/../*) err "${ids[i]} needs a non-empty log inside the feature folder"; return 1;; esac
       [ -s "$F/$path" ] || { err "missing or empty log: $path"; return 1; }
     fi
   done
 }
+# HEAD and toplevel of the project root's repository and of every repository inside the root,
+# tab-separated pairs on one line: a review PASS binds them all.
+review_heads() {
+  { git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null || :
+    { find "$ROOT" \( -name node_modules -o -name .sdlc \) -prune -o -name .git -print -prune 2>/dev/null || :; } | while IFS= read -r g; do dirname "$g"; done
+  } | while IFS= read -r dir; do
+    top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) && head=$(git -C "$top" rev-parse -q --verify HEAD 2>/dev/null) && printf '%s\t%s\n' "$head" "$top" || :
+  done | sort -u | awk '{printf "%s%s", (NR>1 ? "\t" : ""), $0}'
+}
 repo_path() { case "$1" in /*|[A-Za-z]:*|\<*) die "repo path must be relative: $1";; esac; REPO=$ROOT/$1; }
 validate_commits() {
-  # Repositories are compared by git's own toplevel path, so any path into the project repo is bound to the review.
-  # A project root outside git (several repositories side by side) binds nothing.
+  # Repositories are compared by git's own toplevel path, so any path into a repository is bound to the review.
+  # A Commit repository the last review did not see (outside the project root) is refused.
   roottop=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null) || roottop=
   rootprefix=$(git -C "$ROOT" rev-parse --show-prefix 2>/dev/null) || rootprefix=
   for ((i=0;i<${#commits[@]};i++)); do
@@ -279,7 +303,9 @@ validate_commits() {
     head=$(git -C "$REPO" rev-parse HEAD) || die "not a git repository: ${repos[i]}"
     [ "$head" = "$full" ] || die "HEAD differs from Commit: ${repos[i]}"
     top=$(git -C "$REPO" rev-parse --show-toplevel) || die "not a git repository: ${repos[i]}"
-    if [ -n "$vsha" ] && [ "$vsha" != - ] && [ "$top" = "$roottop" ] && [ "$full" != "$vsha" ]; then die "Commit ${commits[i]} is not the reviewed commit $vsha: commit, then review again"; fi
+    reviewed=$(printf '%s' "$heads" | awk -F'\t' -v top="$top" '{for(j=1;j<NF;j+=2)if($(j+1)==top){print $j;exit}}')
+    [ -n "$reviewed" ] || die "${repos[i]} was not under review: commit, then review again from the project root"
+    [ "$full" = "$reviewed" ] || die "Commit ${commits[i]} is not the reviewed commit $reviewed: commit, then review again"
     excludes=(':(exclude).sdlc')
     [ "$top" != "$roottop" ] || excludes[${#excludes[@]}]=":(top,exclude,literal)${rootprefix}.sdlc"
     ptop=$(cd "$top" && pwd -P); physical_store=$(cd "$STORE" && pwd -P)
@@ -368,8 +394,10 @@ case "$command" in
         fi
         hash=$(sha < "$F/PLAN.md")
         if [ "$who" = agent ] && pending_plan && [ "$psh" = "$hash" ]; then die 'PLAN.md unchanged since Evidence routed to plan'; fi
-        if [ "$psh" = "$hash" ] && [ "$pish" = "$ihash" ] && ! pending_plan && ! stopped; then printf 'plan already approved\n'; exit; fi
-        event; plan="$hash $ihash $who $seq $ts $note"; entry=$((entry+1)); fails=0; review=; planned=$newplanned
+        if [ "$psh" = "$hash" ] && [ "$pish" = "$ihash" ] && [ -z "$removed" ] && ! pending_plan && ! stopped; then printf 'plan already approved\n'; exit; fi
+        # Only the human or a counted return to plan resets the review FAIL cap; an agent re-approval keeps it.
+        keep=$fails; if [ "$who" = human ] || pending_plan; then keep=0; fi
+        event; plan="$hash $ihash $who $seq $ts $note"; entry=$((entry+1)); fails=$keep; review=; heads=; planned=$newplanned
         left=; for id in $withdrawn; do case " $scenarios " in *" $id "*) :;; *) left="${left}${left:+ }$id";; esac; done; withdrawn=$left
         # Rounds already in review.md (the plan gap check) cannot pass the build.
         read -r rounds _ <<< "$(verdicts)"
@@ -386,6 +414,7 @@ case "$command" in
     [ "$nrounds" -gt "$rounds" ] || die 'review.md has no new round since the last review or plan approval: the reviewer appends one'
     [ "$actual_verdict" = "$(printf '%s' "$2" | tr '[:lower:]' '[:upper:]')" ] || die "review.md's last VERDICT is $actual_verdict"
     vsha=$(git -C "$ROOT" rev-parse -q --verify HEAD 2>/dev/null) || vsha=-
+    heads=$(review_heads)
     event; review="$2 $entry $seq $vsha $note"; rounds=$nrounds
     if [ "$2" = fail ]; then fails=$((fails+1)); printf 'review FAIL %s/3\n' "$fails"; [ "$fails" -lt 3 ] || printf '3 review FAILs this build: stop, the human decides\n'
     else printf 'review PASS. Phase 4: run QA, fill evidence.md, score.\n'; fi

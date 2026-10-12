@@ -7,6 +7,8 @@ trap 'rm -rf "$TMP"' EXIT
 COUNT=0
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 ok() { COUNT=$((COUNT + 1)); printf 'ok: %s\n' "$*"; }
+# CI must run every symlink check; elsewhere an OS without symlinks skips them.
+skip() { [ -z "${CI:-}" ] || fail "symlink check skipped on CI: $*"; printf 'skip: %s\n' "$*"; }
 contains() { case "$OUTPUT" in *"$1"*) ;; *) fail "missing '$1' in: $OUTPUT" ;; esac; }
 expect() {
   expected=$1; shift
@@ -336,7 +338,7 @@ regression_other() {
     ok 'unignored external symlink store excluded from parent repo with canonical paths'
   else
     mv "$TMP/external-nested-store" .sdlc
-    printf 'skip: external nested symlink unavailable on this OS\n'
+    skip 'external nested symlink unavailable on this OS'
   fi
 }
 regression_init() {
@@ -480,11 +482,95 @@ regression_round2() {
     *) fail "unknown round 2 regression: $1";;
   esac
 }
+regression_ultra() {
+  repo regression-ultra
+  feature inline-question
+  replace '/^- none$/ {print "- Can we drop the legacy column? <!-- waiting on the DBA -->"; next} {print}' "$F/intent.md"
+  expect 1 approve intent "$SLUG" --human 'question open'; contains 'drop the legacy column'
+  expect 10 next "$SLUG"; contains 'drop the legacy column'
+  printf 'human_gates: intent plan <!-- every plan needs me -->\n' > .sdlc/config.md
+  expect 0 status; contains 'human_gates: intent plan ·'
+  printf '<!-- gates\n-->lazymode: 0\n' > .sdlc/config.md
+  expect 0 status; contains 'human_gates: intent plan ·'
+  ok 'ultra 1: text beside an inline or closing HTML comment still counts'
+  for gates in all '[intent, plan]' 'intent;plan' spec; do
+    printf 'human_gates: %s\n' "$gates" > .sdlc/config.md
+    expect 0 status; contains 'human_gates: intent plan ·'; contains 'unknown human_gates value'
+  done
+  printf 'human_gates: Plan, intent, plan\n' > .sdlc/config.md
+  expect 0 status; contains 'human_gates: plan intent ·'
+  printf 'human_gates: intent\n' > .sdlc/config.md
+  ok 'ultra 2: an unknown human_gates word fails closed to intent and plan'
+  ready fail-cap 2
+  reviewed "$SLUG" fail 'finding 1'; reviewed "$SLUG" fail 'finding 2'
+  printf '\nagent edit before the third FAIL\n' >> "$F/PLAN.md"
+  expect 0 approve plan "$SLUG" --agent 'reapproved mid-build'
+  [ "$(state fails)" -eq 2 ] || fail 'agent plan approval reset the review FAIL cap'
+  reviewed "$SLUG" fail 'finding 3'
+  expect 10 next "$SLUG"; contains '3 review FAILs'
+  expect 0 approve plan "$SLUG" --human 'human resumes'
+  [ "$(state fails)" -eq 0 ] || fail 'human plan approval kept the review FAIL cap'
+  ok 'ultra 3: an agent plan re-approval keeps the review FAIL count; the human resets it'
+  printf 'services/\n' >> .git/info/exclude
+  mkdir -p services/other
+  git -C services/other -c init.defaultBranch=main init -q
+  git -C services/other config user.name 'sdlc selftest'; git -C services/other config user.email selftest@sdlc.invalid
+  printf 'v1\n' > services/other/source; git -C services/other add source; git -C services/other commit -qm v1
+  ready nested-bound 1
+  printf 'v2 unreviewed\n' > services/other/source; git -C services/other commit -qam v2
+  evidence
+  replace '/## Results/ {print "- Commit: '"$(git -C services/other rev-parse HEAD)"' services/other"} {print}' "$E"
+  expect 1 score "$SLUG"; contains 'is not the reviewed commit'
+  reviewed "$SLUG" pass 'review covers the nested commit'
+  route deliver
+  ok 'ultra 4: a review PASS binds the HEAD of every repository under the project root'
+  ready log-escape 1
+  evidence
+  printf 'outside\n' > "$F/../outside.txt"
+  replace '{sub(/logs\/S1\.txt/, "../outside.txt")} {print}' "$E"
+  expect 1 score "$SLUG"; contains 'inside the feature folder'
+  replace '{sub(/\.\.\/outside\.txt/, "logs/../../outside.txt")} {print}' "$E"
+  expect 1 score "$SLUG"; contains 'inside the feature folder'
+  replace '{sub(/logs\/\.\.\/\.\.\/outside\.txt/, "logs/S1.txt")} {print}' "$E"
+  route deliver
+  ok 'ultra 6: a Results log cannot point outside the feature folder'
+  ready qa-added 1
+  evidence
+  printf 'qa only\n' > "$F/logs/S9.txt"
+  printf '| S9 | PASS | | QA-added check | logs/S9.txt |\n' >> "$E"
+  route deliver
+  replace '!/^\| S9 /' "$E"
+  expect 1 score "$SLUG"; contains 'missing S9'
+  expect 1 approve plan "$SLUG" --agent 'agent cannot drop QA scenario'; contains 'S9 removed'
+  expect 0 approve plan "$SLUG" --human 'S9 was a false lead'
+  case " $(state scored) " in *" S9 "*) fail 'human approval kept S9 scored';; esac
+  case " $(state withdrawn) " in *" S9 "*) :;; *) fail 'human approval did not withdraw S9';; esac
+  reviewed "$SLUG" pass 'review after the withdrawal'
+  route deliver
+  ok 'ultra 7: the human withdraws a scenario only QA added by deleting its evidence row'
+  mkdir -p "$TMP/no-store/deep"; cd "$TMP/no-store/deep"
+  expect 2 status; contains 'no .sdlc/config.md found'
+  ok 'ultra 8: the store walk-up stops at the filesystem root'
+  if git -c init.defaultBranch=main init -q --object-format=sha256 "$TMP/sha256" 2>/dev/null; then
+    cd "$TMP/sha256"
+    git config user.name 'sdlc selftest'; git config user.email selftest@sdlc.invalid
+    printf 'baseline\n' > README; git add README; git commit -qm baseline
+    expect 0 init; SHA=$(git rev-parse HEAD)
+    [ "${#SHA}" -eq 64 ] || fail "sha256 repository gave a ${#SHA}-character HEAD"
+    ready sha256 1
+    evidence; route deliver
+    delivery
+    expect 0 close "$SLUG" shipped 'full SHA-256 Commit and Delivered'
+    ok 'ultra 9: 64-character SHA-256 Commit and Delivered hashes'
+  else
+    printf 'skip: git without SHA-256 repositories\n'
+  fi
+}
 run_regressions() {
   case "$1" in
     stop) regression_stop;; scenarios) regression_scenarios;; delivery) regression_delivery;; review) regression_review;; other) regression_other;;
-    init) regression_init;; round2-[abcde]) regression_round2 "${1#round2-}";; round3) regression_round3;;
-    all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init
+    init) regression_init;; ultra) regression_ultra;; round2-[abcde]) regression_round2 "${1#round2-}";; round3) regression_round3;;
+    all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init; regression_ultra
       for round2 in a b c d e; do regression_round2 "$round2"; done; regression_round3;;
     *) fail "unknown regression group: $1";;
   esac
@@ -687,7 +773,7 @@ if ln -s "$TMP/shared-store" .sdlc 2>/dev/null && [ -L .sdlc ]; then
   cd ..
   ok 'real symlink store discovered and updated from nested directories'
 else
-  printf 'skip: real symlink creation unavailable on this OS\n'
+  skip 'real symlink creation unavailable on this OS'
 fi
 
 repo scoring
