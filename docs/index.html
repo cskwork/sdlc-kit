@@ -131,7 +131,28 @@
   .band-alt { background: linear-gradient(rgba(255, 251, 240, 0.016), rgba(255, 251, 240, 0.016)); }
 
   /* ---------- the loop ---------- */
-  .flow { list-style: none; margin: 0 0 2.75rem; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+  .loopmap { display: grid; gap: 2rem; align-items: start; }
+  .loopmap > * { min-width: 0; }
+  @media (min-width: 900px) { .loopmap { grid-template-columns: minmax(0, 30rem) 1fr; gap: 3rem; } }
+  .loopsvg { display: block; width: 100%; max-width: 30rem; height: auto; margin-inline: auto; }
+  .loopsvg .box rect { fill: var(--bg-raised); stroke: var(--line-strong); stroke-width: 1.2; }
+  .loopsvg .box text { font: 600 16px var(--slab); fill: var(--text); text-anchor: middle; }
+  .loopsvg path { fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .loopsvg .go path { stroke: var(--accent); marker-end: url(#ah-go); }
+  .loopsvg .back path { stroke: var(--danger); stroke-dasharray: 5 4; marker-end: url(#ah-back); }
+  .loopsvg .trunk { stroke: var(--line-strong); }
+  .loopsvg .stop { stroke: var(--text-2); marker-end: url(#ah-out); }
+  .loopsvg .mk-go { fill: var(--accent); }
+  .loopsvg .mk-back { fill: var(--danger); }
+  .loopsvg .mk-out { fill: var(--text-2); }
+  .loopsvg .dots circle { fill: var(--line-strong); }
+  .loopsvg .pill { fill: none; stroke: var(--text-2); stroke-width: 1.2; }
+  .loopsvg .pill.done { fill: var(--accent); stroke: var(--accent); }
+  .loopsvg .pill-t { font: 600 13px var(--sans); fill: var(--text); text-anchor: middle; }
+  .loopsvg .pill-t.done { fill: var(--accent-ink); }
+  .loopsvg .lbl text { font: 400 13.5px var(--sans); fill: var(--text-2); }
+  .loopsvg .lbl.end text { text-anchor: end; }
+  .flow { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
   .flow .stage { background: var(--bg-raised); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.15rem 1.1rem; }
   .flow h3 { margin: 0 0 0.3rem; font-size: 1.08rem; display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
   .flow h3 .art {
@@ -140,36 +161,8 @@
     padding: 0.14rem 0.5rem; border-radius: 99px; letter-spacing: 0;
   }
   .flow .what { margin: 0; color: var(--text-2); font-size: 0.86rem; line-height: 1.55; }
-  .flow .edge { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; padding-block: 0.15rem; }
-  .flow .edge .lbl {
-    font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.02em; text-align: center;
-    color: var(--text-2); border: 1px dashed var(--line-strong); border-radius: 99px; padding: 0.2rem 0.7rem;
-  }
-  .flow .edge.gate .lbl { color: var(--accent); border-color: rgba(234, 176, 77, 0.45); }
-  .flow .edge svg { color: var(--line-strong); }
-  .flow .edge.gate svg { color: var(--accent); }
-  .loopnote { margin: 1rem 0 0; max-width: 62ch; color: var(--text-2); font-size: 0.86rem; }
+  .loopnote { margin: 1.5rem 0 0; max-width: 62ch; color: var(--text-2); font-size: 0.86rem; }
   .loopnote b { color: var(--text); font-weight: 600; }
-  @media (min-width: 900px) {
-    .flow {
-      display: grid; gap: 1.1rem 0.5rem; align-items: stretch;
-      grid-template-columns: 1fr 5.2rem 1fr;
-      grid-template-areas: "s1 e12 s2" ". . e23" "s4 e34 s3";
-    }
-    .s1 { grid-area: s1; } .s2 { grid-area: s2; } .s3 { grid-area: s3; } .s4 { grid-area: s4; }
-    .e12 { grid-area: e12; } .e23 { grid-area: e23; } .e34 { grid-area: e34; }
-    .flow .edge { justify-content: center; }
-  }
-  @media (max-width: 899.98px) { .flow .edge .d { display: none; } }
-
-  /* ---------- routing table ---------- */
-  .tablewrap { overflow-x: auto; }
-  table.how { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-  table.how caption { text-align: left; font-family: var(--slab); font-weight: 600; font-size: 1.12rem; padding-bottom: 0.8rem; }
-  table.how th, table.how td { text-align: left; padding: 0.75rem 1rem 0.75rem 0; border-top: 1px solid var(--line); vertical-align: top; }
-  table.how thead th { font-family: var(--mono); font-size: 0.7rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-2); }
-  table.how tbody th { font-weight: 600; white-space: nowrap; font-family: var(--mono); font-size: 0.84rem; }
-  table.how td { color: var(--text-2); }
 
   /* ---------- what you get (ledger) ---------- */
   .ledger { margin: 0; border-bottom: 1px solid var(--line); }
@@ -249,54 +242,77 @@
   <section class="band" id="loop" aria-labelledby="loop-h">
     <div class="wrap">
       <h2 id="loop-h" data-i18n="loop-h">Four phases, with checkpoints between them</h2>
-      <p class="section-lede" data-i18n="loop-lede">Each phase writes down what it found or did, and the next one starts only when its checkpoint opens. By default a person confirms the request. A plan with a risk flag also waits for a person, and you can choose to approve every plan yourself.</p>
+      <p class="section-lede" data-i18n="loop-lede">Each phase writes down what it did, and the next one starts only when its checkpoint opens. The red arrows show where work goes back when something fails.</p>
 
-      <ol class="flow" aria-label="The four phases, with the checkpoints between them" data-i18n-aria="flow-aria">
-        <li class="stage s1">
-          <h3><span data-i18n="s1-h">1 · Intent</span> <span class="art" data-i18n="s1-a">what you asked</span></h3>
-          <p class="what" data-i18n="s1-p">The AI writes down what you asked, what it understood, and the risks in that understanding. It asks only the questions whose answers would change what gets built.</p>
-        </li>
-        <li class="edge gate e12">
-          <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M0 5h41M38 1.5 42 5l-4 3.5"/></svg>
-          <span class="lbl" data-i18n="e12">checkpoint · a person confirms</span>
-        </li>
-        <li class="stage s2">
-          <h3><span data-i18n="s2-h">2 · Plan</span> <span class="art" data-i18n="s2-a">one plan page</span></h3>
-          <p class="what" data-i18n="s2-p">Several helper AIs explore at the same time: the rules that decide the behaviour, the data, the logic, and how users reach it today. Each writes notes. One plan page holds before and after, side effects, and the scenarios that will be tested. A separate AI checks it for gaps.</p>
-        </li>
-        <li class="edge gate e23">
-          <svg class="d" width="10" height="52" viewBox="0 0 10 52" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 0v47M1.5 43.5 5 48l3.5-4.5"/></svg>
-          <span class="lbl" data-i18n="e23">risk flag · a person approves</span>
-        </li>
-        <li class="stage s3">
-          <h3><span data-i18n="s3-h">3 · Build</span> <span class="art" data-i18n="s3-a">the smallest complete change</span></h3>
-          <p class="what" data-i18n="s3-p">The AI makes the smallest change that fully does what the plan says. A separate AI then reviews it, assuming it is wrong. After three failed reviews the work stops for a person.</p>
-        </li>
-        <li class="edge e34">
-          <svg class="d" width="46" height="10" viewBox="0 0 46 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M46 5H5M8 1.5 4 5l4 3.5"/></svg>
-          <span class="lbl" data-i18n="e34">review passes · goes on</span>
-        </li>
-        <li class="stage s4">
-          <h3><span data-i18n="s4-h">4 · Evidence</span> <span class="art" data-i18n="s4-a">scored proof</span></h3>
-          <p class="what" data-i18n="s4-p">The project's real checks run first. Then every scenario is played as its user, through the same screens and commands that user really works with. A script scores the result, so the AI cannot grade its own work.</p>
-        </li>
-      </ol>
+      <div class="loopmap">
+        <svg class="loopsvg" viewBox="0 0 440 612" role="img" aria-label="The loop. 1 Intent goes to 2 Plan once a person approves. Plan goes to 3 Build once the plan is approved, by a person if it carries a risk flag; gaps found send it back into Plan for one or two rounds. Build goes to 4 Evidence when the review passes; a failed review means fix and review again. Evidence checks the score in this order: a wrong or incomplete plan, or the same failure twice, goes back to Plan; every must-pass scenario passed and at least 95% of all passed means Deliver; scenarios with no place to run that block delivery go to a person; anything else goes back to Build. Each kind of return happens at most three times, then a person decides." data-i18n-aria="loop-aria">
+          <defs>
+            <marker id="ah-go" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 8 4 0 8z" class="mk-go"/></marker>
+            <marker id="ah-back" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 8 4 0 8z" class="mk-back"/></marker>
+            <marker id="ah-out" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 8 4 0 8z" class="mk-out"/></marker>
+          </defs>
+          <g class="box">
+            <rect x="140" y="8" width="150" height="52" rx="8"/><text x="215" y="40" data-i18n="s1-h">1 · Intent</text>
+            <rect x="140" y="106" width="150" height="52" rx="8"/><text x="215" y="138" data-i18n="s2-h">2 · Plan</text>
+            <rect x="140" y="212" width="150" height="52" rx="8"/><text x="215" y="244" data-i18n="s3-h">3 · Build</text>
+            <rect x="140" y="318" width="150" height="52" rx="8"/><text x="215" y="350" data-i18n="s4-h">4 · Evidence</text>
+          </g>
+          <g class="go">
+            <path d="M215 60V105"/><path d="M215 158V211"/><path d="M215 264V317"/><path d="M215 482H345"/>
+          </g>
+          <g class="back">
+            <path d="M140 118H126A10 10 0 0 0 126 138H139"/>
+            <path d="M140 222H126A10 10 0 0 0 126 242H139"/>
+            <path d="M215 422H430V132H291"/>
+            <path d="M215 600H14V256H139"/>
+          </g>
+          <path class="trunk" d="M215 370V600"/>
+          <path class="stop" d="M215 542H345"/>
+          <g class="dots"><circle cx="215" cy="422" r="3"/><circle cx="215" cy="482" r="3"/><circle cx="215" cy="542" r="3"/></g>
+          <rect class="pill done" x="346" y="470" width="84" height="24" rx="12"/><text class="pill-t done" x="388" y="487" data-i18n="d-deliver">Deliver</text>
+          <rect class="pill" x="346" y="530" width="84" height="24" rx="12"/><text class="pill-t" x="388" y="547" data-i18n="d-person">A person</text>
+          <g class="lbl">
+            <text x="227" y="88" data-i18n="e12">checkpoint · a person confirms</text>
+            <text x="227" y="180" data-i18n="d-ok2">plan approved</text>
+            <text x="227" y="197" data-i18n="e23">risk flag · a person approves</text>
+            <text x="227" y="294" data-i18n="e34">review passes · goes on</text>
+            <text x="227" y="395" data-i18n="d-a1">plan wrong or incomplete,</text>
+            <text x="227" y="412" data-i18n="d-a2">or the same failure twice</text>
+            <text x="227" y="447" data-i18n="d-b1">all must-pass scenarios passed,</text>
+            <text x="227" y="464" data-i18n="d-b2">and at least 95% of all</text>
+            <text x="227" y="507" data-i18n="d-c1">no place to run scenarios,</text>
+            <text x="227" y="524" data-i18n="d-c2">and that blocks delivery</text>
+          </g>
+          <g class="lbl end">
+            <text x="112" y="125" data-i18n="d-gap1">gaps found:</text>
+            <text x="112" y="142" data-i18n="d-gap2">1–2 rounds</text>
+            <text x="112" y="229" data-i18n="d-fail1">review fails:</text>
+            <text x="112" y="246" data-i18n="d-fail2">fix, review again</text>
+            <text x="203" y="572" data-i18n="d-d1">anything else:</text>
+            <text x="203" y="589" data-i18n="d-d2">the change failed</text>
+          </g>
+        </svg>
 
-      <div class="tablewrap">
-        <table class="how">
-          <caption data-i18n="rt-cap">After Evidence, the score decides where the work goes</caption>
-          <thead>
-            <tr><th scope="col" data-i18n="rt-h1">Goes to</th><th scope="col" data-i18n="rt-h2">When</th></tr>
-          </thead>
-          <tbody>
-            <tr><th scope="row" data-i18n="rt1-to">Plan</th><td data-i18n="rt1">The plan was wrong or missed something, or the same failure happened twice.</td></tr>
-            <tr><th scope="row" data-i18n="rt2-to">Deliver</th><td data-i18n="rt2">Every must-pass scenario passed, and at least 95% of all scenarios passed.</td></tr>
-            <tr><th scope="row" data-i18n="rt3-to">A person</th><td data-i18n="rt3">Scenarios could not be run, because there was nowhere to run them, and that is what stops delivery.</td></tr>
-            <tr><th scope="row" data-i18n="rt4-to">Build</th><td data-i18n="rt4">Anything else.</td></tr>
-          </tbody>
-        </table>
+        <ol class="flow" aria-label="The four phases" data-i18n-aria="flow-aria">
+          <li class="stage">
+            <h3><span data-i18n="s1-h">1 · Intent</span> <span class="art" data-i18n="s1-a">what you asked</span></h3>
+            <p class="what" data-i18n="s1-p">The AI writes down what you asked, what it understood, and the risks in that understanding. It asks only the questions whose answers would change what gets built.</p>
+          </li>
+          <li class="stage">
+            <h3><span data-i18n="s2-h">2 · Plan</span> <span class="art" data-i18n="s2-a">one plan page</span></h3>
+            <p class="what" data-i18n="s2-p">Helper AIs explore the rules, the data, the logic and how users reach it today. One plan page holds before and after, side effects and the scenarios to test. A separate AI checks it for gaps.</p>
+          </li>
+          <li class="stage">
+            <h3><span data-i18n="s3-h">3 · Build</span> <span class="art" data-i18n="s3-a">the smallest complete change</span></h3>
+            <p class="what" data-i18n="s3-p">The AI makes the smallest change that fully does what the plan says. A separate AI reviews it, assuming it is wrong. A failed review sends it back to be fixed and reviewed again; after three failures the work stops for a person.</p>
+          </li>
+          <li class="stage">
+            <h3><span data-i18n="s4-h">4 · Evidence</span> <span class="art" data-i18n="s4-a">scored proof</span></h3>
+            <p class="what" data-i18n="s4-p">The project's real checks run first, then every scenario is played as its user. A script scores the result, so the AI cannot grade its own work. Failures go back to Plan or Build, depending on the cause.</p>
+          </li>
+        </ol>
       </div>
-      <p class="loopnote" data-i18n="loopnote">The rules are checked in this order. Each kind of return happens <b>at most three times</b>, then a person decides. A scenario that could not run counts as failed, and only a person can remove a scenario.</p>
+      <p class="loopnote" data-i18n="loopnote">The score is checked from top to bottom. Each kind of return happens <b>at most three times</b>, then a person decides. A scenario that could not run counts as failed, and only a person can remove a scenario.</p>
     </div>
   </section>
 
@@ -404,34 +420,38 @@ ln -s ~/sdlc-kit ~/.claude/skills/sdlc-kit</span>
     "t6": '<span class="ok">통과.</span><span class="o"> 두 번째 검토입니다.</span>',
     "t7": '<span class="ok">8개 중 8개 통과.</span><span class="o"> 납품합니다.</span>',
     "loop-h": '네 단계와 그 사이의 확인 지점',
-    "loop-lede": '각 단계는 알아낸 것이나 한 일을 글로 남기고, 다음 단계는 확인 지점이 열려야 시작합니다. 기본 설정에서는 사람이 요청 내용을 확인합니다. 위험 표시가 붙은 계획도 사람을 기다리며, 원하면 모든 계획을 직접 승인할 수 있습니다.',
+    "loop-lede": '각 단계는 한 일을 글로 남기고, 다음 단계는 확인 지점이 열려야 시작합니다. 빨간 화살표는 무언가 실패했을 때 작업이 되돌아가는 곳입니다.',
     "s1-h": '1 · 의도',
     "s1-a": '요청한 것',
     "s1-p": 'AI가 요청한 내용, 자신이 이해한 내용, 그 이해에 숨은 위험을 글로 적습니다. 답에 따라 만들 것이 달라지는 질문만 묻습니다.',
     "e12": '확인 지점 · 사람이 확인',
     "s2-h": '2 · 계획',
     "s2-a": '계획 한 장',
-    "s2-p": '여러 보조 AI가 동시에 조사합니다. 동작을 정하는 규칙, 데이터, 처리 흐름, 사용자가 지금 그 기능에 닿는 경로를 살피고 각자 기록을 남깁니다. 계획 한 장에 바뀌기 전과 후, 부작용, 시험할 시나리오를 담고, 다른 AI가 빠진 곳을 찾습니다.',
+    "s2-p": '보조 AI들이 규칙, 데이터, 처리 흐름, 사용자가 지금 그 기능에 닿는 경로를 조사합니다. 계획 한 장에 바뀌기 전과 후, 부작용, 시험할 시나리오를 담고, 다른 AI가 빠진 곳을 찾습니다.',
+    "d-ok2": '계획 승인',
     "e23": '위험 표시 · 사람이 승인',
     "s3-h": '3 · 만들기',
     "s3-a": '가장 작은 완전한 변경',
-    "s3-p": '계획이 말하는 일을 빠짐없이 해내는 가장 작은 변경을 만듭니다. 이어서 다른 AI가 틀렸다고 가정하고 검토합니다. 검토에서 세 번 떨어지면 작업을 멈추고 사람에게 넘깁니다.',
+    "s3-p": '계획이 말하는 일을 빠짐없이 해내는 가장 작은 변경을 만듭니다. 이어서 다른 AI가 틀렸다고 가정하고 검토합니다. 검토에서 떨어지면 고친 뒤 다시 검토받고, 세 번 떨어지면 작업을 멈추고 사람에게 넘깁니다.',
     "e34": '검토 통과 · 다음으로',
     "s4-h": '4 · 검증',
     "s4-a": '점수가 매겨진 증거',
-    "s4-p": '먼저 프로젝트의 실제 점검을 돌립니다. 그다음 모든 시나리오를 그 사용자가 되어, 사용자가 실제로 쓰는 화면과 명령으로 해 봅니다. 결과는 스크립트가 채점하므로 AI가 스스로 채점할 수 없습니다.',
-    "rt-cap": '검증이 끝나면 점수가 다음 행선지를 정합니다',
-    "rt-h1": '다음 단계',
-    "rt-h2": '조건',
-    "rt1-to": '계획',
-    "rt1": '계획이 틀렸거나 무언가를 놓쳤을 때, 또는 같은 실패가 두 번 났을 때',
-    "rt2-to": '납품',
-    "rt2": '반드시 통과해야 할 시나리오가 모두 통과하고, 전체 시나리오의 95% 이상이 통과했을 때',
-    "rt3-to": '사람',
-    "rt3": '돌려 볼 환경이 없어 시나리오를 실행하지 못했고, 그 때문에 납품할 수 없을 때',
-    "rt4-to": '만들기',
-    "rt4": '그 밖의 모든 경우',
-    "loopnote": '조건은 위에서부터 차례로 따집니다. 같은 종류의 되돌아가기는 <b>최대 세 번</b>이며, 그 뒤에는 사람이 정합니다. 실행하지 못한 시나리오는 실패로 치고, 시나리오를 지우는 것은 사람만 할 수 있습니다.',
+    "s4-p": '먼저 프로젝트의 실제 점검을 돌리고, 모든 시나리오를 그 사용자가 되어 해 봅니다. 결과는 스크립트가 채점하므로 AI가 스스로 채점할 수 없습니다. 실패하면 원인에 따라 계획이나 만들기로 돌아갑니다.',
+    "d-gap1": '빈틈이 있으면',
+    "d-gap2": '1~2회 보완',
+    "d-fail1": '검토 불합격',
+    "d-fail2": '고쳐서 재검토',
+    "d-a1": '계획이 틀렸거나 빠졌을 때,',
+    "d-a2": '또는 같은 실패가 두 번 났을 때',
+    "d-b1": '필수 시나리오가 모두 통과하고',
+    "d-b2": '전체의 95% 이상이 통과',
+    "d-c1": '시나리오를 돌릴 환경이 없어',
+    "d-c2": '납품할 수 없을 때',
+    "d-d1": '그 밖의 경우:',
+    "d-d2": '만든 변경의 실패',
+    "d-deliver": '납품',
+    "d-person": '사람',
+    "loopnote": '점수는 위에서부터 차례로 따집니다. 같은 종류의 되돌아가기는 <b>최대 세 번</b>이며, 그 뒤에는 사람이 정합니다. 실행하지 못한 시나리오는 실패로 치고, 시나리오를 지우는 것은 사람만 할 수 있습니다.',
     "why-h": '달라지는 점',
     "why-lede": 'AI는 모든 단계에서 같은 규칙을 따릅니다. 그래서 다음이 달라집니다.',
     "g1-t": '중요한 것은 사람이 확인합니다',
@@ -458,7 +478,8 @@ ln -s ~/sdlc-kit ~/.claude/skills/sdlc-kit</span>
   var KO_ARIA = {
     "hero-aria": 'sdlc-kit 소개',
     "term-aria": '대화 예시: 사람이 요청을 확인하고, 다른 AI가 작업을 검토하고, 점수가 납품을 정합니다.',
-    "flow-aria": '네 단계와 그 사이의 확인 지점',
+    "loop-aria": '작업 순환도. 1 의도는 사람이 승인하면 2 계획으로 갑니다. 계획은 승인되면 3 만들기로 가며, 위험 표시가 있으면 사람이 승인합니다. 빈틈이 발견되면 계획을 1~2회 보완합니다. 만들기는 검토를 통과하면 4 검증으로 가고, 검토에서 떨어지면 고쳐서 다시 검토받습니다. 검증은 점수를 다음 순서로 따집니다. 계획이 틀렸거나 빠졌을 때, 또는 같은 실패가 두 번 났을 때는 계획으로 돌아갑니다. 필수 시나리오가 모두 통과하고 전체의 95% 이상이 통과하면 납품합니다. 시나리오를 돌릴 환경이 없어 납품할 수 없으면 사람에게 넘깁니다. 그 밖의 경우는 만들기로 돌아갑니다. 같은 종류의 되돌아가기는 최대 세 번이며, 그 뒤에는 사람이 정합니다.',
+    "flow-aria": '네 단계',
     "foot-aria": '바닥글'
   };
   var enText = new WeakMap();
