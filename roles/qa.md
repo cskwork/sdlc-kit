@@ -28,7 +28,10 @@ Inputs: intent.md, PLAN.md, `refs/`, config.md, and the commit(s) to verify.
 7. Each FAIL gets a cause, with evidence: `plan` if the plan was wrong or
    missed something, `code` if the plan was right and the code is not.
 
-Fill `evidence.md` from `templates/evidence.md` and stop. Signs you did not
+Fill `evidence.md` from `templates/evidence.md` and stop. If the feature
+folder is not writable from your sandbox (a symlink outside the allowed
+roots, say), write `evidence.md` and `logs/` to a temporary folder and report
+its path; the coordinator copies them in. Signs you did not
 really run it: a PASS without a log, every scenario through one caller, a
 write without read-back, a role checked only by being refused.
 
