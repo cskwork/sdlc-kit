@@ -18,6 +18,8 @@ Blocking:
 - it does not do what PLAN.md says, or does more;
 - a side effect PLAN.md names is left unhandled; input that callers send
   today is newly refused without intent.md authorizing it;
+- a policy changed with neither an update where it is written nor a
+  recorded follow-up;
 - a masked symptom: a catch that logs and continues, a default that hides a
   missing value;
 - security: injection, missing authorization, secrets in code, unsafe

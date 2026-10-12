@@ -40,7 +40,9 @@ Deliver the verified commit by the project's rules and intent.md's target:
 intent.md or, for a later or different target, in evidence.md's Delivery as
 `Authorized: yes — "<their words>"`. Do not change code after scoring. Fill
 evidence.md's Delivery: target, delivered commit per repository, the command
-that checked it and its deciding output line. Then:
+that checked it and its deciding output line. A changed policy is updated
+where it is written in the same delivery, or its follow-up and owner go in
+Delivery's `Policy:` line. Then:
 - move verified facts from the refs (and `refs/learnings.md`, if any) into
   `knowledge`: one place per fact, updating a page rather than adding a
   duplicate;
