@@ -30,23 +30,30 @@ and needs no particular harness: it is Markdown plus one shell script.
 
 ## The loop
 
-| # | Phase | What happens | Leaves when |
-|---|---|---|---|
-| 1 | **Intent** | What you asked, what the agent understood, and the risks in that understanding. You confirm it. | intent approved |
-| 2 | **Plan** | Parallel scouts map source of truth, data, logic and user flow into `refs/`; one `PLAN.md` holds AS-IS → TO-BE, side effects and the scenarios QA will run. | plan approved |
-| 3 | **Build** | The smallest complete change, then a separate adversarial reviewer. Three FAILs stop the loop. | review PASS |
-| 4 | **Evidence** | Integration and E2E checks, then every scenario run as its persona through the real interface. A script scores it and routes it. | delivered |
+```mermaid
+flowchart LR
+  I["1 Intent"] -->|you approve| P["2 Plan"]
+  P -. gap found .-> P
+  P -->|plan approved| B["3 Build"]
+  B -. FAIL: fix, re-review .-> B
+  B -->|review PASS| E["4 Evidence"]
+  E -. plan was wrong, or same failure twice .-> P
+  E -. code failed .-> B
+  E -->|every must passes, 95%+ overall| D(["deliver"])
+  E -->|no environment to run it| H(["you decide"])
+```
 
-**Routing after Evidence** — computed by `sdlc.sh score`, not judged by the agent:
+| Phase | What happens | Goes back when |
+|---|---|---|
+| **1 Intent** | What you asked, what the agent understood, and the risks in it. You confirm it. | — |
+| **2 Plan** | Parallel scouts map source of truth, data, logic and user flow into `refs/`; one `PLAN.md` holds AS-IS → TO-BE, side effects and the scenarios QA will run. | the gap check finds holes |
+| **3 Build** | The smallest complete change, committed, then a separate adversarial reviewer. | the review FAILs: fix it, review again |
+| **4 Evidence** | Real checks, then every scenario as its persona through the real interface. `sdlc.sh score` scores and routes it; the agent does not judge. | the plan was wrong or the same failure came twice → Plan; code failed → Build |
 
-1. a failure the plan caused, or the same code failure twice → back to **Plan**
-2. every must scenario passes and ≥ 95% of all scenarios pass → **deliver**
-3. scenarios could not run (no environment) and that is what blocks delivery → **the human**
-4. otherwise → back to **Build**
-
-Each kind of return is capped at three; then the human decides, and only
-`sdlc.sh approve plan --human` resumes the loop. A scenario that could not run
-counts as failed, only you can remove a scenario, and every PASS needs its log.
+Every way back is capped at three — three review FAILs, three returns to Plan,
+three to Build — then the loop stops for you, and only
+`sdlc.sh approve plan --human` resumes it. A scenario that could not run counts
+as failed, only you can remove a scenario, and every PASS needs its log.
 
 ## Quick start
 
