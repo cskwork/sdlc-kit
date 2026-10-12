@@ -4,6 +4,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+env:
+  # Git Bash otherwise copies on `ln -s`, and the symlink store checks would skip; ignored on macOS/Linux
+  MSYS: winsymlinks:nativestrict
 jobs:
   selftest:
     strategy:
