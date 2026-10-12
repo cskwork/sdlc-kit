@@ -29,12 +29,22 @@ Changes:
 
 Commit the change locally (the project's rules decide the message), then
 dispatch the reviewer (`roles/reviewer.md`, diff mode) with intent.md,
-PLAN.md, `refs/` and the commit. It appends a round to `review.md` ending in
-`VERDICT: PASS` or `VERDICT: FAIL`. Record it with `sdlc.sh review <slug>
-pass|fail "<one line>"`: the script reads the verdict of the newest round
-(every recording needs a new one) and binds a PASS to the HEAD of every
-repository under the project root. Code changed after a PASS needs a new
-commit and a new round.
+PLAN.md, `refs/` and the commit. Where every commit needs the human's
+approval, review the uncommitted change instead. The reviewer appends a round
+to `review.md` ending in `VERDICT: PASS` or `VERDICT: FAIL`. Record it with
+`sdlc.sh review <slug> pass|fail "<one line>"`: the script reads the verdict
+of the newest round (every recording needs a new one) and binds a PASS to the
+HEAD of every repository under the project root (or in config `repos:`), and
+to the working tree of any with uncommitted changes: tracked and untracked
+files that are not ignored, leaving out the store and untracked repositories
+nested inside it (if git cannot read that tree, the PASS binds HEAD alone
+and says so). `score` and `close` compare only the repositories named on
+evidence `Commit` lines. Each Commit must be the reviewed HEAD or descend
+from it, hold the reviewed working tree inside its Commit path, and change
+nothing outside that path that the reviewed tree does not hold; uncommitted
+changes outside every Commit path do not count. Reverting or stashing the
+change, amending or rebasing needs a new round, as does any code changed
+after a PASS.
 FAIL → fix the blocking findings, commit, review again. The third FAIL stops
 the loop: show the human the trail; only `sdlc.sh approve plan <slug>
 --human` resumes it. Then phase 4.
