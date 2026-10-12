@@ -13,7 +13,7 @@ writing one file in `refs/`:
 
 | Scout | File | Answers |
 |---|---|---|
-| source | `refs/source.md` | the request's text, the canonical rules and docs it touches, earlier attempts and reverts and why |
+| source | `refs/source.md` | the request's text, the policies and canonical docs it touches, earlier attempts and reverts and why |
 | data | `refs/data.md` | data models and fields, who writes and reads each, the states existing records are in |
 | logic | `refs/logic.md` | entry points, call chains, every caller in every tier and repository the change crosses, shared code |
 | flow | `refs/flow.md` | how each persona reaches the behavior today, observed by running it, with the result |
@@ -30,7 +30,9 @@ Fill `templates/PLAN.md`, 150 lines at most. It summarizes; refs hold the
 evidence. Link, do not copy.
 - **Understanding** — a few lines each on data, logic, source of truth and
   user flow, each with its ref.
-- **AS-IS → TO-BE** — every behavior before and after; AS-IS as observed.
+- **AS-IS → TO-BE** — every behavior before and after, with the policy that
+  sets it; AS-IS as observed. Behavior that must not change is a row whose
+  TO-BE is `unchanged`, with a scenario.
 - **Side effects** — every other reader or writer of the touched data, every
   caller that sends today's shapes (missing, empty, null, old values),
   records made before the change, shared code — each with how it stays
