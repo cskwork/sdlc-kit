@@ -14,7 +14,7 @@
 - O1: <observable success criterion>
 
 ## Risks in this intent
-- <an ambiguity, a claim the code or data contradicts (with evidence), work that needs the human's authority — or none>
+- <an ambiguity, a claim the code or data contradicts (with evidence), a policy the request would change and its owner, work that needs the human's authority — or none>
 
 ## Blocking questions
 - none

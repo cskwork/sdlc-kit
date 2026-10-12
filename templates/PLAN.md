@@ -10,9 +10,9 @@
 - User flow: <…> (refs/flow.md)
 
 ## AS-IS → TO-BE
-| Behavior | AS-IS (observed) | TO-BE |
-|---|---|---|
-| <…> | <…> | <…> |
+| Behavior | Policy | AS-IS (observed) | TO-BE |
+|---|---|---|---|
+| <…> | <where it is written, with version | code | unknown> | <…> | <… | unchanged> |
 
 ## Side effects
 - <another reader or writer, caller, existing record state or shared path> → <how it stays correct> (<scenario ID>)

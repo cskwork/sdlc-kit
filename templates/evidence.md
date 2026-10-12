@@ -23,3 +23,4 @@
 - Checked with: <command>
 - Output: <the deciding output line, verbatim>
 - Authorized: <yes — "the human's words", when intent.md has none for this target>
+- Policy: <updated <where> | follow-up <what, owner> | unchanged>
