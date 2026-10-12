@@ -93,7 +93,8 @@ $EDITOR .sdlc/config.md                          # build, test, lint, run, e2e, 
 프로젝트마다 다른 값은 `.sdlc/config.md` 한 곳에만 둡니다. `build`, `test`,
 `lint`, `run`, `e2e` 명령, 화면이나 API를 다룰 `qa` 도구, `human_gates`(기본값
 `intent`, 모든 plan을 직접 승인하려면 `plan` 추가, 위험 플래그가 있는 plan은
-설정과 상관없이 사람이 승인), `knowledge` 폴더입니다. `.sdlc/`는
+설정과 상관없이 사람이 승인), `knowledge` 폴더, `repos`(리뷰가 묶을 저장소.
+프로젝트 루트 아래 저장소가 많으면 나열하고, 비우면 루트 아래 전부)입니다. `.sdlc/`는
 `.git/info/exclude`로 git에서 빠집니다. 팀이 배운 것을 공유하려면 `knowledge:`를
 git이 추적하는 폴더로 지정하세요.
 
