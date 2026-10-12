@@ -47,6 +47,7 @@ config() {
   gates=$(printf '%s' "$gates" | awk '{gsub(/,/," ");for(i=1;i<=NF;i++){v=tolower($i);if(v!="intent"&&v!="plan"){bad=$i;break}if(!seen[v]++)out=out (out==""?"":" ") v}}END{if(bad!="")print "!" bad;else print out}')
   case "$gates" in '!'*) err "unknown human_gates value '${gates#!}' (write intent, plan, or leave it empty): the human approves intent and plan"; gates='intent plan';; esac
   knowledge=$(value "$STORE/config.md" knowledge)
+  bound=$(value "$STORE/config.md" repos)
   if [ -z "$knowledge" ]; then
     if [ -d "$STORE/memory" ]; then knowledge=.sdlc/memory; else knowledge=.sdlc/knowledge; fi
   fi
@@ -98,12 +99,12 @@ parse() {
   function trim(s){sub(/^[ \t]+/,"",s);sub(/[ \t]+$/,"",s);return s}
   function problem(s){print "X\034" s}
   function question(){if(q!=""){l=tolower(trim(q));if(l!="none"&&l!="n/a"&&l!~/^resolved:/&&l!~/— resolved:/&&l!~/-- resolved:/)print "Q\034" q;q=""}}
-  function fields(s, c,j){for(j in a)delete a[j];nfields=1;for(j=1;j<=length(s);j++){c=substr(s,j,1);if(c=="\\"&&substr(s,j+1,1)=="|"){a[nfields]=a[nfields] "|";j++}else if(c=="|")nfields++;else a[nfields]=a[nfields] c}for(j=1;j<=nfields;j++)a[j]=trim(a[j]);return a[2]}
+  function fields(s, c,j){for(j in a)delete a[j];nfields=1;for(j=1;j<=length(s);j++){c=substr(s,j,1);if(c=="\\"&&substr(s,j+1,1)=="|"){a[nfields]=a[nfields] "|";j++}else if(c=="|")nfields++;else a[nfields]=a[nfields] c}for(j=1;j<=nfields;j++)a[j]=trim(a[j]);cells=nfields-1-(a[nfields]=="");return a[2]}
   {
     if(uncomment())next
     sub(/^[ \t]*\*[ \t]+/,"- ");gsub(/[`*]/,"");raw=$0;line=trim(raw);low=tolower(line)
     if(mode=="plan"&&low~/<three lines for the human|<file or symbol>|<another reader or writer|<…>/)problem("PLAN.md contains template placeholder")
-    if(low~/^## /){question();section=substr(low,4);next}
+    if(low~/^## /){question();section=substr(low,4);header=0;next}
     if(mode=="intent"){
       if(section~/^understood as/&&line~/^- O[0-9]+[ \t]*:/){id=line;sub(/^[^-]*- /,"",id);sub(/[ \t]*:.*/,"",id);text=line;sub(/^[^:]*:[ \t]*/,"",text);if(text!=""&&text!~/^</){print "O\034" id;outcomes++}}
       if(section~/^blocking questions/){if(line~/^(-|[0-9]+\.)[ \t]/){question();q=line;sub(/^(-|[0-9]+\.)[ \t]+/,"",q)}else if(raw~/^[ \t]+/&&q!="")q=q " " line}
@@ -112,7 +113,8 @@ parse() {
     if(mode=="plan"&&low~/risk flags:/){flags++;v=line;sub(/^.*[Rr][Ii][Ss][Kk] [Ff][Ll][Aa][Gg][Ss]:[ \t]*/,"",v);n=split(v,segments,"·");for(i=1;i<=n;i++)if(tolower(segments[i])~/(^|[^a-z0-9_])yes([^a-z0-9_]|$)/)print "R\034" trim(segments[i])}
     if(mode=="evidence"&&(low~/^- commit:/||(section~/^delivery/&&low~/^- delivered:/))){kind=low~/^- commit:/?"C":"D";v=line;sub(/^[^:]*:[ \t]*/,"",v);hash=v;sub(/[ \t].*/,"",hash);repo=v;sub(/^[^ \t]+[ \t]*/,"",repo);if(repo==v||repo=="")repo=".";if(hash!~/^[a-fA-F0-9]+$/||length(hash)<7||length(hash)>64){if(kind=="C")problem("invalid Commit: " hash)}else{print kind "\034" tolower(hash) "\034" repo;if(kind=="C")commits++}}
     if(line!~/^\|/)next
-    id=fields(line);if(tolower(id)=="id"||line~/^[| :\t-]+$/)next
+    id=fields(line);if(tolower(id)=="id"){header=cells;next}if(line~/^[| :\t-]+$/)next
+    if(header&&cells>header&&((mode=="plan"&&section~/^scenarios/)||(mode=="evidence"&&section~/^results/)))problem(id ": row has " cells " cells, header has " header)
     if(mode=="plan"&&section~/^scenarios/){
       count++;if(id!~/^S[0-9]+$/)problem("invalid scenario ID: " id);if(seen[id]++)problem("duplicate scenario: " id)
       must=tolower(a[6]);if(must=="yes"||must=="y"||must=="true"||must=="must")must=1;else if(must=="no"||must=="n"||must=="false"||must=="")must=0;else{problem("invalid Must: " a[6]);must=0}
@@ -281,36 +283,120 @@ validate_evidence() {
     fi
   done
 }
-# HEAD and toplevel of the project root's repository and of every repository inside the root,
-# tab-separated pairs on one line: a review PASS binds them all.
+# HEAD and toplevel of the project root's repository and of every repository inside the root (or only
+# of config repos:), tab-separated pairs on one line: a review PASS binds them all. A repository with
+# uncommitted changes records HEAD+tree, the tree its working tree would commit, so a commit-gated
+# project can review first and commit that exact change after.
 review_heads() {
-  { git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null || :
-    { find "$ROOT" \( -name node_modules -o -name .sdlc \) -prune -o -name .git -print -prune 2>/dev/null || :; } | while IFS= read -r g; do dirname "$g"; done
-  } | while IFS= read -r dir; do
-    top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) && head=$(git -C "$top" rev-parse -q --verify HEAD 2>/dev/null) && printf '%s\t%s\n' "$head" "$top" || :
-  done | sort -u | awk '{printf "%s%s", (NR>1 ? "\t" : ""), $0}'
+  root_repo
+  if [ -n "$bound" ]; then
+    read -r -a list <<< "$bound"
+    proot=$(cd "$ROOT" && pwd -P)
+    for path in "${list[@]}"; do
+      # "." names the repository holding the project root; any other entry is a repository's own top folder.
+      repo_path "$path"; preal=$(cd "$REPO" 2>/dev/null && pwd -P) || preal=
+      case "$preal/" in "$proot"/*) :;; *) die "repos: '$path' is not a directory under the project root";; esac
+      top=$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null) || die "repos: '$path' is not in a git repository"
+      [ "$preal" = "$proot" ] || [ "$preal" = "$(cd "$top" && pwd -P)" ] || die "repos: '$path' is not the top folder of a git repository (it is inside $top)"
+    done
+  fi
+  { if [ -n "$bound" ]; then for path in "${list[@]}"; do printf '%s\n' "$ROOT/$path"; done
+    else
+      git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null || :
+      { find "$ROOT" \( -name node_modules -o -name .sdlc \) -prune -o -name .git -print -prune 2>/dev/null || :; } | while IFS= read -r g; do dirname "$g"; done
+    fi
+  } | { seen=$'\n'; while IFS= read -r dir; do
+    top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) && head=$(git -C "$top" rev-parse -q --verify HEAD 2>/dev/null) || continue
+    # The root's repository comes from rev-parse and from find: inspect it once.
+    case "$seen" in *$'\n'"$top"$'\n'*) continue;; esac; seen="$seen$top"$'\n'
+    changes "$top" "$top"
+    if [ -n "$dirty" ]; then
+      rc=0; tree=$(worktree_tree "$top") || rc=$?
+      case "$rc" in 0) head="$head+$tree";; 3) :;; *) exit 1;; esac
+    fi
+    printf '%s\t%s\n' "$head" "$top"
+  done; } | sort -u | awk '{printf "%s%s", (NR>1 ? "\t" : ""), $0}'
+}
+# The tree id that git add -A would commit in repository $1, store and untracked nested repositories
+# excluded, built in a copy of its index. The store leaves the copy after add, so it stays out whether it
+# is untracked, ignored or partly tracked (git add refuses an exclude naming an ignored path). When git add
+# cannot read the working tree, exit 3 after one line saying why: the caller binds HEAD alone, as v2.1.0
+# did. Called in a command substitution, so its traps are its own; tmp is global for the EXIT trap, which
+# runs after the function returns.
+worktree_tree() {
+  local gitdir tree path cause specs=(.)
+  for path in "${nested[@]}"; do specs[${#specs[@]}]=":(top,exclude,literal)$path"; done
+  tmp=; trap 'rm -rf "$tmp"' EXIT; trap 'exit 130' INT TERM HUP
+  tmp=$(mktemp -d) || die 'cannot create a temporary folder'
+  gitdir=$(git -C "$1" rev-parse --absolute-git-dir) || die "not a git repository: $1"
+  if [ -f "$gitdir/index" ]; then cp -p "$gitdir/index" "$tmp/index"; else GIT_INDEX_FILE=$tmp/index git -C "$1" read-tree HEAD; fi || die "cannot copy the index: $1"
+  cause=$(GIT_INDEX_FILE=$tmp/index git -C "$1" add -A -- "${specs[@]}" 2>&1 >/dev/null) ||
+    { err "cannot fingerprint the uncommitted changes in $1 (${cause%%$'\n'*}): the PASS binds its HEAD only"; exit 3; }
+  for path in "${store_paths[@]}"; do
+    GIT_INDEX_FILE=$tmp/index git -C "$1" rm -r -q -f --cached --ignore-unmatch -- ":(top,literal)$path" >/dev/null || die "cannot fingerprint the working tree: $1"
+  done
+  tree=$(GIT_INDEX_FILE=$tmp/index git -C "$1" write-tree) || die "cannot fingerprint the working tree: $1"
+  printf '%s' "$tree"
+}
+# Uncommitted changes in repository $1, as git status run in $2 lists them, into dirty. The store is left
+# out, and so is every untracked nested repository (a worktree or clone inside it, listed by ls-files
+# with a trailing slash): it is never part of a commit, and git add would stage it as a gitlink. Its
+# path goes to nested and excludes. Tracked gitlinks are not untracked and stay in.
+changes() {
+  local path
+  store_excludes "$1"; nested=()
+  dirty=$(git -C "$2" status --porcelain -- . "${excludes[@]}") || die "cannot inspect working tree: $2"
+  [ -n "$dirty" ] || return 0
+  while IFS= read -r -d '' path; do
+    case "$path" in */) nested[${#nested[@]}]=${path%/}; excludes[${#excludes[@]}]=":(top,exclude,literal)${path%/}";; esac
+  done < <(git -C "$1" ls-files -o --exclude-standard -z)
+  [ "${#nested[@]}" -eq 0 ] || dirty=$(git -C "$2" status --porcelain -- . "${excludes[@]}") || die "cannot inspect working tree: $2"
+}
+root_repo() {
+  roottop=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null) || roottop=
+  rootprefix=$(git -C "$ROOT" rev-parse --show-prefix 2>/dev/null) || rootprefix=
+}
+# Pathspecs that keep the store out of repository $1's status and fingerprint.
+# store_paths holds the same stores relative to the toplevel.
+store_excludes() {
+  local path
+  excludes=(':(exclude).sdlc'); store_paths=(.sdlc)
+  [ "$1" != "$roottop" ] || store_paths[${#store_paths[@]}]=${rootprefix}.sdlc
+  ptop=$(cd "$1" && pwd -P); physical_store=$(cd "$STORE" && pwd -P)
+  case "$physical_store" in "$ptop"/*) store_paths[${#store_paths[@]}]=${physical_store#"$ptop"/};; esac
+  for path in "${store_paths[@]:1}"; do excludes[${#excludes[@]}]=":(top,exclude,literal)$path"; done
 }
 repo_path() { case "$1" in /*|[A-Za-z]:*|\<*) die "repo path must be relative: $1";; esac; REPO=$ROOT/$1; }
+# $2 names the evidence line (Commit or Delivered) whose repository path is $1.
+repo_dir() { repo_path "$1"; [ -d "$REPO" ] || die "$2 path '$1' is not a directory under the project root: write '- $2: <sha> <relative-path>'"; }
 validate_commits() {
   # Repositories are compared by git's own toplevel path, so any path into a repository is bound to the review.
   # A Commit repository the last review did not see (outside the project root) is refused.
-  roottop=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null) || roottop=
-  rootprefix=$(git -C "$ROOT" rev-parse --show-prefix 2>/dev/null) || rootprefix=
+  root_repo
   for ((i=0;i<${#commits[@]};i++)); do
-    repo_path "${repos[i]}"
-    [ -d "$REPO" ] || die "repository missing: ${repos[i]}"
+    repo_dir "${repos[i]}" Commit
     full=$(git -C "$REPO" rev-parse --verify -q "${commits[i]}^{commit}") || die "unknown commit: ${commits[i]}"
     head=$(git -C "$REPO" rev-parse HEAD) || die "not a git repository: ${repos[i]}"
     [ "$head" = "$full" ] || die "HEAD differs from Commit: ${repos[i]}"
     top=$(git -C "$REPO" rev-parse --show-toplevel) || die "not a git repository: ${repos[i]}"
     reviewed=$(printf '%s' "$heads" | awk -F'\t' -v top="$top" '{for(j=1;j<NF;j+=2)if($(j+1)==top){print $j;exit}}')
-    [ -n "$reviewed" ] || die "${repos[i]} was not under review: commit, then review again from the project root"
-    [ "$full" = "$reviewed" ] || die "Commit ${commits[i]} is not the reviewed commit $reviewed: commit, then review again"
-    excludes=(':(exclude).sdlc')
-    [ "$top" != "$roottop" ] || excludes[${#excludes[@]}]=":(top,exclude,literal)${rootprefix}.sdlc"
-    ptop=$(cd "$top" && pwd -P); physical_store=$(cd "$STORE" && pwd -P)
-    case "$physical_store" in "$ptop"/*) excludes[${#excludes[@]}]=":(top,exclude,literal)${physical_store#"$ptop"/}";; esac
-    dirty=$(git -C "$REPO" status --porcelain -- . "${excludes[@]}") || die 'cannot inspect working tree'
+    [ -n "$reviewed" ] || die "${repos[i]} was not under review: commit, then review again from the project root${bound:+ (config repos: $bound)}"
+    rbase=${reviewed%%+*}; rtree=; [ "$rbase" = "$reviewed" ] || rtree=${reviewed#*+}
+    # A PASS on uncommitted changes binds their tree. The Commit is the reviewed HEAD or descends from it, holds
+    # the bound tree inside its path, and outside it changes nothing since that HEAD that the tree does not hold.
+    # Changes left uncommitted outside the path do not count, as when a commit is reviewed.
+    if [ -n "$rtree" ]; then
+      store_excludes "$top"
+      { [ "$full" = "$rbase" ] || git -C "$REPO" merge-base --is-ancestor "$rbase" "$full"; } &&
+        git -C "$REPO" diff --quiet "$full" "$rtree" -- . "${excludes[@]}" &&
+        changed=$(git -C "$REPO" diff --no-renames --name-only "$rbase" "$full" -- ':/' "${excludes[@]}") &&
+        differs=$(git -C "$REPO" diff --no-renames --name-only "$full" "$rtree" -- ':/' "${excludes[@]}") &&
+        [ -z "$(printf '%s\n%s\n' "$changed" "$differs" | awk 'NF&&seen[$0]++')" ] ||
+        die "Commit ${commits[i]} is not the reviewed uncommitted change: commit exactly it (tree $rtree) on top of the reviewed commit $rbase, or review again"
+    else
+      [ "$full" = "$rbase" ] || die "Commit ${commits[i]} is not the reviewed commit $rbase: commit, then review again"
+    fi
+    changes "$top" "$REPO"
     [ -z "$dirty" ] || die "dirty tree in ${repos[i]}: $dirty"
   done
 }
@@ -417,7 +503,7 @@ case "$command" in
     heads=$(review_heads)
     event; review="$2 $entry $seq $vsha $note"; rounds=$nrounds
     if [ "$2" = fail ]; then fails=$((fails+1)); printf 'review FAIL %s/3\n' "$fails"; [ "$fails" -lt 3 ] || printf '3 review FAILs this build: stop, the human decides\n'
-    else printf 'review PASS. Phase 4: run QA, fill evidence.md, score.\n'; fi
+    else printf 'review PASS. Phase 4: run QA, fill evidence.md, score.\n'; if printf '%s' "$heads" | awk -F'\t' '{for(j=1;j<NF;j+=2)if($j~/^[0-9a-f]+\+[0-9a-f]+$/)f=1}END{exit !f}'; then printf 'Uncommitted changes are bound, untracked unignored files included: a Commit must hold exactly those inside its path, on top of the reviewed HEAD. An amended or rebased commit needs a new review.\n'; fi; fi
     save_state;;
   score)
     [ "$#" -eq 1 ] || die 'score <slug>' 2; feature "$1"; mutable; gate_plan || die "$greason"
@@ -457,10 +543,10 @@ case "$command" in
         delivery_authority "$etarget" || die "$dreason"
         filled "$checked" && filled "$output" || die 'Delivery Checked with and Output required'
         for ((i=0;i<${#commits[@]};i++)); do
-          repo_path "${repos[i]}"; commit_repo=$REPO; matchsha=
-          source_repo=$(git -C "$commit_repo" rev-parse --show-toplevel) || die "repository missing: ${repos[i]}"
+          repo_dir "${repos[i]}" Commit; commit_repo=$REPO; matchsha=
+          source_repo=$(git -C "$commit_repo" rev-parse --show-toplevel) || die "not a git repository: ${repos[i]}"
           for ((j=0;j<${#delivered[@]};j++)); do
-            repo_path "${drepos[j]}"
+            repo_dir "${drepos[j]}" Delivered
             delivered_repo=$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null) || continue
             [ "$delivered_repo" != "$source_repo" ] || matchsha=${delivered[j]}
           done

@@ -14,7 +14,10 @@ risks in that understanding — confirmed before anyone explores deeply.
      success criteria `O1..On`, each observable so a scenario can check it.
    - **Risks in this intent** — ambiguity, a claim the code or data already
      contradicts (with the evidence), a policy the request would change and
-     who owns it, work that needs authority (rule 3).
+     who owns it, work that needs authority (rule 3). Before logs, error
+     records, reports or metrics count as evidence, check their source (the
+     user, agent or job behind them) shows real use, not tests, automation
+     or synthetic traffic.
    - **Blocking questions** — only those whose wrong answer changes what
      gets built or leaves the authorized scope. Ask them one at a time and
      record each answer in place as `— resolved: <answer, source>`. Other
