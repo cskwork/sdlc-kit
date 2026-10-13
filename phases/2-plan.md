@@ -15,7 +15,7 @@ writing one file in `refs/`:
 |---|---|---|
 | source | `refs/source.md` | the request's text, the policies and canonical docs it touches, earlier attempts and reverts and why |
 | data | `refs/data.md` | data models and fields, who writes and reads each, the states existing records are in |
-| logic | `refs/logic.md` | entry points, call chains, every caller in every tier and repository the change crosses, shared code |
+| logic | `refs/logic.md` | entry points, call chains, every caller in every tier and repository the change crosses, shared code, every consumer of an identifier the change renames, retires or redirects |
 | flow | `refs/flow.md` | how each persona reaches the behavior today, observed by running it, with the result |
 
 A bug adds `refs/repro.md`: the failure reproduced — as a failing test where
@@ -35,7 +35,8 @@ evidence. Link, do not copy.
   TO-BE is `unchanged`, with a scenario.
 - **Side effects** — every other reader or writer of the touched data, every
   caller that sends today's shapes (missing, empty, null, old values),
-  records made before the change, shared code — each with how it stays
+  records made before the change, shared code, every consumer of a changed
+  identifier (even one that only compares it) — each with how it stays
   correct and the scenario that checks it. Then the risk flags line.
 - **Changes** — files and symbols, in an order that keeps checks passing;
   the smallest runnable path first.

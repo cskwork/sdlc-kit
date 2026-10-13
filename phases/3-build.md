@@ -60,4 +60,6 @@ the loop: show the human the trail; only `sdlc.sh approve plan <slug>
 ## Back from Evidence
 
 `sdlc.sh next` names the scenarios that failed for code reasons; evidence.md
-and `logs/` hold what was seen. Fix them, commit, and review again.
+and `logs/` hold what was seen. Each is a bug fix: write its regression test
+first and watch it fail for the reported reason, then fix, commit, and review
+again.
