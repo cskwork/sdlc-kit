@@ -95,7 +95,8 @@ Closed features move to `.sdlc/archive/`. Verified facts move to the
 `lint`, `run` and `e2e` commands, the `qa` tool that drives screens or APIs,
 `human_gates` (default `intent`; add `plan` to approve every plan yourself — a
 plan with a risk flag always asks), the `knowledge` folder, and `repos` (the
-repositories a review binds — list them when the project root holds many;
+repositories a review binds — list them when the project root holds many,
+or name them per review with `sdlc.sh review <slug> pass --repos "<path> ..." "<note>"`;
 empty means every one under it). `.sdlc/` stays
 out of git through `.git/info/exclude`; point `knowledge:` at a tracked folder
 to share what the team learns.

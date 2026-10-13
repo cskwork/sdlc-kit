@@ -22,4 +22,5 @@
 
 ## Delivery
 - Target: <local | pr | deploy>
+- Note: <optional: branch, environment or anything else about the delivery>
 - Authorized: <yes — "the human's words authorizing push, merge or deploy" | no>
