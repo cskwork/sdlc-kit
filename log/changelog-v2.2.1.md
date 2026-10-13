@@ -1,6 +1,6 @@
 # v2.2.1 — opt-in review of uncommitted changes
 
-Two regressions in v2.2.0, both against flows v2.1.0 accepted, and three
+Three regressions in v2.2.0, all against flows v2.1.0 accepted, and five
 small fixes.
 
 ## Changes
@@ -33,6 +33,20 @@ small fixes.
   mirror push and left behind by a feature never closed.
 - **A FAIL binds no heads.** `review <slug> fail` no longer scans the
   repositories; only a PASS is ever scored.
+- **A trailing empty cell.** v2.2.0 refused a Results or Scenarios row
+  that ends in an empty cell (`| S1 | … | O1 | |`), which GitHub renders as
+  a valid table, so a PLAN approved under v2.1.0 could stop at the upgrade.
+  Cells beyond the header that are all empty are allowed again; an extra
+  cell with text is still named (`S1: row has 6 cells, header has 5`).
+- **Amending, worded exactly.** The `--uncommitted` notice and
+  `phases/3-build.md` said any amended or rebased commit needs a new review.
+  It is amending or rebasing the reviewed HEAD itself that does; rewording the
+  commit made on top of it keeps the reviewed tree and passes, as it did.
+  The build phase also notes that recording hashes the reviewed files into the
+  repository's object store: ignore large or secret files before reviewing.
+- **An absolute path in `repos:`** is refused as `repos: '<path>' must be a
+  path relative to the project root`, naming the key like the other `repos:`
+  errors, instead of `repo path must be relative`.
 - **Commas in `repos:`.** `repos: ., services/a` reads like `repos: .
   services/a`, as `human_gates` already did. A `repos:` value with no entry
   (`repos: ,`) is refused at `review` instead of binding nothing.
@@ -40,7 +54,8 @@ small fixes.
   a skipped Delivered path only as a note.
 
 Selftest adds the `optin` group and checks in `uncommitted` (pruned tree),
-`paths` (extra Delivered line) and `repos` (commas); each fails on v2.2.0.
+`paths` (extra Delivered line), `repos` (commas, an absolute path) and
+`cells` (a trailing empty cell); each fails on v2.2.0.
 Groups that test the uncommitted binding (`uncommitted`, `nested`,
 `scoped`, `fingerprint`, `interrupt`) now pass `--uncommitted`.
 

@@ -597,6 +597,8 @@ regression_repos() {
   printf 'human_gates: intent\nrepos: services/a services/none\n' > .sdlc/config.md
   printf 'VERDICT: PASS\n' >> "$F/review.md"
   expect 1 review "$SLUG" pass 'listed path is missing'; contains "repos: 'services/none' is not a directory under the project root"
+  printf 'human_gates: intent\nrepos: %s\n' "$PWD/services/a" > .sdlc/config.md
+  expect 1 review "$SLUG" pass 'listed path is absolute'; contains "repos: '$PWD/services/a' must be a path relative to the project root"
   printf 'human_gates: intent\nrepos: services\n' > .sdlc/config.md
   expect 1 review "$SLUG" pass 'listed path is a plain folder'; contains "repos: 'services' is not the top folder of a git repository"
   nested_repo "$TMP/outside-repos"
@@ -629,7 +631,15 @@ regression_cells() {
   evidence; replace '/\| S2 \|/ {$0="| S2 | BLOCKED | | no env |"} {print}' "$E"
   expect 0 score "$SLUG"; contains 'ROUTE human'
   case "$OUTPUT" in *'row has'*) fail 'a short row was refused';; esac
-  ok 'a Results or Scenarios row with more cells than its header is named, a shorter row reads as before; escaped pipes still count as text'
+  feature trailing-cells
+  expect 0 approve intent "$SLUG" --human 'approved scope'
+  plan 1; replace '/\| S1 \|/ {$0=$0" |"} {print}' "$F/PLAN.md"
+  expect 0 approve plan "$SLUG" --agent 'scenario row with a trailing empty cell'
+  reviewed "$SLUG" pass 'trailing empty cells'
+  evidence; replace '/\| S1 \|/ {$0=$0" |  |"} {print}' "$E"
+  route deliver
+  case "$OUTPUT" in *'row has'*) fail 'a trailing empty cell was refused';; esac
+  ok 'a Results or Scenarios row with more cells than its header is named, a shorter row reads as before; escaped pipes still count as text; trailing empty cells are allowed'
 }
 regression_paths() {
   repo regression-paths
