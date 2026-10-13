@@ -34,7 +34,10 @@ approval, review the uncommitted change instead. The reviewer appends a round
 to `review.md` ending in `VERDICT: PASS` or `VERDICT: FAIL`. Record it with
 `sdlc.sh review <slug> pass|fail "<one line>"`: the script reads the verdict
 of the newest round (every recording needs a new one) and binds a PASS to the
-HEAD of every repository under the project root (or in config `repos:`);
+HEAD of every repository under the project root (or in config `repos:`, or
+in `--repos "<path> ..."` given before the note, which replaces `repos:` for
+that review: name the repositories the change touches when the root holds
+many);
 `score` and `close` compare only the repositories named on evidence `Commit`
 lines, and each Commit must be that HEAD. For a review of the uncommitted
 change, record `sdlc.sh review <slug> pass --uncommitted "<one line>"`: the

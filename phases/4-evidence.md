@@ -31,7 +31,11 @@ checked out — then counts and routes:
 BLOCKED counts as not passed. Each kind of return is capped at three; after
 that the route is human. On a human route, show the human the score lines,
 the failing rows and their logs; they resume with `sdlc.sh approve plan
-<slug> --human` or drop the feature.
+<slug> --human` or drop the feature. For a BLOCKED row, offer all three:
+remove the scenario (the approval records the removal and the gap), retry
+with what is missing and a limit on attempts, or drop. When intent.md, the
+HEADs a PASS bound (not a working tree) and PLAN.md outside Scenarios are
+unchanged, the approval keeps the review PASS: go straight to QA.
 
 ## Deliver
 
