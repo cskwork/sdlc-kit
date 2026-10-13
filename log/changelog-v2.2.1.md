@@ -1,6 +1,6 @@
 # v2.2.1 — opt-in review of uncommitted changes
 
-Three regressions in v2.2.0, all against flows v2.1.0 accepted, and five
+Three regressions in v2.2.0, all against flows v2.1.0 accepted, and six
 small fixes.
 
 ## Changes
@@ -37,7 +37,7 @@ small fixes.
   that ends in an empty cell (`| S1 | … | O1 | |`), which GitHub renders as
   a valid table, so a PLAN approved under v2.1.0 could stop at the upgrade.
   Cells beyond the header that are all empty are allowed again; an extra
-  cell with text is still named (`S1: row has 6 cells, header has 5`).
+  cell with text is still named (`S1: row has N cells, header has M`).
 - **Amending, worded exactly.** The `--uncommitted` notice and
   `phases/3-build.md` said any amended or rebased commit needs a new review.
   It is amending or rebasing the reviewed HEAD itself that does; rewording the
