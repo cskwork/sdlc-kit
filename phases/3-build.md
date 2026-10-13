@@ -45,8 +45,11 @@ PASS binds HEAD alone and says so). Each Commit must then be the reviewed
 HEAD or descend from it, hold the reviewed working tree inside its Commit
 path, and change nothing outside that path that the reviewed tree does not
 hold; uncommitted changes outside every Commit path do not count. Reverting
-or stashing the change, amending or rebasing needs a new round, as does any
-code changed after a PASS.
+or stashing the change, or amending or rebasing the reviewed HEAD itself,
+needs a new round, as does any code changed after a PASS; rewording the
+commit made on top of it does not. Recording hashes those files into the
+repository's object store (not its index): ignore large or secret files
+before reviewing.
 FAIL → fix the blocking findings, commit, review again. The third FAIL stops
 the loop: show the human the trail; only `sdlc.sh approve plan <slug>
 --human` resumes it. Then phase 4.

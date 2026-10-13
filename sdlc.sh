@@ -115,7 +115,7 @@ parse() {
     if(mode=="evidence"&&(low~/^- commit:/||(section~/^delivery/&&low~/^- delivered:/))){kind=low~/^- commit:/?"C":"D";v=line;sub(/^[^:]*:[ \t]*/,"",v);hash=v;sub(/[ \t].*/,"",hash);repo=v;sub(/^[^ \t]+[ \t]*/,"",repo);if(repo==v||repo=="")repo=".";if(hash!~/^[a-fA-F0-9]+$/||length(hash)<7||length(hash)>64){if(kind=="C")problem("invalid Commit: " hash)}else{print kind "\034" tolower(hash) "\034" repo;if(kind=="C")commits++}}
     if(line!~/^\|/)next
     id=fields(line);if(tolower(id)=="id"){header=cells;next}if(line~/^[| :\t-]+$/)next
-    if(header&&cells>header&&((mode=="plan"&&section~/^scenarios/)||(mode=="evidence"&&section~/^results/)))problem(id ": row has " cells " cells, header has " header)
+    if(header&&cells>header&&((mode=="plan"&&section~/^scenarios/)||(mode=="evidence"&&section~/^results/))){x=0;for(j=header+2;j<=cells+1;j++)if(a[j]!="")x=1;if(x)problem(id ": row has " cells " cells, header has " header)}
     if(mode=="plan"&&section~/^scenarios/){
       count++;if(id!~/^S[0-9]+$/)problem("invalid scenario ID: " id);if(seen[id]++)problem("duplicate scenario: " id)
       must=tolower(a[6]);if(must=="yes"||must=="y"||must=="true"||must=="must")must=1;else if(must=="no"||must=="n"||must=="false"||must=="")must=0;else{problem("invalid Must: " a[6]);must=0}
@@ -297,6 +297,7 @@ review_heads() {
     proot=$(cd "$ROOT" && pwd -P)
     for path in "${list[@]}"; do
       # "." names the repository holding the project root; any other entry is a repository's own top folder.
+      case "$path" in /*|[A-Za-z]:*|\<*) die "repos: '$path' must be a path relative to the project root";; esac
       repo_path "$path"; preal=$(cd "$REPO" 2>/dev/null && pwd -P) || preal=
       case "$preal/" in "$proot"/*) :;; *) die "repos: '$path' is not a directory under the project root";; esac
       top=$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null) || die "repos: '$path' is not in a git repository"
@@ -511,7 +512,7 @@ case "$command" in
     heads=; [ "$2" != pass ] || heads=$(review_heads)
     event; review="$2 $entry $seq $vsha $note"; rounds=$nrounds
     if [ "$2" = fail ]; then fails=$((fails+1)); printf 'review FAIL %s/3\n' "$fails"; [ "$fails" -lt 3 ] || printf '3 review FAILs this build: stop, the human decides\n'
-    else printf 'review PASS. Phase 4: run QA, fill evidence.md, score.\n'; if printf '%s' "$heads" | awk -F'\t' '{for(j=1;j<NF;j+=2)if($j~/^[0-9a-f]+\+[0-9a-f]+$/)f=1}END{exit !f}'; then printf 'Uncommitted changes are bound, untracked unignored files included: a Commit must hold exactly those inside its path, on top of the reviewed HEAD. An amended or rebased commit needs a new review.\n'; fi; fi
+    else printf 'review PASS. Phase 4: run QA, fill evidence.md, score.\n'; if printf '%s' "$heads" | awk -F'\t' '{for(j=1;j<NF;j+=2)if($j~/^[0-9a-f]+\+[0-9a-f]+$/)f=1}END{exit !f}'; then printf 'Uncommitted changes are bound, untracked unignored files included: a Commit must hold exactly those inside its path, on top of the reviewed HEAD. Amending or rebasing the reviewed HEAD itself needs a new review; a commit made on top of it may be reworded.\n'; fi; fi
     save_state;;
   score)
     [ "$#" -eq 1 ] || die 'score <slug>' 2; feature "$1"; mutable; gate_plan || die "$greason"
