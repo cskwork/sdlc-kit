@@ -77,7 +77,8 @@ finds `.git`.
 `.sdlc/config.md` holds every project value: `build`, `test`, `lint`, `run`,
 `e2e`, `qa` (the tool that drives screens or APIs), `human_gates` (default
 `intent`), `knowledge` (the durable knowledge folder) and `repos` (the
-repositories a review binds; empty means every one under the project root).
+repositories a review binds; empty means every one under the project root;
+`review --repos` names them for one review).
 Records are working
 knowledge, not source: `init` keeps `.sdlc/` out of git through
 `.git/info/exclude`, changing no tracked file. Closed features move

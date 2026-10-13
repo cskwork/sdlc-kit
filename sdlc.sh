@@ -9,7 +9,7 @@ usage() {
 Usage: sdlc.sh init [--knowledge path] | new slug | status [slug] [--json]
        sdlc.sh next slug | check intent|plan slug
        sdlc.sh approve intent|plan slug --human words|--agent review
-       sdlc.sh review slug pass|fail note | review slug pass --uncommitted note
+       sdlc.sh review slug pass|fail [--uncommitted] [--repos "path ..."] note
        sdlc.sh score slug
        sdlc.sh close slug shipped|dropped reason | help | --version
 USAGE
@@ -48,7 +48,7 @@ config() {
   gates=$(printf '%s' "$gates" | awk '{gsub(/,/," ");for(i=1;i<=NF;i++){v=tolower($i);if(v!="intent"&&v!="plan"){bad=$i;break}if(!seen[v]++)out=out (out==""?"":" ") v}}END{if(bad!="")print "!" bad;else print out}')
   case "$gates" in '!'*) err "unknown human_gates value '${gates#!}' (write intent, plan, or leave it empty): the human approves intent and plan"; gates='intent plan';; esac
   knowledge=$(value "$STORE/config.md" knowledge)
-  bound=$(value "$STORE/config.md" repos)
+  bound=$(value "$STORE/config.md" repos); boundby='config repos:'
   if [ -z "$knowledge" ]; then
     if [ -d "$STORE/memory" ]; then knowledge=.sdlc/memory; else knowledge=.sdlc/knowledge; fi
   fi
@@ -71,11 +71,11 @@ feature() {
   load_state
 }
 load_state() {
-  seq=0; entry=0; fails=0; rp=0; rb=0; lastfail=; intent=; plan=; review=; route=; score=; closed=; planned=; scored=; rounds=0; withdrawn=; heads=
+  seq=0; entry=0; fails=0; rp=0; rb=0; lastfail=; intent=; plan=; review=; route=; score=; closed=; planned=; scored=; rounds=0; withdrawn=; heads=; planbody=
   if [ -f "$F/.state" ]; then
     while IFS= read -r line; do
       key=${line%%:*}; val=${line#*:}; val=${val# }
-      case "$key" in seq) seq=$val;; entry) entry=$val;; fails) fails=$val;; returns_plan) rp=$val;; returns_build) rb=$val;; lastfail) lastfail=$val;; intent) intent=$val;; plan) plan=$val;; review) review=$val;; route) route=$val;; score) score=$val;; closed) closed=$val;; planned) planned=$val;; scored) scored=$val;; rounds) rounds=$val;; withdrawn) withdrawn=$val;; heads) heads=$val;; esac
+      case "$key" in seq) seq=$val;; entry) entry=$val;; fails) fails=$val;; returns_plan) rp=$val;; returns_build) rb=$val;; lastfail) lastfail=$val;; intent) intent=$val;; plan) plan=$val;; review) review=$val;; route) route=$val;; score) score=$val;; closed) closed=$val;; planned) planned=$val;; scored) scored=$val;; rounds) rounds=$val;; withdrawn) withdrawn=$val;; heads) heads=$val;; planbody) planbody=$val;; esac
     done < "$F/.state"
   fi
   read -r ish iwho iseq its inote <<< "$intent"
@@ -88,7 +88,7 @@ save_state() {
   {
     printf 'seq: %s\nentry: %s\nfails: %s\nreturns_plan: %s\nreturns_build: %s\nlastfail: %s\n' "$seq" "$entry" "$fails" "$rp" "$rb" "$lastfail"
     printf 'planned: %s\nscored: %s\nrounds: %s\nwithdrawn: %s\n' "$planned" "$scored" "$rounds" "$withdrawn"
-    for key in intent plan review route score closed heads; do eval 'val=$'"$key"; [ -z "$val" ] || printf '%s: %s\n' "$key" "$val"; done
+    for key in intent plan planbody review route score closed heads; do eval 'val=$'"$key"; [ -z "$val" ] || printf '%s: %s\n' "$key" "$val"; done
   } > "$tmp"
   mv "$tmp" "$F/.state"
 }
@@ -110,7 +110,7 @@ parse() {
       if(section~/^understood as/&&line~/^- O[0-9]+[ \t]*:/){id=line;sub(/^[^-]*- /,"",id);sub(/[ \t]*:.*/,"",id);text=line;sub(/^[^:]*:[ \t]*/,"",text);if(text!=""&&text!~/^</){print "O\034" id;outcomes++}}
       if(section~/^blocking questions/){if(line~/^(-|[0-9]+\.)[ \t]/){question();q=line;sub(/^(-|[0-9]+\.)[ \t]+/,"",q)}else if(raw~/^[ \t]+/&&q!="")q=q " " line}
     }
-    if(section~/^delivery/){v=line;sub(/^- /,"",v);if(tolower(v)~/^(target|authorized|checked with|output):/){key=v;sub(/:.*/,"",key);sub(/^[^:]*:[ \t]*/,"",v);key=tolower(key);if(key=="target"){target=tolower(v);print "T\034" target}if(key=="authorized")print "A\034" v;if(key=="checked with")print "K\034" v;if(key=="output")print "U\034" v}}
+    if(section~/^delivery/){v=line;sub(/^- /,"",v);if(tolower(v)~/^(target|authorized|checked with|output):/){key=v;sub(/:.*/,"",key);sub(/^[^:]*:[ \t]*/,"",v);key=tolower(key);if(key=="target"){rawtarget=v;target=tolower(v);print "T\034" target}if(key=="authorized")print "A\034" v;if(key=="checked with")print "K\034" v;if(key=="output")print "U\034" v}}
     if(mode=="plan"&&low~/risk flags:/){flags++;v=line;sub(/^.*[Rr][Ii][Ss][Kk] [Ff][Ll][Aa][Gg][Ss]:[ \t]*/,"",v);n=split(v,segments,"·");for(i=1;i<=n;i++)if(tolower(segments[i])~/(^|[^a-z0-9_])yes([^a-z0-9_]|$)/)print "R\034" trim(segments[i])}
     if(mode=="evidence"&&(low~/^- commit:/||(section~/^delivery/&&low~/^- delivered:/))){kind=low~/^- commit:/?"C":"D";v=line;sub(/^[^:]*:[ \t]*/,"",v);hash=v;sub(/[ \t].*/,"",hash);repo=v;sub(/^[^ \t]+[ \t]*/,"",repo);if(repo==v||repo=="")repo=".";if(hash!~/^[a-fA-F0-9]+$/||length(hash)<7||length(hash)>64){if(kind=="C")problem("invalid Commit: " hash)}else{print kind "\034" tolower(hash) "\034" repo;if(kind=="C")commits++}}
     if(line!~/^\|/)next
@@ -132,7 +132,7 @@ parse() {
     }
   }
   END{
-    question();if(mode=="intent"){if(!outcomes)problem("Understood as needs a filled O criterion");if(target!="local"&&target!="pr"&&target!="deploy")problem("Delivery Target must be local, pr or deploy")}
+    question();if(mode=="intent"){if(!outcomes)problem("Understood as needs a filled O criterion");if(target!="local"&&target!="pr"&&target!="deploy")problem("Delivery Target must be local, pr or deploy, alone on its line (" (rawtarget==""?"missing":"found \"" rawtarget "\"") "): put any detail on a \"- Note:\" line")}
     if(mode=="plan"){if(NR>150)problem("PLAN.md has " NR " lines; keep it to 150 and move detail into refs/");if(!flags)problem("Risk flags: line missing");if(!count)problem("Scenarios need at least one row");n=split(objectives,os," ");for(i=1;i<=n;i++)if(os[i]!=""&&!covered[os[i]])problem(os[i] " has no must scenario")}
     if(mode=="evidence"){if(!commits)problem("Commit lines missing");if(!count)problem("Results need at least one row");n=split(scenarios " " scored,ss," ");for(i=1;i<=n;i++)if(ss[i]!=""&&!seen[ss[i]]&&!missing[ss[i]]++)problem("evidence.md is missing " ss[i] ": scenarios are never removed")}
   }' "$2"
@@ -190,7 +190,7 @@ route_current() { [ "$rid" = "$eid" ] && [ "$rentry" = "$entry" ]; }
 authorized() { local v re='^yes([^a-z0-9_]|$)'; v=$(one_line "$1" | tr '[:upper:]' '[:lower:]'); [[ $v =~ $re ]]; }
 delivery_authority() {
   dreason=
-  case "$1" in local) return 0;; pr|deploy) :;; *) dreason='Delivery Target must be local, pr or deploy'; return 1;; esac
+  case "$1" in local) return 0;; pr|deploy) :;; *) found=missing; [ -z "$1" ] || found="found \"$1\""; dreason="Delivery Target must be local, pr or deploy ($found)"; return 1;; esac
   if authorized "$eauth" || { [ "$1" = "$itarget" ] && authorized "$iauth"; }; then return 0; fi
   dreason="authorize $1"; return 1
 }
@@ -212,10 +212,11 @@ plan_history() {
 }
 
 filled() { [ -n "$1" ] && [[ $1 != \<* ]]; }
-# Prints the number of VERDICT lines in review.md (HTML comments skipped) and the newest verdict word.
+# Prints the number of VERDICT lines in review.md (HTML comments skipped), how many rounds after the first
+# $1 are not PASS, and the newest verdict word (last: it may be empty).
 verdicts() {
   [ -f "$F/review.md" ] || { printf '0\n'; return; }
-  awk "$UNCOMMENT"'{if(uncomment())next;gsub(/[`*]/,"");if(tolower($0)~/^[ \t]*verdict[ \t]*:/){n++;sub(/^[^:]*:[ \t]*/,"");v=toupper($0);if(v~/(PASS|FAIL)[ \t]*[|\/][ \t]*(PASS|FAIL)/)v="UNDECIDED";else sub(/[^A-Z].*$/,"",v)}}END{print n+0, v}' "$F/review.md"
+  awk -v k="${1:-0}" "$UNCOMMENT"'{if(uncomment())next;gsub(/[`*]/,"");if(tolower($0)~/^[ \t]*verdict[ \t]*:/){n++;sub(/^[^:]*:[ \t]*/,"");v=toupper($0);if(v~/(PASS|FAIL)[ \t]*[|\/][ \t]*(PASS|FAIL)/)v="UNDECIDED";else sub(/[^A-Z].*$/,"",v);if(n>k&&v!="PASS")bad++}}END{print n+0, bad+0, v}' "$F/review.md"
 }
 qa_action() {
   local need= id
@@ -285,7 +286,7 @@ validate_evidence() {
   done
 }
 # HEAD and toplevel of the project root's repository and of every repository inside the root (or only
-# of config repos:, spaces or commas between entries), tab-separated pairs on one line: a review PASS
+# of config repos: or review --repos, spaces or commas between entries), tab-separated pairs on one line: a review PASS
 # binds them all. With review --uncommitted, a repository with uncommitted changes records HEAD+tree,
 # the tree its working tree would commit, so a commit-gated project can review first and commit that
 # exact change after. Without it, nothing is fingerprinted and HEAD alone is bound, as in v2.1.0.
@@ -293,15 +294,15 @@ review_heads() {
   root_repo
   if [ -n "$bound" ]; then
     read -r -a list <<< "${bound//,/ }"
-    [ "${#list[@]}" -gt 0 ] || die "repos: '$bound' lists no repository: name one, or leave repos: empty to bind every repository"
+    [ "${#list[@]}" -gt 0 ] || die "$boundby '$bound' lists no repository: name one, or leave it empty to bind every repository"
     proot=$(cd "$ROOT" && pwd -P)
     for path in "${list[@]}"; do
       # "." names the repository holding the project root; any other entry is a repository's own top folder.
-      case "$path" in /*|[A-Za-z]:*|\<*) die "repos: '$path' must be a path relative to the project root";; esac
+      case "$path" in /*|[A-Za-z]:*|\<*) die "$boundby '$path' must be a path relative to the project root";; esac
       repo_path "$path"; preal=$(cd "$REPO" 2>/dev/null && pwd -P) || preal=
-      case "$preal/" in "$proot"/*) :;; *) die "repos: '$path' is not a directory under the project root";; esac
-      top=$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null) || die "repos: '$path' is not in a git repository"
-      [ "$preal" = "$proot" ] || [ "$preal" = "$(cd "$top" && pwd -P)" ] || die "repos: '$path' is not the top folder of a git repository (it is inside $top)"
+      case "$preal/" in "$proot"/*) :;; *) die "$boundby '$path' is not a directory under the project root";; esac
+      top=$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null) || die "$boundby '$path' is not in a git repository"
+      [ "$preal" = "$proot" ] || [ "$preal" = "$(cd "$top" && pwd -P)" ] || die "$boundby '$path' is not the top folder of a git repository (it is inside $top)"
     done
   fi
   { if [ -n "$bound" ]; then for path in "${list[@]}"; do printf '%s\n' "$ROOT/$path"; done
@@ -321,6 +322,16 @@ review_heads() {
     printf '%s\t%s\n' "$head" "$top"
   done; } | sort -u | awk '{printf "%s%s", (NR>1 ? "\t" : ""), $0}'
 }
+# True when review_heads' record still holds HEAD-only: every bound repository is at the HEAD it recorded.
+# A bound working tree (review --uncommitted, head+tree) never equals HEAD, so it never carries.
+heads_unchanged() {
+  local rhead top; [ -n "$heads" ] || return 1
+  while IFS=$'\t' read -r rhead top; do
+    [ "$(git -C "$top" rev-parse -q --verify HEAD 2>/dev/null)" = "$rhead" ] || return 1
+  done < <(printf '%s' "$heads" | awk -F'\t' '{for(j=1;j<NF;j+=2)print $j "\t" $(j+1)}')
+}
+# PLAN.md without its Scenarios section, hashed: what a diff review judged the code against.
+plan_body() { awk "$UNCOMMENT"'{if(uncomment())next;l=tolower($0);sub(/^[ \t]+/,"",l);gsub(/[`*]/,"",l)} l~/^## /{skip=(substr(l,4)~/^[ \t]*scenarios/)} !skip' "$F/PLAN.md" | sha; }
 # The tree id that git add -A would commit in repository $1, store and untracked nested repositories
 # excluded, built in a copy of its index. The store leaves the copy after add, so it stays out whether it
 # is untracked, ignored or partly tracked (git add refuses an exclude naming an ignored path). When git add
@@ -384,7 +395,7 @@ validate_commits() {
     [ "$head" = "$full" ] || die "HEAD differs from Commit: ${repos[i]}"
     top=$(git -C "$REPO" rev-parse --show-toplevel) || die "not a git repository: ${repos[i]}"
     reviewed=$(printf '%s' "$heads" | awk -F'\t' -v top="$top" '{for(j=1;j<NF;j+=2)if($(j+1)==top){print $j;exit}}')
-    [ -n "$reviewed" ] || die "${repos[i]} was not under review: commit, then review again from the project root${bound:+ (config repos: $bound)}"
+    [ -n "$reviewed" ] || die "${repos[i]} was not under review: commit, then review again from the project root; config repos: ${bound:+(now: $bound) }or review --repos names the repositories a review binds"
     rbase=${reviewed%%+*}; rtree=; [ "$rbase" = "$reviewed" ] || rtree=${reviewed#*+}
     # A PASS on uncommitted changes binds their tree. The Commit is the reviewed HEAD or descends from it, holds
     # the bound tree inside its path, and outside it changes nothing since that HEAD that the tree does not hold.
@@ -489,21 +500,37 @@ case "$command" in
         if [ "$psh" = "$hash" ] && [ "$pish" = "$ihash" ] && [ -z "$removed" ] && ! pending_plan && ! stopped; then printf 'plan already approved\n'; exit; fi
         # Only the human or a counted return to plan resets the review FAIL cap; an agent re-approval keeps it.
         keep=$fails; if [ "$who" = human ] || pending_plan; then keep=0; fi
-        event; plan="$hash $ihash $who $seq $ts $note"; entry=$((entry+1)); fails=$keep; review=; heads=; planned=$newplanned
+        # The build's review PASS carries over when nothing it judged moved: every HEAD it bound is unchanged
+        # and so is PLAN.md outside Scenarios, as when only a scenario or its procedure is retried.
+        # A plan gap check that passed may add a round; any later round that is not PASS stops the carry.
+        body=$(plan_body); carry=; read -r _ newbad _ <<< "$(verdicts "$rounds")"
+        if [ "$verdict" = pass ] && [ "${newbad:-0}" = 0 ] && [ "$ventry" = "$entry" ] && [ "$planbody" = "$body" ] && [ "$pish" = "$ihash" ] && heads_unchanged; then
+          case "$vnote" in 'carried: '*) carry=$vnote;; *) carry="carried: $vnote";; esac
+        fi
+        event; plan="$hash $ihash $who $seq $ts $note"; entry=$((entry+1)); fails=$keep; planbody=$body; planned=$newplanned
+        if [ -n "$carry" ]; then review="pass $entry $seq $vsha $carry"; else review=; heads=; fi
         left=; for id in $withdrawn; do case " $scenarios " in *" $id "*) :;; *) left="${left}${left:+ }$id";; esac; done; withdrawn=$left
         # Rounds already in review.md (the plan gap check) cannot pass the build.
         read -r rounds _ <<< "$(verdicts)"
       fi
       save_state; printf '%s approved. Run sdlc.sh next %s.\n' "$which" "$slug"
+      [ -z "${carry:-}" ] || printf 'review PASS carried: the reviewed HEADs and PLAN.md outside Scenarios are unchanged. Phase 4: run QA, fill evidence.md, score.\n'
     fi;;
   review)
-    uncommitted=; if [ "$#" -eq 4 ] && [ "$3" = --uncommitted ]; then uncommitted=1; set -- "$1" "$2" "$4"; fi
-    [ "$#" -eq 3 ] && [ "$3" != --uncommitted ] || die 'review <slug> pass|fail note, or review <slug> pass --uncommitted note' 2; feature "$1"; mutable
+    rusage='review <slug> pass|fail note, or review <slug> pass --uncommitted note; --repos "path ..." before the note names the repositories to bind'
+    [ "$#" -ge 3 ] || die "$rusage" 2
+    rslug=$1; rverdict=$2; shift 2; uncommitted=; rrepos=
+    # --repos replaces config repos: for this review only.
+    while [ "$#" -gt 1 ]; do case "$1" in --uncommitted) [ -z "$uncommitted" ] || die "$rusage" 2; uncommitted=1; shift;;
+      --repos) [ "$#" -gt 2 ] && [ -z "$rrepos" ] || die "$rusage" 2; rrepos=1; bound=$(one_line "$2"); boundby='review --repos'; shift 2;; *) die "$rusage" 2;; esac; done
+    case "$1" in --uncommitted|--repos) die "$rusage" 2;; esac
+    [ -z "$rrepos" ] || [ -n "$bound" ] || die 'review --repos lists no repository: name one, or leave --repos out' 2
+    set -- "$rslug" "$rverdict" "$1"; feature "$1"; mutable
     case "$2" in pass|fail) :;; *) die 'review verdict must be pass or fail' 2;; esac
-    [ -z "$uncommitted" ] || [ "$2" = pass ] || die '--uncommitted binds a PASS: review <slug> fail note' 2
+    [ -z "$uncommitted$rrepos" ] || [ "$2" = pass ] || die '--uncommitted binds a PASS, as --repos does: review <slug> fail note' 2
     note=$(one_line "$3"); [ -n "$note" ] || die 'review note required' 2
     gate_plan || die "$greason"
-    read -r nrounds actual_verdict <<< "$(verdicts)"
+    read -r nrounds _ actual_verdict <<< "$(verdicts)"
     [ -n "$actual_verdict" ] || die 'review.md has no VERDICT line'
     [ "$nrounds" -gt "$rounds" ] || die 'review.md has no new round since the last review or plan approval: the reviewer appends one'
     [ "$actual_verdict" = "$(printf '%s' "$2" | tr '[:lower:]' '[:upper:]')" ] || die "review.md's last VERDICT is $actual_verdict"

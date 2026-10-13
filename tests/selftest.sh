@@ -585,7 +585,7 @@ regression_repos() {
   replace '/## Results/ {print "- Commit: '"$(git -C services/a rev-parse HEAD)"' services/a"} {print}' "$E"
   route deliver
   replace '/## Results/ {print "- Commit: '"$(git -C services/b rev-parse HEAD)"' services/b"} {print}' "$E"
-  expect 1 score "$SLUG"; contains 'services/b was not under review'; contains '(config repos: . services/a)'
+  expect 1 score "$SLUG"; contains 'services/b was not under review'; contains 'config repos: (now: . services/a) or review --repos names'
   printf 'human_gates: intent\nrepos: ., services/a\n' > .sdlc/config.md
   reviewed "$SLUG" pass 'comma-separated repos'
   case "$(state heads)" in *'/services/b'*|*'/services/c'*) fail 'comma-separated repos: bound an unlisted repository';; esac
@@ -843,15 +843,129 @@ regression_interrupt() {
   [ ! -e "$dir" ] || { rm -rf "$dir"; fail 'interrupted review left its temporary index'; }
   ok 'an interrupted review removes its temporary index'
 }
+regression_reposflag() {
+  repo regression-reposflag
+  printf 'services/\n' >> .git/info/exclude
+  for name in a b; do nested_repo "services/$name"; done
+  printf 'human_gates: intent\nrepos: services/b\n' > .sdlc/config.md
+  feature flag-repos
+  expect 0 approve intent "$SLUG" --human 'approved scope'
+  plan 1; expect 0 approve plan "$SLUG" --agent reviewed
+  reviewed "$SLUG" pass --repos 'services/a' 'review names its repository'
+  case "$(state heads)" in *'/services/a') :;; *) fail "review --repos did not bind services/a: $(state heads)";; esac
+  [ "$(state heads | awk -F'\t' '{print NF}')" -eq 2 ] || fail "review --repos bound more than services/a: $(state heads)"
+  evidence
+  replace '/^- Commit:/ {print "- Commit: '"$(git -C services/a rev-parse HEAD)"' services/a"; next} {print}' "$E"
+  route deliver
+  replace '/^- Commit:/ {print "- Commit: '"$(git -C services/b rev-parse HEAD)"' services/b"; next} {print}' "$E"
+  expect 1 score "$SLUG"; contains 'services/b was not under review'; contains 'or review --repos names'
+  printf 'VERDICT: PASS\n' >> "$F/review.md"
+  expect 0 review "$SLUG" pass --repos 'services/a' --uncommitted 'flags in either order'
+  printf 'VERDICT: PASS\n' >> "$F/review.md"
+  expect 0 review "$SLUG" pass --uncommitted --repos 'services/a, services/b' 'commas between entries'
+  [ "$(state heads | awk -F'\t' '{print NF}')" -eq 4 ] || fail "review --repos with a comma did not bind both: $(state heads)"
+  printf 'VERDICT: PASS\n' >> "$F/review.md"
+  expect 2 review "$SLUG" pass --repos '' 'empty list'; contains 'review --repos lists no repository'
+  expect 2 review "$SLUG" pass --repos 'services/a'; contains 'review <slug> pass|fail note'
+  expect 2 review "$SLUG" pass --repos 'services/a' --repos 'services/b' 'repeated flag'; contains 'review <slug> pass|fail note'
+  printf 'VERDICT: FAIL\n' >> "$F/review.md"
+  expect 2 review "$SLUG" fail --repos 'services/a' 'flag on a FAIL'; contains 'as --repos does'
+  printf 'VERDICT: PASS\n' >> "$F/review.md"
+  expect 1 review "$SLUG" pass --repos 'services/none' 'missing path'; contains "review --repos 'services/none' is not a directory under the project root"
+  ok 'review --repos replaces config repos: for one review, takes either flag order, and refuses an empty or missing list'
+}
+regression_carry() {
+  repo regression-carry
+  ready blocked-retry 2
+  evidence S1:BLOCKED:; route human
+  replace '/^\| S2 / {sub(/run real CLI/, "run the CLI with a fixture")} {print}' "$F/PLAN.md"
+  expect 0 approve plan "$SLUG" --human 'retry S1 with a fixture'; contains 'review PASS carried'
+  case "$(state review)" in "pass $(state entry) "*' carried: independent review passed') :;; *) fail "review not carried: $(state review)";; esac
+  evidence S1:BLOCKED:; route human
+  printf '## Round — plan gap check\nVERDICT: PASS\n' >> "$F/review.md"
+  expect 0 approve plan "$SLUG" --human 'retry S1 again after a passing gap check'; contains 'review PASS carried'
+  case "$(state review)" in *'carried: carried:'*) fail "carried note stacked: $(state review)";; esac
+  evidence; route deliver
+  ok 'a plan re-approval that changes only Scenarios keeps the review PASS while every reviewed HEAD is unchanged'
+  ready code-moved 2
+  evidence S1:BLOCKED:; route human
+  printf 'fix\n' >> README; git commit -qam fix; SHA=$(git rev-parse HEAD)
+  expect 0 approve plan "$SLUG" --human 'retry after a new commit'
+  case "$OUTPUT" in *carried*) fail 'review carried across a new commit';; esac
+  [ -z "$(state review)" ] && [ -z "$(state heads)" ] || fail 'a new commit kept the review'
+  evidence; expect 1 score "$SLUG"; contains 'review PASS required'
+  ready plan-moved 2
+  evidence S1:BLOCKED:; route human
+  replace '/^## Scenarios/ {print "## Changes"; print "1. README — one more step"} {print}' "$F/PLAN.md"
+  expect 0 approve plan "$SLUG" --human 'plan changed outside Scenarios'
+  [ -z "$(state review)" ] || fail 'a PLAN.md change outside Scenarios kept the review'
+  ready legacy-state 2
+  evidence S1:BLOCKED:; route human
+  replace '!/^planbody:/' "$F/.state"
+  expect 0 approve plan "$SLUG" --human 'state from an older kit'
+  [ -z "$(state review)" ] || fail 'a state without planbody kept the review'
+  printf 'work in progress\n' > wip.txt
+  ready tree-bound 2 --uncommitted
+  case "$(state heads)" in *+*) :;; *) fail "review --uncommitted bound no working tree: $(state heads)";; esac
+  rm wip.txt
+  replace '/^\| S2 / {sub(/run real CLI/, "run the CLI again")} {print}' "$F/PLAN.md"
+  expect 0 approve plan "$SLUG" --agent 'scenario wording'
+  [ -z "$(state review)" ] || fail 'a review bound to a working tree was carried'
+  ready intent-moved 2
+  evidence S1:BLOCKED:; route human
+  printf -- '- O2: The operator also observes the log.\n' > "$TMP/o2"
+  replace '/^- O1:/ {print; while ((getline l < "'"$TMP/o2"'") > 0) print l; next} {print}' "$F/intent.md"
+  replace '/^\| S1 / {sub(/\| O1 \|$/, "| O1 O2 |")} {print}' "$F/PLAN.md"
+  expect 0 approve intent "$SLUG" --human 'added O2'
+  expect 0 approve plan "$SLUG" --human 'S1 covers O2'
+  [ -z "$(state review)" ] || fail 'an intent change kept the review'
+  ready build-return 2
+  evidence S2:FAIL:code; route build
+  replace '/^\| S2 / {sub(/run real CLI/, "run the CLI after the fix")} {print}' "$F/PLAN.md"
+  expect 0 approve plan "$SLUG" --agent 'scenario wording after a build return'
+  [ -z "$(state review)" ] || fail 'a review from before a build return was carried'
+  ready unrecorded-round 2
+  evidence S1:BLOCKED:; route human
+  printf 'VERDICT: FAIL\n' >> "$F/review.md"
+  expect 0 approve plan "$SLUG" --human 'retry with a newer round unrecorded'
+  [ -z "$(state review)" ] || fail 'a PASS was carried past a newer unrecorded round'
+  feature commented-change
+  expect 0 approve intent "$SLUG" --human 'approved scope'
+  plan 2; replace '/^## Scenarios/ {print "## Changes"; print "<!--"; print "## Scenarios draft"; print "-->"} {print}' "$F/PLAN.md"
+  expect 0 approve plan "$SLUG" --agent reviewed; reviewed "$SLUG" pass 'independent review passed'
+  evidence S1:BLOCKED:; route human
+  replace '{print} /^-->/ {print "1. README — a change after a commented heading"}' "$F/PLAN.md"
+  expect 0 approve plan "$SLUG" --human 'change hidden after a commented heading'
+  [ -z "$(state review)" ] || fail 'a commented Scenarios heading hid a change outside Scenarios'
+  ok 'the review is not carried after a new commit, a change to intent.md or PLAN.md outside Scenarios, a build return, an unrecorded round, a state without planbody, or a bound working tree'
+}
+regression_target() {
+  repo regression-target
+  feature target-detail
+  replace '{sub(/^- Target: local$/, "- Target: deploy (dev then stg)")} {print}' "$F/intent.md"
+  expect 1 approve intent "$SLUG" --human 'approved scope'; contains 'found "deploy (dev then stg)"'; contains 'put any detail on a "- Note:" line'
+  replace '!/^- Target:/' "$F/intent.md"
+  expect 1 approve intent "$SLUG" --human 'approved scope'; contains 'or deploy, alone on its line (missing)'
+  intent
+  replace '/^- Target:/ {print; print "- Note: push the branch after review"; next} {print}' "$F/intent.md"
+  expect 0 approve intent "$SLUG" --human 'approved scope'
+  ready target-close 1
+  evidence; route deliver; delivery 'deploy (dev)'
+  expect 1 close "$SLUG" shipped 'detail after the target'; contains 'or deploy (found "deploy (dev)")'
+  case "$OUTPUT" in *'")deploy'*|*'"deploy (dev)"deploy'*) fail "Target repeated: $OUTPUT";; esac
+  ok 'an intent or evidence Target error quotes what it found once and points intent detail to a Note line'
+}
 run_regressions() {
   case "$1" in
     stop) regression_stop;; scenarios) regression_scenarios;; delivery) regression_delivery;; review) regression_review;; other) regression_other;;
     init) regression_init;; ultra) regression_ultra;; round2-[abcde]) regression_round2 "${1#round2-}";; round3) regression_round3;;
     repos) regression_repos;; cells) regression_cells;; paths) regression_paths;; uncommitted) regression_uncommitted;;
     nested) regression_nested;; interrupt) regression_interrupt;; scoped) regression_scoped;; fingerprint) regression_fingerprint;; optin) regression_optin;;
+    reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;;
     all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init; regression_ultra
       for round2 in a b c d e; do regression_round2 "$round2"; done; regression_round3
-      regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint; regression_optin;;
+      regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint; regression_optin
+      regression_reposflag; regression_carry; regression_target;;
     *) fail "unknown regression group: $1";;
   esac
 }
