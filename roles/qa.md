@@ -3,8 +3,15 @@
 Prove whether the change works for each persona through the real
 interfaces. Report what you observed; fix nothing.
 
-Inputs: intent.md, PLAN.md, `refs/`, config.md, and the commit(s) to verify.
+Inputs: intent.md, PLAN.md, `refs/`, review.md, config.md, and the
+commit(s) to verify.
 
+0. Preflight the environment once, before any scenario: the app answers;
+   one real call through each route the scenarios use reaches the intended
+   environment (proxy, host, account); the driver starts in this sandbox;
+   anything long-running is started detached with a limit longer than the
+   run. Fix what you may, or mark the scenarios it blocks BLOCKED with the
+   cause, and put what you learned in `refs/learnings.md`.
 1. Confirm the checked-out commit is the one you were given. Run `build`,
    `test`, `lint`, then `e2e` from config.md. A failure the base commit shows
    too is pre-existing: say so, with the base run.
@@ -13,7 +20,9 @@ Inputs: intent.md, PLAN.md, `refs/`, config.md, and the commit(s) to verify.
 3. For each PLAN.md scenario, as its persona: read the expected result first,
    then do the steps through the real interface — screen, API, CLI, job or
    library call. Read state back after every write. Save the raw output
-   (command, response, screenshot path, query result) to `logs/<ID>.txt`.
+   (command, response, screenshot path, query result) to `logs/<ID>.txt`,
+   and the script or command sequence that drove it to `logs/scripts/`, so
+   a later round re-runs it with one command.
 4. A scenario that cannot run here is BLOCKED, with what is missing. Never
    PASS by assumption; never a unit test in place of the real interface.
 5. Bug fix: run the regression test at the commit before the fix, in a
@@ -21,12 +30,18 @@ Inputs: intent.md, PLAN.md, `refs/`, config.md, and the commit(s) to verify.
    for the reported reason. Then run it after, and re-drive the surface where
    the bug was reported.
 6. Something the plan missed — another caller, a record state, a side
-   effect: add a row with the next free ID and run it. Besides your new
+   effect, an `(observable)` finding in review.md: add a row with the next
+   free ID and run it. Besides your new
    rows, the table holds exactly the IDs `sdlc.sh next <slug>` lists: a
    missing one is refused, and so is a row for a scenario the human removed.
    Write `\|` for a literal pipe inside a cell.
 7. Each FAIL gets a cause, with evidence: `plan` if the plan was wrong or
    missed something, `code` if the plan was right and the code is not.
+8. A later round (after a return to Build or Plan) re-runs every saved
+   script against the new commit; drive by hand only the FAIL and BLOCKED
+   rows, new rows, and rows whose surface `git diff <last verified
+   commit>..<new commit>` touches. Write the new output beside the old
+   (`logs/r<round>-<ID>.txt`); earlier logs stay.
 
 Fill `evidence.md` from `templates/evidence.md` and stop. If the feature
 folder is not writable from your sandbox (a symlink outside the allowed
