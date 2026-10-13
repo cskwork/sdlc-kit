@@ -83,7 +83,7 @@ always says what comes next.
   PLAN.md       one page: understanding, AS-IS → TO-BE, side effects, changes, scenarios
   review.md     reviewer rounds, each ending in VERDICT
   evidence.md   checks, one result row per scenario, delivery
-  logs/         raw output behind every PASS and FAIL
+  logs/         raw output behind every PASS and FAIL; scripts/ re-runs each scenario
 ```
 
 Closed features move to `.sdlc/archive/`. Verified facts move to the
