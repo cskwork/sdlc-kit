@@ -9,7 +9,8 @@ usage() {
 Usage: sdlc.sh init [--knowledge path] | new slug | status [slug] [--json]
        sdlc.sh next slug | check intent|plan slug
        sdlc.sh approve intent|plan slug --human words|--agent review
-       sdlc.sh review slug pass|fail note | score slug
+       sdlc.sh review slug pass|fail note | review slug pass --uncommitted note
+       sdlc.sh score slug
        sdlc.sh close slug shipped|dropped reason | help | --version
 USAGE
 }
@@ -284,13 +285,15 @@ validate_evidence() {
   done
 }
 # HEAD and toplevel of the project root's repository and of every repository inside the root (or only
-# of config repos:), tab-separated pairs on one line: a review PASS binds them all. A repository with
-# uncommitted changes records HEAD+tree, the tree its working tree would commit, so a commit-gated
-# project can review first and commit that exact change after.
+# of config repos:, spaces or commas between entries), tab-separated pairs on one line: a review PASS
+# binds them all. With review --uncommitted, a repository with uncommitted changes records HEAD+tree,
+# the tree its working tree would commit, so a commit-gated project can review first and commit that
+# exact change after. Without it, nothing is fingerprinted and HEAD alone is bound, as in v2.1.0.
 review_heads() {
   root_repo
   if [ -n "$bound" ]; then
-    read -r -a list <<< "$bound"
+    read -r -a list <<< "${bound//,/ }"
+    [ "${#list[@]}" -gt 0 ] || die "repos: '$bound' lists no repository: name one, or leave repos: empty to bind every repository"
     proot=$(cd "$ROOT" && pwd -P)
     for path in "${list[@]}"; do
       # "." names the repository holding the project root; any other entry is a repository's own top folder.
@@ -309,7 +312,7 @@ review_heads() {
     top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) && head=$(git -C "$top" rev-parse -q --verify HEAD 2>/dev/null) || continue
     # The root's repository comes from rev-parse and from find: inspect it once.
     case "$seen" in *$'\n'"$top"$'\n'*) continue;; esac; seen="$seen$top"$'\n'
-    changes "$top" "$top"
+    if [ -n "$uncommitted" ]; then changes "$top" "$top"; else dirty=; fi
     if [ -n "$dirty" ]; then
       rc=0; tree=$(worktree_tree "$top") || rc=$?
       case "$rc" in 0) head="$head+$tree";; 3) :;; *) exit 1;; esac
@@ -367,7 +370,7 @@ store_excludes() {
   for path in "${store_paths[@]:1}"; do excludes[${#excludes[@]}]=":(top,exclude,literal)$path"; done
 }
 repo_path() { case "$1" in /*|[A-Za-z]:*|\<*) die "repo path must be relative: $1";; esac; REPO=$ROOT/$1; }
-# $2 names the evidence line (Commit or Delivered) whose repository path is $1.
+# $2 names the evidence line whose repository path is $1.
 repo_dir() { repo_path "$1"; [ -d "$REPO" ] || die "$2 path '$1' is not a directory under the project root: write '- $2: <sha> <relative-path>'"; }
 validate_commits() {
   # Repositories are compared by git's own toplevel path, so any path into a repository is bound to the review.
@@ -386,6 +389,8 @@ validate_commits() {
     # the bound tree inside its path, and outside it changes nothing since that HEAD that the tree does not hold.
     # Changes left uncommitted outside the path do not count, as when a commit is reviewed.
     if [ -n "$rtree" ]; then
+      # An unreachable tree can be pruned (gc.pruneExpire, two weeks by default): say so rather than call the Commit wrong.
+      git -C "$REPO" cat-file -e "$rtree^{tree}" 2>/dev/null || die "the reviewed tree $rtree of ${repos[i]} is gone (git gc?): review again"
       store_excludes "$top"
       { [ "$full" = "$rbase" ] || git -C "$REPO" merge-base --is-ancestor "$rbase" "$full"; } &&
         git -C "$REPO" diff --quiet "$full" "$rtree" -- . "${excludes[@]}" &&
@@ -491,8 +496,10 @@ case "$command" in
       save_state; printf '%s approved. Run sdlc.sh next %s.\n' "$which" "$slug"
     fi;;
   review)
-    [ "$#" -eq 3 ] || die 'review <slug> pass|fail note' 2; feature "$1"; mutable
+    uncommitted=; if [ "$#" -eq 4 ] && [ "$3" = --uncommitted ]; then uncommitted=1; set -- "$1" "$2" "$4"; fi
+    [ "$#" -eq 3 ] && [ "$3" != --uncommitted ] || die 'review <slug> pass|fail note, or review <slug> pass --uncommitted note' 2; feature "$1"; mutable
     case "$2" in pass|fail) :;; *) die 'review verdict must be pass or fail' 2;; esac
+    [ -z "$uncommitted" ] || [ "$2" = pass ] || die '--uncommitted binds a PASS: review <slug> fail note' 2
     note=$(one_line "$3"); [ -n "$note" ] || die 'review note required' 2
     gate_plan || die "$greason"
     read -r nrounds actual_verdict <<< "$(verdicts)"
@@ -500,7 +507,8 @@ case "$command" in
     [ "$nrounds" -gt "$rounds" ] || die 'review.md has no new round since the last review or plan approval: the reviewer appends one'
     [ "$actual_verdict" = "$(printf '%s' "$2" | tr '[:lower:]' '[:upper:]')" ] || die "review.md's last VERDICT is $actual_verdict"
     vsha=$(git -C "$ROOT" rev-parse -q --verify HEAD 2>/dev/null) || vsha=-
-    heads=$(review_heads)
+    # Only a PASS binds heads: score needs one, and a FAIL is never scored.
+    heads=; [ "$2" != pass ] || heads=$(review_heads)
     event; review="$2 $entry $seq $vsha $note"; rounds=$nrounds
     if [ "$2" = fail ]; then fails=$((fails+1)); printf 'review FAIL %s/3\n' "$fails"; [ "$fails" -lt 3 ] || printf '3 review FAILs this build: stop, the human decides\n'
     else printf 'review PASS. Phase 4: run QA, fill evidence.md, score.\n'; if printf '%s' "$heads" | awk -F'\t' '{for(j=1;j<NF;j+=2)if($j~/^[0-9a-f]+\+[0-9a-f]+$/)f=1}END{exit !f}'; then printf 'Uncommitted changes are bound, untracked unignored files included: a Commit must hold exactly those inside its path, on top of the reviewed HEAD. An amended or rebased commit needs a new review.\n'; fi; fi
@@ -543,14 +551,15 @@ case "$command" in
         delivery_authority "$etarget" || die "$dreason"
         filled "$checked" && filled "$output" || die 'Delivery Checked with and Output required'
         for ((i=0;i<${#commits[@]};i++)); do
-          repo_dir "${repos[i]}" Commit; commit_repo=$REPO; matchsha=
+          repo_dir "${repos[i]}" Commit; commit_repo=$REPO; matchsha=; nodir=
           source_repo=$(git -C "$commit_repo" rev-parse --show-toplevel) || die "not a git repository: ${repos[i]}"
           for ((j=0;j<${#delivered[@]};j++)); do
-            repo_dir "${drepos[j]}" Delivered
-            delivered_repo=$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null) || continue
+            # A Delivered line for another repository (a deploy repository not checked out here, say) is skipped.
+            repo_path "${drepos[j]}"
+            delivered_repo=$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null) || { [ -d "$REPO" ] || nodir=${drepos[j]}; continue; }
             [ "$delivered_repo" != "$source_repo" ] || matchsha=${delivered[j]}
           done
-          [ -n "$matchsha" ] || die "Delivered missing for repo: ${repos[i]}"
+          [ -n "$matchsha" ] || die "Delivered missing for repo: ${repos[i]}: add '- Delivered: <sha> ${repos[i]}'${nodir:+ (the line for '$nodir' was skipped: it is not a folder under the project root)}"
           git -C "$commit_repo" rev-parse --verify -q "$matchsha^{commit}" >/dev/null || die "unknown Delivered commit: $matchsha"
           git -C "$commit_repo" diff --quiet "${commits[i]}" "$matchsha" || die 'Delivered tree differs from verified Commit'
           if [ "$etarget" != local ]; then remote=$(git -C "$commit_repo" branch -r --contains "$matchsha"); [ -n "$remote" ] || die 'Delivered commit is not on any remote'; fi

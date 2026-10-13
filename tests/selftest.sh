@@ -79,7 +79,7 @@ ready() {
   expect 0 approve intent "$SLUG" --human 'approved scope'
   plan "$2"
   expect 0 approve plan "$SLUG" --agent 'scenarios and risks reviewed'
-  reviewed "$SLUG" pass 'independent review passed'
+  reviewed "$SLUG" pass ${3+"$3"} 'independent review passed'
 }
 evidence() {
   local i result cause override id rest
@@ -586,6 +586,14 @@ regression_repos() {
   route deliver
   replace '/## Results/ {print "- Commit: '"$(git -C services/b rev-parse HEAD)"' services/b"} {print}' "$E"
   expect 1 score "$SLUG"; contains 'services/b was not under review'; contains '(config repos: . services/a)'
+  printf 'human_gates: intent\nrepos: ., services/a\n' > .sdlc/config.md
+  reviewed "$SLUG" pass 'comma-separated repos'
+  case "$(state heads)" in *'/services/b'*|*'/services/c'*) fail 'comma-separated repos: bound an unlisted repository';; esac
+  [ "$(state heads | awk -F'\t' '{print NF}')" -eq 4 ] || fail "comma-separated repos: did not bind . and services/a: $(state heads)"
+  ok 'config repos: takes commas between entries, as human_gates does'
+  printf 'human_gates: intent\nrepos: ,\n' > .sdlc/config.md
+  printf 'VERDICT: PASS\n' >> "$F/review.md"
+  expect 1 review "$SLUG" pass 'only a comma'; contains "repos: ',' lists no repository"
   printf 'human_gates: intent\nrepos: services/a services/none\n' > .sdlc/config.md
   printf 'VERDICT: PASS\n' >> "$F/review.md"
   expect 1 review "$SLUG" pass 'listed path is missing'; contains "repos: 'services/none' is not a directory under the project root"
@@ -630,8 +638,11 @@ regression_paths() {
   replace '/Commit:/ {$0=$0" (reviewed)"} {print}' "$E"
   expect 1 score "$SLUG"; contains "Commit path '(reviewed)' is not a directory under the project root: write '- Commit: <sha> <relative-path>'"
   evidence; route deliver; delivery local "$SHA nowhere"
-  expect 1 close "$SLUG" shipped 'delivered path is not a folder'; contains "Delivered path 'nowhere' is not a directory under the project root"
-  ok 'a Commit or Delivered path that is not a folder under the project root says so and shows the line format'
+  expect 1 close "$SLUG" shipped 'delivered path is not a folder'; contains "Delivered missing for repo: .: add '- Delivered: <sha> .'"; contains "the line for 'nowhere' was skipped: it is not a folder under the project root"
+  ok 'a Commit path that is not a folder says so with the line format; a Delivered line for no folder is skipped and named when nothing matches'
+  evidence; route deliver; delivery local "$SHA deploy-repo"; printf -- '- Delivered: %s\n' "$SHA" >> "$E"
+  expect 0 close "$SLUG" shipped 'extra Delivered line for a repository not checked out here'; contains 'Archived'
+  ok 'a Delivered line for a repository not present locally is skipped when another Delivered line matches'
 }
 regression_uncommitted() {
   repo regression-uncommitted
@@ -639,7 +650,7 @@ regression_uncommitted() {
   expect 0 approve intent "$SLUG" --human 'approved scope'
   plan 1; expect 0 approve plan "$SLUG" --agent reviewed
   printf 'reviewed change\n' >> README; printf 'new file\n' > added.txt
-  reviewed "$SLUG" pass 'reviewed before the human commits'; review_output=$OUTPUT
+  reviewed "$SLUG" pass --uncommitted 'reviewed before the human commits'; review_output=$OUTPUT
   git add README added.txt; git commit -qm 'commit the reviewed change'; SHA=$(git rev-parse HEAD)
   evidence; route deliver; delivery
   expect 0 close "$SLUG" shipped 'reviewed before commit, committed unchanged'
@@ -649,7 +660,7 @@ regression_uncommitted() {
   expect 0 approve intent "$SLUG" --human 'approved scope'
   plan 1; expect 0 approve plan "$SLUG" --agent reviewed
   printf 'reviewed two\n' >> README
-  reviewed "$SLUG" pass 'reviewed before commit'
+  reviewed "$SLUG" pass --uncommitted 'reviewed before commit'
   reviewed_sha=$SHA
   printf 'unreviewed extra\n' >> README; git commit -qam 'commit more than was reviewed'; SHA=$(git rev-parse HEAD)
   evidence
@@ -666,7 +677,7 @@ regression_uncommitted() {
   expect 0 approve intent "$SLUG" --human 'approved scope'
   plan 1; expect 0 approve plan "$SLUG" --agent reviewed
   printf 'reviewed three\n' >> README
-  reviewed "$SLUG" pass 'reviewed before commit'
+  reviewed "$SLUG" pass --uncommitted 'reviewed before commit'
   git checkout -q README; SHA=$(git rev-parse HEAD)
   evidence
   expect 1 score "$SLUG"; contains 'is not the reviewed uncommitted change'
@@ -675,25 +686,62 @@ regression_uncommitted() {
   git stash pop -q; git commit -qam 'commit the reviewed change at last'; SHA=$(git rev-parse HEAD)
   evidence; route deliver
   ok 'the reviewed HEAD alone does not satisfy a review of uncommitted changes that were reverted or stashed'
+  feature precommit-gone
+  expect 0 approve intent "$SLUG" --human 'approved scope'
+  plan 1; expect 0 approve plan "$SLUG" --agent reviewed
+  printf 'reviewed four\n' >> README
+  reviewed "$SLUG" pass --uncommitted 'reviewed before commit'
+  tree=$(state heads | awk -F'\t' '{print $1}'); tree=${tree#*+}
+  git checkout -q README; rm -f ".git/objects/${tree:0:2}/${tree:2}"
+  ! git cat-file -e "$tree" 2>/dev/null || fail 'the reviewed tree is still in the object store'
+  SHA=$(git rev-parse HEAD); evidence
+  expect 1 score "$SLUG"; contains "the reviewed tree $tree of . is gone (git gc?): review again"
+  ok 'a reviewed tree pruned from the object store asks for a new review'
+}
+# Without --uncommitted a review binds HEAD alone, as in v2.1.0: a stray file present at review and gone by score
+# does not matter, and nothing is written to the object store. A FAIL binds nothing.
+regression_optin() {
+  repo regression-optin
+  feature committed-first
+  expect 0 approve intent "$SLUG" --human 'approved scope'
+  plan 1; expect 0 approve plan "$SLUG" --agent reviewed
+  printf 'committed change\n' >> README; git commit -qam 'commit first'; SHA=$(git rev-parse HEAD)
+  printf 'test artifact\n' > coverage.txt; printf 'unstaged\n' >> README; objects=$(git count-objects -v)
+  reviewed "$SLUG" pass 'review after commit, stray artifact present'; review_output=$OUTPUT
+  rm coverage.txt; git checkout -q README
+  evidence; route deliver
+  case "$(state heads)" in *+*) fail 'a review without --uncommitted bound the working tree';; esac
+  [ "$(git count-objects -v)" = "$objects" ] || fail 'a review without --uncommitted wrote to the object store'
+  OUTPUT=$review_output; case "$OUTPUT" in *'Uncommitted changes are bound'*) fail 'notice printed without --uncommitted';; esac
+  ok 'without --uncommitted a review binds HEAD alone: a stray file deleted before score does not block the reviewed commit'
+  feature flag-args
+  expect 0 approve intent "$SLUG" --human 'approved scope'
+  plan 1; expect 0 approve plan "$SLUG" --agent reviewed
+  printf 'VERDICT: FAIL\n' >> "$F/review.md"
+  expect 2 review "$SLUG" fail --uncommitted 'flag on a FAIL'; contains '--uncommitted binds a PASS'
+  expect 2 review "$SLUG" pass --uncommitted; contains 'review <slug> pass --uncommitted note'
+  expect 0 review "$SLUG" fail 'finding'
+  [ -z "$(state heads)" ] || fail 'a review FAIL recorded heads'
+  ok '--uncommitted goes with a PASS and a note; a FAIL binds no heads'
 }
 regression_nested() {
   repo regression-nested
   for name in a b c; do nested_repo "worktrees/$name"; done
   git worktree add -q --detach worktrees/linked
-  ready nested-clean 1
+  ready nested-clean 1 --uncommitted
   case "$(state heads)" in *+*) fail 'untracked nested repositories bound as uncommitted changes';; esac
   feature nested
   expect 0 approve intent "$SLUG" --human 'approved scope'
   plan 1; expect 0 approve plan "$SLUG" --agent reviewed
   printf 'real change\n' >> README
-  reviewed "$SLUG" pass 'reviewed beside untracked nested repositories'; contains 'Uncommitted changes are bound'
+  reviewed "$SLUG" pass --uncommitted 'reviewed beside untracked nested repositories'; contains 'Uncommitted changes are bound'
   case "$OUTPUT" in *'embedded git repository'*) fail 'review warned about nested repositories';; esac
   [ "${#OUTPUT}" -lt 400 ] || fail "review printed ${#OUTPUT} bytes"
   git commit -qam 'commit only the real change'; SHA=$(git rev-parse HEAD)
   evidence; route deliver
   git init -q worktrees/empty
   printf 'more\n' >> README
-  reviewed "$SLUG" pass 'nested repository without a commit'
+  reviewed "$SLUG" pass --uncommitted 'nested repository without a commit'
   ok 'untracked nested repositories stay out of the bound change, its dirty check and the review output'
 }
 # Uncommitted changes outside every Commit path do not block a reviewed commit, as in v2.1.0.
@@ -706,14 +754,14 @@ regression_scoped() {
   cd proj; expect 0 init
   printf 'committed change\n' >> README; git commit -qam 'change in the project'; SHA=$(git rev-parse HEAD)
   printf 'outside the project\n' >> ../other/o.txt
-  ready scoped-parent 1
+  ready scoped-parent 1 --uncommitted
   evidence; route deliver
   ok 'a reviewed commit passes beside uncommitted changes in the parent repository outside the project root'
   printf 'reviewed in the project\n' >> README
   feature scoped-later
   expect 0 approve intent "$SLUG" --human 'approved scope'
   plan 1; expect 0 approve plan "$SLUG" --agent reviewed
-  reviewed "$SLUG" pass 'reviewed before commit beside outside changes'
+  reviewed "$SLUG" pass --uncommitted 'reviewed before commit beside outside changes'
   printf 'unreviewed\n' > ../other/x.txt; git add README ../other/x.txt; git commit -qm 'reviewed change plus an unreviewed one'; SHA=$(git rev-parse HEAD)
   evidence
   expect 1 score "$SLUG"; contains 'is not the reviewed uncommitted change'
@@ -723,7 +771,7 @@ regression_scoped() {
   repo regression-scoped-pkg
   mkdir pkg; printf 'package\n' > pkg/file; git add pkg; git commit -qm 'add package'; SHA=$(git rev-parse HEAD)
   printf 'notes\n' > notes.txt
-  ready scoped-pkg 1
+  ready scoped-pkg 1 --uncommitted
   evidence; replace '/^- Commit:/ {$0=$0" pkg"} {print}' "$E"
   route deliver
   ok 'an untracked file outside the Commit path does not block a reviewed commit'
@@ -732,7 +780,7 @@ regression_scoped() {
   expect 0 approve intent "$SLUG" --human 'approved scope'
   plan 1; expect 0 approve plan "$SLUG" --agent reviewed
   printf 'reviewed\n' >> pkg/file
-  reviewed "$SLUG" pass 'reviewed before commit'
+  reviewed "$SLUG" pass --uncommitted 'reviewed before commit'
   git mv out/secret.txt other-secret.txt; printf 'EVIL\n' >> other-secret.txt
   git add -A; git commit -qm 'reviewed change plus an unreviewed rename and edit'; SHA=$(git rev-parse HEAD)
   evidence; replace '/^- Commit:/ {$0=$0" pkg"} {print}' "$E"
@@ -745,12 +793,12 @@ regression_fingerprint() {
   mkdir -p .sdlc/memory; printf 'shared\n' > .sdlc/memory/team.md; git add -f .sdlc/memory/team.md; git commit -qm 'share store knowledge'
   mkdir pkg; printf 'package\n' > pkg/file; git add pkg; git commit -qm 'add package'; SHA=$(git rev-parse HEAD)
   printf 'notes\n' > notes.txt
-  ready tracked-store 1
+  ready tracked-store 1 --uncommitted
   evidence; replace '/^- Commit:/ {$0=$0" pkg"} {print}' "$E"
   route deliver
   ok 'a partly tracked, ignored store does not stop the working tree fingerprint'
   repo 'regression-c++proj'
-  ready plus-path 1
+  ready plus-path 1 --uncommitted
   case "$OUTPUT" in *'Uncommitted changes are bound'*) fail 'a + in the repository path read as bound uncommitted changes';; esac
   ok 'a + in a repository path is not a bound working tree'
   case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) printf 'skip: unreadable files need POSIX permissions\n'; return;; esac
@@ -758,7 +806,7 @@ regression_fingerprint() {
   mkdir pkg; printf 'package\n' > pkg/file; git add pkg; git commit -qm 'add package'; SHA=$(git rev-parse HEAD)
   mkdir build; printf 'locked\n' > build/locked.bin; chmod 000 build/locked.bin
   if cat build/locked.bin > /dev/null 2>&1; then chmod 600 build/locked.bin; printf 'skip: unreadable files are readable for this user\n'; return; fi
-  ready unreadable 1; contains 'the PASS binds its HEAD only'
+  ready unreadable 1 --uncommitted; contains 'the PASS binds its HEAD only'
   [ "$(printf '%s\n' "$OUTPUT" | grep -c 'cannot fingerprint')" -eq 1 ] || fail "fingerprint warning not printed once: $OUTPUT"
   evidence; replace '/^- Commit:/ {$0=$0" pkg"} {print}' "$E"
   route deliver
@@ -777,7 +825,7 @@ regression_interrupt() {
   real=$(command -v git); mark=$TMP/interrupt-mark; mkdir -p "$TMP/slowgit"
   printf '#!/bin/sh\ncase " $* " in *" write-tree"*) printf %%s "$GIT_INDEX_FILE" > "%s"; sleep 5;; esac\nexec "%s" "$@"\n' "$mark" "$real" > "$TMP/slowgit/git"
   chmod +x "$TMP/slowgit/git"
-  set -m; PATH="$TMP/slowgit:$PATH" bash "$SDLC" review "$SLUG" pass interrupted > /dev/null 2>&1 & pid=$!; set +m
+  set -m; PATH="$TMP/slowgit:$PATH" bash "$SDLC" review "$SLUG" pass --uncommitted interrupted > /dev/null 2>&1 & pid=$!; set +m
   n=0; while [ ! -s "$mark" ] && [ "$n" -lt 100 ]; do sleep 0.1; n=$((n+1)); done
   [ -s "$mark" ] || fail 'review never fingerprinted the working tree'
   dir=$(dirname "$(cat "$mark")"); kill -INT -- "-$pid"; wait "$pid" || :
@@ -790,10 +838,10 @@ run_regressions() {
     stop) regression_stop;; scenarios) regression_scenarios;; delivery) regression_delivery;; review) regression_review;; other) regression_other;;
     init) regression_init;; ultra) regression_ultra;; round2-[abcde]) regression_round2 "${1#round2-}";; round3) regression_round3;;
     repos) regression_repos;; cells) regression_cells;; paths) regression_paths;; uncommitted) regression_uncommitted;;
-    nested) regression_nested;; interrupt) regression_interrupt;; scoped) regression_scoped;; fingerprint) regression_fingerprint;;
+    nested) regression_nested;; interrupt) regression_interrupt;; scoped) regression_scoped;; fingerprint) regression_fingerprint;; optin) regression_optin;;
     all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init; regression_ultra
       for round2 in a b c d e; do regression_round2 "$round2"; done; regression_round3
-      regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint;;
+      regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint; regression_optin;;
     *) fail "unknown regression group: $1";;
   esac
 }
