@@ -75,7 +75,9 @@ finds `.git`.
 ## Config and records
 
 `.sdlc/config.md` holds every project value: `build`, `test`, `lint`, `run`,
-`e2e`, `qa` (the tool that drives screens or APIs), `human_gates` (default
+`e2e`, `qa` (the tool that drives screens or APIs), `qa_runner` (an optional
+adapter in `adapters/`, such as `e2e`) and `qa_session` (its sign-in command),
+`human_gates` (default
 `intent`), `knowledge` (the durable knowledge folder) and `repos` (the
 repositories a review binds; empty means every one under the project root;
 `review --repos` names them for one review).

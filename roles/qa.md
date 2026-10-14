@@ -10,7 +10,10 @@ commit(s) to verify.
    one real call through each route the scenarios use reaches the intended
    environment (proxy, host, account); the driver starts in this sandbox;
    anything long-running is started detached with a limit longer than the
-   run. Fix what you may, or mark the scenarios it blocks BLOCKED with the
+   run; config `qa_session`, if set, signs in and its setup check passes.
+   Treat no step as read-only until you know: opening, closing or paging
+   through a record can write on the server. On shared data, find what each
+   step writes first, and drive only accounts whose state may change. Fix what you may, or mark the scenarios it blocks BLOCKED with the
    cause, and put what you learned in `refs/learnings.md`.
 1. Confirm the checked-out commit is the one you were given. Run `build`,
    `test`, `lint`, then `e2e` from config.md. A failure the base commit shows
@@ -22,7 +25,9 @@ commit(s) to verify.
    library call. Read state back after every write. Save the raw output
    (command, response, screenshot path, query result) to `logs/<ID>.txt`,
    and the script or command sequence that drove it to `logs/scripts/`, so
-   a later round re-runs it with one command.
+   a later round re-runs it with one command. With config `qa_runner: <name>`,
+   the script is that runner's test: read `adapters/<name>/README.md` in the
+   kit folder first; its deterministic layer decides PASS or FAIL.
 4. A scenario that cannot run here is BLOCKED, with what is missing. Never
    PASS by assumption; never a unit test in place of the real interface.
 5. Bug fix: run the regression test at the commit before the fix, in a

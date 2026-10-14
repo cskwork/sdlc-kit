@@ -1459,4 +1459,10 @@ assert_file .sdlc/archive/count-todos/evidence.md
 assert_file .sdlc/archive/count-todos/refs/data.md
 expect 30 next "$SLUG"
 ok 'real four-phase lifecycle: old CLI data, scouts, plan, change, commit, review, four CLI scenarios, score, local archive'
+# The e2e adapter is self-contained: vendored guide with its license, a pinned VERSION, a runnable updater.
+A=$KIT/adapters/e2e
+for f in README.md VERSION update.sh vendor/e2e-skill/SKILL.md vendor/e2e-skill/LICENSE vendor/e2e-skill/NOTICE templates/e2e.config.ts templates/session.setup.e2e.ts templates/scenario.e2e.ts templates/popup-bridge.ts; do assert_file "$A/$f"; done
+awk -F': *' '$1=="e2e"&&$2~/^[0-9]+\.[0-9]+\.[0-9]+$/{ok=1}END{exit !ok}' "$A/VERSION" || fail 'adapters/e2e/VERSION has no pinned e2e version'
+bash "$A/update.sh" --help > "$TMP/update-help" || fail 'adapters/e2e/update.sh --help failed'
+ok 'e2e adapter: vendored guide, license, pinned version, templates, updater help'
 printf 'PASS: %s checks\n' "$COUNT"
