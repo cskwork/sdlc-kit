@@ -11,6 +11,14 @@ and config.md.
   tier and repository, every reader and writer of the data, the states
   existing records are in. Query real data read-only where a tool and
   permission exist; redact personal data.
+- Changed identifiers: for each name or value the change renames, retires,
+  redirects or reshapes (a route or path, an event, message or log key, an
+  enum value, a column, a config key, an exported symbol), search the literal
+  value as well as the symbol, in every repository, and list each consumer —
+  including those that only compare it: loggers, audit and analytics events,
+  permission checks, watchers, feature flags, links from other apps. One row
+  per consumer: file:line, what it does with the value, what happens to it
+  after the change.
 - Observe rather than infer: run the command, open the screen, call the API.
   For deployed behavior read the deployed revision (`git show
   <deploy-ref>:<path>`), not the working tree.

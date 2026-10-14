@@ -9,7 +9,10 @@ Dispatch QA (`roles/qa.md`) with intent.md, PLAN.md, `refs/`, config.md and
 the reviewed commit. QA runs the checks and every scenario, saves raw output
 in `logs/`, adds scenarios for anything new it finds, and fills `evidence.md`
 (`templates/evidence.md`): one row per scenario — PASS, FAIL with a cause,
-or BLOCKED with what is missing. Scenarios are never dropped: `sdlc.sh next`
+or BLOCKED with what is missing. QA preflights the environment once, runs each
+`(observable)` review finding as a scenario, and saves the script behind
+every scenario, so a later round re-runs them all and drives by hand only
+what failed or what the new diff touches. Scenarios are never dropped: `sdlc.sh next`
 lists every ID the table needs, earlier QA-added ones included.
 A cause is `plan` when the plan was wrong or missed something (a caller, a
 data state, a rule, a scenario), and `code` when the plan was right and the
@@ -50,6 +53,8 @@ Delivery's `Policy:` line. Then:
 - move verified facts from the refs (and `refs/learnings.md`, if any) into
   `knowledge`: one place per fact, updating a page rather than adding a
   duplicate;
+- add the saved scripts (`logs/scripts/`) worth keeping to the project's
+  `e2e` suite, or name them as a follow-up in Delivery;
 - `sdlc.sh close <slug> shipped "<one line>"` — refused if the delivered
   tree differs from the verified one.
 
