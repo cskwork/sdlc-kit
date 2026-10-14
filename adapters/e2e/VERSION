@@ -1,0 +1,5 @@
+e2e: 0.20.0
+web: 0.14.0
+node: ^22.22.3 || >=24.8.0
+source: https://www.npmjs.com/package/e2e (skills/e2e, LICENSE, NOTICE)
+updated: 2026-10-14
