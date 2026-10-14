@@ -60,6 +60,10 @@ Save `--reporter json` output in `logs/` with the scenario ID.
   assignment in its viewer marked it submitted on the server. Before driving
   a flow on shared or seeded data, find out what opening, closing and
   navigating write, and use fixture accounts whose state may change.
+- A URL assertion right after `app.open` can pass on the address the app is
+  about to redirect away from: expecting the opened URL passed in the trial
+  although the app redirected to another page. Wait for an element only the
+  settled screen shows, then assert the URL.
 - An agent step absorbs a renamed control and still passes; only the det
   locator catches that regression. Keep det as the gate.
 - A wrong expectation after a correct replay evicts the correct recording;
