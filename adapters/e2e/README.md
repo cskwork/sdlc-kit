@@ -27,6 +27,18 @@ npm. The project still installs the runner itself.
 Read `vendor/e2e-skill/SKILL.md` and the one reference it points to before
 writing tests.
 
+## Popups
+
+e2e does not follow windows the app opens. `templates/popup-bridge.ts` is an
+init script that turns `window.open` into a full-viewport iframe in the same
+tab and makes `window.opener`, `close()` and `focus()` behave inside it, so a
+same-origin popup that talks through opener and postMessage works unchanged;
+assert inside it with `browser.frameLocator`. Its header lists what it does
+not cover (cross-origin popups, `target="_blank"` links, `noopener`) and how
+it differs from a real popup. Tried on two document-viewer popups: the
+deterministic run passed twice, and an agent step inside the popup replayed
+with no model call on its second run.
+
 ## Each scenario, two layers
 
 `templates/scenario.e2e.ts` shows both, tagged with the scenario ID:
@@ -44,6 +56,10 @@ Save `--reporter json` output in `logs/` with the scenario ID.
 
 ## Limits seen in use
 
+- Opening is not always read-only. In the trial, merely opening a one-page
+  assignment in its viewer marked it submitted on the server. Before driving
+  a flow on shared or seeded data, find out what opening, closing and
+  navigating write, and use fixture accounts whose state may change.
 - An agent step absorbs a renamed control and still passes; only the det
   locator catches that regression. Keep det as the gate.
 - A wrong expectation after a correct replay evicts the correct recording;
