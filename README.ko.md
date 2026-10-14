@@ -91,12 +91,19 @@ $EDITOR .sdlc/config.md                          # build, test, lint, run, e2e, 
 ## 설정
 
 프로젝트마다 다른 값은 `.sdlc/config.md` 한 곳에만 둡니다. `build`, `test`,
-`lint`, `run`, `e2e` 명령, 화면이나 API를 다룰 `qa` 도구, `human_gates`(기본값
+`lint`, `run`, `e2e` 명령, 화면이나 API를 다룰 `qa` 도구, 선택 실행기 어댑터 `qa_runner`와
+그 로그인 명령 `qa_session`, `human_gates`(기본값
 `intent`, 모든 plan을 직접 승인하려면 `plan` 추가, 위험 플래그가 있는 plan은
 설정과 상관없이 사람이 승인), `knowledge` 폴더, `repos`(리뷰가 묶을 저장소.
 프로젝트 루트 아래 저장소가 많으면 나열하거나 리뷰마다 `sdlc.sh review <slug> pass --repos "<경로> ..." "<메모>"`로 지정하고, 비우면 루트 아래 전부)입니다. `.sdlc/`는
 `.git/info/exclude`로 git에서 빠집니다. 팀이 배운 것을 공유하려면 `knowledge:`를
 git이 추적하는 폴더로 지정하세요.
+
+`adapters/e2e/`가 그런 실행기 하나입니다. `qa_runner: e2e`이면 QA는 브라우저·모바일
+시나리오마다 [e2e](https://www.npmjs.com/package/e2e) 테스트를 씁니다. 결정적 층(증거,
+모델 없음)과, 다음 라운드부터 모델 호출 없이 재생되는 선택 agent 층으로 나뉩니다.
+키트는 e2e의 에이전트 가이드를 버전 고정으로 들고 있어(Apache-2.0) 오프라인에서도
+쓸 수 있고, `adapters/e2e/update.sh [버전]`으로 갱신합니다.
 
 ## 늘 지키는 규칙
 
