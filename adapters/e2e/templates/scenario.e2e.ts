@@ -7,6 +7,9 @@ import { expect } from 'e2e';
 describe('S1 <persona> <behavior>', { session: 'user', tags: ['S1'] }, () => {
   test('det', { tags: ['det'] }, async ({ app, browser }) => {
     await app.open('/start');
+    // Wait for something only the settled screen shows before any URL check: right after
+    // open, toHaveURL can match the address the app is about to redirect away from.
+    await expect(browser.locator('nav')).toBeVisible();
     await browser.locator('nav >> text=Reports').tap();
     await expect(browser).toHaveURL('/reports');
     // A request the change must (or must not) send: record it, then assert.
