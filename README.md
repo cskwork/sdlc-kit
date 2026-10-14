@@ -93,6 +93,7 @@ Closed features move to `.sdlc/archive/`. Verified facts move to the
 
 `.sdlc/config.md` is the only project-specific file: the `build`, `test`,
 `lint`, `run` and `e2e` commands, the `qa` tool that drives screens or APIs,
+an optional `qa_runner` adapter with its `qa_session` sign-in command,
 `human_gates` (default `intent`; add `plan` to approve every plan yourself — a
 plan with a risk flag always asks), the `knowledge` folder, and `repos` (the
 repositories a review binds — list them when the project root holds many,
@@ -100,6 +101,13 @@ or name them per review with `sdlc.sh review <slug> pass --repos "<path> ..." "<
 empty means every one under it). `.sdlc/` stays
 out of git through `.git/info/exclude`; point `knowledge:` at a tracked folder
 to share what the team learns.
+
+`adapters/e2e/` is one such runner: with `qa_runner: e2e`, QA writes each
+browser or mobile scenario as an [e2e](https://www.npmjs.com/package/e2e)
+test with a deterministic layer (the evidence, no model) and an optional
+agent layer that replays without model calls on later rounds. The kit
+vendors e2e's agent guide (Apache-2.0, pinned) so it works offline;
+`adapters/e2e/update.sh [version]` refreshes it.
 
 ## Rules that never relax
 
