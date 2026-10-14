@@ -5,7 +5,7 @@ kit: <path to the kit>
 build:
 test:
 lint:
-# start the app for end-to-end scenarios, and the project's own e2e command
+# start the app for end-to-end scenarios (QA runs it detached, outliving the run), and the project's own e2e command
 run:
 e2e:
 # how QA drives the interface: a browser driver, an HTTP client, the shell; empty = whatever the agent has

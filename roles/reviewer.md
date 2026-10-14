@@ -9,7 +9,9 @@ Inputs: intent.md, PLAN.md, `refs/`. Blocking:
 - a caller, data reader or writer, record state or tier the refs show but
   PLAN.md ignores; a side effect without a scenario;
 - AS-IS stated without observation; a risk flag set to no that the changes
-  trip (migration, data deletion, public API, security, infra).
+  trip (migration, data deletion, public API, security, infra);
+- an identifier the plan renames, retires or redirects whose consumers
+  `refs/` do not list, or a listed consumer with no scenario.
 
 ## Diff mode (phase 3)
 
@@ -17,7 +19,8 @@ Inputs: intent.md, PLAN.md, `refs/`, the commit or uncommitted diff
 (untracked files included). Read every changed file.
 Blocking:
 - it does not do what PLAN.md says, or does more;
-- a side effect PLAN.md names is left unhandled; input that callers send
+- a side effect PLAN.md names is left unhandled; a consumer that still
+  compares a renamed, retired or redirected value; input that callers send
   today is newly refused without intent.md authorizing it;
 - a policy changed with neither an update where it is written nor a
   recorded follow-up;
@@ -46,5 +49,7 @@ Append to `review.md`:
     - <what you read>
     VERDICT: PASS | FAIL
 
-FAIL when anything blocks. Every finding carries its evidence.
+FAIL when anything blocks. Every finding carries its evidence. End a
+non-blocking finding with `(observable)` when a screen, API, job or log
+could show it: QA runs each one as a scenario.
 Must not: write anything but `review.md`, or run mutating commands.
