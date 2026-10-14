@@ -82,7 +82,7 @@ $EDITOR .sdlc/config.md                          # build, test, lint, run, e2e, 
   PLAN.md       한 장: 이해, AS-IS → TO-BE, 부작용, 변경, 시나리오
   review.md     리뷰 라운드, 각 라운드는 VERDICT로 끝남
   evidence.md   검사, 시나리오별 결과 한 행, 납품 기록
-  logs/         모든 PASS·FAIL 뒤의 원본 출력
+  logs/         모든 PASS·FAIL 뒤의 원본 출력, scripts/는 시나리오별 재실행 스크립트
 ```
 
 끝난 기능은 `.sdlc/archive/`로 옮겨집니다. 검증된 사실은 `knowledge` 폴더로
