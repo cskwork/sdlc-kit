@@ -25,8 +25,21 @@ tried first on one feature's four browser scenarios against a dev server.
   through a popup, SSO or a device prompt cannot be driven. `qa_session`
   names a command that signs in and writes the storage the setup template
   injects before saving a named session.
-- **Templates.** `e2e.config.ts`, `session.setup.e2e.ts` and
-  `scenario.e2e.ts` (both layers), checked with `e2e list` and `tsc`.
+- **Popup bridge.** e2e does not follow windows an app opens. The template
+  `popup-bridge.ts` turns `window.open` into a full-viewport iframe in the
+  same tab, with `window.opener`, `close()` and `focus()` working inside it,
+  so same-origin popups that talk through opener and postMessage run
+  unchanged. Tried on two document-viewer popups: deterministic run 25.0 s
+  and 24.1 s, 4 of 4 both times; an agent step inside the popup took 2 model
+  calls (12.3k tokens) first and 0 on replay. Screenshots matched real
+  popups except window size. Not covered: cross-origin popups,
+  `target="_blank"` links, `noopener`.
+- **Opening can write.** In that trial, opening a one-page assignment in its
+  viewer marked it submitted. QA's preflight now treats no step as read-only
+  until it knows what the step writes, and drives only accounts whose state
+  may change.
+- **Templates.** `e2e.config.ts`, `session.setup.e2e.ts`,
+  `scenario.e2e.ts` (both layers) and `popup-bridge.ts`, checked with `e2e list` and `tsc`.
 - **Limits written down from the trial.** An agent step absorbs a renamed
   control and still passes, so the `det` locator stays the gate. A wrong
   expectation after a correct replay evicts the correct recording. A replay

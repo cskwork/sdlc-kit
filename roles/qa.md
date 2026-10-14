@@ -10,7 +10,10 @@ commit(s) to verify.
    one real call through each route the scenarios use reaches the intended
    environment (proxy, host, account); the driver starts in this sandbox;
    anything long-running is started detached with a limit longer than the
-   run; config `qa_session`, if set, signs in and its setup check passes. Fix what you may, or mark the scenarios it blocks BLOCKED with the
+   run; config `qa_session`, if set, signs in and its setup check passes.
+   Treat no step as read-only until you know: opening, closing or paging
+   through a record can write on the server. On shared data, find what each
+   step writes first, and drive only accounts whose state may change. Fix what you may, or mark the scenarios it blocks BLOCKED with the
    cause, and put what you learned in `refs/learnings.md`.
 1. Confirm the checked-out commit is the one you were given. Run `build`,
    `test`, `lint`, then `e2e` from config.md. A failure the base commit shows
