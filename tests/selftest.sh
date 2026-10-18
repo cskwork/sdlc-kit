@@ -506,10 +506,10 @@ regression_clarity() {
   expect 1 approve intent "$SLUG" --human 'template'; contains 'Clarity Constraints: State must be clear, assumed or open'
   ok 'clarity 1: an unfilled Clarity table from the template blocks intent approval'
   feature clarity-one-assumed
-  replace '/^\| TO-BE \|/ {$0="| TO-BE | assumed | wording of the error message not given"} {print}' "$F/intent.md"
+  replace '/^\| TO-BE \|/ {$0="| TO-BE | assumed | wording of the error message not given"} /^\| Constraints \|/ {$0="| Constraints | clear | <200 ms p95, per the SLA page |"} {print}' "$F/intent.md"
   expect 0 approve intent "$SLUG" --human 'one assumption'
   expect 0 next "$SLUG"; contains 'READY plan'
-  ok 'clarity 2: one assumed area is 91%: approval passes'
+  ok 'clarity 2: one assumed area is 91%: approval passes; evidence that starts with < is not a placeholder'
   feature clarity-two-assumed
   replace '/^\| (TO-BE|Constraints) \|/ {sub(/\| clear \|/,"| assumed |")} {print}' "$F/intent.md"
   expect 0 next "$SLUG"; contains 'READY intent: intent not approved; clarity 83% < 90%: settle TO-BE assumed, Constraints assumed by exploring, reproducing, researching or asking the requester'
@@ -523,9 +523,9 @@ regression_clarity() {
   expect 10 next "$SLUG"; contains 'asked: ABC-1 comment'
   ok 'clarity 3: two assumed or one open area is 83%: refused for human and agent gates, naming the areas; an asked question waits for the requester'
   feature clarity-shape
-  replace '/^\| Success \|/ {next} /^\| Scope \|/ {$0="| Scope | clear |  |"} /^\| Outcome \|/ {print; print "| Outcome | clear | again |"; print "| Budget | clear | invented |"; next} /^\| AS-IS \|/ {$0="| AS-IS | clear | <…> |"} /^\| TO-BE \|/ {$0="| TO-BE | clear | — |"} {print}' "$F/intent.md"
+  replace '/^\| Success \|/ {next} /^\| Scope \|/ {$0="| Scope | clear |  |"} /^\| Outcome \|/ {print; print "| Outcome | clear | again |"; print "| Budget | clear | invented |"; next} /^\| AS-IS \|/ {$0="| AS-IS | clear | <…> |"} /^\| TO-BE \|/ {$0="| TO-BE | clear | — |"} /^\| Constraints \|/ {$0="| Constraints | clear | <policy \\| owner> |"} {print}' "$F/intent.md"
   expect 1 approve intent "$SLUG" --human 'bad shape'
-  for problem in 'Clarity needs a row for Success' 'Clarity Scope: How settled needs its evidence or reason' 'Clarity: duplicate area Outcome' 'Clarity: unknown area Budget' 'Clarity AS-IS: How settled needs its evidence or reason' 'Clarity TO-BE: How settled needs its evidence or reason'; do contains "$problem"; done
+  for problem in 'Clarity needs a row for Success' 'Clarity Scope: How settled needs its evidence or reason' 'Clarity: duplicate area Outcome' 'Clarity: unknown area Budget' 'Clarity AS-IS: How settled needs its evidence or reason' 'Clarity TO-BE: How settled needs its evidence or reason' 'Clarity Constraints: How settled needs its evidence or reason'; do contains "$problem"; done
   case "$OUTPUT" in *'clarity '*'% < 90%'*) fail "score shown beside table problems: $OUTPUT";; esac
   ok 'clarity 4: a missing, duplicate, unknown or unsettled area is named, and no score is shown beside it'
   expect 0 new clarity-legacy
