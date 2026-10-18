@@ -17,7 +17,8 @@ gate below 90%.
   `sdlc.sh next` prints the score and the weak areas (`clarity 83% < 90%:
   settle TO-BE assumed, Constraints assumed by …`), and `approve intent`
   refuses below the bar or when an area is missing, duplicated, unknown, or
-  has no How settled. The human's answer settles an area like any other
+  has no How settled (empty, a template placeholder, or only `-`, `?`,
+  `n/a`, `tbd`). The human's answer settles an area like any other
   evidence: cite it.
 - **Four ways to raise it**, cheapest first (`phases/1-intent.md`): explore
   the code and earlier tickets; reproduce a reported bug where that is safe
@@ -32,17 +33,19 @@ gate below 90%.
   pull request, else the chat. One comment carries every open question, each
   with its options and the answer the agent will assume; each is marked
   `— asked: <where, when>` and keeps the feature at NEEDS-HUMAN (exit 10)
-  until answered. Only the requester or the policy owner resolves one, and an
-  answer settles what to build without granting authority.
+  until answered; a question that blocks nothing rides in the same comment
+  and is noted in its area's How settled. Only the requester or the policy
+  owner resolves one, and an answer settles what to build without granting
+  authority.
 - **Posting needs the human's words.** Rule 3 adds posting beyond this
   machine (a ticket or issue comment, a message). Without that authority the
   agent shows the human the draft.
 - **Intent check.** The reviewer gains an intent mode: a fresh context looks
   for a second reading of the request that intent.md does not rule out, and
   for an area marked clear on evidence that does not say so. It writes
-  `refs/intent-check.md`, never `review.md`, so it cannot count against the
-  build's FAIL cap. Skipped only when every area cites the requester's own
-  words.
+  `refs/intent-check.md`, never `review.md`, which keeps only the plan and
+  diff rounds that `sdlc.sh review` reads. Skipped only when every area
+  cites the requester's own words.
 
 ## Compatibility
 

@@ -62,7 +62,9 @@ cheapest way that works, in this order:
    Linear…), else the chat. Posting there is rule 3 work: without the
    human's words for it, show them the draft. One comment carries every open
    question, numbered, each with its options and the answer you will assume;
-   mark each `— asked: <where, when>` until answered. An answer from the
+   mark each `— asked: <where, when>` until answered. A question that
+   blocks nothing rides in the same comment and is noted in its area's How
+   settled, not under Blocking questions. An answer from the
    requester or the policy owner resolves it; anyone else's is a lead. An
    answer settles what to build; it grants no authority.
 
