@@ -36,6 +36,19 @@ repo() {
   [ -z "$(git status --porcelain)" ] || fail 'init changed the working tree'
   SHA=$(git rev-parse HEAD)
 }
+clarity() {
+  cat <<'DOC'
+## Clarity
+| Area | State | How settled |
+|---|---|---|
+| Outcome | clear | the operator's request |
+| Scope | clear | the operator's request |
+| AS-IS | clear | observed with the real CLI |
+| TO-BE | clear | the operator's request |
+| Success | clear | O1 is CLI output |
+| Constraints | clear | none found in config.md |
+DOC
+}
 intent() {
   cat > "$F/intent.md" <<'DOC'
 # Intent
@@ -47,6 +60,7 @@ intent() {
 - Target: local
 - Authorized: no
 DOC
+  clarity >> "$F/intent.md"
 }
 plan() {
   local i must covers
@@ -481,6 +495,50 @@ regression_round2() {
       ;;
     *) fail "unknown round 2 regression: $1";;
   esac
+}
+sha_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum < "$1"; else shasum -a 256 < "$1"; fi | awk '{print $1}'; }
+regression_clarity() {
+  repo regression-clarity
+  expect 0 new clarity-template; contains 'until its Clarity reaches 90%'
+  SLUG=clarity-template; F=$PWD/.sdlc/work/$SLUG
+  replace '/^- O1:/ {$0="- O1: The operator observes it."} /^- Target:/ {$0="- Target: local"} {print}' "$F/intent.md"
+  expect 0 next "$SLUG"; contains 'READY intent'; contains 'Clarity Outcome: State must be clear, assumed or open'
+  expect 1 approve intent "$SLUG" --human 'template'; contains 'Clarity Constraints: State must be clear, assumed or open'
+  ok 'clarity 1: an unfilled Clarity table from the template blocks intent approval'
+  feature clarity-one-assumed
+  replace '/^\| TO-BE \|/ {$0="| TO-BE | assumed | wording of the error message not given"} {print}' "$F/intent.md"
+  expect 0 approve intent "$SLUG" --human 'one assumption'
+  expect 0 next "$SLUG"; contains 'READY plan'
+  ok 'clarity 2: one assumed area is 91%: approval passes'
+  feature clarity-two-assumed
+  replace '/^\| (TO-BE|Constraints) \|/ {sub(/\| clear \|/,"| assumed |")} {print}' "$F/intent.md"
+  expect 0 next "$SLUG"; contains 'READY intent: intent not approved; clarity 83% < 90%: settle TO-BE assumed, Constraints assumed by exploring, reproducing, researching or asking the requester'
+  expect 1 approve intent "$SLUG" --human 'two assumptions'; contains 'clarity 83% < 90%'
+  printf 'human_gates:\n' > .sdlc/config.md
+  expect 1 approve intent "$SLUG" --agent 'agent gate'; contains 'clarity 83% < 90%'
+  printf 'human_gates: intent\n' > .sdlc/config.md
+  replace '/^\| AS-IS \|/ {$0="| AS-IS | open | not reproduced yet |"} /^\| (TO-BE|Constraints) \|/ {sub(/\| assumed \|/,"| clear |")} {print}' "$F/intent.md"
+  expect 1 approve intent "$SLUG" --human 'one open'; contains 'clarity 83% < 90%: settle AS-IS open'
+  replace '/^- none$/ {print "- Which account sees the error? — asked: ABC-1 comment, 2026-10-19"; next} {print}' "$F/intent.md"
+  expect 10 next "$SLUG"; contains 'asked: ABC-1 comment'
+  ok 'clarity 3: two assumed or one open area is 83%: refused for human and agent gates, naming the areas; an asked question waits for the requester'
+  feature clarity-shape
+  replace '/^\| Success \|/ {next} /^\| Scope \|/ {$0="| Scope | clear |  |"} /^\| Outcome \|/ {print; print "| Outcome | clear | again |"; print "| Budget | clear | invented |"; next} /^\| AS-IS \|/ {$0="| AS-IS | clear | <…> |"} /^\| TO-BE \|/ {$0="| TO-BE | clear | — |"} {print}' "$F/intent.md"
+  expect 1 approve intent "$SLUG" --human 'bad shape'
+  for problem in 'Clarity needs a row for Success' 'Clarity Scope: How settled needs its evidence or reason' 'Clarity: duplicate area Outcome' 'Clarity: unknown area Budget' 'Clarity AS-IS: How settled needs its evidence or reason' 'Clarity TO-BE: How settled needs its evidence or reason'; do contains "$problem"; done
+  case "$OUTPUT" in *'clarity '*'% < 90%'*) fail "score shown beside table problems: $OUTPUT";; esac
+  ok 'clarity 4: a missing, duplicate, unknown or unsettled area is named, and no score is shown beside it'
+  expect 0 new clarity-legacy
+  SLUG=clarity-legacy; F=$PWD/.sdlc/work/$SLUG
+  printf '# Intent\n## Understood as\n- O1: The operator observes it.\n## Blocking questions\n- none\n## Delivery\n- Target: local\n- Authorized: no\n' > "$F/intent.md"
+  expect 1 approve intent "$SLUG" --human 'no table'; contains 'Clarity table missing under a "## Clarity" heading'
+  printf 'intent: %s human 1 2026-10-01T00:00:00Z approved by v2.5.1\n' "$(sha_of "$F/intent.md")" >> "$F/.state"
+  expect 0 check intent "$SLUG"; contains 'GATE OPEN'
+  expect 0 next "$SLUG"; contains 'READY plan'
+  expect 0 approve intent "$SLUG" --human 'again'; contains 'intent already approved'
+  printf '\nedited after approval\n' >> "$F/intent.md"
+  expect 0 next "$SLUG"; contains 'intent.md changed after approval; Clarity table missing'
+  ok 'clarity 5: an intent approved before Clarity existed stays approved; editing it brings the bar back'
 }
 regression_ultra() {
   repo regression-ultra
@@ -961,11 +1019,11 @@ run_regressions() {
     init) regression_init;; ultra) regression_ultra;; round2-[abcde]) regression_round2 "${1#round2-}";; round3) regression_round3;;
     repos) regression_repos;; cells) regression_cells;; paths) regression_paths;; uncommitted) regression_uncommitted;;
     nested) regression_nested;; interrupt) regression_interrupt;; scoped) regression_scoped;; fingerprint) regression_fingerprint;; optin) regression_optin;;
-    reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;;
+    reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;;
     all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init; regression_ultra
       for round2 in a b c d e; do regression_round2 "$round2"; done; regression_round3
       regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint; regression_optin
-      regression_reposflag; regression_carry; regression_target;;
+      regression_reposflag; regression_carry; regression_target; regression_clarity;;
     *) fail "unknown regression group: $1";;
   esac
 }
@@ -1147,6 +1205,16 @@ cat > "$F/intent.md" <<'DOC'
 ## DELIVERY
 - **Target**: `LOCAL`
 - **Authorized**: no
+## **CLARITY**
+| **Area** | State | How settled |
+|---|---|---|
+| `Outcome` | **Clear** | the request |
+| Scope | CLEAR | the request |
+| as is | clear | observed |
+<!-- | Budget | open | ignored | -->
+| To Be | clear | the request |
+| Success | clear | O1 |
+| Constraints | clear | none \| checked config.md |
 DOC
 expect 1 approve intent "$SLUG" --agent reviewed
 expect 10 next "$SLUG"; contains 'NEEDS-HUMAN intent'
@@ -1404,6 +1472,7 @@ cat > "$F/intent.md" <<'DOC'
 - Target: local
 - Authorized: local feature implementation approved
 DOC
+clarity >> "$F/intent.md"
 expect 0 approve intent "$SLUG" --human 'add count and preserve old saved tasks'
 printf '[verified: bash todo.sh list] Existing add/list commands store one task per line.\n' > "$F/refs/logic.md"
 printf '[verified: old-data fixture] Existing saved data contains written by old version.\n' > "$F/refs/data.md"
