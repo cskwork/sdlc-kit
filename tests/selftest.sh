@@ -514,21 +514,24 @@ regression_clarity() {
   replace '/^\| (TO-BE|Constraints) \|/ {sub(/\| clear \|/,"| assumed |")} {print}' "$F/intent.md"
   expect 0 next "$SLUG"; contains 'READY intent: intent not approved; clarity 83% < 90%: settle TO-BE assumed, Constraints assumed by exploring, reproducing, researching or asking the requester'
   expect 1 approve intent "$SLUG" --human 'two assumptions'; contains 'clarity 83% < 90%'
+  printf 'human_gates:\n' > .sdlc/config.md
+  expect 1 approve intent "$SLUG" --agent 'agent gate'; contains 'clarity 83% < 90%'
+  printf 'human_gates: intent\n' > .sdlc/config.md
   replace '/^\| AS-IS \|/ {$0="| AS-IS | open | not reproduced yet |"} /^\| (TO-BE|Constraints) \|/ {sub(/\| assumed \|/,"| clear |")} {print}' "$F/intent.md"
   expect 1 approve intent "$SLUG" --human 'one open'; contains 'clarity 83% < 90%: settle AS-IS open'
   replace '/^- none$/ {print "- Which account sees the error? — asked: ABC-1 comment, 2026-10-19"; next} {print}' "$F/intent.md"
   expect 10 next "$SLUG"; contains 'asked: ABC-1 comment'
-  ok 'clarity 3: two assumed or one open area is 83%: refused, naming the areas; an asked question waits for the requester'
+  ok 'clarity 3: two assumed or one open area is 83%: refused for human and agent gates, naming the areas; an asked question waits for the requester'
   feature clarity-shape
-  replace '/^\| Success \|/ {next} /^\| Scope \|/ {$0="| Scope | clear |  |"} /^\| Outcome \|/ {print; print "| Outcome | clear | again |"; print "| Budget | clear | invented |"; next} /^\| AS-IS \|/ {$0="| AS-IS | clear | <…> |"} {print}' "$F/intent.md"
+  replace '/^\| Success \|/ {next} /^\| Scope \|/ {$0="| Scope | clear |  |"} /^\| Outcome \|/ {print; print "| Outcome | clear | again |"; print "| Budget | clear | invented |"; next} /^\| AS-IS \|/ {$0="| AS-IS | clear | <…> |"} /^\| TO-BE \|/ {$0="| TO-BE | clear | — |"} {print}' "$F/intent.md"
   expect 1 approve intent "$SLUG" --human 'bad shape'
-  for problem in 'Clarity needs a row for Success' 'Clarity Scope: How settled needs its evidence or reason' 'Clarity: duplicate area Outcome' 'Clarity: unknown area Budget' 'Clarity AS-IS: How settled needs its evidence or reason'; do contains "$problem"; done
+  for problem in 'Clarity needs a row for Success' 'Clarity Scope: How settled needs its evidence or reason' 'Clarity: duplicate area Outcome' 'Clarity: unknown area Budget' 'Clarity AS-IS: How settled needs its evidence or reason' 'Clarity TO-BE: How settled needs its evidence or reason'; do contains "$problem"; done
   case "$OUTPUT" in *'clarity '*'% < 90%'*) fail "score shown beside table problems: $OUTPUT";; esac
   ok 'clarity 4: a missing, duplicate, unknown or unsettled area is named, and no score is shown beside it'
   expect 0 new clarity-legacy
   SLUG=clarity-legacy; F=$PWD/.sdlc/work/$SLUG
   printf '# Intent\n## Understood as\n- O1: The operator observes it.\n## Blocking questions\n- none\n## Delivery\n- Target: local\n- Authorized: no\n' > "$F/intent.md"
-  expect 1 approve intent "$SLUG" --human 'no table'; contains 'Clarity table missing: copy it from templates/intent.md'
+  expect 1 approve intent "$SLUG" --human 'no table'; contains 'Clarity table missing under a "## Clarity" heading'
   printf 'intent: %s human 1 2026-10-01T00:00:00Z approved by v2.5.1\n' "$(sha_of "$F/intent.md")" >> "$F/.state"
   expect 0 check intent "$SLUG"; contains 'GATE OPEN'
   expect 0 next "$SLUG"; contains 'READY plan'
