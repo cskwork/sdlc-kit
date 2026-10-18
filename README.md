@@ -45,7 +45,7 @@ flowchart LR
 
 | Phase | What happens | Goes back when |
 |---|---|---|
-| **1 Intent** | What you asked, what the agent understood, and the risks in it. You confirm it. | — |
+| **1 Intent** | What you asked, what the agent understood, and the risks in it, scored for clarity across six areas. Below 90% the agent explores, reproduces the bug, researches the spec or asks the requester on the ticket, issue or pull request. You confirm it. | — |
 | **2 Plan** | Parallel scouts map source of truth, data, logic and user flow into `refs/`; one `PLAN.md` holds AS-IS → TO-BE, side effects and the scenarios QA will run. | the gap check finds holes |
 | **3 Build** | The smallest complete change, committed, then a separate adversarial reviewer. | the review FAILs: fix it, review again |
 | **4 Evidence** | Real checks, then every scenario as its persona through the real interface. `sdlc.sh score` scores and routes it; the agent does not judge. | the plan was wrong or the same failure came twice → Plan; code failed → Build |
@@ -78,8 +78,8 @@ always says what comes next.
 
 ```
 .sdlc/work/<slug>/
-  intent.md     what was asked, understood, risked
-  refs/         scout findings: source.md data.md logic.md flow.md learnings.md
+  intent.md     what was asked, understood, risked, and how clear it is
+  refs/         scout findings and the intent check: source.md data.md logic.md flow.md learnings.md intent-check.md
   PLAN.md       one page: understanding, AS-IS → TO-BE, side effects, changes, scenarios
   review.md     reviewer rounds, each ending in VERDICT
   evidence.md   checks, one result row per scenario, delivery
@@ -112,8 +112,8 @@ vendors e2e's agent guide (Apache-2.0, pinned) so it works offline;
 ## Rules that never relax
 
 - **Authority is not a gate.** Data loss, migrations, public API changes,
-  security-sensitive code, infra changes, and push, merge or deploy need your
-  prior words at every setting.
+  security-sensitive code, infra changes, push, merge or deploy, and a
+  comment posted on a ticket need your prior words at every setting.
 - **Independent eyes.** Scouts, reviewer and QA run in fresh contexts, never
   in the one that wrote the work.
 - **Proof, not claims.** No environment means BLOCKED, never PASS. A bug fix

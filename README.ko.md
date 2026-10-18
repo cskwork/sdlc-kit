@@ -45,7 +45,7 @@ flowchart LR
 
 | 단계 | 하는 일 | 되돌아가는 때 |
 |---|---|---|
-| **1 Intent** | 요청한 것, 에이전트가 이해한 것, 그 이해에 숨은 위험을 적습니다. 사람이 확인합니다. | — |
+| **1 Intent** | 요청한 것, 에이전트가 이해한 것, 그 이해에 숨은 위험을 적고, 여섯 영역으로 명확도를 매깁니다. 90%에 못 미치면 에이전트가 코드를 살피고, 버그를 재현하고, 스펙을 조사하거나, 티켓·이슈·PR에서 요청자에게 묻습니다. 사람이 확인합니다. | — |
 | **2 Plan** | 여러 scout가 나란히 정본·데이터·로직·사용자 흐름을 조사해 `refs/`에 남깁니다. `PLAN.md` 한 장에 AS-IS → TO-BE, 부작용, QA가 돌릴 시나리오를 담습니다. | 누락 점검에서 빈틈이 나올 때 |
 | **3 Build** | 가장 작은 완전한 변경을 만들어 커밋하고, 별도 리뷰어가 공격적으로 검토합니다. | 리뷰 FAIL: 고치고 다시 리뷰 |
 | **4 Evidence** | 실제 검사 뒤, 모든 시나리오를 각 페르소나로 실제 인터페이스에서 돌립니다. 점수와 다음 경로는 에이전트가 아니라 `sdlc.sh score`가 정합니다. | 계획이 틀렸거나 같은 실패 반복 → Plan, 코드 실패 → Build |
@@ -77,8 +77,8 @@ $EDITOR .sdlc/config.md                          # build, test, lint, run, e2e, 
 
 ```
 .sdlc/work/<slug>/
-  intent.md     요청, 이해, 위험
-  refs/         scout 결과: source.md data.md logic.md flow.md learnings.md
+  intent.md     요청, 이해, 위험, 명확도
+  refs/         scout 결과와 intent 점검: source.md data.md logic.md flow.md learnings.md intent-check.md
   PLAN.md       한 장: 이해, AS-IS → TO-BE, 부작용, 변경, 시나리오
   review.md     리뷰 라운드, 각 라운드는 VERDICT로 끝남
   evidence.md   검사, 시나리오별 결과 한 행, 납품 기록
@@ -108,8 +108,8 @@ git이 추적하는 폴더로 지정하세요.
 ## 늘 지키는 규칙
 
 - **권한은 게이트와 별개입니다.** 데이터 유실, 마이그레이션, 공개 API 변경,
-  보안에 민감한 코드, 인프라 변경, push·merge·배포는 어떤 설정에서든 사람이
-  미리 허락해야 합니다.
+  보안에 민감한 코드, 인프라 변경, push·merge·배포, 티켓에 다는 댓글은 어떤
+  설정에서든 사람이 미리 허락해야 합니다.
 - **독립된 눈.** scout, 리뷰어, QA는 작업을 만든 컨텍스트가 아닌 새 컨텍스트에서
   돕니다.
 - **주장 대신 증거.** 실행 환경이 없으면 PASS가 아니라 BLOCKED입니다. 버그 수정에는
