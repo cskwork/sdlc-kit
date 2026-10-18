@@ -296,7 +296,7 @@
         <ol class="flow" aria-label="The four phases" data-i18n-aria="flow-aria">
           <li class="stage">
             <h3><span data-i18n="s1-h">1 · Intent</span> <span class="art" data-i18n="s1-a">what you asked</span></h3>
-            <p class="what" data-i18n="s1-p">The AI writes down what you asked, what it understood, and the risks in that understanding. It asks only the questions whose answers would change what gets built.</p>
+            <p class="what" data-i18n="s1-p">The AI writes down what you asked, what it understood, and the risks in that understanding. It rates how clear the request is, and below 90% it keeps working before going on: it reads the code, reproduces the bug, checks the spec, or asks whoever made the request, right on their ticket. It asks only the questions whose answers would change what gets built.</p>
           </li>
           <li class="stage">
             <h3><span data-i18n="s2-h">2 · Plan</span> <span class="art" data-i18n="s2-a">one plan page</span></h3>
@@ -423,7 +423,7 @@ ln -s ~/sdlc-kit ~/.claude/skills/sdlc-kit</span>
     "loop-lede": '각 단계는 한 일을 글로 남기고, 다음 단계는 확인 지점이 열려야 시작합니다. 빨간 화살표는 무언가 실패했을 때 작업이 되돌아가는 곳입니다.',
     "s1-h": '1 · 의도',
     "s1-a": '요청한 것',
-    "s1-p": 'AI가 요청한 내용, 자신이 이해한 내용, 그 이해에 숨은 위험을 글로 적습니다. 답에 따라 만들 것이 달라지는 질문만 묻습니다.',
+    "s1-p": 'AI가 요청한 내용, 자신이 이해한 내용, 그 이해에 숨은 위험을 글로 적습니다. 요청이 얼마나 분명한지 점수를 매기고, 90%에 못 미치면 다음 단계로 가지 않고 코드를 읽거나, 버그를 재현하거나, 스펙을 확인하거나, 요청한 사람에게 그 티켓에서 바로 묻습니다. 답에 따라 만들 것이 달라지는 질문만 묻습니다.',
     "e12": '확인 지점 · 사람이 확인',
     "s2-h": '2 · 계획',
     "s2-a": '계획 한 장',
