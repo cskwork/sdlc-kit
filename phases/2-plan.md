@@ -7,7 +7,8 @@ enough that side effects are found here, before any code. Scouts write
 ## 1. Scout
 
 `sdlc.sh check intent <slug>` must print GATE OPEN. Read the `knowledge`
-folder first: a fact it already gives with a source is not scouted again.
+folder and phase 1's `refs/` and `logs/` first: a fact they already give
+with a source is not scouted again.
 Dispatch one scout (`roles/scout.md`) per open question, in parallel, each
 writing one file in `refs/`:
 
@@ -18,8 +19,9 @@ writing one file in `refs/`:
 | logic | `refs/logic.md` | entry points, call chains, every caller in every tier and repository the change crosses, shared code, every consumer of an identifier the change renames, retires or redirects |
 | flow | `refs/flow.md` | how each persona reaches the behavior today, observed by running it, with the result |
 
-A bug adds `refs/repro.md`: the failure reproduced — as a failing test where
-one can reach it — and its cause, with rival causes ruled out.
+A bug adds `refs/repro.md`: starting from phase 1's reproduction, the
+failure as a failing test where one can reach it, and its cause, with rival
+causes ruled out.
 Scale to the unknowns: skip a scout whose answer you can already cite with
 file:line; a small change in known files may need none. Facts worth keeping
 beyond this feature go to `refs/learnings.md`, one line each with a source.
