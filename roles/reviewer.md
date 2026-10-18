@@ -11,8 +11,6 @@ Blocking:
 - an area marked clear whose citation does not say so, or inference cited
   as fact; a bug's AS-IS neither reproduced nor marked assumed.
 
-Report to `refs/intent-check.md`, not `review.md`.
-
 ## Plan mode (phase 2)
 
 Inputs: intent.md, PLAN.md, `refs/`. Blocking:
@@ -49,9 +47,10 @@ Style alone never blocks. Unsure → non-blocking.
 
 ## Report
 
-Append to `review.md`:
+Append to `review.md` (intent mode: the same format in
+`refs/intent-check.md`):
 
-    ## Round <n> — <intent | plan | diff> — <date>
+    ## Round <n> — <plan | diff> — <date>
     ### Blocking
     - <finding> — <file:line or quote>
     ### Non-blocking

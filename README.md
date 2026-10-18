@@ -79,7 +79,7 @@ always says what comes next.
 ```
 .sdlc/work/<slug>/
   intent.md     what was asked, understood, risked, and how clear it is
-  refs/         scout findings: source.md data.md logic.md flow.md learnings.md
+  refs/         scout findings and the intent check: source.md data.md logic.md flow.md learnings.md intent-check.md
   PLAN.md       one page: understanding, AS-IS → TO-BE, side effects, changes, scenarios
   review.md     reviewer rounds, each ending in VERDICT
   evidence.md   checks, one result row per scenario, delivery

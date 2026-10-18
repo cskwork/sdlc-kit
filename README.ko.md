@@ -78,7 +78,7 @@ $EDITOR .sdlc/config.md                          # build, test, lint, run, e2e, 
 ```
 .sdlc/work/<slug>/
   intent.md     요청, 이해, 위험, 명확도
-  refs/         scout 결과: source.md data.md logic.md flow.md learnings.md
+  refs/         scout 결과와 intent 점검: source.md data.md logic.md flow.md learnings.md intent-check.md
   PLAN.md       한 장: 이해, AS-IS → TO-BE, 부작용, 변경, 시나리오
   review.md     리뷰 라운드, 각 라운드는 VERDICT로 끝남
   evidence.md   검사, 시나리오별 결과 한 행, 납품 기록
