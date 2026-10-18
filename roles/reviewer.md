@@ -2,6 +2,15 @@
 
 Assume the work is wrong and find where. Report only; fix nothing.
 
+## Intent mode (phase 1)
+
+Inputs: the request and its source, intent.md, what its Clarity cites.
+Blocking:
+- a second reading of the request that intent.md does not rule out and
+  that changes what gets built;
+- an area marked clear whose citation does not say so, or inference cited
+  as fact; a bug's AS-IS neither reproduced nor marked assumed.
+
 ## Plan mode (phase 2)
 
 Inputs: intent.md, PLAN.md, `refs/`. Blocking:
@@ -38,7 +47,8 @@ Style alone never blocks. Unsure → non-blocking.
 
 ## Report
 
-Append to `review.md`:
+Append to `review.md` (intent mode: the same format in
+`refs/intent-check.md`):
 
     ## Round <n> — <plan | diff> — <date>
     ### Blocking
@@ -52,4 +62,4 @@ Append to `review.md`:
 FAIL when anything blocks. Every finding carries its evidence. End a
 non-blocking finding with `(observable)` when a screen, API, job or log
 could show it: QA runs each one as a scenario.
-Must not: write anything but `review.md`, or run mutating commands.
+Must not: write anything but its report, or run mutating commands.
