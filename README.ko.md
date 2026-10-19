@@ -85,7 +85,7 @@ $EDITOR .sdlc/config.md                          # build, test, lint, run, e2e, 
   logs/         모든 PASS·FAIL 뒤의 원본 출력, scripts/는 시나리오별 재실행 스크립트
 ```
 
-끝난 기능은 `.sdlc/archive/`로 옮겨집니다. 검증된 사실은 `knowledge` 폴더로
+끝난 기능은 `.sdlc/archive/`로 옮겨집니다. 검증된 사실은 `memory` 폴더로
 옮기고, 다음 기능의 scout가 그 폴더부터 읽습니다.
 
 ## 설정
@@ -94,9 +94,9 @@ $EDITOR .sdlc/config.md                          # build, test, lint, run, e2e, 
 `lint`, `run`, `e2e` 명령, 화면이나 API를 다룰 `qa` 도구, 선택 실행기 어댑터 `qa_runner`와
 그 로그인 명령 `qa_session`, `human_gates`(기본값
 `intent`, 모든 plan을 직접 승인하려면 `plan` 추가, 위험 플래그가 있는 plan은
-설정과 상관없이 사람이 승인), `knowledge` 폴더, `repos`(리뷰가 묶을 저장소.
+설정과 상관없이 사람이 승인), `memory` 폴더, `repos`(리뷰가 묶을 저장소.
 프로젝트 루트 아래 저장소가 많으면 나열하거나 리뷰마다 `sdlc.sh review <slug> pass --repos "<경로> ..." "<메모>"`로 지정하고, 비우면 루트 아래 전부)입니다. `.sdlc/`는
-`.git/info/exclude`로 git에서 빠집니다. 팀이 배운 것을 공유하려면 `knowledge:`를
+`.git/info/exclude`로 git에서 빠집니다. 팀이 배운 것을 공유하려면 `memory:`를
 git이 추적하는 폴더로 지정하세요.
 
 `adapters/e2e/`가 그런 실행기 하나입니다. `qa_runner: e2e`이면 QA는 브라우저·모바일
@@ -138,7 +138,8 @@ v2는 새 계약입니다. 기록은 있던 자리에 그대로 남습니다.
 - `lazymode`는 계속 읽힙니다. 0–1 → `human_gates: intent plan`, 2–3 → `intent`,
   4 → 없음. 직접 정하려면 `human_gates:`를 쓰세요. `intent`, `plan`이 아닌
   값은 둘 다로 처리합니다.
-- `knowledge:`를 정하기 전까지 `.sdlc/memory/`를 knowledge 폴더로 읽습니다.
+- v0처럼 `.sdlc/memory/`가 기본 memory 폴더입니다. 예전 `knowledge:` 줄도 폴더를
+  지정하고, 지정한 폴더가 아닌 기본 폴더가 있으면 `sdlc.sh`가 알립니다.
 - `init.sh` → `sdlc.sh init`, `gates/status.sh --json`과 `tools/auto.sh next` →
   `sdlc.sh status --json`과 `sdlc.sh next`(종료 코드 동일). spec.md, summary.md,
   delivery.md, qa-guide.md, map.md, harvest, 검증 영수증, handoff, tripwire,
