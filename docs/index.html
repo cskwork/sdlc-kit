@@ -337,7 +337,7 @@
         </div>
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span data-i18n="g4-t">Proof behind every "passed"</span></dt>
-          <dd data-i18n="g4-d">Every pass points to the record of what was run or seen. If there is nowhere to try something, it is marked as blocked, never as passed. A bug fix needs a test that failed before the fix and passes after it. The list of scenarios becomes your own checklist.</dd>
+          <dd data-i18n="g4-d">Every pass points to the record of what was run or seen. If there is nowhere to try something, it is marked as blocked, never as passed. A bug fix needs a test that failed before the fix and passes after it, and a test for new behavior is seen failing once without it. The list of scenarios becomes your own checklist.</dd>
         </div>
         <div>
           <dt><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg><span data-i18n="g5-t">Delivered means what was verified</span></dt>
@@ -461,7 +461,7 @@ ln -s ~/sdlc-kit ~/.claude/skills/sdlc-kit</span>
     "g3-t": '다른 AI가 따로 점검합니다',
     "g3-d": '조사하는 보조 AI, 검토 AI, 시험 AI는 모두 처음부터 새로 시작합니다. 점검하는 대상을 만든 AI가 맡는 일은 없고, 결과를 고치지도 않습니다. 별도의 AI를 쓸 수 없으면 그 빈틈을 기록합니다.',
     "g4-t": '"통과"에는 증거가 붙습니다',
-    "g4-d": '모든 통과에는 무엇을 실행하거나 보았는지 기록이 붙습니다. 시험해 볼 곳이 없으면 통과가 아니라 "막힘"으로 표시합니다. 오류 수정에는 고치기 전에는 실패하고 고친 뒤에는 통과하는 테스트가 있어야 합니다. 시나리오 목록은 그대로 담당자의 확인 목록이 됩니다.',
+    "g4-d": '모든 통과에는 무엇을 실행하거나 보았는지 기록이 붙습니다. 시험해 볼 곳이 없으면 통과가 아니라 "막힘"으로 표시합니다. 오류 수정에는 고치기 전에는 실패하고 고친 뒤에는 통과하는 테스트가 있어야 하고, 새 동작의 테스트는 그 동작 없이 한 번 실패하는 것을 확인합니다. 시나리오 목록은 그대로 담당자의 확인 목록이 됩니다.',
     "g5-t": '검증한 것만 납품합니다',
     "g5-d": '납품한 결과가 검사한 버전과 다르면 작업을 닫을 수 없습니다. 위험한 작업은 어떤 설정에서든 사람의 허락이 먼저 필요합니다. 데이터 삭제, 저장된 데이터의 구조 변경, 다른 시스템이 기대는 약속의 변경, 보안, 인프라, 이 컴퓨터 밖으로 작업을 내보내는 일이 여기에 해당합니다. 작업 중에 읽은 글은 참고 자료로만 다루고, 지시는 사람에게서만 받습니다.',
     "lim-h": '할 수 없는 일',

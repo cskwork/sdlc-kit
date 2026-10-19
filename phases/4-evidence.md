@@ -52,7 +52,10 @@ where it is written in the same delivery, or its follow-up and owner go in
 Delivery's `Policy:` line. Then:
 - move verified facts from the refs (and `refs/learnings.md`, if any) into
   `knowledge`: one place per fact, updating a page rather than adding a
-  duplicate;
+  duplicate; a fact that rests on code ends with its file (path from the
+  project root) and the delivered commit of that file's repository, after
+  re-checking the fact there if the file changed since it was checked:
+  `[verified: <file> @ <short sha>]`;
 - add the saved scripts (`logs/scripts/`) worth keeping to the project's
   `e2e` suite, or name them as a follow-up in Delivery;
 - `sdlc.sh close <slug> shipped "<one line>"` — refused if the delivered
