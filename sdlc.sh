@@ -6,7 +6,7 @@ err() { printf 'sdlc: %s\n' "$*" >&2; }
 die() { err "$1"; exit "${2:-1}"; }
 usage() {
   cat <<'USAGE'
-Usage: sdlc.sh init [--knowledge path] | new slug | status [slug] [--json]
+Usage: sdlc.sh init [--memory path] | new slug | status [slug] [--json]
        sdlc.sh next slug | check intent|plan slug
        sdlc.sh approve intent|plan slug --human words|--agent review
        sdlc.sh review slug pass|fail [--uncommitted] [--repos "path ..."] note
@@ -47,11 +47,10 @@ config() {
   # An unknown word fails closed, as an unknown lazymode does.
   gates=$(printf '%s' "$gates" | awk '{gsub(/,/," ");for(i=1;i<=NF;i++){v=tolower($i);if(v!="intent"&&v!="plan"){bad=$i;break}if(!seen[v]++)out=out (out==""?"":" ") v}}END{if(bad!="")print "!" bad;else print out}')
   case "$gates" in '!'*) err "unknown human_gates value '${gates#!}' (write intent, plan, or leave it empty): the human approves intent and plan"; gates='intent plan';; esac
-  knowledge=$(value "$STORE/config.md" knowledge)
+  memory=$(value "$STORE/config.md" memory); [ -n "$memory" ] || memory=$(value "$STORE/config.md" knowledge)
   bound=$(value "$STORE/config.md" repos); boundby='config repos:'
-  if [ -z "$knowledge" ]; then
-    if [ -d "$STORE/memory" ]; then knowledge=.sdlc/memory; else knowledge=.sdlc/knowledge; fi
-  fi
+  [ -n "$memory" ] || memory=.sdlc/memory
+  for d in memory knowledge; do [ ! -d "$STORE/$d" ] || [ ".sdlc/$d" = "$memory" ] || [ "$STORE/$d" -ef "$ROOT/$memory" ] || [ "$STORE/$d" -ef "$memory" ] || err ".sdlc/$d is not the memory folder ($memory): move its pages there or name it in config.md memory:"; done
 }
 human_gate() { case " $gates " in *" $1 "*) return 0;; *) return 1;; esac; }
 find_store() {
@@ -422,14 +421,14 @@ case "$command" in
   help) [ "$#" -eq 0 ] || die 'unexpected arguments' 2; usage; exit;;
   --version) [ "$#" -eq 0 ] || die 'unexpected arguments' 2; cat "$KIT/VERSION"; exit;;
   init)
-    custom=; if [ "$#" -gt 0 ]; then [ "$#" -eq 2 ] && [ "$1" = --knowledge ] && [ -n "$2" ] || die 'init [--knowledge path]' 2; custom=$2; fi
+    custom=; if [ "$#" -gt 0 ]; then [ "$#" -eq 2 ] && [ "$1" = --memory ] && [ -n "$2" ] || die 'init [--memory path]' 2; custom=$2; fi
     if [ -f .sdlc/config.md ]; then printf 'Existing .sdlc/config.md left as is.\n'; exit; fi
     mkdir -p .sdlc/work .sdlc/archive
     tmp=$(mktemp .sdlc/config.md.XXXXXX)
-    awk -v kit="$KIT" -v k="$custom" '/^kit:/{print "kit: " kit;next}/^knowledge:/{if(k!=""){print "knowledge: " k;next}}{print}' "$KIT/templates/config.md" > "$tmp"
+    awk -v kit="$KIT" -v k="$custom" '/^kit:/{print "kit: " kit;next}/^memory:/{if(k!=""){print "memory: " k;next}}{print}' "$KIT/templates/config.md" > "$tmp"
     mv "$tmp" .sdlc/config.md
     ROOT=$PWD; STORE=$PWD/.sdlc; config
-    case "$knowledge" in /*|[A-Za-z]:*) :;; *) mkdir -p "$knowledge";; esac
+    case "$memory" in /*|[A-Za-z]:*) :;; *) mkdir -p "$memory";; esac
     # Records stay out of git through the clone-local exclude list, so init never changes a tracked file.
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && ! git check-ignore -q .sdlc 2>/dev/null; then
       exclude=$(git rev-parse --git-path info/exclude); mkdir -p "$(dirname "$exclude")"

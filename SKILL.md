@@ -23,7 +23,7 @@ finds `.git`.
 ## Route a request
 
 - A change or fix, and `.sdlc/` exists → `sdlc.sh new <slug>`, then phase 1.
-- No `.sdlc/` yet → `sdlc.sh init` (`--knowledge <folder>` keeps knowledge
+- No `.sdlc/` yet → `sdlc.sh init` (`--memory <folder>` keeps memory
   elsewhere); fill `.sdlc/config.md` from the repo
   (scripts, Makefile, CI) and run each command once; ask only what the repo
   cannot show. Then phase 1.
@@ -78,15 +78,15 @@ finds `.git`.
 `e2e`, `qa` (the tool that drives screens or APIs), `qa_runner` (an optional
 adapter in `adapters/`, such as `e2e`) and `qa_session` (its sign-in command),
 `human_gates` (default
-`intent`), `knowledge` (the durable knowledge folder) and `repos` (the
+`intent`), `memory` (older configs: `knowledge:`) and `repos` (the
 repositories a review binds; empty means every one under the project root;
 `review --repos` names them for one review).
 Records are working
 knowledge, not source: `init` keeps `.sdlc/` out of git through
 `.git/info/exclude`, changing no tracked file. Closed features move
-to `.sdlc/archive/<slug>/`. Scouts read `knowledge` first; Evidence adds what
-was verified. The default `.sdlc/knowledge` stays on this machine; point
-`knowledge:` at a tracked folder to share it.
+to `.sdlc/archive/<slug>/`. Scouts read `memory` first; Evidence adds what
+was verified. The default `.sdlc/memory` stays on this machine; point
+`memory:` at a tracked folder to share it.
 
 ## Automation
 
