@@ -1035,6 +1035,28 @@ if [ "$#" -gt 0 ]; then
 fi
 run_regressions all
 
+# One memory folder: init names .sdlc/memory, an older knowledge: line still
+# names the folder, and a default folder that is not the configured one is
+# reported instead of silently ignored (a rewritten config once hid a v0
+# store's .sdlc/memory this way).
+repo memory-folder
+expect 0 init
+grep -q '^memory: \.sdlc/memory$' .sdlc/config.md || fail 'init writes memory: .sdlc/memory'
+[ -d .sdlc/memory ] || fail 'init creates .sdlc/memory'
+expect 0 status
+case "$OUTPUT" in *'is not the memory folder'*) fail "no stray folder, yet: $OUTPUT";; esac
+mkdir .sdlc/knowledge
+expect 0 status
+contains '.sdlc/knowledge is not the memory folder (.sdlc/memory)'
+awk '/^memory:/ {print "knowledge: .sdlc/knowledge"; next} {print}' .sdlc/config.md > "$TMP/memory-config" && mv "$TMP/memory-config" .sdlc/config.md
+rmdir .sdlc/memory
+expect 0 status
+case "$OUTPUT" in *'is not the memory folder'*) fail "older knowledge: line not read: $OUTPUT";; esac
+mkdir .sdlc/memory
+expect 0 status
+contains '.sdlc/memory is not the memory folder (.sdlc/knowledge)'
+ok 'memory folder: init default, older knowledge: line, stray default folder reported'
+
 cd "$KIT"
 words=$(cat SKILL.md phases/*.md roles/*.md templates/*.md | wc -w | tr -d ' ')
 [ "$words" -le 6000 ] || fail "prompt total $words words > 6000"
@@ -1070,13 +1092,13 @@ expect 2 unknown
 ok 'help, version, missing store and usage errors'
 repo 'project with spaces'
 assert_file .sdlc/config.md
-[ -d .sdlc/work ] && [ -d .sdlc/archive ] && [ -d .sdlc/knowledge ] || fail 'init directories'
+[ -d .sdlc/work ] && [ -d .sdlc/archive ] && [ -d .sdlc/memory ] || fail 'init directories'
 exclude=$(git rev-parse --git-path info/exclude)
 contains "Ignored .sdlc/ in $exclude (this clone only; no tracked file changed)."
 [ ! -e .gitignore ] || fail 'init created .gitignore'
 case "$(cat .sdlc/config.md)" in *"kit: $KIT"*) ;; *) fail 'init kit path';; esac
 cp .sdlc/config.md "$TMP/config.before"
-expect 0 init --knowledge ignored
+expect 0 init --memory ignored
 cmp .sdlc/config.md "$TMP/config.before" || fail 'second init overwrote config'
 [ "$(awk '$0=="/.sdlc" {n++} END {print n+0}' "$exclude")" -eq 1 ] || fail 'two inits must append one exclude entry'
 [ ! -e .gitignore ] && [ -z "$(git status --porcelain)" ] || fail 'second init changed the working tree'

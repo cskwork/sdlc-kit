@@ -7,7 +7,7 @@ plans how to build it.
 1. `sdlc.sh new <slug>`. Prefix the slug with the ticket key or the date
    (`abc-123-fix-login`, `261012-fix-login`).
 2. Read the request and its source (ticket, issue, pull request, document)
-   with its comments and links, and `knowledge` pages with the same words.
+   with its comments and links, and pages in the `memory` folder with the same words.
 3. Fill `intent.md` (`templates/intent.md`):
    - **Request** — the human's words, verbatim or a faithful excerpt.
    - **Understood as** — the outcome, what is in and out of scope, and
