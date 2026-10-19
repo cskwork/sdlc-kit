@@ -87,7 +87,7 @@ always says what comes next.
 ```
 
 Closed features move to `.sdlc/archive/`. Verified facts move to the
-`knowledge` folder, which the next feature's scouts read first.
+`memory` folder, which the next feature's scouts read first.
 
 ## Config
 
@@ -95,11 +95,11 @@ Closed features move to `.sdlc/archive/`. Verified facts move to the
 `lint`, `run` and `e2e` commands, the `qa` tool that drives screens or APIs,
 an optional `qa_runner` adapter with its `qa_session` sign-in command,
 `human_gates` (default `intent`; add `plan` to approve every plan yourself — a
-plan with a risk flag always asks), the `knowledge` folder, and `repos` (the
+plan with a risk flag always asks), the `memory` folder, and `repos` (the
 repositories a review binds — list them when the project root holds many,
 or name them per review with `sdlc.sh review <slug> pass --repos "<path> ..." "<note>"`;
 empty means every one under it). `.sdlc/` stays
-out of git through `.git/info/exclude`; point `knowledge:` at a tracked folder
+out of git through `.git/info/exclude`; point `memory:` at a tracked folder
 to share what the team learns.
 
 `adapters/e2e/` is one such runner: with `qa_runner: e2e`, QA writes each
@@ -144,7 +144,8 @@ v2 is a new contract. Your records stay where they are.
 - `lazymode` keeps working: 0–1 → `human_gates: intent plan`, 2–3 → `intent`,
   4 → none. Write `human_gates:` to choose explicitly; a word other than
   `intent` or `plan` means both.
-- `.sdlc/memory/` is read as the knowledge folder until you set `knowledge:`.
+- `.sdlc/memory/` is the default memory folder, as in v0; a `knowledge:` line still
+  names the folder, and `sdlc.sh` reports a default folder that is not it.
 - `init.sh` → `sdlc.sh init`; `gates/status.sh --json` and `tools/auto.sh
   next` → `sdlc.sh status --json` and `sdlc.sh next` (same exit codes).
   spec.md, summary.md, delivery.md, qa-guide.md, map.md, harvest, verification
