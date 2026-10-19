@@ -15,7 +15,8 @@ Changes:
 - No abstraction, option or "for later" code nobody asked for; keep the
   codebase's structure and conventions.
 - Bug fix: write the regression test first and watch it fail for the
-  reported reason; fix the root cause once, in the shared code.
+  reported reason, keeping the output in `logs/`; fix the root cause once,
+  in the shared code.
 - A new or changed test for new behavior: run it once where it must fail, on
   the base commit in a disposable worktree (never stash or touch the human's
   tree) or, for a new symbol, with the behavior disabled; keep the output in
