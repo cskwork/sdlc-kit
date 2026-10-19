@@ -87,7 +87,9 @@ always says what comes next.
 ```
 
 Closed features move to `.sdlc/archive/`. Verified facts move to the
-`memory` folder, which the next feature's scouts read first.
+`memory` folder, which the next feature's scouts read first. Its
+`glossary.md` holds the project's terms: Intent matches each request's terms
+against it, and Evidence adds the terms a feature settled.
 
 ## Config
 
