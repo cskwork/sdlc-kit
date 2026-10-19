@@ -13,7 +13,7 @@ governs phase order, gates and proof.
 |---|---|---|---|---|
 | 1 | Intent | `phases/1-intent.md` | `intent.md`, `refs/`, `logs/` | Clarity 90%, intent approved |
 | 2 | Plan | `phases/2-plan.md` | `refs/`, `PLAN.md` | plan approved |
-| 3 | Build | `phases/3-build.md` | code, `review.md` | review PASS |
+| 3 | Build | `phases/3-build.md` | code, `review.md`, `logs/` | review PASS |
 | 4 | Evidence | `phases/4-evidence.md` | `evidence.md`, `logs/` | `sdlc.sh score` routes |
 
 `sdlc.sh next <slug>` names the next step and why. Run `sdlc.sh` (in this

@@ -16,6 +16,11 @@ Changes:
   codebase's structure and conventions.
 - Bug fix: write the regression test first and watch it fail for the
   reported reason; fix the root cause once, in the shared code.
+- A new or changed test for new behavior: run it once where it must fail, on
+  the base commit in a disposable worktree (never stash or touch the human's
+  tree) or, for a new symbol, with the behavior disabled; keep the output in
+  `logs/`. It must fail on its assertion, not on a missing symbol or compile
+  error.
 - Never cut validation at trust boundaries, error handling that prevents data
   loss, security or accessibility.
 - After each step run the narrowest check; run the full `build`, `test` and
@@ -29,7 +34,7 @@ Changes:
 
 Commit the change locally (the project's rules decide the message), then
 dispatch the reviewer (`roles/reviewer.md`, diff mode) with intent.md,
-PLAN.md, `refs/` and the commit. Where every commit needs the human's
+PLAN.md, `refs/`, `logs/` and the commit. Where every commit needs the human's
 approval, review the uncommitted change instead. The reviewer appends a round
 to `review.md` ending in `VERDICT: PASS` or `VERDICT: FAIL`. Record it with
 `sdlc.sh review <slug> pass|fail "<one line>"`: the script reads the verdict
@@ -53,7 +58,13 @@ needs a new round, as does any code changed after a PASS; rewording the
 commit made on top of it does not. Recording hashes those files into the
 repository's object store (not its index): ignore large or secret files
 before reviewing.
-FAIL → fix the blocking findings, commit, review again. The third FAIL stops
+FAIL → fix the blocking findings, commit, review again. A blocking diff
+finding that a screen, API, job or log could show is a bug fix: its
+regression test first, failing on the FAILed commit for the finding's reason,
+then the fix; if no test can show it, the fix's commit message (or, for an
+uncommitted review, the review request) says why.
+Plan-review FAILs and findings nothing can observe (wording,
+docs, structure) need no test. The third FAIL stops
 the loop: show the human the trail; only `sdlc.sh approve plan <slug>
 --human` resumes it. Then phase 4.
 
