@@ -12,6 +12,10 @@ plans how to build it.
    - **Request** — the human's words, verbatim or a faithful excerpt.
    - **Understood as** — the outcome, what is in and out of scope, and
      success criteria `O1..On`, each observable so a scenario can check it.
+   - **Terms** — match each term the request turns on to `glossary.md` in
+     the `memory` folder, else the code. A ❓ term, read two ways,
+     leaves its Clarity area open and is a blocking question; the question
+     shows each reading with a real value.
    - **Clarity** — one row per area: Outcome, Scope, AS-IS, TO-BE, Success,
      Constraints. State `clear` only when How settled cites evidence that
      leaves one reading: the requester's words, a file:line, a log, a

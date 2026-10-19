@@ -86,7 +86,9 @@ $EDITOR .sdlc/config.md                          # build, test, lint, run, e2e, 
 ```
 
 끝난 기능은 `.sdlc/archive/`로 옮겨집니다. 검증된 사실은 `memory` 폴더로
-옮기고, 다음 기능의 scout가 그 폴더부터 읽습니다.
+옮기고, 다음 기능의 scout가 그 폴더부터 읽습니다. 그 안의 `glossary.md`가
+프로젝트 용어집입니다. Intent는 요청의 용어를 여기에 대조하고, Evidence는 기능에서
+확정한 용어를 여기에 더합니다.
 
 ## 설정
 
