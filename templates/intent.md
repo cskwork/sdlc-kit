@@ -13,6 +13,11 @@
 - Out of scope: <…>
 - O1: <observable success criterion>
 
+## Terms
+<!-- Each term the request turns on, or none: ✅ one meaning, ⚠️ assumed, ❓ two readings (each with a real value; its Clarity area stays open). -->
+- ✅ <term> = <plain meaning>, e.g. <real value>
+  - Source: <glossary line | requester's words | file:line> · Code: <identifier>
+
 ## Clarity
 <!-- State: clear, assumed or open. sdlc.sh scores clear 1, assumed 1/2, open 0 and refuses approval below 90%: one assumed area passes; two, or one open, do not. How settled: the evidence that leaves one reading, why it is assumed, or what is missing. -->
 | Area | State | How settled |
