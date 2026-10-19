@@ -6,7 +6,7 @@ enough that side effects are found here, before any code. Scouts write
 
 ## 1. Scout
 
-`sdlc.sh check intent <slug>` must print GATE OPEN. Read the `knowledge`
+`sdlc.sh check intent <slug>` must print GATE OPEN. Read the `memory`
 folder and phase 1's `refs/` and `logs/` first: a fact they already give
 with a source is not scouted again.
 Dispatch one scout (`roles/scout.md`) per open question, in parallel, each
