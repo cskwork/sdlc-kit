@@ -28,8 +28,7 @@ beyond this feature go to `refs/learnings.md`, one line each with a source.
 
 ## 2. Write PLAN.md
 
-Fill `templates/PLAN.md`, 150 lines at most. It summarizes; refs hold the
-evidence. Link, do not copy.
+Fill `templates/PLAN.md`, 150 lines at most.
 - **Understanding** — a few lines each on data, logic, source of truth and
   user flow, each with its ref.
 - **AS-IS → TO-BE** — every behavior before and after, with the policy that

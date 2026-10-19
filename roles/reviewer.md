@@ -6,9 +6,9 @@ Assume the work is wrong and find where. Report only; fix nothing.
 
 Inputs: the request and its source, intent.md, what its Clarity cites.
 Blocking:
-- a second reading of the request that intent.md does not rule out and
-  that changes what gets built;
-- an area marked clear whose citation does not say so, or inference cited
+- a second reading of the request or a term that intent.md does not rule
+  out and that changes what gets built;
+- a clear area or ✅ term whose citation does not say so, or inference cited
   as fact; a bug's AS-IS neither reproduced nor marked assumed.
 
 ## Plan mode (phase 2)
