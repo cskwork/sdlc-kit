@@ -51,7 +51,7 @@ that checked it and its deciding output line. A changed policy is updated
 where it is written in the same delivery, or its follow-up and owner go in
 Delivery's `Policy:` line. Then:
 - move verified facts from the refs (and `refs/learnings.md`, if any) into
-  `knowledge`: one place per fact, updating a page rather than adding a
+  the `memory` folder: one place per fact, updating a page rather than adding a
   duplicate; a fact that rests on code ends with its file (path from the
   project root) and the delivered commit of that file's repository, after
   re-checking the fact there if the file changed since it was checked:
