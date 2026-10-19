@@ -16,7 +16,7 @@ qa_runner:
 qa_session:
 # gates a human approves: intent, plan. Plan also needs the human when PLAN.md raises a risk flag.
 human_gates: intent
-# durable knowledge: scouts read it first, Evidence adds verified facts to it
-knowledge: .sdlc/knowledge
+# durable knowledge: scouts read it first, Evidence adds verified facts to it; empty = .sdlc/memory if it exists (a store from v0), else .sdlc/knowledge
+knowledge:
 # repositories a review PASS binds: top folders, separated by spaces or commas, of repositories under the project root (relative, no spaces in a path), "." for the repository holding the root; empty = every repository under the root; review --repos replaces it for one review
 repos:
