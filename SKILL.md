@@ -85,8 +85,8 @@ Records are working
 knowledge, not source: `init` keeps `.sdlc/` out of git through
 `.git/info/exclude`, changing no tracked file. Closed features move
 to `.sdlc/archive/<slug>/`. Scouts read `knowledge` first; Evidence adds what
-was verified. The default `.sdlc/knowledge` stays on this machine; point
-`knowledge:` at a tracked folder to share it.
+was verified. Empty `knowledge:` is `.sdlc/memory` if present, else
+`.sdlc/knowledge`, both local; name a tracked folder to share.
 
 ## Automation
 
