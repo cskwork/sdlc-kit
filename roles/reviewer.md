@@ -24,7 +24,7 @@ Inputs: intent.md, PLAN.md, `refs/`. Blocking:
 
 ## Diff mode (phase 3)
 
-Inputs: intent.md, PLAN.md, `refs/`, the commit or uncommitted diff
+Inputs: intent.md, PLAN.md, `refs/`, `logs/`, the commit or uncommitted diff
 (untracked files included). Read every changed file.
 Blocking:
 - it does not do what PLAN.md says, or does more;
@@ -38,7 +38,8 @@ Blocking:
 - security: injection, missing authorization, secrets in code, unsafe
   deserialization;
 - a test that cannot fail or asserts nothing; a bug fix without a test that
-  failed before it;
+  failed before it; a new-behavior test with no recorded assertion failure;
+  an observable blocking diff finding untested and unexplained;
 - a name that lies, one rule decided in two places, a hardcoded environment
   value, dead code the change left behind;
 - an abstraction, option or layer PLAN.md did not ask for.

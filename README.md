@@ -117,7 +117,8 @@ vendors e2e's agent guide (Apache-2.0, pinned) so it works offline;
 - **Independent eyes.** Scouts, reviewer and QA run in fresh contexts, never
   in the one that wrote the work.
 - **Proof, not claims.** No environment means BLOCKED, never PASS. A bug fix
-  needs a test that failed before the fix.
+  needs a test that failed before the fix; a test for new behavior is seen
+  failing once without it.
 - **Delivered means what was verified.** `close` refuses a delivered tree that
   differs from the verified commit.
 
