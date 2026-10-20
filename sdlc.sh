@@ -98,7 +98,7 @@ parse() {
   awk -v mode="$1" -v objectives="$objectives" -v scenarios="$scenarios" -v scored="$scored" -v withdrawn="$withdrawn" "$UNCOMMENT"'
   function trim(s){sub(/^[ \t]+/,"",s);sub(/[ \t]+$/,"",s);return s}function problem(s){print "X\034" s}
   function area(id,  k,s){k=tolower(id);gsub(/[^a-z]/,"",k);s=tolower(a[3]);if(k=="area")return;ca++;if(k!~/^(outcome|scope|asis|tobe|success|constraints)$/){print "Y\034Clarity: unknown area " id;cy++;return}if(k in cs){print "Y\034Clarity: duplicate area " id;cy++;return}cs[k]="open";if(s!~/^(clear|assumed|open)$/){print "Y\034Clarity " id ": State must be clear, assumed or open";cy++}else if(tolower(a[4])~/^(<.*>|[-—–?.]*|n\/a|tbd)$/){print "Y\034Clarity " id ": How settled needs its evidence or reason";cy++}else cs[k]=s}
-  function question(){if(q!=""){l=tolower(trim(q));if(l!="none"&&l!="n/a"&&l!~/^resolved:/&&l!~/— resolved:/&&l!~/-- resolved:/)print "Q\034" q;q=""}}
+  function question(){if(q!=""){l=tolower(trim(q));if(l!="none"&&l!="n/a"&&l!~/^resolved:/&&l!~/— resolved:/&&l!~/-- resolved:/)print "Q\034" q;else if(l~/resolved:/)print "V\034" l;q=""}}
   function fields(s, c,j){for(j in a)delete a[j];nfields=1;for(j=1;j<=length(s);j++){c=substr(s,j,1);if(c=="\\"&&substr(s,j+1,1)=="|"){a[nfields]=a[nfields] "|";j++}else if(c=="|")nfields++;else a[nfields]=a[nfields] c}for(j=1;j<=nfields;j++)a[j]=trim(a[j]);cells=nfields-1-(a[nfields]=="");return a[2]}
   {
     if(uncomment())next
@@ -137,9 +137,9 @@ parse() {
   }' "$2"
 }
 read_intent() {
-  objectives=; iproblems=; questions=; itarget=; iauth=; cproblems=
+  objectives=; iproblems=; questions=; itarget=; iauth=; cproblems=; answers=
   while IFS=$'\034' read -r type a b; do
-    case "$type" in O) objectives="$objectives $a";; X) iproblems="${iproblems}${a}"$'\n';; Q) questions="${questions}${a}"$'\n';; Y) cproblems="${cproblems}${a}"$'\n';; T) itarget=$a;; A) iauth=$a;; esac
+    case "$type" in O) objectives="$objectives $a";; X) iproblems="${iproblems}${a}"$'\n';; Q) questions="${questions}${a}"$'\n';; Y) cproblems="${cproblems}${a}"$'\n';; V) answers="${answers}${a}"$'\n';; T) itarget=$a;; A) iauth=$a;; esac
   done < <(parse intent "$F/intent.md")
 }
 read_plan() {
@@ -481,7 +481,7 @@ case "$command" in
       if [ "$which" = plan ] && [ "$who" = agent ] && stopped; then die "stopped for the human: $stopreason; resume with approve plan --human"; fi
       read_intent; problems "$iproblems" || exit 1; problems "$questions" || exit 1
       if [ "$which" = intent ]; then
-        if [ "$who" = agent ] && human_gate intent; then die 'intent needs --human approval'; fi
+        if [ "$who" = agent ] && human_gate intent; then die 'intent needs --human approval'; fi; if [ "$who" = human ] && lnote=$(printf '%s' "${note//[\`*]/}" | tr '[:upper:]' '[:lower:]') && [ "$(printf '%s' "$lnote" | LC_ALL=C wc -c)" -ge 12 ] && [[ $answers == *"$lnote"* ]]; then die 'that note answers a blocking question; it does not approve this intent: show the human Bottom line, Risks and any assumed Clarity area, ask "is this what you want?" and record their reply'; fi
         hash=$(sha < "$F/intent.md"); if [ "$ish" = "$hash" ]; then printf 'intent already approved\n'; exit; fi; problems "$cproblems" || exit 1
         event; intent="$hash $who $seq $ts $note"
       else
