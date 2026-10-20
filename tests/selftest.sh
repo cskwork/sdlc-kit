@@ -1207,6 +1207,17 @@ printf 'human_gates: # deliberately empty\n' > .sdlc/config.md
 feature ungated
 expect 0 approve intent ungated --agent reviewed
 ok 'present empty human_gates allows agent approval'
+printf 'human_gates: intent\n' > .sdlc/config.md
+feature answered
+printf '## Blocking questions\n- Q1. scope? — resolved: "TC-25 later, the rest go ahead" (requester, chat)\n' >> "$F/intent.md"
+expect 1 approve intent answered --human 'TC-25 later, the rest go ahead'; contains 'answers a blocking question'
+expect 0 approve intent answered --human 'yes, this is what I want'
+feature answered2
+printf '## Blocking questions\n- Q1. scope? -- Resolved: "**나머진** 진행" (requester)\n<!-- the line ends with "— resolved: <answer, source>" -->\n' >> "$F/intent.md"
+expect 1 approve intent answered2 --human '나머진 진행'; contains 'answers a blocking question'
+expect 0 approve intent answered2 --human 'the line ends with'
+ok 'an answer to a blocking question is not --human approval of the intent'
+printf 'human_gates: # deliberately empty\n' > .sdlc/config.md
 mkdir -p nested/deep
 cd nested/deep
 expect 0 status ungated; contains 'ungated'
