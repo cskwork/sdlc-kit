@@ -8,19 +8,22 @@ plans how to build it.
    (`abc-123-fix-login`, `261012-fix-login`).
 2. Read the request and its source (ticket, issue, pull request, document)
    with its comments and links, and pages in the `memory` folder with the same words.
-3. Fill `intent.md` (`templates/intent.md`):
-   - **Request** — the human's words, verbatim or a faithful excerpt.
-   - **Understood as** — the outcome, what is in and out of scope, and
+3. Fill `intent.md` (`templates/intent.md`) for a skimming reader: one idea
+   per line, a bold lead-in so the bold alone carries the gist, exact
+   numbers, each warning on the line it guards; proof goes to Facts. Each
+   fact appears once; elsewhere cite it (O2, F3, Q1, Request). Human
+   sections come first, the agent's record (Terms, Clarity, Facts) last.
+   Write in the requester's language; headings, field labels and Clarity words stay English.
+   - **Understood as** — scope (Bottom line Changes is the outcome) and
      success criteria `O1..On`, each observable so a scenario can check it.
    - **Terms** — match each term the request turns on to `glossary.md` in
-     the `memory` folder, else the code. A ❓ term, read two ways,
-     leaves its Clarity area open and is a blocking question; the question
-     shows each reading with a real value.
-   - **Clarity** — one row per area: Outcome, Scope, AS-IS, TO-BE, Success,
-     Constraints. State `clear` only when How settled cites evidence that
+     the `memory` folder, else the code. A ❓ term leaves its Clarity area
+     open and is a blocking question showing each reading with a real value.
+   - **Clarity** — state `clear` only when How settled cites evidence that
      leaves one reading: the requester's words, a file:line, a log, a
      primary source. Otherwise `assumed` (and why) or `open` (and what is
      missing).
+   - **Facts** — that evidence, one fact per line (`F1:`) with its source.
    - **Risks in this intent** — ambiguity, a claim the code or data already
      contradicts (with the evidence), a policy the request would change and
      who owns it, work that needs authority (rule 3). Before logs, error
@@ -32,11 +35,8 @@ plans how to build it.
      a time; record each answer in place as `— resolved: <answer, source>`
      and cite it in its Clarity area. Other uncertainty is written as
      `[assumed: why]`.
-   - **Delivery** — `local`, `pr` or `deploy` alone on the Target line
-     (`pr` also covers pushing a branch for review with no pull request),
-     details such as branch or environment on a `Note:` line, and
-     `Authorized: yes — "<the human's words>"` when they authorized it, else
-     `no`.
+   - **Delivery** — `pr` also covers a branch pushed for review; record
+     `Authorized: yes` only with the human's words.
 4. Several independent outcomes → one slug each; list them under Understood
    as.
 5. A bug report also records what was done, what happened against what was
@@ -50,7 +50,7 @@ cheapest way that works, in this order:
 
 1. **Explore** — the code path, screen or command the request names, and
    earlier tickets or commits on it. Look only as far as what is wanted; how
-   to change it safely (every caller, data states, side effects) is phase 2.
+   to change it safely is phase 2.
    A question needing more than a few reads goes to a scout
    (`roles/scout.md`); phase 2 reuses its `refs/` file.
 2. **Reproduce** — drive a reported bug where that is safe: locally or in a
@@ -77,10 +77,11 @@ cheapest way that works, in this order:
 Once clarity is 90% and every blocking question is resolved, dispatch the
 reviewer in intent mode (`roles/reviewer.md`); skip it only when every area
 cites the requester's own words. An area it shows unsettled goes back to
-Raise clarity. Then — human gate (the default): show the human Understood
-as, Clarity and Risks, and ask one question — is this what you want? On
-explicit approval run
-`sdlc.sh approve intent <slug> --human "<their words>"`.
-Otherwise check intent.md against the request yourself, run
+Raise clarity. Then — human gate (the default): show the human Bottom line,
+Risks and any assumed Clarity area, ask one question — is this what you
+want? — and end the turn. Only a reply to that question approves:
+`sdlc.sh approve intent <slug> --human "<their words>"`. An answer to a
+blocking question is not approval; ask again after it.
+Without an intent gate, check intent.md against the request yourself, run
 `sdlc.sh approve intent <slug> --agent "<what you checked>"`, and post it as
 FYI. Then phase 2.
