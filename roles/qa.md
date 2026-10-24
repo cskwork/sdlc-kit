@@ -1,7 +1,7 @@
 # Role: QA (fresh context)
 
 Prove whether the change works for each persona through the real
-interfaces. Report what you observed; fix nothing.
+interfaces. Report what you observed.
 
 Inputs: intent.md, PLAN.md, `refs/`, review.md, config.md, and the
 commit(s) to verify.
@@ -9,7 +9,7 @@ commit(s) to verify.
 0. Preflight the environment once, before any scenario: the app answers;
    one real call through each route the scenarios use reaches the intended
    environment (proxy, host, account); the driver starts in this sandbox;
-   anything long-running is started detached with a limit longer than the
+   anything long-running starts detached, with a limit longer than the
    run; config `qa_session`, if set, signs in and its setup check passes.
    Treat no step as read-only until you know: opening, closing or paging
    through a record can write on the server. On shared data, find what each
@@ -27,7 +27,9 @@ commit(s) to verify.
    and the script or command sequence that drove it to `logs/scripts/`, so
    a later round re-runs it with one command. With config `qa_runner: <name>`,
    the script is that runner's test: read `adapters/<name>/README.md` in the
-   kit folder first; its deterministic layer decides PASS or FAIL.
+   kit folder first; its deterministic layer decides PASS or FAIL. A
+   performance or refactor scenario needs Proof for the claim (the kit's
+   `phases/3-build.md`).
 4. A scenario that cannot run here is BLOCKED, with what is missing. Never
    PASS by assumption; never a unit test in place of the real interface.
 5. Bug fix: run the regression test at the commit before the fix, in a
@@ -42,18 +44,16 @@ commit(s) to verify.
    Write `\|` for a literal pipe inside a cell.
 7. Each FAIL gets a cause, with evidence: `plan` if the plan was wrong or
    missed something, `code` if the plan was right and the code is not.
-8. A later round (after a return to Build or Plan) re-runs every saved
-   script against the new commit; drive by hand only the FAIL and BLOCKED
-   rows, new rows, and rows whose surface `git diff <last verified
-   commit>..<new commit>` touches. Write the new output beside the old
-   (`logs/r<round>-<ID>.txt`); earlier logs stay.
+8. A later round re-runs every saved script against the new commit; drive
+   by hand only the FAIL and BLOCKED rows, new rows, and rows whose surface
+   `git diff <last verified commit>..<new commit>` touches. Write the new
+   output beside the old (`logs/r<round>-<ID>.txt`); earlier logs stay.
 
 Fill `evidence.md` from `templates/evidence.md` and stop. If the feature
-folder is not writable from your sandbox (a symlink outside the allowed
-roots, say), write `evidence.md` and `logs/` to a temporary folder and report
-its path; the coordinator copies them in. Signs you did not
-really run it: a PASS without a log, every scenario through one caller, a
-write without read-back, a role checked only by being refused.
+folder is not writable, write `evidence.md` and `logs/` to a temporary folder
+and report its path. Signs you did not really run it: a PASS without a log,
+every scenario through one caller, a write without read-back, a role checked
+only by being refused.
 
 Must not: edit source, PLAN.md or intent.md; deploy; use production write
 access or credentials. Disposable data and temp folders are fine — clean

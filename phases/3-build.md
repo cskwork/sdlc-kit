@@ -8,8 +8,8 @@ adversarial reviewer.
 `sdlc.sh check plan <slug>` must print GATE OPEN. Then work through PLAN.md's
 Changes:
 - Take the first option that fully works: not needed → skip it and say so;
-  already in the codebase → reuse it the way the code around it does; the
-  standard library or an installed dependency → use it; otherwise the least
+  already in the codebase → reuse it as nearby code does;
+  standard library or installed dependency → use it; otherwise the least
   code that works.
 - Finish what the change touches: callers, tests, fixtures, config.
 - No abstraction, option or "for later" code nobody asked for; keep the
@@ -19,59 +19,66 @@ Changes:
   in the shared code.
 - A new or changed test for new behavior: run it once where it must fail, on
   the base commit in a disposable worktree (never stash or touch the human's
-  tree) or, for a new symbol, with the behavior disabled; keep the output in
-  `logs/`. It must fail on its assertion, not on a missing symbol or compile
-  error.
+  tree) or, for a new symbol, with the behavior disabled, output in `logs/`;
+  it must fail on its assertion, not a missing symbol or compile error.
+- **Proof for the claim**, only for a numeric performance or unchanged-behavior
+  (refactor) claim; base run before the first edit, output in `logs/`.
+  - *Performance*: repeated base and after samples of one fixed, realistic
+    workload, command and environment, with median, spread, errors and work
+    done; insufficient samples or a difference within spread do not establish
+    improvement.
+  - *Refactor*: behavior checks pass before and after, and one fails on a
+    behavioral assertion, not compilation, when deliberately broken in a disposable
+    worktree; tests alone do not replace the real-interface run, nor do lint
+    or typecheck.
+  - *Optimization loop*, only on the human's request: an agreed target and
+    effort limit; per round one hypothesis, change and measurement, kept or
+    reverted alone.
 - Never cut validation at trust boundaries, error handling that prevents data
   loss, security or accessibility.
-- After each step run the narrowest check; run the full `build`, `test` and
+- After each step run the narrowest check; the full `build`, `test` and
   `lint` once at the end.
 - A failing test means fix the code — unless PLAN.md changed that expected
   behavior.
+- Two failed fixes for one failure (test, review finding or scenario) that
+  share a premise → test that premise, recording it and the result in
+  `refs/repro.md`, before the next fix.
 - Reality differs from PLAN.md in files or approach → stop and go back to
   phase 2. Small differences go in `review.md` for the reviewer.
 
 ## Review
 
-Commit the change locally (the project's rules decide the message), then
-dispatch the reviewer (`roles/reviewer.md`, diff mode) with intent.md,
-PLAN.md, `refs/`, `logs/` and the commit. Where every commit needs the human's
-approval, review the uncommitted change instead. The reviewer appends a round
-to `review.md` ending in `VERDICT: PASS` or `VERDICT: FAIL`. Record it with
-`sdlc.sh review <slug> pass|fail "<one line>"`: the script reads the verdict
-of the newest round (every recording needs a new one) and binds a PASS to the
-HEAD of every repository under the project root (or in config `repos:`, or
-in `--repos "<path> ..."` given before the note, which replaces `repos:` for
-that review: name the repositories the change touches when the root holds
-many);
-`score` and `close` compare only the repositories named on evidence `Commit`
-lines, and each Commit must be that HEAD. For a review of the uncommitted
-change, record `sdlc.sh review <slug> pass --uncommitted "<one line>"`: the
-PASS also binds the working tree of any repository with uncommitted changes
-(tracked and untracked files that are not ignored, leaving out the store and
-untracked repositories nested inside it; if git cannot read that tree, the
-PASS binds HEAD alone and says so). Each Commit must then be the reviewed
-HEAD or descend from it, hold the reviewed working tree inside its Commit
-path, and change nothing outside that path that the reviewed tree does not
-hold; uncommitted changes outside every Commit path do not count. Reverting
-or stashing the change, or amending or rebasing the reviewed HEAD itself,
-needs a new round, as does any code changed after a PASS; rewording the
-commit made on top of it does not. Recording hashes those files into the
-repository's object store (not its index): ignore large or secret files
-before reviewing.
+Commit locally (the project's rules decide the message) and dispatch the
+reviewer (`roles/reviewer.md`, diff mode); where every commit needs the
+human's approval, review the uncommitted change instead. Record its verdict
+with `sdlc.sh review <slug> pass|fail "<one line>"`: the script reads the
+newest `review.md` round (each recording needs a new one) and binds a PASS to
+the HEAD of every repository in `--repos "<path> ..."` (before the note), else
+config `repos:`, else under the project root (name the touched repositories
+when the root holds many). `score` and `close` compare only repositories named
+on evidence `Commit` lines; each Commit must be that HEAD. For an uncommitted
+review, `sdlc.sh review <slug> pass --uncommitted "<one line>"` also binds the
+working tree of each repository with uncommitted changes (non-ignored files,
+tracked or not, excluding the store and untracked repositories nested inside
+it; if git cannot read it, the PASS binds HEAD alone and says so). Each Commit
+must then be or descend from the reviewed HEAD, hold the reviewed tree inside
+its Commit path, and change nothing outside that path the reviewed tree lacks;
+uncommitted changes outside every Commit path do not count. Reverting or
+stashing the change, amending or rebasing the reviewed HEAD, or changing code
+after a PASS needs a new round; rewording a commit made on top does not.
+Recording hashes those files into the object store (not the index): ignore
+large or secret files first.
 FAIL → fix the blocking findings, commit, review again. A blocking diff
-finding that a screen, API, job or log could show is a bug fix: its
+finding a screen, API, job or log could show is a bug fix: its
 regression test first, failing on the FAILed commit for the finding's reason,
 then the fix; if no test can show it, the fix's commit message (or, for an
 uncommitted review, the review request) says why.
 Plan-review FAILs and findings nothing can observe (wording,
 docs, structure) need no test. The third FAIL stops
-the loop: show the human the trail; only `sdlc.sh approve plan <slug>
---human` resumes it. Then phase 4.
+the loop (rule 6). Then phase 4.
 
 ## Back from Evidence
 
 `sdlc.sh next` names the scenarios that failed for code reasons; evidence.md
-and `logs/` hold what was seen. Each is a bug fix: write its regression test
-first and watch it fail for the reported reason, then fix, commit, and review
-again.
+and `logs/` hold what was seen. Each is a bug fix as above: regression test
+first, then fix, commit, and review again.
