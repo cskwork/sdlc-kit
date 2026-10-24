@@ -5,7 +5,7 @@ Merged in [PR #54](https://github.com/cskwork/sdlc-kit/pull/54) to cskwork/sdlc-
 ## Changes
 
 - Safe disposable probes settle empirical uncertainty. Behavior evidence is kept separate from real-use claims.
-- Performance claims require repeated, comparable baseline and after samples, reporting median, spread, errors, and work completed.
+- Numeric performance claims require repeated, comparable baseline and after samples, reporting median, spread, errors, and work completed.
 - Behavior-preserving refactors require before/after behavior checks. They also require a deliberate assertion failure in a disposable worktree; a compile failure does not count.
 - After two failed fixes that share a premise, test that premise before trying another fix.
 - Plan review checks the proposed proof methods. Diff review and QA check the results.
