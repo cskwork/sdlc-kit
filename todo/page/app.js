@@ -43,6 +43,9 @@ async function api(path, body) {
     let message = text.trim();
     try { const data = JSON.parse(text); message = data.error || data.message || message; } catch { /* plain text */ }
     if (response.status === 403) message = 'This page is not allowed. Open the link printed in the terminal again.';
+    if (response.status === 409 && body) {
+      try { received(await api('/api/items')); } catch { /* keep the mutation's error */ }
+    }
     throw new RequestError(message || `Request failed (${response.status})`, response.status);
   }
   return text ? JSON.parse(text) : {};
@@ -127,32 +130,35 @@ function buildRow(item) {
     refs.review.className = 'text-button';
     refs.waitLine.append(refs.waitLabel, refs.waitWhat, refs.review);
     main.append(refs.waitLine);
-    const tools = el('div', 'tools');
-    tools.id = `tools-${item.id}`;
-    refs.more = button('', 'more', '⋯');
-    refs.more.className = 'more icon';
-    const dots = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    dots.setAttribute('viewBox', '0 0 20 20');
-    dots.setAttribute('aria-hidden', 'true');
-    for (const x of [4, 10, 16]) {
-      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      dot.setAttribute('cx', x); dot.setAttribute('cy', '10'); dot.setAttribute('r', '1.5');
-      dots.append(dot);
-    }
-    refs.more.replaceChildren(dots);
-    refs.more.setAttribute('aria-expanded', 'false');
-    refs.more.setAttribute('aria-controls', tools.id);
-    refs.open = button('', 'open', 'Details');
-    refs.open.className = 'quiet';
+  }
+  const tools = el('div', 'tools');
+  tools.id = `tools-${item.id}`;
+  refs.more = button('', 'more', '⋯');
+  refs.more.className = 'more icon';
+  const dots = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  dots.setAttribute('viewBox', '0 0 20 20');
+  dots.setAttribute('aria-hidden', 'true');
+  for (const x of [4, 10, 16]) {
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('cx', x); dot.setAttribute('cy', '10'); dot.setAttribute('r', '1.5');
+    dots.append(dot);
+  }
+  refs.more.replaceChildren(dots);
+  refs.more.setAttribute('aria-expanded', 'false');
+  refs.more.setAttribute('aria-controls', tools.id);
+  refs.open = button('', 'open', 'Details');
+  refs.open.className = 'quiet';
+  tools.append(refs.open);
+  if (!item.done) {
     refs.up = button('', 'up', '↑');
     refs.down = button('', 'down', '↓');
     refs.del = button('', 'delete', '✕');
-    tools.append(refs.open, refs.up, refs.down, refs.del);
-    li.append(refs.more, tools);
+    tools.append(refs.up, refs.down, refs.del);
   } else {
     refs.when = el('span', 'when');
     main.append(refs.when);
   }
+  li.append(refs.more, tools);
   li._refs = refs;
   return li;
 }
@@ -165,14 +171,14 @@ function updateRow(li, item) {
   r.check.setAttribute('aria-label', item.done ? `Mark "${item.title}" not done` : `Mark "${item.title}" done`);
   if (!item.done) r.title.setAttribute('aria-label', `${item.title}. Press Enter to rename.`);
   if (r.when) r.when.textContent = doneAt(item) ? `Done ${doneAt(item)}` : '';
-  if (r.open) {
+  r.open.setAttribute('aria-label', `Details for "${item.title}"`);
+  r.more.setAttribute('aria-label', `Actions for "${item.title}"`);
+  if (r.waitLine) {
     const needsYou = item.id === items.find(i => !i.done && i.status === 'waiting')?.id;
     li.classList.toggle('needs-you', needsYou);
     r.waitLine.hidden = !needsYou;
     r.waitWhat.textContent = whatWaits(item);
     r.review.setAttribute('aria-label', `Review "${item.title}"`);
-    r.more.setAttribute('aria-label', `Actions for "${item.title}"`);
-    r.open.setAttribute('aria-label', `Details for "${item.title}"`);
     r.up.setAttribute('aria-label', `Move "${item.title}" up`);
     r.down.setAttribute('aria-label', `Move "${item.title}" down`);
     r.del.setAttribute('aria-label', `Delete "${item.title}"`);
@@ -287,21 +293,21 @@ function describeChange(before) {
 }
 
 // ---------- row actions ----------
-const op = (id, name, extra, done) => mutate('/api/item', { id, op: name, ...extra }, done);
+const op = (item, name, extra, done) => mutate('/api/item', { id: item.id, version: item.version, op: name, ...extra }, done);
 
 function rowOf(node) { return node.closest('li.row'); }
 async function move(li, delta) {
-  try { await op(li.dataset.id, 'move', { delta }, delta < 0 ? 'Moved up' : 'Moved down'); } catch { /* shown */ }
+  try { await op(li._item, 'move', { delta }, delta < 0 ? 'Moved up' : 'Moved down'); } catch { /* shown */ }
 }
 async function remove(li) {
   const item = li._item;
   if (!confirm(`Delete "${item.title}"? This cannot be undone.`)) return;
-  try { await op(item.id, 'delete', {}, `Deleted ${item.title}`); } catch { /* shown */ }
+  try { await op(item, 'delete', {}, `Deleted ${item.title}`); } catch { /* shown */ }
 }
 
 function startEdit(li) {
   if (li.classList.contains('editing') || li._item.done) return;
-  const r = li._refs;
+  const r = li._refs, item = li._item;
   const input = el('input', 'edit');
   input.type = 'text';
   input.value = li._item.title;
@@ -316,7 +322,7 @@ function startEdit(li) {
   const finish = async save => {
     if (finished) return;
     finished = true;
-    const value = input.value.trim(), oldTitle = li._item.title;
+    const value = input.value.trim(), oldTitle = item.title;
     const restore = () => { li.classList.remove('editing'); r.title.hidden = false; input.remove(); };
     if (!save || !value || value === oldTitle) {
       restore();
@@ -326,7 +332,7 @@ function startEdit(li) {
     // Ids follow the title for items without a slug, so the row may come back under a new id.
     const index = [...li.parentElement.children].indexOf(li);
     try {
-      await op(li.dataset.id, 'edit', { title: value }, 'Renamed');
+      await op(item, 'edit', { title: value }, 'Renamed');
     } catch {
       finished = false;
       input.focus();
@@ -349,7 +355,7 @@ function wireList(list) {
     const li = rowOf(event.target), item = li._item;
     const wantDone = event.target.checked;
     event.target.checked = item.done; // the server decides; the next list sets it
-    op(item.id, wantDone ? 'done' : 'undone', {}, wantDone ? `Done: ${item.title}` : `Back to open: ${item.title}`).catch(() => {});
+    op(item, wantDone ? 'done' : 'undone', {}, wantDone ? `Done: ${item.title}` : `Back to open: ${item.title}`).catch(() => {});
   });
   list.addEventListener('click', event => {
     const target = event.target.closest('[data-role]');
@@ -478,7 +484,7 @@ function renderDetail() {
   $('notes').textContent = item.notes.map(n => n.trim()).join('\n');
 }
 async function loadArtifact() {
-  const id = detailId, request = ++artifactRequest;
+  const id = detailId, version = items.find(item => item.id === id)?.version, request = ++artifactRequest;
   artifact = null;
   $('decide').hidden = true;
   $('approve-submit').disabled = true;
@@ -494,7 +500,7 @@ async function loadArtifact() {
     if (id !== detailId || request !== artifactRequest) return;
     // The renderer escapes all HTML first; this is the page's only innerHTML.
     $('artifact').innerHTML = rendered;
-    artifact = data;
+    artifact = { ...data, version };
     $('decide').hidden = false;
     $('approve-submit').disabled = false;
     const what = artifact.gate === 'intent' ? 'what will be done' : 'the plan';
@@ -513,7 +519,11 @@ async function loadArtifact() {
 }
 function updateCount() { $('approve-count').textContent = `${$('approve-words').value.trim().length} / 500`; }
 $('approve-words').addEventListener('input', () => { draftFor(detailId).words = $('approve-words').value; updateCount(); });
-$('reply-text').addEventListener('input', () => { draftFor(detailId).reply = $('reply-text').value; });
+$('reply-text').addEventListener('input', () => {
+  const draft = draftFor(detailId);
+  if (!draft.reply) draft.replyVersion = items.find(item => item.id === detailId)?.version;
+  draft.reply = $('reply-text').value;
+});
 $('artifact-reload').addEventListener('click', () => loadArtifact().then(() => $('artifact-title').focus()));
 $('artifact-title').tabIndex = -1;
 
@@ -529,16 +539,22 @@ $('approve-form').addEventListener('submit', async event => {
     $('approve-words').focus();
     return;
   }
+  const id = detailId, draft = draftFor(id);
   try {
-    const data = await api('/api/approve', { id: detailId, gate: artifact.gate, sha: artifact.sha, words });
-    draftFor(detailId).words = '';
-    $('approve-words').value = '';
-    updateCount();
+    const data = await api('/api/approve', { id, version: artifact.version, gate: artifact.gate, sha: artifact.sha, words });
+    draft.words = '';
+    if (detailId === id) {
+      $('approve-words').value = '';
+      updateCount();
+    }
     if (data.items) apply(data);
     announce('Approved');
-    $('decide').hidden = $('artifact-box').hidden = true;
-    $('detail-title').focus();
+    if (detailId === id) {
+      $('decide').hidden = $('artifact-box').hidden = true;
+      $('detail-title').focus();
+    }
   } catch (failure) {
+    if (detailId !== id) return;
     error.textContent = failure.status === 409 ? `${failure.message} Reload to see the current version.` : failure.message;
     error.hidden = false;
     $('artifact-reload').hidden = failure.status !== 409;
@@ -552,13 +568,15 @@ $('reply-form').addEventListener('submit', async event => {
   const error = $('reply-error');
   error.hidden = true;
   if (!text) { error.textContent = 'Write a reply first.'; error.hidden = false; $('reply-text').focus(); return; }
+  const id = detailId, draft = draftFor(id);
   try {
-    const data = await api('/api/item', { id: detailId, op: 'reply', text });
-    draftFor(detailId).reply = '';
-    $('reply-text').value = '';
+    const data = await api('/api/item', { id, version: draft.replyVersion, op: 'reply', text });
+    draft.reply = '';
+    if (detailId === id) $('reply-text').value = '';
     if (data.items) apply(data);
     announce('Reply sent');
   } catch (failure) {
+    if (detailId !== id) return;
     error.textContent = failure.message;
     error.hidden = false;
     $('reply-text').focus();

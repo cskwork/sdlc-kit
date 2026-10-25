@@ -86,6 +86,12 @@ function items(response, file) {
   return response.json.items;
 }
 
+// Ordinary actions read the snapshot they are about to change, as the page does.
+async function post(ctx, pathname, body) {
+  const snapshot = items(await request(ctx, '/api/items'), ctx.file).find(item => item.id === body.id);
+  return request(ctx, pathname, { method: 'POST', body: { version: snapshot?.version, ...body } });
+}
+
 function command(program, args, cwd) {
   return execFileSync(program, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
@@ -164,21 +170,21 @@ test('S3/S12: HTTP mutations add human history, edit, move, complete, undo, repl
   assert.match(readFileSync(ctx.file, 'utf8'), /widget#42/);
   list = items(await request(ctx, '/api/items', { method: 'POST', body: { text: 'Second' } }), ctx.file);
   const second = list.find(item => item.title === 'Second');
-  list = items(await request(ctx, '/api/item', { method: 'POST', body: { op: 'edit', id: second.id, title: 'Revised second' } }), ctx.file);
+  list = items(await post(ctx, '/api/item', { op: 'edit', id: second.id, title: 'Revised second' }), ctx.file);
   const revised = list.find(item => item.title === 'Revised second');
   assert.ok(revised);
-  list = items(await request(ctx, '/api/item', { method: 'POST', body: { op: 'move', id: revised.id, delta: -1 } }), ctx.file);
+  list = items(await post(ctx, '/api/item', { op: 'move', id: revised.id, delta: -1 }), ctx.file);
   assert.equal(list[0].id, revised.id);
-  list = items(await request(ctx, '/api/item', { method: 'POST', body: { op: 'done', id: revised.id } }), ctx.file);
+  list = items(await post(ctx, '/api/item', { op: 'done', id: revised.id }), ctx.file);
   assert.equal(list.find(item => item.title === 'Revised second').done, true);
   assert.match(readFileSync(ctx.file, 'utf8'), /human: done/);
-  list = items(await request(ctx, '/api/item', { method: 'POST', body: { op: 'undone', id: revised.id } }), ctx.file);
+  list = items(await post(ctx, '/api/item', { op: 'undone', id: revised.id }), ctx.file);
   assert.equal(list.find(item => item.title === 'Revised second').done, false);
   await core.wait(ctx.file, first.id, 'which environment?');
-  items(await request(ctx, '/api/item', { method: 'POST', body: { op: 'reply', id: first.id, text: 'Use the local environment' } }), ctx.file);
+  items(await post(ctx, '/api/item', { op: 'reply', id: first.id, text: 'Use the local environment' }), ctx.file);
   assert.match(readFileSync(ctx.file, 'utf8'), /human: reply — Use the local environment/);
   assert.doesNotMatch(readFileSync(ctx.file, 'utf8'), /waiting: which environment/);
-  list = items(await request(ctx, '/api/item', { method: 'POST', body: { op: 'delete', id: first.id } }), ctx.file);
+  list = items(await post(ctx, '/api/item', { op: 'delete', id: first.id }), ctx.file);
   assert.deepEqual(list.map(item => item.title), ['Revised second']);
   const unchanged = readFileSync(ctx.file, 'utf8');
   for (const body of [
@@ -256,16 +262,16 @@ test('S6/S7/S8: intent artifact bytes bind approval; stale approval and replies 
   assert.equal(shown.json.markdown, intent);
   assert.equal(shown.json.sha, createHash('sha256').update(intent).digest('hex'));
   writeFileSync(join(folder, 'intent.md'), intent + '\nEdited after the browser opened.\n');
-  const stale = await request(ctx, '/api/approve', { method: 'POST', body: { id: item.id, gate: 'intent', sha: shown.json.sha, words: 'approved the displayed scope' } });
+  const stale = await post(ctx, '/api/approve', { id: item.id, gate: 'intent', sha: shown.json.sha, words: 'approved the displayed scope' });
   assert.equal(stale.status, 409, stale.text);
   assert.match(stale.text, /changed since/i);
   gateClosed(child, 'intent', slug);
-  items(await request(ctx, '/api/item', { method: 'POST', body: { op: 'reply', id: item.id, text: 'Please keep the first outcome' } }), ctx.file);
+  items(await post(ctx, '/api/item', { op: 'reply', id: item.id, text: 'Please keep the first outcome' }), ctx.file);
   assert.match(readFileSync(ctx.file, 'utf8'), /human: reply — Please keep the first outcome/);
   gateClosed(child, 'intent', slug);
   shown = await request(ctx, `/api/artifact?id=${item.id}`);
   const words = 'approved the revised intent scope';
-  items(await request(ctx, '/api/approve', { method: 'POST', body: { id: item.id, gate: 'intent', sha: shown.json.sha, words } }), ctx.file);
+  items(await post(ctx, '/api/approve', { id: item.id, gate: 'intent', sha: shown.json.sha, words }), ctx.file);
   assert.match(sdlc(child, 'check', 'intent', slug), /GATE OPEN/);
   assert.ok(readFileSync(ctx.file, 'utf8').includes(`human: approved intent — "${words}"`));
 });
@@ -288,13 +294,13 @@ test('S6/S7: plan approval binds displayed bytes and targets the selected projec
   assert.equal(shown.json.gate, 'plan');
   assert.equal(realpathSync(shown.json.file), realpathSync(join(folderTwo, 'PLAN.md')));
   writeFileSync(join(folderTwo, 'PLAN.md'), plan + '\nA revised implementation detail.\n');
-  const stale = await request(ctx, '/api/approve', { method: 'POST', body: { id: item.id, gate: 'plan', sha: shown.json.sha, words: 'approved the displayed plan' } });
+  const stale = await post(ctx, '/api/approve', { id: item.id, gate: 'plan', sha: shown.json.sha, words: 'approved the displayed plan' });
   assert.equal(stale.status, 409, stale.text);
   assert.match(stale.text, /changed since/i);
   gateClosed(two, 'plan', slug);
   shown = await request(ctx, `/api/artifact?id=${item.id}`);
   const words = 'approved the revised plan and security risk';
-  items(await request(ctx, '/api/approve', { method: 'POST', body: { id: item.id, gate: 'plan', sha: shown.json.sha, words } }), ctx.file);
+  items(await post(ctx, '/api/approve', { id: item.id, gate: 'plan', sha: shown.json.sha, words }), ctx.file);
   assert.match(sdlc(two, 'check', 'plan', slug), /GATE OPEN/);
   gateClosed(one, 'plan', slug);
   assert.ok(readFileSync(ctx.file, 'utf8').includes(`human: approved plan — "${words}"`));
@@ -359,7 +365,7 @@ for (const channel of ['web', 'chat']) test(`B2: documented ${channel} approval 
   if (/When sdlc needs the human, run `wait/.test(instructions)) await core.wait(ctx.file, item.id, 'approve intent');
   if (channel === 'web') {
     const shown = await request(ctx, `/api/artifact?id=${item.id}`);
-    items(await request(ctx, '/api/approve', { method: 'POST', body: { id: item.id, gate: 'intent', sha: shown.json.sha, words: 'approved scope' } }), ctx.file);
+    items(await post(ctx, '/api/approve', { id: item.id, gate: 'intent', sha: shown.json.sha, words: 'approved scope' }), ctx.file);
   } else {
     sdlc(dir, 'approve', 'intent', slug, '--human', 'approved scope');
     execFileSync(process.execPath, [join(kit, 'todo', 'todo.mjs'), 'note', item.id, 'chat: approved intent — "approved scope"'], { cwd: dir, env: { ...process.env, SDLC_TODO: ctx.file } });
@@ -373,7 +379,7 @@ for (const channel of ['web', 'chat']) test(`B2: documented ${channel} approval 
   await core.wait(ctx.file, item.id, 'which environment?');
   if (channel === 'web') {
     const shown = await request(ctx, `/api/artifact?id=${item.id}`);
-    items(await request(ctx, '/api/approve', { method: 'POST', body: { id: item.id, gate: 'plan', sha: shown.json.sha, words: 'approved plan' } }), ctx.file);
+    items(await post(ctx, '/api/approve', { id: item.id, gate: 'plan', sha: shown.json.sha, words: 'approved plan' }), ctx.file);
   } else {
     sdlc(dir, 'approve', 'plan', slug, '--human', 'approved plan');
     execFileSync(process.execPath, [join(kit, 'todo', 'todo.mjs'), 'note', item.id, 'chat: approved plan — "approved plan"'], { cwd: dir, env: { ...process.env, SDLC_TODO: ctx.file } });
@@ -398,7 +404,116 @@ test('B3: symlinked project reads and approves the physical status store with a 
   assert.equal(shown.status, 200, shown.text);
   assert.equal(realpathSync(shown.json.file), realpathSync(join(status.store, 'work', slug, 'intent.md')));
   assert.match(shown.json.markdown, /Physical store/);
-  items(await request(ctx, '/api/approve', { method: 'POST', body: { id: item.id, gate: 'intent', sha: shown.json.sha, words: 'approved physical scope' } }), ctx.file);
+  items(await post(ctx, '/api/approve', { id: item.id, gate: 'intent', sha: shown.json.sha, words: 'approved physical scope' }), ctx.file);
   assert.match(sdlc(alias, 'check', 'intent', slug), /GATE OPEN/);
   gateClosed(logical, 'intent', slug);
 });
+
+
+// Explicit stale snapshots bypass the fresh-snapshot helper used by ordinary actions.
+const changedMessage = 'This item changed. Reload and try again.';
+async function duplicateSnapshot(ctx) {
+  for (const record of ['record A', 'record B']) {
+    const item = await core.add(ctx.file, 'Duplicate', { by: 'human' });
+    await core.note(ctx.file, item.id, record);
+  }
+  const list = items(await request(ctx, '/api/items'), ctx.file);
+  const first = list[0];
+  // The fallback lets the base server reach the behavioral assertion without a new export.
+  return { ...first, version: first.version || 'a'.repeat(64) };
+}
+for (const op of ['delete', 'move', 'done', 'edit', 'undone', 'reply']) {
+  test(`B1: stale ${op} refuses a duplicate that inherited the shown item's id`, async t => {
+    const ctx = await web(t);
+    const shown = await duplicateSnapshot(ctx);
+    await core.remove(ctx.file, shown.id);
+    await core.add(ctx.file, 'Tail');
+    const before = readFileSync(ctx.file, 'utf8');
+    const response = await request(ctx, '/api/item', { method: 'POST', body: {
+      id: shown.id, version: shown.version, op, delta: 1, title: 'Wrong rename', text: 'Wrong reply'
+    } });
+    assert.equal(response.status, 409, `stale ${op} must not change record B: ${response.text}`);
+    assert.equal(response.json.error, changedMessage);
+    assert.equal(readFileSync(ctx.file, 'utf8'), before, 'record B and order survive unchanged');
+    assert.ok(core.load(ctx.file).items[0].events.some(e => e.what === 'record B'));
+  });
+}
+for (const op of ['delete', 'move', 'done']) {
+  test(`B1: stale ${op} returns 409 when the shown id is gone`, async t => {
+    const ctx = await web(t);
+    const shown = await duplicateSnapshot(ctx);
+    await core.remove(ctx.file, shown.id);
+    await core.remove(ctx.file, shown.id);
+    const response = await request(ctx, '/api/item', { method: 'POST', body: {
+      id: shown.id, version: shown.version, op, delta: 1
+    } });
+    assert.equal(response.status, 409, response.text);
+    assert.equal(response.json.error, changedMessage);
+    assert.deepEqual(core.load(ctx.file).items, []);
+  });
+}
+test('B1: same-id external edits and omitted versions cannot mutate an item', async t => {
+  const ctx = await web(t);
+  const shown = await duplicateSnapshot(ctx);
+  await core.note(ctx.file, shown.id, 'external update');
+  const before = readFileSync(ctx.file, 'utf8');
+  for (const version of [shown.version, null, undefined]) {
+    const response = await request(ctx, '/api/item', { method: 'POST', body: { id: shown.id, version, op: 'delete' } });
+    assert.equal(response.status, 409, response.text);
+    assert.equal(response.json.error, changedMessage);
+    assert.equal(readFileSync(ctx.file, 'utf8'), before);
+  }
+});
+test('B1: approval checks the shown item inside the mutation lock before opening its gate', async t => {
+  const ctx = await web(t), dir = project(ctx.root), slug = 'stale-approval';
+  feature(dir, slug);
+  const item = await core.add(ctx.file, 'Approve shown item', { project: dir, slug });
+  const artifact = await request(ctx, `/api/artifact?id=${item.id}`);
+  const shown = items(await request(ctx, '/api/items'), ctx.file).find(i => i.id === item.id);
+  const version = shown.version || 'a'.repeat(64);
+  let entered;
+  const locked = new Promise(resolve => { entered = resolve; });
+  let release;
+  const hold = new Promise(resolve => { release = resolve; });
+  const writer = core.mutate(ctx.file, async model => {
+    entered();
+    await hold;
+    core.findItem(model, item.id).notes.push('  external edit while approval queued');
+  });
+  await locked;
+  const approval = request(ctx, '/api/approve', { method: 'POST', body: {
+    id: item.id, version, gate: 'intent', sha: artifact.json.sha, words: 'approved shown scope'
+  } });
+  release();
+  await writer;
+  const response = await approval;
+  assert.equal(response.status, 409, response.text);
+  assert.equal(response.json.error, changedMessage);
+  gateClosed(dir, 'intent', slug);
+  assert.doesNotMatch(readFileSync(ctx.file, 'utf8'), /human: approved/);
+});
+
+test('B1: snapshots expose sha256 of each serialized item block', async t => {
+  const ctx = await web(t);
+  await duplicateSnapshot(ctx);
+  const shown = items(await request(ctx, '/api/items'), ctx.file)[0];
+  const block = readFileSync(ctx.file, 'utf8').split('\n\n').find(block => block.startsWith('- [ ] Duplicate'));
+  assert.equal(shown.version, createHash('sha256').update(block).digest('hex'));
+});
+for (const scenario of ['missing target', 'missing version']) {
+  test(`B1: approval rejects a ${scenario} with the changed-target message`, async t => {
+    const ctx = await web(t), dir = project(ctx.root), slug = 'missing-approval';
+    feature(dir, slug);
+    const item = await core.add(ctx.file, 'Approve shown item', { project: dir, slug });
+    const artifact = await request(ctx, `/api/artifact?id=${item.id}`);
+    const shown = items(await request(ctx, '/api/items'), ctx.file)[0];
+    if (scenario === 'missing target') await core.remove(ctx.file, item.id);
+    const response = await request(ctx, '/api/approve', { method: 'POST', body: {
+      id: item.id, version: scenario === 'missing version' ? undefined : shown.version || 'a'.repeat(64),
+      gate: 'intent', sha: artifact.json.sha, words: 'approved shown scope'
+    } });
+    assert.equal(response.status, 409, response.text);
+    assert.equal(response.json.error, changedMessage);
+    gateClosed(dir, 'intent', slug);
+  });
+}
