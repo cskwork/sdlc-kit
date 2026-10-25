@@ -8,7 +8,7 @@ usage() {
   cat <<'USAGE'
 Usage: sdlc.sh init [--memory path] | new slug | status [slug] [--json]
        sdlc.sh next slug | check intent|plan slug
-       sdlc.sh approve intent|plan slug --human words|--agent review
+       sdlc.sh approve intent|plan slug --human words|--agent review [--sha hex]
        sdlc.sh review slug pass|fail [--uncommitted] [--repos "path ..."] note
        sdlc.sh score slug
        sdlc.sh close slug shipped|dropped reason | help | --version
@@ -469,7 +469,7 @@ case "$command" in
   next) [ "$#" -eq 1 ] || die 'next <slug>' 2; feature "$1"; derive; printf '%s %s: %s\n' "$STATE" "$phase" "$action"; exit "$exitcode";;
   check|approve)
     if [ "$command" = check ]; then [ "$#" -eq 2 ] || die 'check intent|plan <slug>' 2
-    else [ "$#" -eq 4 ] || die 'approve intent|plan <slug> --human|--agent note' 2; fi
+    else { [ "$#" -eq 4 ] || { [ "$#" -eq 6 ] && [ "$5" = --sha ] && [[ $6 =~ ^[0-9a-fA-F]{64}$ ]]; }; } || die 'approve intent|plan <slug> --human|--agent note [--sha hex]' 2; fi
     which=$1; case "$which" in intent|plan) :;; *) die 'gate must be intent or plan' 2;; esac
     feature "$2"
     if [ "$command" = check ]; then
@@ -482,7 +482,7 @@ case "$command" in
       read_intent; problems "$iproblems" || exit 1; problems "$questions" || exit 1
       if [ "$which" = intent ]; then
         if [ "$who" = agent ] && human_gate intent; then die 'intent needs --human approval'; fi; if [ "$who" = human ] && lnote=$(printf '%s' "${note//[\`*]/}" | tr '[:upper:]' '[:lower:]') && [ "$(printf '%s' "$lnote" | LC_ALL=C wc -c)" -ge 12 ] && [[ $answers == *"$lnote"* ]]; then die 'that note answers a blocking question; it does not approve this intent: show the human Bottom line, Risks and any assumed Clarity area, ask "is this what you want?" and record their reply'; fi
-        hash=$(sha < "$F/intent.md"); if [ "$ish" = "$hash" ]; then printf 'intent already approved\n'; exit; fi; problems "$cproblems" || exit 1
+        hash=$(sha < "$F/intent.md"); [ "$#" -eq 4 ] || [ "$hash" = "$(printf '%s' "$6" | tr 'A-F' 'a-f')" ] || die 'intent.md changed since it was shown'; if [ "$ish" = "$hash" ]; then printf 'intent already approved\n'; exit; fi; problems "$cproblems" || exit 1
         event; intent="$hash $who $seq $ts $note"
       else
         gate_intent || die "$greason"; read_plan; problems "$pproblems" || exit 1
@@ -494,7 +494,7 @@ case "$command" in
           note="$note ($annotation)"; kept=; for id in $scored; do case "; $removed;" in *"; $id;"*) :;; *) kept="${kept}${kept:+ }$id";; esac; done; scored=$kept
           for id in $(printf '%s' "$removed" | tr ';' ' '); do withdrawn="${withdrawn}${withdrawn:+ }$id"; done
         fi
-        hash=$(sha < "$F/PLAN.md")
+        hash=$(sha < "$F/PLAN.md"); [ "$#" -eq 4 ] || [ "$hash" = "$(printf '%s' "$6" | tr 'A-F' 'a-f')" ] || die 'PLAN.md changed since it was shown'
         if [ "$who" = agent ] && pending_plan && [ "$psh" = "$hash" ]; then die 'PLAN.md unchanged since Evidence routed to plan'; fi
         if [ "$psh" = "$hash" ] && [ "$pish" = "$ihash" ] && [ -z "$removed" ] && ! pending_plan && ! stopped; then printf 'plan already approved\n'; exit; fi
         # Only the human or a counted return to plan resets the review FAIL cap; an agent re-approval keeps it.
