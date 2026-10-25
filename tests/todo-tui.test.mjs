@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { spawn, execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import * as core from '../todo/core.mjs';
@@ -62,7 +62,7 @@ test('Done collapsed until Tab and expanded titles have dim strike styling', () 
   assert.match(render(state).join('\n'), /Done · 1/);
   assert.doesNotMatch(render(state).join('\n'), /완료된 작업/);
   const expanded = reduce(state, 'Tab').state;
-  assert.match(render(expanded, { color: true }).join('\n'), /\x1b\[2;9m✓ 완료된 작업/);
+  assert.match(render(expanded, { color: true }).join('\n'), /\x1b\[2;33;9m✓ 완료된 작업/);
   assert.equal(reduce(expanded, 'Tab').state.showDone, false);
 });
 test('color false has no ANSI, and file text cannot inject terminal sequences', () => {
@@ -186,13 +186,13 @@ async function until(predicate) {
     await delay(10);
   }
 }
-async function terminal(t, seed) {
+async function terminal(t, seed, web = false) {
   const root = mkdtempSync(join(tmpdir(), 'todo-tui-test-')), file = join(root, 'todo.md');
   await seed(file);
   const source = `import {runTui} from ${JSON.stringify(new URL('../todo/tui.mjs', import.meta.url).href)};
     process.stdin.isTTY = true; process.stdin.setRawMode = () => {};
     process.stdout.isTTY = true; process.stdout.columns = 60; process.stdout.rows = 12;
-    await runTui({file: process.env.SDLC_TODO, kit: ${JSON.stringify(fileURLToPath(new URL('../', import.meta.url)))}, web:false});`;
+    await runTui({file: process.env.SDLC_TODO, kit: ${JSON.stringify(fileURLToPath(new URL('../', import.meta.url)))}, web:${web}});`;
   const child = spawn(process.execPath, ['--input-type=module', '-e', source], {
     env: { ...process.env, SDLC_TODO: file, NO_COLOR: '' }, stdio: ['pipe', 'pipe', 'pipe']
   });
@@ -269,4 +269,106 @@ test('undo refuses a different duplicate with matching minute-resolution history
   await until(() => ui.screen().includes('Cannot undo: item changed elsewhere'));
   assert.equal(core.load(ui.file).items.filter(i => !i.done).length, 2);
   await ui.close();
+});
+
+const kit = fileURLToPath(new URL('../', import.meta.url));
+const intent = `# Intent
+## Understood as
+- O1: operator observes requested behavior.
+## Blocking questions
+- none
+## Delivery
+- Target: local
+- Authorized: no
+## Clarity
+| Area | State | How settled |
+|---|---|---|
+| Outcome | clear | operator's request |
+| Scope | clear | operator's request |
+| AS-IS | clear | observed with real CLI |
+| TO-BE | clear | operator's request |
+| Success | clear | O1 is CLI output |
+| Constraints | clear | none found in config.md |
+`;
+
+function setupProject(root) {
+  const dir = join(root, 'project'); mkdirSync(dir);
+  const run = (...args) => execFileSync('bash', [join(kit, 'sdlc.sh'), ...args], { cwd: dir, encoding: 'utf8' });
+  run('init'); run('new', 'startup');
+  writeFileSync(join(dir, '.sdlc', 'work', 'startup', 'intent.md'), intent);
+  return { dir, run };
+}
+for (const [state, web] of [['approved', false], ['approved', true], ['archived', false], ['missing', false]]) test(`B5: ${web ? 'web' : 'no-web'} startup syncs ${state} before the first usable frame`, async t => {
+  const ui = await terminal(t, async file => {
+    const { dir, run } = setupProject(dirname(file));
+    await core.add(file, 'Startup item', { project: dir, slug: 'startup' });
+    await core.sync(file, { kit });
+    if (state === 'approved') run('approve', 'intent', 'startup', '--human', 'approved scope');
+    if (state === 'archived') run('close', 'startup', 'dropped', 'no longer needed');
+    if (state === 'missing') rmSync(dir, { recursive: true, force: true });
+  }, web);
+  const current = core.load(ui.file).items[0];
+  assert.equal(current.sdlc.state, { approved: 'READY', archived: 'DONE', missing: 'BLOCKED' }[state],
+    'startup must reconcile cached NEEDS-HUMAN without R or a web server');
+  if (state === 'approved') assert.ok(!ui.screen().includes('approve intent --human'), 'no usable frame shows the stale approval wait');
+  if (state === 'archived') assert.match(ui.screen(), /0 open/);
+  if (state === 'missing') assert.match(ui.screen(), /blocked/);
+  await ui.close();
+});
+
+test('B5: startup sync failure restores raw mode, cursor and alternate screen', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'todo-tui-failure-')), file = join(root, 'todo.md');
+  writeFileSync(file, '## Open\n\n## Done\n');
+  writeFileSync(`${file}.lock`, 'live owner');
+  const source = `import {runTui} from ${JSON.stringify(new URL('../todo/tui.mjs', import.meta.url).href)};
+    process.stdin.isTTY = true; process.stdin.setRawMode = raw => process.stdout.write('RAW=' + raw + '\\n');
+    process.stdout.isTTY = true; process.stdout.columns = 60; process.stdout.rows = 12;
+    try { await runTui({file:process.env.SDLC_TODO, web:false}); }
+    catch (error) { process.stderr.write(error.message); process.exitCode = 1; }`;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', source], {
+    env: { ...process.env, SDLC_TODO: file }, stdio: ['pipe', 'pipe', 'pipe']
+  });
+  let output = '', error = '';
+  child.stdout.on('data', data => { output += data; }); child.stderr.on('data', data => { error += data; });
+  // The old implementation never syncs: quit it, then assert the missing failure.
+  const timer = setTimeout(() => child.stdin.write('q'), 2800);
+  t.after(() => { clearTimeout(timer); if (child.exitCode === null) child.kill('SIGKILL'); rmSync(root, { recursive: true, force: true }); });
+  const code = await new Promise(resolve => child.once('exit', resolve));
+  assert.equal(code, 1, 'startup must fail when sync cannot acquire the inbox lock');
+  assert.match(error, /timed out waiting for lock/);
+  assert.match(output, /RAW=false/);
+  assert.ok(output.includes('\x1b[?25h') && output.includes('\x1b[?1049l'), 'cursor and alternate screen restored');
+});
+
+test('Apple Notes palette uses yellow title, selection, waiting and dim done with readable plain glyphs', () => {
+  const state = { ...fixture(), showDone: true };
+  const colored = render(state, { color: true }).join('\n');
+  assert.match(colored, /\x1b\[1;33mTo-do/);
+  assert.match(colored, /\x1b\[33m› /);
+  assert.match(colored, /\x1b\[33m● /);
+  assert.match(colored, /\x1b\[2;33;9m✓ /);
+  assert.match(colored, /\x1b\[31m✕ /);
+  const plain = render(state, { color: false }).join('\n');
+  assert.doesNotMatch(plain, /\x1b/);
+  for (const glyph of ['○', '●', '✓', '✕', '◐']) assert.ok(plain.includes(glyph));
+});
+
+test('B5: resize during startup cannot draw cached state before sync completes', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'todo-tui-resize-')), file = join(root, 'todo.md');
+  const kitStub = join(root, 'kit'), entered = join(root, 'entered'), release = join(root, 'release'); mkdirSync(kitStub);
+  await core.add(file, 'Cached item', { project: root, slug: 'probe' });
+  writeFileSync(join(kitStub, 'sdlc.sh'), `touch "${entered}"\nwhile [ ! -f "${release}" ]; do sleep 0.01; done\nprintf '%s\\n' '{"features":[{"slug":"probe","phase":"build","state":"READY"}]}'\n`);
+  const source = `import {runTui} from ${JSON.stringify(new URL('../todo/tui.mjs', import.meta.url).href)};
+    import fs from 'node:fs';
+    process.stdin.isTTY=true;process.stdin.setRawMode=()=>{};process.stdout.isTTY=true;
+    process.stdout.columns=60;process.stdout.rows=12;
+    const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(entered)})){clearInterval(timer);process.stdout.emit('resize');process.stdout.write('RESIZED');}},5);
+    await runTui({file:process.env.SDLC_TODO,kit:${JSON.stringify(kitStub)},web:false});`;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', source], { env: { ...process.env, SDLC_TODO: file } });
+  let screen = '', error = ''; child.stdout.on('data', d => { screen += d; }); child.stderr.on('data', d => { error += d; });
+  const exited = new Promise(resolve => child.once('exit', resolve));
+  t.after(async () => { if (child.exitCode === null) child.kill('SIGKILL'); await exited; rmSync(root, { recursive: true, force: true }); });
+  try { await until(() => screen.includes('RESIZED')); assert.ok(!screen.includes('To-do'), 'resize cannot display an unsynced inbox'); }
+  finally { writeFileSync(release, 'sync may finish'); }
+  await until(() => screen.includes('To-do')); child.stdin.write('q'); assert.equal(await exited, 0, error);
 });

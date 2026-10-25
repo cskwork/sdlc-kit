@@ -7,24 +7,19 @@ const el = (tag, className, text) => {
   return node;
 };
 
-// Token: the terminal opens the page with #t=<token>; keep it for this tab, then clear the address bar.
-const TOKEN_KEY = 'todo.token', DRAFT_KEY = 'todo.draft';
+// Token stays in page memory. Keep the terminal's fragment so a reload can read it again.
 let openOnLoad = '';
+let token = '';
 {
   const hash = location.hash.slice(1);
   const params = new URLSearchParams(hash.includes('=') ? hash : '');
-  const fresh = params.get('t');
+  token = params.get('t') || '';
   if (!hash.includes('=') && /^[0-9a-f]{6}(?:-\d+)?$/.test(hash)) openOnLoad = hash;
   if (params.get('id')) openOnLoad = params.get('id');
-  if (fresh && fresh !== sessionStorage.getItem(TOKEN_KEY)) {
-    sessionStorage.removeItem(DRAFT_KEY);
-    sessionStorage.setItem(TOKEN_KEY, fresh);
-  }
-  if (hash) history.replaceState(null, '', location.pathname + location.search);
 }
-const token = sessionStorage.getItem(TOKEN_KEY) || '';
 
 let items = [], file = '';
+let seenSnapshot = false, changedAt = null;
 const drafts = new Map(); // item id -> {reply, words}
 
 // ---------- server ----------
@@ -125,14 +120,35 @@ function buildRow(item) {
   li.append(check, main);
   const refs = { check, title, info, sig: '' };
   if (!item.done) {
+    refs.waitLine = el('div', 'wait-line');
+    refs.waitLabel = el('span', 'wait-label', 'Needs you');
+    refs.waitWhat = el('span');
+    refs.review = button('', 'review', 'Review');
+    refs.review.className = 'text-button';
+    refs.waitLine.append(refs.waitLabel, refs.waitWhat, refs.review);
+    main.append(refs.waitLine);
     const tools = el('div', 'tools');
+    tools.id = `tools-${item.id}`;
+    refs.more = button('', 'more', '⋯');
+    refs.more.className = 'more icon';
+    const dots = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    dots.setAttribute('viewBox', '0 0 20 20');
+    dots.setAttribute('aria-hidden', 'true');
+    for (const x of [4, 10, 16]) {
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', x); dot.setAttribute('cy', '10'); dot.setAttribute('r', '1.5');
+      dots.append(dot);
+    }
+    refs.more.replaceChildren(dots);
+    refs.more.setAttribute('aria-expanded', 'false');
+    refs.more.setAttribute('aria-controls', tools.id);
     refs.open = button('', 'open', 'Details');
     refs.open.className = 'quiet';
     refs.up = button('', 'up', '↑');
     refs.down = button('', 'down', '↓');
     refs.del = button('', 'delete', '✕');
     tools.append(refs.open, refs.up, refs.down, refs.del);
-    li.append(tools);
+    li.append(refs.more, tools);
   } else {
     refs.when = el('span', 'when');
     main.append(refs.when);
@@ -150,6 +166,12 @@ function updateRow(li, item) {
   if (!item.done) r.title.setAttribute('aria-label', `${item.title}. Press Enter to rename.`);
   if (r.when) r.when.textContent = doneAt(item) ? `Done ${doneAt(item)}` : '';
   if (r.open) {
+    const needsYou = item.id === items.find(i => !i.done && i.status === 'waiting')?.id;
+    li.classList.toggle('needs-you', needsYou);
+    r.waitLine.hidden = !needsYou;
+    r.waitWhat.textContent = whatWaits(item);
+    r.review.setAttribute('aria-label', `Review "${item.title}"`);
+    r.more.setAttribute('aria-label', `Actions for "${item.title}"`);
     r.open.setAttribute('aria-label', `Details for "${item.title}"`);
     r.up.setAttribute('aria-label', `Move "${item.title}" up`);
     r.down.setAttribute('aria-label', `Move "${item.title}" down`);
@@ -162,7 +184,7 @@ function updateRow(li, item) {
   r.sig = sig;
   const parts = [];
   if (!item.done) {
-    if (item.status === 'waiting') parts.push(chip('Needs you', 'badge wait'));
+    if (item.status === 'waiting') parts.push(chip('Waiting', 'badge wait'));
     else if (item.status === 'blocked') {
       parts.push(chip('Blocked', 'badge blocked'));
       parts.push(chip(item.sdlc?.action || 'Unknown error', 'row-error'));
@@ -235,13 +257,18 @@ function apply(data) {
   $('done-box').hidden = done.length === 0;
   $('done-count').textContent = String(done.length);
   $('file').textContent = file ? `Saved in ${file}` : '';
-  const first = waiting[0];
-  $('needs').hidden = !first;
-  if (first) {
-    $('needs-name').textContent = first.title;
-    $('needs-what').textContent = [whatWaits(first), first.project && basename(first.project)].filter(Boolean).join(' · ');
-    $('needs-review').dataset.id = first.id;
-    $('needs-review').setAttribute('aria-label', `Review "${first.title}"`);
+  const lastChange = items.flatMap(item => item.events).map(event => event.at).sort().at(-1);
+  // The API has event times but no file mtime; observe subsequent edits, moves and deletions here.
+  if (!seenSnapshot) changedAt = lastChange ? new Date(lastChange.replace(' ', 'T')) : null;
+  else if (JSON.stringify([...before.values()]) !== JSON.stringify(items)) changedAt = new Date();
+  seenSnapshot = true;
+  const changed = $('changed');
+  changed.hidden = !changedAt;
+  if (changedAt) {
+    if (!Number.isNaN(changedAt.getTime())) {
+      changed.dateTime = changedAt.toISOString();
+      changed.textContent = new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeStyle: 'short' }).format(changedAt);
+    } else changed.hidden = true;
   }
   if (detailId) renderDetail();
   return before;
@@ -329,7 +356,11 @@ function wireList(list) {
     if (!target) return;
     const li = rowOf(target);
     const role = target.dataset.role;
-    if (role === 'open') openDetail(li.dataset.id, target);
+    if (role === 'open' || role === 'review') openDetail(li.dataset.id, target);
+    else if (role === 'more') {
+      const expanded = li.classList.toggle('actions-open');
+      target.setAttribute('aria-expanded', String(expanded));
+    }
     else if (role === 'up') move(li, -1);
     else if (role === 'down') move(li, 1);
     else if (role === 'delete') remove(li);
@@ -340,7 +371,11 @@ function wireList(list) {
   list.addEventListener('keydown', event => {
     const li = rowOf(event.target);
     if (!li || li._item.done) return;
-    if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown') && !li.classList.contains('editing')) {
+    if (event.key === 'Escape' && li.classList.contains('actions-open') && !li.classList.contains('editing')) {
+      li.classList.remove('actions-open');
+      li._refs.more.setAttribute('aria-expanded', 'false');
+      li._refs.more.focus();
+    } else if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown') && !li.classList.contains('editing')) {
       event.preventDefault();
       move(li, event.key === 'ArrowUp' ? -1 : 1);
     } else if ((event.key === 'Enter' || event.key === ' ') && event.target.tagName === 'SPAN' && event.target.dataset.role === 'title') {
@@ -354,17 +389,17 @@ wireList($('done'));
 
 // ---------- add ----------
 const addText = $('add-text');
-addText.value = sessionStorage.getItem(DRAFT_KEY) || '';
-addText.addEventListener('input', () => sessionStorage.setItem(DRAFT_KEY, addText.value));
+let adding = false;
 $('add').addEventListener('submit', async event => {
   event.preventDefault();
   const text = addText.value.trim();
-  if (!text) return;
+  if (!text || adding) return;
+  adding = true;
   try {
     await mutate('/api/items', { text }, 'Added');
-    addText.value = '';
-    sessionStorage.removeItem(DRAFT_KEY);
+    if (addText.value.trim() === text) addText.value = '';
   } catch { /* draft stays */ }
+  finally { adding = false; }
   addText.focus();
 });
 document.addEventListener('keydown', event => {
@@ -536,7 +571,6 @@ dialog.addEventListener('close', () => {
   if (opener?.isConnected && opener.getClientRects().length) opener.focus();
   else (rows.get(id)?.querySelector('[data-role="open"]') || addText).focus();
 });
-$('needs-review').addEventListener('click', event => openDetail(event.currentTarget.dataset.id, event.currentTarget));
 
 // ---------- live updates ----------
 function setLive(state, text) {
@@ -577,7 +611,7 @@ function connect() {
 
 if (!token) {
   setLive('off', 'Not connected');
-  showError('Open this page from the link printed in the terminal.');
+  showError('Open the link printed in your terminal (or press w in the TUI)');
 } else {
   api('/api/items').then(received).catch(error => showError(error.message));
   connect();

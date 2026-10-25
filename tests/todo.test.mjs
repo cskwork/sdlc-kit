@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -533,4 +533,196 @@ test('CLI malformed commands exit 2 and missing ids exit 1 without altering the 
     checkCode(await cli(file, args), 1);
   }
   assert.equal(readFileSync(file, 'utf8'), before);
+});
+
+// Pause only the stale stat, preserving the review's two-reclaimer interleaving.
+test('B1: two stale reclaimers preserve both successful writes', async t => {
+  const { root, file } = scratch(t);
+  await core.add(file, 'Original');
+  writeFileSync(`${file}.lock`, 'crashed owner');
+  const stale = new Date(Date.now() - 11000);
+  utimesSync(`${file}.lock`, stale, stale);
+  const observed = join(root, 'observed'), resume = join(root, 'resume'), restored = join(root, 'restored');
+  const source = `import fs from 'node:fs';
+    import * as core from ${JSON.stringify(new URL('../todo/core.mjs', import.meta.url).href)};
+    const file = ${JSON.stringify(file)}, observed = ${JSON.stringify(observed)}, resume = ${JSON.stringify(resume)}, restored = ${JSON.stringify(restored)};
+    const stat = fs.statSync, link = fs.linkSync;
+    let paused = false;
+    fs.statSync = function(name, ...args) {
+      const value = stat.call(this, name, ...args);
+      if (name === file + '.lock' && !paused) {
+        paused = true; fs.writeFileSync(observed, 'stale stat read');
+        const deadline = Date.now() + 5000;
+        while (!fs.existsSync(resume)) {
+          if (Date.now() > deadline) throw new Error('parent did not resume stale reclaimer');
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+        }
+      }
+      return value;
+    };
+    fs.linkSync = function(from, to) {
+      const value = link.call(this, from, to);
+      if (to === file + '.lock') fs.writeFileSync(restored, 'successor restored');
+      return value;
+    };
+    await core.add(file, 'Concurrent A');`;
+  const a = spawn(process.execPath, ['--input-type=module', '-e', source]);
+  let error = '', exited = false;
+  a.stderr.on('data', data => { error += data; });
+  const finished = new Promise(resolve => a.once('exit', code => { exited = true; resolve(code); }));
+  t.after(() => { if (!exited) a.kill('SIGKILL'); });
+  const until = async predicate => {
+    const deadline = Date.now() + 5000;
+    while (!predicate()) {
+      assert.ok(Date.now() < deadline, 'interleaving reached its scheduled step');
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+  };
+  await until(() => existsSync(observed));
+  let release, held;
+  const loaded = new Promise(resolve => { held = resolve; });
+  const b = core.mutate(file, async model => {
+    model.items[0].title = 'Held B';
+    held();
+    await new Promise(resolve => { release = resolve; });
+  });
+  await loaded;
+  try {
+    writeFileSync(resume, 'resume A with its stale observation');
+    await until(() => exited || existsSync(restored));
+  } finally { release(); }
+  await b;
+  assert.equal(await finished, 0, error);
+  assert.deepEqual(core.load(file).items.map(item => item.title), ['Held B', 'Concurrent A'],
+    'successful A must survive B committing its older model');
+});
+
+test('B1: sync releases the inbox lock while sdlc status runs', async t => {
+  const { root, file } = scratch(t);
+  const kitStub = join(root, 'kit'); mkdirSync(kitStub);
+  writeFileSync(join(kitStub, 'sdlc.sh'), `if [ -e "$SDLC_TODO.lock" ]; then echo 'inbox lock held during status' >&2; exit 1; fi\nprintf '%s\\n' '{"features":[{"slug":"probe","phase":"build","state":"READY"}]}'\n`);
+  const item = await core.add(file, 'Status', { project: root, slug: 'probe' });
+  const old = process.env.SDLC_TODO; process.env.SDLC_TODO = file;
+  try {
+    const result = await core.next(file, { kit: kitStub });
+    assert.equal(result.code, 0, result.item?.sdlc?.action);
+    assert.equal(result.item.id, item.id);
+  } finally { if (old === undefined) delete process.env.SDLC_TODO; else process.env.SDLC_TODO = old; }
+});
+
+test('B1: displaced owner retries before committing an older snapshot', async t => {
+  const { file } = scratch(t);
+  await core.add(file, 'Original');
+  let calls = 0;
+  await core.mutate(file, async model => {
+    if (calls++ === 0) {
+      const displaced = `${file}.displaced`;
+      // Simulate ownership lost during an asynchronous operation.
+      const { renameSync, unlinkSync } = await import('node:fs');
+      renameSync(`${file}.lock`, displaced);
+      await core.add(file, 'Successor write');
+      unlinkSync(displaced);
+    }
+    model.items[0].title = 'Updated original';
+  });
+  assert.deepEqual(core.load(file).items.map(item => item.title), ['Updated original', 'Successor write']);
+  assert.equal(calls, 2, 'the stale model must be discarded and the mutation reapplied');
+});
+
+test('B1: a delayed reclaimer cannot open a commit window or duplicate archive entries', async t => {
+  const { root, file } = scratch(t);
+  await core.add(file, 'Original');
+  const model = core.load(file);
+  for (let i = 0; i < 32; i++) model.items.push({ ...structuredClone(model.items[0]), title: `Done ${i}`, done: true });
+  writeFileSync(file, core.serialize(model));
+  writeFileSync(file + '.lock', 'crashed owner');
+  const stale = new Date(Date.now() - 11000); utimesSync(file + '.lock', stale, stale);
+  const observed = join(root, 'observed'), resume = join(root, 'resume');
+  const committing = join(root, 'committing'), commit = join(root, 'commit');
+  const moved = join(root, 'moved'), restore = join(root, 'restore'), reclaiming = join(root, 'reclaiming');
+  const prelude = `import fs from 'node:fs'; import * as core from ${JSON.stringify(new URL('../todo/core.mjs', import.meta.url).href)};
+    const file=${JSON.stringify(file)};
+    function wait(name) { const end=Date.now()+5000; while(!fs.existsSync(name)) { if(Date.now()>end) throw Error('schedule timed out: '+name); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,5); } }`;
+  const child = source => {
+    const proc = spawn(process.execPath, ['--input-type=module', '-e', prelude + source]);
+    let error = '', exited = false; proc.stdout.resume(); proc.stderr.on('data', d => { error += d; });
+    const done = new Promise(resolve => proc.once('exit', code => { exited = true; resolve({ code, error }); }));
+    t.after(() => { if (!exited) proc.kill('SIGKILL'); });
+    return done;
+  };
+  const until = async predicate => {
+    const deadline = Date.now() + 5000;
+    while (!predicate()) { assert.ok(Date.now() < deadline, 'scheduled writer reached its pause'); await new Promise(r => setTimeout(r, 5)); }
+  };
+  const c = child(`const stat=fs.statSync, rename=fs.renameSync; let paused=false;
+    fs.statSync=function(name,...args) { const value=stat.call(this,name,...args); if(name===file+'.lock'&&!paused) { paused=true; fs.writeFileSync(${JSON.stringify(observed)},'observed'); wait(${JSON.stringify(resume)}); fs.writeFileSync(${JSON.stringify(reclaiming)},'resumed'); } return value; };
+    fs.renameSync=function(from,to) { const value=rename.call(this,from,to); if(from===file+'.lock') { fs.writeFileSync(${JSON.stringify(moved)},'moved'); wait(${JSON.stringify(restore)}); } return value; };
+    await core.add(file,'Concurrent C');`);
+  await until(() => existsSync(observed));
+  const b = child(`const rename=fs.renameSync; let paused=false;
+    fs.renameSync=function(from,to) { if(to===file&&!paused) { paused=true; fs.writeFileSync(${JSON.stringify(committing)},'owner checked, before rename'); wait(${JSON.stringify(commit)}); } return rename.call(this,from,to); };
+    await core.mutate(file, model => { model.items[0].title='Held B'; });`);
+  await until(() => existsSync(committing));
+  let d;
+  try {
+    writeFileSync(resume, 'resume stale reclaimer');
+    await until(() => existsSync(reclaiming));
+    await new Promise(r => setTimeout(r, 100));
+    d = core.add(file, 'Concurrent D');
+    // Before the fix, C opens a pathname gap, so D commits an older model.
+    if (existsSync(moved)) await d;
+  } finally { writeFileSync(restore, 'restore'); writeFileSync(commit, 'commit'); }
+  const [resultB, resultC] = await Promise.all([b, c]);
+  await d;
+  assert.equal(resultB.code, 0, resultB.error); assert.equal(resultC.code, 0, resultC.error);
+  assert.deepEqual(core.load(file).items.filter(i => !i.done).map(i => i.title).sort(), ['Concurrent C', 'Concurrent D', 'Held B'],
+    'each successful writer survives the delayed reclamation and final rename');
+  const archived = core.load(join(root, 'todo-archive.md')).items.map(i => i.title);
+  assert.equal(archived.length, 2, 'one archive rotation, even when reclamation overlaps commit');
+  assert.equal(new Set(archived).size, 2, 'overflow records must not be appended twice');
+});
+
+test('B1: dead-process markers restore moved locks and are removed without stranding writers', async t => {
+  const { root, file } = scratch(t);
+  await core.add(file, 'Original');
+  const child = spawn(process.execPath, ['-e', '']);
+  const pid = child.pid; await new Promise(resolve => child.once('exit', resolve));
+  const reclaim = `${file}.lock.reclaim-${pid}-00000000-0000-0000-0000-000000000000`;
+  const commit = `${file}.lock.commit-${pid}-00000000-0000-0000-0000-000000000000`;
+  writeFileSync(reclaim, ''); writeFileSync(commit, ''); writeFileSync(reclaim + '.moved', 'crashed owner');
+  const stale = new Date(Date.now() - 11000); utimesSync(reclaim + '.moved', stale, stale);
+  await core.add(file, 'Recovered');
+  assert.deepEqual(core.load(file).items.map(i => i.title), ['Original', 'Recovered']);
+  assert.deepEqual(readdirSync(root).filter(name => name.startsWith('todo.md.lock')), [], 'dead markers and moved locks are cleaned up');
+});
+
+test('B1: even an old commit marker belonging to a live process prevents reclamation', async t => {
+  const { file } = scratch(t);
+  await core.add(file, 'Original'); const before = readFileSync(file, 'utf8');
+  const marker = `${file}.lock.commit-${process.pid}-00000000-0000-0000-0000-000000000000`;
+  writeFileSync(marker, ''); writeFileSync(file + '.lock', 'stale observed owner');
+  const stale = new Date(Date.now() - 11000); utimesSync(marker, stale, stale); utimesSync(file + '.lock', stale, stale);
+  await assert.rejects(core.add(file, 'Cannot enter a live commit'), /timed out waiting for lock/);
+  assert.equal(readFileSync(file, 'utf8'), before);
+  assert.ok(existsSync(marker), 'age cannot retire a live process marker');
+});
+
+test('B1: sync retries when a new slug is inserted while status runs outside the lock', async t => {
+  const { root, file } = scratch(t), kitStub = join(root, 'kit'); mkdirSync(kitStub);
+  const entered = join(root, 'entered'), release = join(root, 'release'), calls = join(root, 'calls');
+  writeFileSync(join(kitStub, 'sdlc.sh'), `echo "$2" >> "${calls}"\nif [ ! -f "${entered}" ]; then touch "${entered}"; while [ ! -f "${release}" ]; do sleep 0.01; done; fi\nif [ "$2" = new ]; then state=NEEDS-HUMAN; else state=READY; fi\nprintf '{"features":[{"slug":"%s","phase":"intent","state":"%s","action":"approve intent --human"}]}\\n' "$2" "$state"\n`);
+  await core.add(file, 'Old item', { project: root, slug: 'old' });
+  const reading = core.next(file, { kit: kitStub });
+  const deadline = Date.now() + 4000;
+  while (!existsSync(entered)) { assert.ok(Date.now() < deadline, 'status entered'); await new Promise(r => setTimeout(r, 5)); }
+  let added;
+  try {
+    added = await core.add(file, 'New first item', { project: root, slug: 'new' });
+    await core.move(file, added.id, -1);
+  } finally { writeFileSync(release, 'resume status'); }
+  const result = await reading;
+  assert.equal(result.code, 10, 'a concurrently inserted slug must be synced before it can be selected');
+  assert.equal(result.item.id, added.id);
+  assert.equal(result.item.sdlc.state, 'NEEDS-HUMAN');
+  assert.ok(readFileSync(calls, 'utf8').includes('new'), 'the new head was queried after the snapshot changed');
 });

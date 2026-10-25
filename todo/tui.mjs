@@ -44,7 +44,7 @@ const waiting = item => item?.status === 'waiting';
 const waitText = item => item.waiting || item.sdlc?.action || 'Needs your decision';
 const doneTime = item => [...(item.events || [])].reverse().find(e => /^(done|DONE)(?:$| —)/.test(e.what))?.at || '';
 function status(item) {
-  if (item.done) return ['✓', 'done', '2'];
+  if (item.done) return ['✓', 'done', '2;33'];
   if (item.status === 'blocked') return ['✕', 'blocked', '31'];
   if (waiting(item)) return ['●', 'needs you', '33'];
   if (item.sdlc?.slug) return ['◐', 'in progress', '36'];
@@ -87,7 +87,7 @@ export function render(state, { width = 80, height = 24, color = false } = {}) {
   const paint = (text, code) => color && code ? `\x1b[${code}m${text}\x1b[0m` : text;
   const items = state.items || [], open = items.filter(i => !i.done);
   // Only header URLs and detail text wrap; inbox rows never wrap.
-  const lines = headerLines(state, width).map((line, i) => i ? paint(line, '2') : line);
+  const lines = headerLines(state, width).map((line, i) => i ? paint(line, '2') : paint(line, '1;33'));
   const capacity = Math.max(0, height - lines.length - 2), item = selected(state);
   let body;
   if (state.view === 'help' || state.view === 'details' && item) {
@@ -107,7 +107,7 @@ export function render(state, { width = 80, height = 24, color = false } = {}) {
         (current.link?.url ? core.linkLabel(current.link.url) : ''), current.sdlc?.phase].filter(Boolean).join(' · '));
       const showMeta = meta && width >= 72 && widthOf(meta) <= Math.floor(width / 3);
       const title = clip(current.title, width - widthOf(prefix) - (showMeta ? widthOf(meta) + 2 : 0));
-      let row = `${active ? '›' : ' '} ` + paint(`${glyph} ${title}`, current.done ? '2;9' : code);
+      let row = paint(`${active ? '›' : ' '} `, active ? '33' : '') + paint(`${glyph} ${title}`, current.done ? '2;33;9' : code);
       if (showMeta) row += ' '.repeat(Math.max(2, width - widthOf(prefix + title) - widthOf(meta))) + paint(meta, '2');
       rows.push(row);
       if (waiting(current)) rows.push(paint(clip(`    ${waitText(current)} · w: read and decide in the browser`, width), '2'));
@@ -241,8 +241,9 @@ export async function runTui({ file, kit, web }) {
   let server, webStart, stopWatch, messageTimer, stopped = false, failure, queue = Promise.resolve(), finish;
   const finished = new Promise(resolve => { finish = resolve; });
   const wasRaw = input.isRaw, wasFlowing = input.readableFlowing;
+  let ready = false;
   const draw = () => {
-    if (stopped) return;
+    if (stopped || !ready) return;
     state.width = output.columns || 80; state.height = output.rows || 24;
     const color = !Object.hasOwn(process.env, 'NO_COLOR') && process.env.TERM !== 'dumb' && (output.getColorDepth?.() || 1) > 1;
     output.write('\x1b[H' + render(state, { width: output.columns || 80, height: output.rows || 24, color })
@@ -376,8 +377,11 @@ export async function runTui({ file, kit, web }) {
   try {
     process.on('SIGINT', sigint); process.on('SIGTERM', sigterm);
     process.on('uncaughtException', fatal); process.on('unhandledRejection', fatal); output.on('resize', refresh);
-    emitKeypressEvents(input); input.on('keypress', keypress);
-    input.setRawMode(true); input.resume(); output.write('\x1b[?1049h\x1b[?25l\x1b[?7l');
+    input.setRawMode(true); output.write('\x1b[?1049h\x1b[?25l\x1b[?7l');
+    await core.sync(file, { kit });
+    if (stopped) { if (failure) throw failure; return; }
+    state.items = core.load(file).items; ready = true;
+    emitKeypressEvents(input); input.on('keypress', keypress); input.resume();
     stopWatch = core.watch(file, refresh); draw();
     if (web) webStart = import('./web.mjs').then(({ startWeb }) => startWeb({ file, kit, port: 0, open: false,
       onUrl: url => { state.webUrl = url; draw(); } }))

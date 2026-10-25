@@ -159,6 +159,8 @@ It includes Claude Code `/loop`, cron/launchd and Paseo recipes; the kit never r
 
 `next` exits `0` workable, `10` waiting for the human, `20` blocked with error text, or `30` nothing to do.
 Agents must stop at a waiting or blocked first item and never skip to a lower one.
+Gate approvals and intent blocking questions surface through sync; the agent stops without adding an explicit wait.
+Use `wait` only for questions sdlc.sh does not track, such as which project or a question outside an sdlc artifact.
 Decide in the TUI, web page or chat; replies inform the artifact and never count as approval.
 The web page shows intent or plan before approval.
 
@@ -167,7 +169,8 @@ Done keeps 30 items; older ones move to `todo-archive.md` beside the to-do file.
 History records local time as `YYYY-MM-DD HH:MM`, with the author and action.
 You can edit the file directly; saving an old editor buffer can overwrite newer changes.
 
-Web access stays on `127.0.0.1`, with Host/Origin checks and a per-run token never written to disk.
+Web access stays on `127.0.0.1`, with Host/Origin checks and a per-run token held in memory by the server and page.
+The kit never writes the token to disk; the browser may keep the opened URL in history. The token dies when the process exits.
 Approve binds the bytes shown through `sdlc.sh approve <intent|plan> <slug> --human "<words>" --sha <hex>`; changed bytes are refused.
 Same-user programs are outside this boundary, as with `--human`.
 
