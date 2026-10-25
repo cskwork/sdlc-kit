@@ -91,7 +91,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   const token = randomBytes(16).toString('hex'), expected = Buffer.from(token);
   const authorized = value => typeof value === 'string' && Buffer.byteLength(value) === expected.length && timingSafeEqual(Buffer.from(value), expected);
   const clients = new Set();
-  const payload = () => ({ items: core.load(file).items, file });
+  const payload = () => ({ items: core.load(file).items.map(item => ({ ...item, version: core.itemVersion(item) })), file });
   const sendEvent = (res, value, event = '') => res.write(`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(value)}\n\n`);
   const broadcast = () => {
     try { const value = payload(); for (const res of clients) sendEvent(res, value); }
@@ -145,36 +145,36 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
       if (url.pathname === '/api/items') {
         await core.add(file, text(body.text, 'text'), { by: 'human' });
       } else if (url.pathname === '/api/item') {
-        const item = itemFor(file, body.id);
+        const id = body.id, version = body.version ?? null;
         switch (body.op) {
-          case 'edit': await core.edit(file, item.id, { title: text(body.title, 'title') }); break;
+          case 'edit': await core.edit(file, id, { title: text(body.title, 'title') }, version); break;
           case 'move':
             if (body.delta !== 1 && body.delta !== -1) fail(400, 'invalid delta');
-            await core.move(file, item.id, body.delta); break;
-          case 'done': await core.done(file, item.id, '', 'human'); break;
+            await core.move(file, id, body.delta, version); break;
+          case 'done': await core.done(file, id, '', 'human', version); break;
           case 'undone':
-            await core.mutate(file, model => {
-              const current = core.findItem(model, item.id);
+            await core.update(file, id, (current, model) => {
               current.done = false;
               current.events.push({ at: core.stamp(), who: 'human', what: 'undone' });
               model.items.splice(model.items.indexOf(current), 1);
               const firstDone = model.items.findIndex(other => other.done);
               model.items.splice(firstDone < 0 ? model.items.length : firstDone, 0, current);
-            }); break;
-          case 'delete': await core.remove(file, item.id); break;
-          case 'reply': await core.reply(file, item.id, text(body.text, 'reply')); break;
+            }, version); break;
+          case 'delete': await core.remove(file, id, version); break;
+          case 'reply': await core.reply(file, id, text(body.text, 'reply'), version); break;
           default: fail(400, 'invalid operation');
         }
       } else if (url.pathname === '/api/approve') {
         const words = text(body.words, 'words', 500);
         if (!['intent', 'plan'].includes(body.gate) || typeof body.sha !== 'string' || !/^[a-f0-9]{64}$/i.test(body.sha)) fail(400, 'invalid approval');
         await core.sync(file, { kit });
-        const item = itemFor(file, body.id);
-        if (approvalGate(item) !== body.gate) fail(409, 'approval gate changed');
-        try {
-          await execute('bash', [path.join(kit, 'sdlc.sh'), 'approve', body.gate, item.sdlc.slug, '--human', words, '--sha', body.sha], { cwd: projectPath(item.project) });
-        } catch (error) { fail(409, error.stderr || error.message); }
-        await core.approved(file, item.id, body.gate, words);
+        await core.update(file, body.id, async item => {
+          if (approvalGate(item) !== body.gate) fail(409, 'approval gate changed');
+          try {
+            await execute('bash', [path.join(kit, 'sdlc.sh'), 'approve', body.gate, item.sdlc.slug, '--human', words, '--sha', body.sha], { cwd: projectPath(item.project) });
+          } catch (error) { fail(409, error.stderr || error.message); }
+          item.events.push({ at: core.stamp(), who: 'human', what: `approved ${body.gate} — "${words}"` });
+        }, body.version ?? null);
         await core.sync(file, { kit });
       } else { json(404, { error: 'not found' }); return; }
       json(200, payload());

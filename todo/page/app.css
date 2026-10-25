@@ -142,7 +142,7 @@ a.chip { min-height: 44px; min-width: 44px; }
 /* done */
 .done-box { margin-top: 1.5rem; }
 .done-box summary { min-height: 44px; padding: 0.6rem 0; color: var(--control); font-size: 0.85rem; cursor: pointer; }
-.done-rows .row { grid-template-columns: 44px minmax(0, 1fr); }
+.done-rows .row { grid-template-columns: 44px minmax(0, 1fr) auto; }
 .done-rows .title { text-decoration: line-through; color: var(--muted); }
 .when { display: block; color: var(--muted); font-size: 0.8rem; }
 .file { margin: 3rem 0 0 3rem; color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }

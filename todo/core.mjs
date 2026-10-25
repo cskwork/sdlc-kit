@@ -127,6 +127,7 @@ function renderItem(item) {
   lines.push(...item.notes);
   return lines.join('\n');
 }
+export const itemVersion = item => createHash('sha256').update(renderItem(item)).digest('hex');
 export function serialize(model) {
   const group = done => model.items.filter(item => item.done === done).map(renderItem).join('\n\n');
   return `${model.preamble ?? header}## Open\n\n${group(false)}${group(false) ? '\n\n' : ''}## Done\n\n${group(true)}${group(true) ? '\n' : ''}`;
@@ -310,28 +311,31 @@ export async function add(file, text, options = {}) {
     return item;
   });
 }
-const update = (file, id, fn) => mutate(file, model => {
-  const item = findItem(model, id);
-  fn(item, model);
+export const update = (file, id, fn, version) => mutate(file, async model => {
+  const item = version === undefined ? findItem(model, id) : model.items.find(item => item.id === id);
+  if (version !== undefined && (!item || itemVersion(item) !== version)) {
+    throw Object.assign(new Error('This item changed. Reload and try again.'), { status: 409 });
+  }
+  await fn(item, model);
   identify(model);
   return item;
 });
-export const edit = (file, id, changes) => update(file, id, item => {
+export const edit = (file, id, changes, version) => update(file, id, item => {
   for (const key of ['title', 'project']) if (key in changes) item[key] = line(changes[key]);
   if (!item.title) fail('title required');
   if ('link' in changes) item.link = linkValue(changes.link);
   event(item, 'human', 'edited');
-});
-export const move = (file, id, delta) => update(file, id, (item, model) => {
+}, version);
+export const move = (file, id, delta, version) => update(file, id, (item, model) => {
   const group = model.items.filter(i => i.done === item.done), from = group.indexOf(item);
   const to = Math.max(0, Math.min(group.length - 1, from + delta));
   const target = model.items.indexOf(group[to]);
   model.items.splice(model.items.indexOf(item), 1);
   model.items.splice(target, 0, item);
-});
-export const remove = (file, id) => update(file, id, (item, model) => { model.items.splice(model.items.indexOf(item), 1); });
-export const done = (file, id, words = '', by = 'agent') => update(file, id, (item, model) => finish(model, item, by, `done${words ? ` — ${line(words)}` : ''}`));
-export const reply = (file, id, words) => update(file, id, item => { item.waiting = ''; event(item, 'human', `reply — ${line(words)}`); });
+}, version);
+export const remove = (file, id, version) => update(file, id, (item, model) => { model.items.splice(model.items.indexOf(item), 1); }, version);
+export const done = (file, id, words = '', by = 'agent', version) => update(file, id, (item, model) => finish(model, item, by, `done${words ? ` — ${line(words)}` : ''}`), version);
+export const reply = (file, id, words, version) => update(file, id, item => { item.waiting = ''; event(item, 'human', `reply — ${line(words)}`); }, version);
 export const wait = (file, id, words) => update(file, id, item => { item.waiting = line(words); if (!item.waiting) fail('wait text required'); event(item, 'agent', `waiting — ${item.waiting}`); });
 export const answer = (file, id, words) => update(file, id, item => { item.waiting = ''; event(item, 'agent', `chat answer — ${line(words)}`); });
 export const note = (file, id, words) => update(file, id, item => event(item, 'agent', line(words)));
