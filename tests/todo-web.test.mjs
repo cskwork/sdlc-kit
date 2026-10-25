@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
 import { tmpdir, networkInterfaces } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -223,7 +223,7 @@ function eventStream(ctx, t) {
     if (previous) return Promise.resolve(previous);
     return new Promise((resolveValue, reject) => {
       const waiter = { matches, resolve: resolveValue, reject };
-      waiter.timer = setTimeout(() => { waiters.splice(waiters.indexOf(waiter), 1); reject(new Error('SSE change did not arrive within one second')); }, timeout);
+      waiter.timer = setTimeout(() => { waiters.splice(waiters.indexOf(waiter), 1); reject(new assert.AssertionError({ message: 'SSE change did not arrive within one second', actual: frames, expected: 'matching SSE update' })); }, timeout);
       waiters.push(waiter);
     });
   };
@@ -252,7 +252,7 @@ test('S6/S7/S8: intent artifact bytes bind approval; stale approval and replies 
   let shown = await request(ctx, `/api/artifact?id=${item.id}`);
   assert.equal(shown.status, 200, shown.text);
   assert.equal(shown.json.gate, 'intent');
-  assert.equal(shown.json.file, join(folder, 'intent.md'), 'artifact uses the ancestor SDLC store');
+  assert.equal(realpathSync(shown.json.file), realpathSync(join(folder, 'intent.md')), 'artifact uses the ancestor SDLC store');
   assert.equal(shown.json.markdown, intent);
   assert.equal(shown.json.sha, createHash('sha256').update(intent).digest('hex'));
   writeFileSync(join(folder, 'intent.md'), intent + '\nEdited after the browser opened.\n');
@@ -286,7 +286,7 @@ test('S6/S7: plan approval binds displayed bytes and targets the selected projec
   let shown = await request(ctx, `/api/artifact?id=${item.id}`);
   assert.equal(shown.status, 200, shown.text);
   assert.equal(shown.json.gate, 'plan');
-  assert.equal(shown.json.file, join(folderTwo, 'PLAN.md'));
+  assert.equal(realpathSync(shown.json.file), realpathSync(join(folderTwo, 'PLAN.md')));
   writeFileSync(join(folderTwo, 'PLAN.md'), plan + '\nA revised implementation detail.\n');
   const stale = await request(ctx, '/api/approve', { method: 'POST', body: { id: item.id, gate: 'plan', sha: shown.json.sha, words: 'approved the displayed plan' } });
   assert.equal(stale.status, 409, stale.text);
@@ -346,4 +346,59 @@ test('artifact Markdown renders requested syntax while escaping HTML and droppin
   assert.doesNotMatch(rendered, /href=["'](?:javascript|data):/i);
   assert.match(rendered, /href="https:\/\/example\.test\/a"/);
   assert.match(rendered, /rel="noopener noreferrer"/);
+});
+
+// Execute the agent document's gate-stop instruction, then use the real interfaces.
+for (const channel of ['web', 'chat']) test(`B2: documented ${channel} approval resumes next without an explicit gate wait`, async t => {
+  const ctx = await web(t), dir = project(ctx.root), slug = `documented-${channel}`;
+  const folder = feature(dir, slug);
+  const item = await core.add(ctx.file, 'Gate approval', { project: dir, slug });
+  await core.add(ctx.file, 'Lower item');
+  assert.equal((await core.next(ctx.file, { kit })).code, 10);
+  const instructions = readFileSync(join(kit, 'todo', 'AGENT.md'), 'utf8');
+  if (/When sdlc needs the human, run `wait/.test(instructions)) await core.wait(ctx.file, item.id, 'approve intent');
+  if (channel === 'web') {
+    const shown = await request(ctx, `/api/artifact?id=${item.id}`);
+    items(await request(ctx, '/api/approve', { method: 'POST', body: { id: item.id, gate: 'intent', sha: shown.json.sha, words: 'approved scope' } }), ctx.file);
+  } else {
+    sdlc(dir, 'approve', 'intent', slug, '--human', 'approved scope');
+    execFileSync(process.execPath, [join(kit, 'todo', 'todo.mjs'), 'note', item.id, 'chat: approved intent — "approved scope"'], { cwd: dir, env: { ...process.env, SDLC_TODO: ctx.file } });
+  }
+  assert.match(sdlc(dir, 'check', 'intent', slug), /GATE OPEN/);
+  const result = await core.next(ctx.file, { kit });
+  assert.equal(result.code, 0, `approved gate still waits: ${result.item?.waiting}`);
+  assert.equal(result.item.id, item.id);
+  // A separate unanswered question survives an approval in either channel.
+  writeFileSync(join(folder, 'PLAN.md'), plan);
+  await core.wait(ctx.file, item.id, 'which environment?');
+  if (channel === 'web') {
+    const shown = await request(ctx, `/api/artifact?id=${item.id}`);
+    items(await request(ctx, '/api/approve', { method: 'POST', body: { id: item.id, gate: 'plan', sha: shown.json.sha, words: 'approved plan' } }), ctx.file);
+  } else {
+    sdlc(dir, 'approve', 'plan', slug, '--human', 'approved plan');
+    execFileSync(process.execPath, [join(kit, 'todo', 'todo.mjs'), 'note', item.id, 'chat: approved plan — "approved plan"'], { cwd: dir, env: { ...process.env, SDLC_TODO: ctx.file } });
+  }
+  const waiting = await core.next(ctx.file, { kit });
+  assert.equal(waiting.code, 10);
+  assert.equal(waiting.item.waiting, 'which environment?');
+});
+
+test('B3: symlinked project reads and approves the physical status store with a duplicate slug', async t => {
+  const ctx = await web(t);
+  const logical = project(ctx.root, 'logical'), physical = project(ctx.root, 'physical');
+  const slug = 'probe';
+  const wrong = feature(logical, slug), right = feature(physical, slug);
+  writeFileSync(join(wrong, 'intent.md'), intent + '\nWrong logical store.\n');
+  writeFileSync(join(right, 'intent.md'), intent + '\nPhysical store.\n');
+  mkdirSync(join(physical, 'src'));
+  const alias = join(logical, 'alias'); symlinkSync(join(physical, 'src'), alias, process.platform === 'win32' ? 'junction' : 'dir');
+  const item = await core.add(ctx.file, 'Symlink project', { project: alias, slug });
+  const status = JSON.parse(sdlc(alias, 'status', slug, '--json'));
+  const shown = await request(ctx, `/api/artifact?id=${item.id}`);
+  assert.equal(shown.status, 200, shown.text);
+  assert.equal(realpathSync(shown.json.file), realpathSync(join(status.store, 'work', slug, 'intent.md')));
+  assert.match(shown.json.markdown, /Physical store/);
+  items(await request(ctx, '/api/approve', { method: 'POST', body: { id: item.id, gate: 'intent', sha: shown.json.sha, words: 'approved physical scope' } }), ctx.file);
+  assert.match(sdlc(alias, 'check', 'intent', slug), /GATE OPEN/);
+  gateClosed(logical, 'intent', slug);
 });

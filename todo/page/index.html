@@ -12,6 +12,7 @@
 <body>
 <main class="page">
   <header class="top">
+    <time id="changed" class="timestamp" aria-label="Last change"></time>
     <h1>To-do</h1>
     <p class="meta">
       <span id="counts">0 open · 0 need you · 0 done</span>
@@ -24,29 +25,22 @@
     <button type="button" id="error-dismiss" class="quiet">Dismiss</button>
   </div>
 
-  <form id="add" class="add" autocomplete="off">
-    <label for="add-text" class="visually-hidden">New to-do</label>
-    <input id="add-text" name="text" type="text" maxlength="2000" enterkeyhint="done"
-      placeholder="What needs doing?  ~/project  https://ticket" aria-describedby="add-hint">
-    <p id="add-hint" class="hint">Enter adds. Press / or n to come back here.</p>
-  </form>
-
-  <section id="needs" class="needs" hidden aria-labelledby="needs-title">
-    <h2 id="needs-title">Needs you</h2>
-    <p class="needs-item"><strong id="needs-name"></strong></p>
-    <p class="needs-what" id="needs-what"></p>
-    <button type="button" id="needs-review" class="primary">Review</button>
-  </section>
-
   <section aria-labelledby="open-title">
     <h2 id="open-title" class="visually-hidden">Open</h2>
-    <p id="empty" class="empty" hidden>Nothing open. Add something above.</p>
+    <p id="empty" class="visually-hidden" hidden>Nothing open. Add your first item below.</p>
     <ul id="open" class="rows"></ul>
-    <p class="hint keys">On a row: Enter or double-click a title to rename, Escape cancels. Alt+↑ and Alt+↓ move it.</p>
+    <form id="add" class="add" autocomplete="off">
+      <label for="add-text" class="visually-hidden">New to-do</label>
+      <label for="add-text" class="add-circle" aria-hidden="true"></label>
+      <input id="add-text" name="text" type="text" maxlength="2000" enterkeyhint="done"
+        placeholder="New item" aria-describedby="add-hint">
+      <p id="add-hint" class="visually-hidden">Enter adds. Include ~/project and https://ticket. Press / or n to come back here.</p>
+    </form>
+    <p class="visually-hidden">On a row: Enter or double-click a title to rename, Escape cancels. Alt+↑ and Alt+↓ move it.</p>
   </section>
 
   <details id="done-box" class="done-box" hidden>
-    <summary>Done <span id="done-count">0</span></summary>
+    <summary>Done · <span id="done-count">0</span></summary>
     <ul id="done" class="rows done-rows"></ul>
   </details>
 
@@ -89,7 +83,7 @@
       <textarea id="reply-text" rows="3" maxlength="2000" aria-describedby="reply-help"></textarea>
       <p class="hint" id="reply-help">A reply answers a question. It is not an approval.</p>
       <p id="reply-error" class="field-error" role="alert" hidden></p>
-      <div class="actions"><button type="submit" class="secondary">Send reply</button></div>
+      <div class="actions"><button type="submit" class="secondary">Reply</button></div>
     </form>
   </section>
 

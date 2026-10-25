@@ -36,7 +36,7 @@ function approvalGate(item) {
   return gate;
 }
 function projectPath(project) {
-  return path.resolve(project === '~' ? os.homedir() : project.startsWith('~/') ? path.join(os.homedir(), project.slice(2)) : project);
+  return fs.realpathSync(path.resolve(project === '~' ? os.homedir() : project.startsWith('~/') ? path.join(os.homedir(), project.slice(2)) : project));
 }
 function artifact(item, gate) {
   let root = projectPath(item.project);

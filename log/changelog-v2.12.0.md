@@ -6,13 +6,17 @@
 - A TUI and localhost web page read and update the same file live.
 - Agents and programs add items with project paths and ticket links through `todo.mjs add`.
 - `todo.mjs next` selects the first Open item: 0 workable, 10 waiting for the human, 20 blocked, 30 empty.
-- Agents stop at waiting or blocked items; they never skip to a lower item.
+- Agents stop at waiting or blocked items; they never skip to a lower item. Gate approvals and intent blocking questions surface through sync without an explicit `wait`; `wait` is only for questions sdlc.sh does not track.
 - Every new or resumed sdlc slug has an item; `todo/AGENT.md` documents the agent loop and host schedules.
 - Replies inform artifacts and never approve gates; chat approvals still go through `sdlc.sh approve --human`.
 - The web page binds approval to the bytes shown through `sdlc.sh approve --sha`.
-- The web server binds 127.0.0.1, checks Host and Origin, and uses a per-run token kept off disk.
+- The web server binds 127.0.0.1, checks Host and Origin, and uses a per-run token held in memory by the server and page. The kit never writes it to disk; the browser may keep the opened URL in history. The token dies when the process exits.
 - Done items are checked and struck through; the newest 30 stay, and older items move to `todo-archive.md`.
 - Item history records local timestamps and authors.
+- Concurrent stale-lock reclaimers preserve owner tokens; sync calls sdlc.sh outside the inbox lock.
+- Artifact reads and approval use the same canonical project path, including symlinked projects.
+- TUI startup syncs with or without web; yellow accents and round checklist glyphs remain readable with `NO_COLOR`.
+- Oversized HTTP bodies (>64 KiB) retain status 413.
 
 ## Compatibility
 

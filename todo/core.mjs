@@ -147,60 +147,139 @@ function normalize(model) {
   }
   identify(model);
 }
-async function atomicWrite(file, text) {
+const lockLost = Symbol('lock ownership lost');
+async function atomicWrite(file, text, owns = () => true) {
   const temp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${randomUUID()}.tmp`);
   try {
     fs.writeFileSync(temp, text, 'utf8');
     for (let attempt = 0; ; attempt++) {
-      try { fs.renameSync(temp, file); break; }
+      try { if (!owns()) throw lockLost; fs.renameSync(temp, file); break; }
       catch (error) { if (!['EPERM', 'EBUSY'].includes(error.code) || attempt >= 5) throw error; await pause(20 * (attempt + 1)); }
     }
   } finally { try { fs.unlinkSync(temp); } catch (e) { if (e.code !== 'ENOENT') throw e; } }
 }
+// Move the observed lock aside atomically; a delayed reclaimer may find a
+// successor there. Restore that successor without clobbering a newer owner.
+function removeLock(lock, observed, staleOnly, moved) {
+  try { fs.renameSync(lock, moved); }
+  catch (error) { if (error.code === 'ENOENT') return; throw error; }
+  try {
+    if (fs.readFileSync(moved, 'utf8') !== observed ||
+        (staleOnly && Date.now() - fs.statSync(moved).mtimeMs <= 10000)) {
+      try { fs.linkSync(moved, lock); }
+      catch (error) { if (error.code !== 'EEXIST') throw error; }
+    }
+  } finally { fs.unlinkSync(moved); }
+}
+// Unique per-process markers coordinate the short reclaim/commit sections.
+// They are never reused: dead-process cleanup cannot remove a successor's marker.
+const unlink = file => { try { fs.unlinkSync(file); } catch (error) { if (error.code !== 'ENOENT') throw error; } };
+function markers(lock, kind) {
+  const prefix = `${path.basename(lock)}.${kind}-`, active = [];
+  for (const name of fs.readdirSync(path.dirname(lock))) {
+    if (!name.startsWith(prefix) || !/^\d+-[a-f0-9-]+$/.test(name.slice(prefix.length))) continue;
+    const marker = path.join(path.dirname(lock), name), pid = Number(name.slice(prefix.length).split('-')[0]);
+    try { process.kill(pid, 0); active.push(marker); }
+    catch (error) {
+      if (error.code !== 'ESRCH') { if (error.code === 'EPERM') { active.push(marker); continue; } throw error; }
+      const moved = `${marker}.moved`;
+      try { fs.linkSync(moved, lock); } catch (e) { if (!['ENOENT', 'EEXIST'].includes(e.code)) throw e; }
+      unlink(moved); unlink(marker);
+    }
+  }
+  return active;
+}
+function mark(lock, kind) {
+  const marker = `${lock}.${kind}-${process.pid}-${randomUUID()}`;
+  fs.writeFileSync(marker, '', { flag: 'wx' });
+  return marker;
+}
+async function waitMarkers(lock, kind) {
+  const deadline = Date.now() + 2000;
+  while (markers(lock, kind).length) {
+    if (Date.now() >= deadline) throw new Error(`timed out waiting for lock: ${lock}`);
+    await pause(5);
+  }
+}
+function ownsLock(lock, owner) {
+  try { return fs.readFileSync(lock, 'utf8') === owner; }
+  catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+}
+async function committing(lock, owner, fn, required = true) {
+  for (;;) {
+    await waitMarkers(lock, 'reclaim');
+    const marker = mark(lock, 'commit');
+    try {
+      // A reclaimer that arrived first wins; withdraw before waiting for it.
+      if (markers(lock, 'reclaim').length) continue;
+      if (!ownsLock(lock, owner)) { if (required) throw lockLost; return; }
+      return await fn();
+    } finally { unlink(marker); }
+  }
+}
+async function reclaim(lock, observed) {
+  const marker = mark(lock, 'reclaim');
+  try {
+    await waitMarkers(lock, 'commit');
+    removeLock(lock, observed, true, `${marker}.moved`);
+  } finally { unlink(marker); }
+}
 export async function mutate(file, fn) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const lock = `${file}.lock`, deadline = Date.now() + 2000;
-  let fd;
-  while (fd === undefined) {
-    try { fd = fs.openSync(lock, 'wx'); }
-    catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      try { if (Date.now() - fs.statSync(lock).mtimeMs > 10000) { fs.unlinkSync(lock); continue; } }
-      catch (e) { if (e.code === 'ENOENT') continue; throw e; }
-      if (Date.now() >= deadline) throw new Error(`timed out waiting for lock: ${lock}`);
-      await pause(20);
+  for (;;) {
+    let fd;
+    while (fd === undefined) {
+      await waitMarkers(lock, 'reclaim');
+      try { fd = fs.openSync(lock, 'wx'); }
+      catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+        try {
+          const observed = fs.readFileSync(lock, 'utf8');
+          if (Date.now() - fs.statSync(lock).mtimeMs > 10000) {
+            await reclaim(lock, observed); continue;
+          }
+        } catch (e) { if (e.code === 'ENOENT') continue; throw e; }
+        if (Date.now() >= deadline) throw new Error(`timed out waiting for lock: ${lock}`);
+        await pause(20);
+      }
     }
-  }
-  const owner = randomUUID();
-  let heartbeatError;
-  const heartbeat = setInterval(() => {
-    try { const now = new Date(); fs.futimesSync(fd, now, now); }
-    catch (error) { heartbeatError = error; }
-  }, 1000);
-  heartbeat.unref();
-  try {
-    fs.writeFileSync(fd, owner);
-    const model = load(file);
-    normalize(model);
-    const result = await fn(model);
-    if (heartbeatError) throw heartbeatError;
-    normalize(model);
-    const completed = model.items.filter(item => item.done);
-    if (completed.length > 30) {
-      const overflow = completed.slice(30);
-      const archive = path.join(path.dirname(file), 'todo-archive.md');
-      let previous;
-      try { previous = fs.readFileSync(archive, 'utf8'); } catch (e) { if (e.code !== 'ENOENT') throw e; previous = '# To-do archive\n\n'; }
-      await atomicWrite(archive, previous + overflow.map(renderItem).join('\n\n') + '\n\n');
-      model.items = model.items.filter(item => !overflow.includes(item));
+    const owner = randomUUID();
+    const owns = () => ownsLock(lock, owner);
+    let heartbeatError;
+    const heartbeat = setInterval(() => {
+      try { const now = new Date(); fs.futimesSync(fd, now, now); }
+      catch (error) { heartbeatError = error; }
+    }, 1000);
+    heartbeat.unref();
+    try {
+      fs.writeFileSync(fd, owner);
+      await waitMarkers(lock, 'reclaim');
+      if (!owns()) throw lockLost;
+      const model = load(file);
+      normalize(model);
+      const result = await fn(model);
+      if (heartbeatError) throw heartbeatError;
+      return await committing(lock, owner, async () => {
+        normalize(model);
+        const completed = model.items.filter(item => item.done);
+        if (completed.length > 30) {
+          const overflow = completed.slice(30);
+          const archive = path.join(path.dirname(file), 'todo-archive.md');
+          let previous;
+          try { previous = fs.readFileSync(archive, 'utf8'); } catch (e) { if (e.code !== 'ENOENT') throw e; previous = '# To-do archive\n\n'; }
+          await atomicWrite(archive, previous + overflow.map(renderItem).join('\n\n') + '\n\n', owns);
+          model.items = model.items.filter(item => !overflow.includes(item));
+        }
+        await atomicWrite(file, serialize(model), owns);
+        return result;
+      });
+    } catch (error) { if (error !== lockLost) throw error; }
+    finally {
+      try { await committing(lock, owner, () => fs.unlinkSync(lock), false); }
+      finally { clearInterval(heartbeat); fs.closeSync(fd); }
     }
-    await atomicWrite(file, serialize(model));
-    return result;
-  } finally {
-    clearInterval(heartbeat);
-    fs.closeSync(fd);
-    try { if (fs.readFileSync(lock, 'utf8') === owner) fs.unlinkSync(lock); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    // A reclaimer displaced this owner: re-read and apply the operation again.
   }
 }
 export function findItem(model, idOrSlug) {
@@ -260,8 +339,9 @@ export const start = (file, id, slug, phase = 'intent') => update(file, id, item
 export const phase = (file, id, value) => update(file, id, item => { if (!item.sdlc) fail('item has no slug'); item.sdlc.phase = line(value); event(item, 'agent', `phase ${item.sdlc.phase}`); });
 export const approved = (file, id, gate, words) => update(file, id, item => event(item, 'human', `approved ${line(gate)} — "${line(words)}"`));
 const expandProject = project => project === '~' ? os.homedir() : project.startsWith('~/') ? path.join(os.homedir(), project.slice(2)) : project;
-async function syncModel(model, kit) {
-  for (const item of [...model.items]) {
+async function readStatuses(file, kit) {
+  const statuses = [];
+  for (const item of load(file).items) {
     if (item.done || !item.project || !item.sdlc) continue;
     const previous = item.sdlc;
     let current;
@@ -272,6 +352,20 @@ async function syncModel(model, kit) {
     } catch (error) {
       current = { ...previous, state: 'BLOCKED', action: line((error.stderr || error.message).replace(/[\r\n]+/g, ' ')) };
     }
+    statuses.push({ id: item.id, project: item.project, previous, current });
+  }
+  return statuses;
+}
+const syncChanged = Symbol('inbox changed during status');
+function syncModel(model, statuses) {
+  // Status calls run unlocked; retry if any current slug lacks the same preimage.
+  if (model.items.some(item => !item.done && item.project && item.sdlc &&
+      !statuses.some(status => status.id === item.id && status.project === item.project &&
+        JSON.stringify(status.previous) === JSON.stringify(item.sdlc)))) throw syncChanged;
+  for (const { id, project, previous, current } of statuses) {
+    const item = model.items.find(item => item.id === id && item.project === project && !item.done);
+    // A concurrent edit/start/sync wins over a status read of an older item.
+    if (!item || JSON.stringify(item.sdlc) !== JSON.stringify(previous)) continue;
     item.sdlc = { slug: previous.slug, phase: current.phase, state: current.state, action: current.action || '' };
     if (current.state === 'DONE') { finish(model, item, 'sdlc', `DONE — ${item.sdlc.action}`); continue; }
     if ((['NEEDS-HUMAN', 'BLOCKED'].includes(current.state) && previous.state !== current.state) || previous.action !== item.sdlc.action) {
@@ -282,9 +376,15 @@ async function syncModel(model, kit) {
   }
   return identify(model);
 }
-export const sync = (file, { kit = defaultKit } = {}) => mutate(file, model => syncModel(model, kit));
-export const next = (file, { kit = defaultKit } = {}) => mutate(file, async model => {
-  await syncModel(model, kit);
+async function synced(file, kit, fn) {
+  for (;;) {
+    const statuses = await readStatuses(file, kit);
+    try { return await mutate(file, model => { syncModel(model, statuses); return fn(model); }); }
+    catch (error) { if (error !== syncChanged) throw error; }
+  }
+}
+export const sync = (file, { kit = defaultKit } = {}) => synced(file, kit, model => model);
+export const next = (file, { kit = defaultKit } = {}) => synced(file, kit, model => {
   const item = model.items.find(i => !i.done);
   if (!item) return { code: 30, item: null };
   const result = { code: { workable: 0, waiting: 10, blocked: 20 }[item.status], item: { ...item, events: [...item.events], replies: replies(item) } };
