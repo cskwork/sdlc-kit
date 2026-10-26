@@ -35,18 +35,18 @@ function approvalGate(item) {
       !/^[a-z0-9][a-z0-9._-]{0,79}$/.test(item.sdlc.slug)) fail(409, 'item has no approval gate');
   return gate;
 }
-async function projectPath(project) {
-  return fs.realpathSync(await core.nativePath(core.projectPath(project)));
+// Bash can keep a junction cwd whose realpath would select a different store.
+async function projectStore(item, kit, statusRunner) {
+  const cwd = await core.nativePath(core.projectPath(item.project));
+  const { stdout } = await statusRunner('bash', [path.join(kit, 'sdlc.sh'), 'status', item.sdlc.slug, '--json'], { cwd });
+  const { store } = JSON.parse(stdout);
+  if (typeof store !== 'string' || !store) fail(409, 'status did not report a store');
+  return core.nativePath(store);
 }
-async function artifact(item, gate) {
-  let root = await projectPath(item.project);
-  while (!fs.existsSync(path.join(root, '.sdlc', 'config.md'))) {
-    const parent = path.dirname(root);
-    if (parent === root) fail(409, 'no .sdlc/config.md found');
-    root = parent;
-  }
-  let folder = path.join(root, '.sdlc', 'work', item.sdlc.slug);
-  if (!fs.existsSync(folder)) folder = path.join(root, '.sdlc', 'archive', item.sdlc.slug);
+async function artifact(item, gate, kit, statusRunner) {
+  const store = await projectStore(item, kit, statusRunner);
+  let folder = path.join(store, 'work', item.sdlc.slug);
+  if (!fs.existsSync(folder)) folder = path.join(store, 'archive', item.sdlc.slug);
   const file = path.join(folder, gate === 'intent' ? 'intent.md' : 'PLAN.md');
   const bytes = fs.readFileSync(file);
   return { gate, file, markdown: bytes.toString('utf8'), sha: createHash('sha256').update(bytes).digest('hex') };
@@ -85,7 +85,7 @@ function openBrowser(url) {
   });
 }
 
-export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl } = {}) {
+export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('invalid port');
   if (!onUrl && !open && !process.stdout.isTTY) throw new Error('web requires a terminal or --open');
   const token = randomBytes(16).toString('hex'), expected = Buffer.from(token);
@@ -132,7 +132,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
         } else if (url.pathname === '/api/artifact') {
           await core.sync(file, { kit });
           const item = itemFor(file, url.searchParams.get('id'));
-          json(200, await artifact(item, approvalGate(item)));
+          json(200, await artifact(item, approvalGate(item), kit, statusRunner));
         } else if (url.pathname === '/events') {
           const initial = payload();
           res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', Connection: 'keep-alive' });
@@ -173,7 +173,8 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
         await core.update(file, body.id, async item => {
           if (approvalGate(item) !== body.gate) fail(409, 'approval gate changed');
           try {
-            await execute('bash', [path.join(kit, 'sdlc.sh'), 'approve', body.gate, item.sdlc.slug, '--human', words, '--sha', body.sha], { cwd: await projectPath(item.project) });
+            const store = await projectStore(item, kit, statusRunner);
+            await execute('bash', [path.join(kit, 'sdlc.sh'), 'approve', body.gate, item.sdlc.slug, '--human', words, '--sha', body.sha], { cwd: path.dirname(store) });
           } catch (error) { fail(409, error.stderr || error.message); }
           item.events.push({ at: core.stamp(), who: 'human', what: `approved ${body.gate} — "${words}"` });
         }, body.version ?? null);
