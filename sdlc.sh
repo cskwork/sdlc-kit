@@ -97,7 +97,7 @@ parse() {
   [ -f "$2" ] || { printf 'X\034%s missing\n' "$(basename "$2")"; return; }
   awk -v mode="$1" -v objectives="$objectives" -v scenarios="$scenarios" -v scored="$scored" -v withdrawn="$withdrawn" "$UNCOMMENT"'
   function trim(s){sub(/^[ \t]+/,"",s);sub(/[ \t]+$/,"",s);return s}function problem(s){print "X\034" s}
-  function area(id,  k,s){k=tolower(id);gsub(/[^a-z]/,"",k);s=tolower(a[3]);if(k=="area")return;ca++;if(k!~/^(outcome|scope|asis|tobe|success|constraints)$/){print "Y\034Clarity: unknown area " id;cy++;return}if(k in cs){print "Y\034Clarity: duplicate area " id;cy++;return}cs[k]="open";if(s!~/^(clear|assumed|open)$/){print "Y\034Clarity " id ": State must be clear, assumed or open";cy++}else if(tolower(a[4])~/^(<.*>|[-—–?.]*|n\/a|tbd)$/){print "Y\034Clarity " id ": How settled needs its evidence or reason";cy++}else cs[k]=s}
+  function area(id,  k,s){k=tolower(id);gsub(/[^a-z]/,"",k);s=tolower(a[3]);if(k=="area")return;ca++;k=(k=="outcome")?"goal":(k=="scope")?"boundaries":(k=="asis")?"today":(k=="tobe")?"after":(k=="success")?"donewhen":(k=="constraints")?"limits":k;if(k!~/^(goal|boundaries|today|after|donewhen|limits)$/){print "Y\034How sure we are: unknown area " id;cy++;return}if(k in cs){print "Y\034How sure we are: duplicate area " id;cy++;return}cs[k]="open";cn[k]=id;if(s!~/^(clear|assumed|open)$/){print "Y\034" id " (How sure we are): State must be clear, assumed or open";cy++}else if(tolower(a[4])~/^(<.*>|[-—–?.]*|n\/a|tbd)$/){print "Y\034" id " (How sure we are): Based on needs its evidence or reason";cy++}else cs[k]=s}
   function question(){if(q!=""){l=tolower(trim(q));if(l!="none"&&l!="n/a"&&l!~/^resolved:/&&l!~/— resolved:/&&l!~/-- resolved:/)print "Q\034" q;else if(l~/resolved:/)print "V\034" l;q=""}}
   function fields(s, c,j){for(j in a)delete a[j];nfields=1;for(j=1;j<=length(s);j++){c=substr(s,j,1);if(c=="\\"&&substr(s,j+1,1)=="|"){a[nfields]=a[nfields] "|";j++}else if(c=="|")nfields++;else a[nfields]=a[nfields] c}for(j=1;j<=nfields;j++)a[j]=trim(a[j]);cells=nfields-1-(a[nfields]=="");return a[2]}
   {
@@ -105,13 +105,13 @@ parse() {
     sub(/^[ \t]*\*[ \t]+/,"- ");gsub(/[`*]/,"");raw=$0;line=trim(raw);low=tolower(line)
     if(mode=="plan"&&low~/<three lines for the human|<file or symbol>|<another reader or writer|<…>/)problem("PLAN.md contains template placeholder")
     if(low~/^## /){question();section=substr(low,4);header=0;next}
-    if(mode=="intent"){if(section~/^clarity/&&line~/^\|/&&line!~/^[| :\t-]+$/)area(fields(line))
-      if(section~/^understood as/&&line~/^- O[0-9]+[ \t]*:/){id=line;sub(/^[^-]*- /,"",id);sub(/[ \t]*:.*/,"",id);text=line;sub(/^[^:]*:[ \t]*/,"",text);if(text!=""&&text!~/^</){print "O\034" id;outcomes++}}
-      if(section~/^blocking questions/){if(line~/^(-|[0-9]+\.)[ \t]/){question();q=line;sub(/^(-|[0-9]+\.)[ \t]+/,"",q)}else if(raw~/^[ \t]+/&&q!="")q=q " " line}
+    if(mode=="intent"){if(section~/^(clarity|how sure we are)/&&line~/^\|/&&line!~/^[| :\t-]+$/)area(fields(line))
+      if(section~/^(understood as|what we will do)/&&line~/^- O[0-9]+[ \t]*:/){id=line;sub(/^[^-]*- /,"",id);sub(/[ \t]*:.*/,"",id);text=line;sub(/^[^:]*:[ \t]*/,"",text);if(text!=""&&text!~/^</){print "O\034" id;outcomes++}}
+      if(section~/^(blocking questions|questions for you)/){if(line~/^(-|[0-9]+\.)[ \t]/){question();q=line;sub(/^(-|[0-9]+\.)[ \t]+/,"",q)}else if(raw~/^[ \t]+/&&q!="")q=q " " line}
     }
-    if(section~/^delivery/){v=line;sub(/^- /,"",v);if(tolower(v)~/^(target|authorized|checked with|output):/){key=v;sub(/:.*/,"",key);sub(/^[^:]*:[ \t]*/,"",v);key=tolower(key);if(key=="target"){rawtarget=v;target=tolower(v);print "T\034" target}if(key=="authorized")print "A\034" v;if(key=="checked with")print "K\034" v;if(key=="output")print "U\034" v}}
+    if(section~/^(delivery|shipping)/){v=line;sub(/^- /,"",v);if(tolower(v)~/^(target|ship to|authorized|allowed|checked with|output):/){key=v;sub(/:.*/,"",key);sub(/^[^:]*:[ \t]*/,"",v);key=tolower(key);if(key=="ship to")key="target";if(key=="allowed")key="authorized";if(key=="target"){rawtarget=v;target=tolower(v);print "T\034" target}if(key=="authorized")print "A\034" v;if(key=="checked with")print "K\034" v;if(key=="output")print "U\034" v}}
     if(mode=="plan"&&low~/risk flags:/){flags++;v=line;sub(/^.*[Rr][Ii][Ss][Kk] [Ff][Ll][Aa][Gg][Ss]:[ \t]*/,"",v);n=split(v,segments,"·");for(i=1;i<=n;i++)if(tolower(segments[i])~/(^|[^a-z0-9_])yes([^a-z0-9_]|$)/)print "R\034" trim(segments[i])}
-    if(mode=="evidence"&&(low~/^- commit:/||(section~/^delivery/&&low~/^- delivered:/))){kind=low~/^- commit:/?"C":"D";v=line;sub(/^[^:]*:[ \t]*/,"",v);hash=v;sub(/[ \t].*/,"",hash);repo=v;sub(/^[^ \t]+[ \t]*/,"",repo);if(repo==v||repo=="")repo=".";if(hash!~/^[a-fA-F0-9]+$/||length(hash)<7||length(hash)>64){if(kind=="C")problem("invalid Commit: " hash)}else{print kind "\034" tolower(hash) "\034" repo;if(kind=="C")commits++}}
+    if(mode=="evidence"&&(low~/^- commit:/||(section~/^(delivery|shipping)/&&low~/^- (delivered|shipped):/))){kind=low~/^- commit:/?"C":"D";v=line;sub(/^[^:]*:[ \t]*/,"",v);hash=v;sub(/[ \t].*/,"",hash);repo=v;sub(/^[^ \t]+[ \t]*/,"",repo);if(repo==v||repo=="")repo=".";if(hash!~/^[a-fA-F0-9]+$/||length(hash)<7||length(hash)>64){if(kind=="C")problem("invalid Commit: " hash)}else{print kind "\034" tolower(hash) "\034" repo;if(kind=="C")commits++}}
     if(line!~/^\|/)next
     id=fields(line);if(tolower(id)=="id"){header=cells;next}if(line~/^[| :\t-]+$/)next
     if(header&&cells>header&&((mode=="plan"&&section~/^scenarios/)||(mode=="evidence"&&section~/^results/))){x=0;for(j=header+2;j<=cells+1;j++)if(a[j]!="")x=1;if(x)problem(id ": row has " cells " cells, header has " header)}
@@ -131,7 +131,7 @@ parse() {
     }
   }
   END{
-    question();if(mode=="intent"){if(!outcomes)problem("Understood as needs a filled O criterion");if(target!="local"&&target!="pr"&&target!="deploy")problem("Delivery Target must be local, pr or deploy, alone on its line (" (rawtarget==""?"missing":"found \"" rawtarget "\"") "): put any detail on a \"- Note:\" line");if(!ca)print "Y\034Clarity table missing under a \"## Clarity\" heading: copy it from templates/intent.md";else{n=split("Outcome Scope AS-IS TO-BE Success Constraints",an," ");for(i=1;i<=n;i++){k=tolower(an[i]);gsub(/[^a-z]/,"",k);if(!(k in cs)){print "Y\034Clarity needs a row for " an[i];cy++}else{pts+=(cs[k]=="clear")?2:(cs[k]=="assumed");if(cs[k]!="clear")weak=weak (weak==""?"":", ") an[i] " " cs[k]}}if(!cy&&pts*100<90*2*n)print "Y\034clarity " int(pts*100/(2*n)) "% < 90%: settle " weak " by exploring, reproducing, researching or asking the requester"}}
+    question();if(mode=="intent"){if(!outcomes)problem("What we will do needs a filled O1 line (done when)");if(target!="local"&&target!="pr"&&target!="deploy")problem("Ship to (under Shipping) must be local, pr or deploy, alone on its line (" (rawtarget==""?"missing":"found \"" rawtarget "\"") "): put any detail on a \"- Note:\" line");if(!ca)print "Y\034How sure we are table missing under a \"## How sure we are\" heading: copy it from templates/intent.md";else{n=split("Goal,Boundaries,Today,After,Done when,Limits",an,",");split("Outcome,Scope,AS-IS,TO-BE,Success,Constraints",ao,",");for(i=1;i<=n;i++){k=tolower(an[i]);gsub(/[^a-z]/,"",k);if(!(k in cs)){print "Y\034How sure we are needs a row for " an[i] " (was " ao[i] ")";cy++}else{pts+=(cs[k]=="clear")?2:(cs[k]=="assumed");if(cs[k]!="clear")weak=weak (weak==""?"":", ") cn[k] " " cs[k]}}if(!cy&&pts*100<90*2*n)print "Y\034clarity " int(pts*100/(2*n)) "% < 90%: settle " weak " by exploring, reproducing, researching or asking the requester"}}
     if(mode=="plan"){if(NR>150)problem("PLAN.md has " NR " lines; keep it to 150 and move detail into refs/");if(!flags)problem("Risk flags: line missing");if(!count)problem("Scenarios need at least one row");n=split(objectives,os," ");for(i=1;i<=n;i++)if(os[i]!=""&&!covered[os[i]])problem(os[i] " has no must scenario")}
     if(mode=="evidence"){if(!commits)problem("Commit lines missing");if(!count)problem("Results need at least one row");n=split(scenarios " " scored,ss," ");for(i=1;i<=n;i++)if(ss[i]!=""&&!seen[ss[i]]&&!missing[ss[i]]++)problem("evidence.md is missing " ss[i] ": scenarios are never removed")}
   }' "$2"
@@ -189,7 +189,7 @@ route_current() { [ "$rid" = "$eid" ] && [ "$rentry" = "$entry" ]; }
 authorized() { local v re='^yes([^a-z0-9_]|$)'; v=$(one_line "$1" | tr '[:upper:]' '[:lower:]'); [[ $v =~ $re ]]; }
 delivery_authority() {
   dreason=
-  case "$1" in local) return 0;; pr|deploy) :;; *) found=missing; [ -z "$1" ] || found="found \"$1\""; dreason="Delivery Target must be local, pr or deploy ($found)"; return 1;; esac
+  case "$1" in local) return 0;; pr|deploy) :;; *) found=missing; [ -z "$1" ] || found="found \"$1\""; dreason="Ship to (under Shipping) must be local, pr or deploy ($found)"; return 1;; esac
   if authorized "$eauth" || { [ "$1" = "$itarget" ] && authorized "$iauth"; }; then return 0; fi
   dreason="authorize $1"; return 1
 }
@@ -244,10 +244,10 @@ derive() {
         elif [ -n "$eproblems" ]; then phase=evidence; action=$(joined "$eproblems")
         elif ! route_current; then phase=evidence; qa_action
         elif [ "$dest" = deliver ]; then
-          # Before Delivery is filled, the delivery goes to intent.md's target.
+          # Before Shipping is filled, the delivery goes to intent.md's Ship to.
           phase=deliver; target=$etarget; case "$target" in local|pr|deploy) :;; *) target=$itarget;; esac
           if ! delivery_authority "$target"; then STATE=NEEDS-HUMAN; action=$dreason
-          else action="deliver, fill Delivery, sdlc.sh close $slug shipped"; fi
+          else action="ship, fill Shipping, sdlc.sh close $slug shipped"; fi
         else phase=evidence; qa_action; fi
       fi
     fi
@@ -447,7 +447,7 @@ case "$command" in
     [ ! -e "$STORE/work/$slug" ] && [ ! -e "$STORE/archive/$slug" ] || die "feature already exists: $slug"
     F=$STORE/work/$slug; mkdir -p "$F/refs" "$F/logs"
     awk -v slug="$slug" -v today="$(date +%Y-%m-%d)" '{gsub(/<slug>/,slug);if($0~/^- Date:/)$0="- Date: " today;print}' "$KIT/templates/intent.md" > "$F/intent.md"
-    load_state; save_state; printf 'Created %s. Fill intent.md until its Clarity reaches 90%%, then approve intent.\n' "$slug";;
+    load_state; save_state; printf 'Created %s. Fill intent.md until How sure we are reaches 90%%, then approve intent.\n' "$slug";;
   status)
     selected=; asjson=0
     for arg in "$@"; do case "$arg" in --json) [ "$asjson" -eq 0 ] || die 'duplicate --json' 2; asjson=1;; *) [ -z "$selected" ] || die 'status [slug] [--json]' 2; selected=$arg; valid_slug "$selected";; esac; done
@@ -481,7 +481,7 @@ case "$command" in
       if [ "$which" = plan ] && [ "$who" = agent ] && stopped; then die "stopped for the human: $stopreason; resume with approve plan --human"; fi
       read_intent; problems "$iproblems" || exit 1; problems "$questions" || exit 1
       if [ "$which" = intent ]; then
-        if [ "$who" = agent ] && human_gate intent; then die 'intent needs --human approval'; fi; if [ "$who" = human ] && lnote=$(printf '%s' "${note//[\`*]/}" | tr '[:upper:]' '[:lower:]') && [ "$(printf '%s' "$lnote" | LC_ALL=C wc -c)" -ge 12 ] && [[ $answers == *"$lnote"* ]]; then die 'that note answers a blocking question; it does not approve this intent: show the human Bottom line, Risks and any assumed Clarity area, ask "is this what you want?" and record their reply'; fi
+        if [ "$who" = agent ] && human_gate intent; then die 'intent needs --human approval'; fi; if [ "$who" = human ] && lnote=$(printf '%s' "${note//[\`*]/}" | tr '[:upper:]' '[:lower:]') && [ "$(printf '%s' "$lnote" | LC_ALL=C wc -c)" -ge 12 ] && [[ $answers == *"$lnote"* ]]; then die 'that note answers a blocking question; it does not approve this intent: show the human At a glance, Risks and any assumed How sure we are area, ask "is this what you want?" and record their reply'; fi
         hash=$(sha < "$F/intent.md"); [ "$#" -eq 4 ] || [ "$hash" = "$(printf '%s' "$6" | tr 'A-F' 'a-f')" ] || die 'intent.md changed since it was shown'; if [ "$ish" = "$hash" ]; then printf 'intent already approved\n'; exit; fi; problems "$cproblems" || exit 1
         event; intent="$hash $who $seq $ts $note"
       else
@@ -576,20 +576,20 @@ case "$command" in
         [ "$dest" = deliver ] && route_current || die 'current evidence and build need a deliver route'
         validate_evidence || exit 1
         delivery_authority "$etarget" || die "$dreason"
-        filled "$checked" && filled "$output" || die 'Delivery Checked with and Output required'
+        filled "$checked" && filled "$output" || die 'Shipping Checked with and Output required'
         for ((i=0;i<${#commits[@]};i++)); do
           repo_dir "${repos[i]}" Commit; commit_repo=$REPO; matchsha=; nodir=
           source_repo=$(git -C "$commit_repo" rev-parse --show-toplevel) || die "not a git repository: ${repos[i]}"
           for ((j=0;j<${#delivered[@]};j++)); do
-            # A Delivered line for another repository (a deploy repository not checked out here, say) is skipped.
+            # A Shipped line for another repository (a deploy repository not checked out here, say) is skipped.
             repo_path "${drepos[j]}"
             delivered_repo=$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null) || { [ -d "$REPO" ] || nodir=${drepos[j]}; continue; }
             [ "$delivered_repo" != "$source_repo" ] || matchsha=${delivered[j]}
           done
-          [ -n "$matchsha" ] || die "Delivered missing for repo: ${repos[i]}: add '- Delivered: <sha> ${repos[i]}'${nodir:+ (the line for '$nodir' was skipped: it is not a folder under the project root)}"
-          git -C "$commit_repo" rev-parse --verify -q "$matchsha^{commit}" >/dev/null || die "unknown Delivered commit: $matchsha"
-          git -C "$commit_repo" diff --quiet "${commits[i]}" "$matchsha" || die 'Delivered tree differs from verified Commit'
-          if [ "$etarget" != local ]; then remote=$(git -C "$commit_repo" branch -r --contains "$matchsha"); [ -n "$remote" ] || die 'Delivered commit is not on any remote'; fi
+          [ -n "$matchsha" ] || die "Shipped missing for repo: ${repos[i]}: add '- Shipped: <sha> ${repos[i]}'${nodir:+ (the line for '$nodir' was skipped: it is not a folder under the project root)}"
+          git -C "$commit_repo" rev-parse --verify -q "$matchsha^{commit}" >/dev/null || die "unknown Shipped commit: $matchsha"
+          git -C "$commit_repo" diff --quiet "${commits[i]}" "$matchsha" || die 'Shipped tree differs from verified Commit'
+          if [ "$etarget" != local ]; then remote=$(git -C "$commit_repo" branch -r --contains "$matchsha"); [ -n "$remote" ] || die 'Shipped commit is not on any remote'; fi
         done;;
       *) die 'close result must be shipped or dropped' 2;;
     esac

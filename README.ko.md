@@ -39,16 +39,35 @@ flowchart LR
   B -->|리뷰 PASS| E["4 Evidence"]
   E -. 계획이 틀렸거나 같은 실패 반복 .-> P
   E -. 코드 실패 .-> B
-  E -->|must 전부 통과, 전체 95% 이상| D(["납품"])
+  E -->|must 전부 통과, 전체 95% 이상| D(["반영"])
   E -->|돌릴 환경 없음| H(["사람이 결정"])
 ```
 
 | 단계 | 하는 일 | 되돌아가는 때 |
 |---|---|---|
-| **1 Intent** | 요청한 것, 에이전트가 이해한 것, 그 이해에 숨은 위험을 적고, 여섯 영역으로 명확도를 매깁니다. 90%에 못 미치면 에이전트가 코드를 살피고, 버그를 재현하고, 스펙을 조사하거나, 티켓·이슈·PR에서 요청자에게 묻습니다. 맨 위 세 줄 요약으로 시작하고 에이전트용 근거는 맨 아래에 둡니다. 사람은 "이게 원하는 것인가?"에 답해 승인합니다. | — |
+| **1 Intent** | 요청한 것, 에이전트가 이해한 것, 그 이해에 숨은 위험을 적고, 여섯 영역으로 명확도를 매깁니다. 90%에 못 미치면 에이전트가 코드를 살피고, 버그를 재현하고, 스펙을 조사하거나, 티켓·이슈·PR에서 요청자에게 묻습니다. 맨 위 세 줄 요약(At a glance)으로 시작하고 에이전트용 근거는 맨 아래에 둡니다. 각 제목의 뜻은 아래 표에 있습니다. 사람은 "이게 원하는 것인가?"에 답해 승인합니다. | — |
 | **2 Plan** | 여러 scout가 나란히 정본·데이터·로직·사용자 흐름을 조사해 `refs/`에 남깁니다. `PLAN.md` 한 장에 AS-IS → TO-BE, 부작용, QA가 돌릴 시나리오를 담습니다. | 누락 점검에서 빈틈이 나올 때 |
 | **3 Build** | 가장 작은 완전한 변경을 만들어 커밋하고, 별도 리뷰어가 공격적으로 검토합니다. | 리뷰 FAIL: 고치고 다시 리뷰 |
 | **4 Evidence** | 실제 검사 뒤, 모든 시나리오를 각 페르소나로 실제 인터페이스에서 돌립니다. 점수와 다음 경로는 에이전트가 아니라 `sdlc.sh score`가 정합니다. | 계획이 틀렸거나 같은 실패 반복 → Plan, 코드 실패 → Build |
+
+### intent.md 제목 읽는 법
+
+제목과 항목 이름은 영어로 두고 본문은 요청한 사람의 언어로 씁니다.
+
+| 제목·항목 | 뜻 |
+|---|---|
+| **At a glance** — What changes · Not included · Your call | 한눈에 보기: 끝나면 무엇이 바뀌는지, 빠지는 것 중 가장 큰 것, 사람이 정해야 할 것 |
+| **What was asked** | 요청 원문 또는 충실한 발췌 |
+| **Why this came up** | 요청이 생긴 배경(이력). 요청·티켓·스레드에 이유가 있으면 인용하고, 없으면 티켓 이력·연결 이슈·커밋·memory로 추정해 줄 앞에 `(추정)`과 근거를 붙입니다. 추정을 사실처럼 쓰지 않습니다. |
+| **What we will do** — Included · Not included · Done when | 이번에 할 일, 하지 않을 일(이유 포함), 끝났다고 볼 기준 `O1..On`(눈으로 확인 가능) |
+| **Risks** | 이 요청에 숨은 위험. ⚠️는 사람의 권한이 필요한 것 |
+| **Shipping** — Ship to · Note · Allowed | 어디까지 반영할지(`local`·`pr`·`deploy`), 부가 설명, 사람이 허락했는지 |
+| **Questions for you** | 답이 없으면 승인할 수 없는 질문. 답하면 `— resolved:`가 붙습니다 |
+| **Key terms** | 요청을 좌우하는 용어와 그 뜻 |
+| **How sure we are** — Goal · Boundaries · Today · After · Done when · Limits | 확신 정도: 목표, 범위 경계, 지금 동작, 바뀐 뒤 동작, 완료 기준, 제약을 `clear`·`assumed`·`open`으로 매기고 90%가 넘어야 승인 |
+| **Facts** | 위 판단의 근거 `F1..`와 출처 |
+
+v2.13.0까지의 제목(Bottom line, Understood as, Clarity, Delivery 등)으로 쓴 intent.md도 `sdlc.sh`가 그대로 읽습니다.
 
 되돌아가는 횟수는 리뷰 FAIL, Plan 복귀, Build 복귀마다 세 번까지입니다. 넘으면
 루프가 멈추고 사람이 정하며, `sdlc.sh approve plan --human`으로만 다시 시작합니다.
@@ -77,11 +96,11 @@ $EDITOR .sdlc/config.md                          # build, test, lint, run, e2e, 
 
 ```
 .sdlc/work/<slug>/
-  intent.md     요청, 이해, 위험, 명확도
+  intent.md     요청과 그 배경, 할 일, 위험, 확신 정도
   refs/         scout 결과와 intent 점검: source.md data.md logic.md flow.md learnings.md intent-check.md
   PLAN.md       한 장: 이해, AS-IS → TO-BE, 부작용, 변경, 시나리오
   review.md     리뷰 라운드, 각 라운드는 VERDICT로 끝남
-  evidence.md   검사, 시나리오별 결과 한 행, 납품 기록
+  evidence.md   검사, 시나리오별 결과 한 행, 반영 기록
   logs/         모든 PASS·FAIL 뒤의 원본 출력, scripts/는 시나리오별 재실행 스크립트
 ```
 
@@ -117,7 +136,7 @@ git이 추적하는 폴더로 지정하세요.
 - **주장 대신 증거.** 실행 환경이 없으면 PASS가 아니라 BLOCKED입니다. 버그 수정에는
   수정 전에 실패한 테스트가 있어야 하고, 새 동작의 테스트는 그 동작 없이 한 번
   실패하는 것을 확인합니다.
-- **검증한 것만 납품.** 납품한 트리가 검증한 커밋과 다르면 `close`가 거부합니다.
+- **검증한 것만 반영.** 반영한 트리가 검증한 커밋과 다르면 `close`가 거부합니다.
 
 Build는 [ponytail](https://github.com/DietrichGebert/ponytail) 방식(가장 작은
 완전한 변경)을 따릅니다. 규칙은 단계 문서에 들어 있어서 다른 스킬이 필요 없습니다.
@@ -127,7 +146,7 @@ Build는 [ponytail](https://github.com/DietrichGebert/ponytail) 방식(가장 �
 `sdlc.sh status --json`은 모든 기능의 단계, 상태, 점수, 경로를 보여 줍니다.
 `sdlc.sh next <slug>`는 `0` 진행 가능, `10` 사람 필요, `20` 막힘, `30` 완료로
 끝납니다. 스크립트는 기록하고 보고할 뿐 모델을 돌리지 않습니다. 무인 실행은
-기록된 사람의 허락만큼만 납품합니다. 따로 허락하지 않았다면 로컬 커밋까지입니다.
+기록된 사람의 허락만큼만 반영합니다. 따로 허락하지 않았다면 로컬 커밋까지입니다.
 Windows에서는 Git Bash나 WSL로 `sdlc.sh`를 실행하세요.
 
 ## 개인 to-do

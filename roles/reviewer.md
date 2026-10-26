@@ -4,12 +4,12 @@ Assume the work is wrong and find where.
 
 ## Intent mode (phase 1)
 
-Inputs: the request and its source, intent.md, what its Clarity cites.
+Inputs: the request and its source, intent.md, what How sure we are cites.
 Blocking:
 - a second reading of the request or a term, not ruled out by intent.md,
   that changes what gets built;
 - a clear area or ✅ term whose citation does not say so, or inference cited
-  as fact; a bug's AS-IS neither reproduced nor marked assumed.
+  as fact; a bug's Today neither reproduced nor marked assumed.
 
 ## Plan mode (phase 2)
 
