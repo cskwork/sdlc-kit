@@ -50,17 +50,27 @@
 <dialog id="detail" class="detail" aria-labelledby="detail-title">
   <div class="detail-head">
     <h2 id="detail-title" tabindex="-1"></h2>
-    <button type="button" id="detail-close" class="quiet">Close</button>
+    <div class="detail-tools">
+      <span role="group" aria-label="Text size">
+        <button type="button" id="text-smaller" class="quiet" aria-label="Smaller text">A−</button>
+        <button type="button" id="text-larger" class="quiet" aria-label="Larger text">A+</button>
+      </span>
+      <button type="button" id="detail-close" class="quiet">Close</button>
+    </div>
   </div>
   <p id="detail-gone" class="notice" hidden>This item changed or was removed. Close and open it again from the list.</p>
   <dl id="detail-fields" class="fields"></dl>
 
+  <div class="detail-body">
+  <div class="detail-main">
   <section id="artifact-box" class="artifact-box" hidden aria-labelledby="artifact-title">
     <h3 id="artifact-title">What you are asked to approve</h3>
     <p class="hint" id="artifact-file"></p>
     <div id="artifact" class="artifact"></div>
   </section>
-
+  <button type="button" id="artifact-reload" class="quiet" hidden>Reload artifact</button>
+  </div>
+  <div class="detail-side">
   <section id="decide" class="decide" hidden aria-labelledby="decide-title">
     <h3 id="decide-title">Your decision</h3>
     <form id="approve-form" novalidate>
@@ -74,9 +84,7 @@
       </div>
     </form>
   </section>
-
-      <button type="button" id="artifact-reload" class="quiet" hidden>Reload artifact</button>
-      <section id="reply-box" class="reply-box" hidden aria-labelledby="reply-title">
+  <section id="reply-box" class="reply-box" hidden aria-labelledby="reply-title">
     <h3 id="reply-title">Reply</h3>
     <form id="reply-form" novalidate>
       <label for="reply-text">Your answer</label>
@@ -95,6 +103,8 @@
     <h3 id="notes-title">Notes</h3>
     <pre id="notes" class="notes"></pre>
   </section>
+  </div>
+  </div>
 </dialog>
 
 <div id="announce" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
