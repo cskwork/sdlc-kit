@@ -24,7 +24,8 @@ finds few. sdlc-kit puts understanding first and independent proof last, and
 keeps everything in between small.
 
 It is adapted from [Anthropic's AI-Native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook)
-and needs no particular harness: it is Markdown plus one shell script.
+and needs no particular harness: the core loop is Markdown plus one shell script.
+The personal to-do is an optional Node 18+ add-on.
 
 > sdlc-kit is an independent project and is not affiliated with Anthropic.
 
@@ -135,6 +136,43 @@ route. `sdlc.sh next <slug>` exits `0` ready, `10` needs a human, `20`
 blocked, `30` done. The scripts record and report; they never run a model. An
 unattended run delivers no further than your recorded words allow — a local
 commit unless you said more. Windows: run `sdlc.sh` in Git Bash or WSL.
+
+## Personal to-do
+
+Keep work across projects in one human-readable `~/.sdlc/todo.md`.
+The TUI and localhost web page show and update the same file live.
+Set `SDLC_TODO` to use another file.
+This optional add-on requires Node 18+; the core loop still needs only bash.
+
+```bash
+node ~/sdlc-kit/todo/todo.mjs                     # TUI plus web page
+node ~/sdlc-kit/todo/todo.mjs web --open          # web page only
+node ~/sdlc-kit/todo/todo.mjs add "Fix login ~/code/web https://acme.atlassian.net/browse/WEB-123" --by jira
+node ~/sdlc-kit/todo/todo.mjs next                # first Open item
+```
+
+Agents and programs use `todo.mjs add` to attach a project path and ticket link, including Jira links.
+The kit makes no Jira API calls.
+Every sdlc slug, new or resumed, has a to-do item.
+Have a host follow [todo/AGENT.md](todo/AGENT.md) to work proactively.
+It includes Claude Code `/loop`, cron/launchd and Paseo recipes; the kit never runs a model.
+
+`next` exits `0` workable, `10` waiting for the human, `20` blocked with error text, or `30` nothing to do.
+Agents must stop at a waiting or blocked first item and never skip to a lower one.
+Gate approvals and intent blocking questions surface through sync; the agent stops without adding an explicit wait.
+Use `wait` only for questions sdlc.sh does not track, such as which project or a question outside an sdlc artifact.
+Decide in the TUI, web page or chat; replies inform the artifact and never count as approval.
+The web page shows intent or plan before approval.
+
+Completed items are checked, struck through and moved to Done, newest first.
+Done keeps 30 items; older ones move to `todo-archive.md` beside the to-do file.
+History records local time as `YYYY-MM-DD HH:MM`, with the author and action.
+You can edit the file directly; saving an old editor buffer can overwrite newer changes.
+
+Web access stays on `127.0.0.1`, with Host/Origin checks and a per-run token held in memory by the server and page.
+The kit never writes the token to disk; the browser may keep the opened URL in history. The token dies when the process exits.
+Approve binds the bytes shown through `sdlc.sh approve <intent|plan> <slug> --human "<words>" --sha <hex>`; changed bytes are refused.
+Same-user programs are outside this boundary, as with `--human`.
 
 ## Upgrading from v0.x
 
