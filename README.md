@@ -151,6 +151,12 @@ node ~/sdlc-kit/todo/todo.mjs add "Fix login ~/code/web https://acme.atlassian.n
 node ~/sdlc-kit/todo/todo.mjs next                # first Open item
 ```
 
+The TUI and web page show English or Korean: pass `--lang ko` (TUI or `web`) or set `SDLC_TODO_LANG=ko`; the flag wins, an unknown variable means English, and English is the default.
+Press `L` in the TUI or use the page's language menu to switch until restart or reload.
+Statuses say who acts next: your turn (approve intent, approve plan or answer), agent working, not started, blocked — fix needed, or done; the row where agents stop says so.
+To add a language, copy `todo/locales/en.mjs` to `todo/locales/<code>.mjs`, translate `name` and every message, and add its import to `locales` in `todo/i18n.mjs`.
+The flag, the TUI key, the page menu and the served files follow that registry; the parity test fails on a missing key or `{placeholder}`, and a missing key shows in English.
+
 Agents and programs use `todo.mjs add` to attach a project path and ticket link, including Jira links.
 The kit makes no Jira API calls.
 Every sdlc slug, new or resumed, has a to-do item.

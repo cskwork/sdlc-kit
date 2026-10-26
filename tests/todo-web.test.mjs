@@ -247,6 +247,20 @@ test('S3: SSE observes an external core write within one second without reloadin
   assert.equal(update.items.length, 2);
 });
 
+test('approval without a note opens the gate and records the shown version', async t => {
+  const ctx = await web(t);
+  const dir = project(ctx.root);
+  const slug = 'web-blank-note';
+  feature(dir, slug);
+  const item = await core.add(ctx.file, 'Approve without a note', { project: dir, slug });
+  const shown = await request(ctx, `/api/artifact?id=${item.id}`);
+  assert.equal(shown.json.gate, 'intent', shown.text);
+  items(await post(ctx, '/api/approve', { id: item.id, gate: 'intent', sha: shown.json.sha, words: '  ' }), ctx.file);
+  assert.match(sdlc(dir, 'check', 'intent', slug), /GATE OPEN/);
+  assert.ok(readFileSync(ctx.file, 'utf8').includes(
+    `human: approved intent — "approved as shown in the to-do web page (version ${shown.json.sha.slice(0, 12)})"`));
+});
+
 test('S6/S7/S8: intent artifact bytes bind approval; stale approval and replies keep the gate closed', async t => {
   const ctx = await web(t);
   const dir = project(ctx.root);
@@ -274,6 +288,26 @@ test('S6/S7/S8: intent artifact bytes bind approval; stale approval and replies 
   items(await post(ctx, '/api/approve', { id: item.id, gate: 'intent', sha: shown.json.sha, words }), ctx.file);
   assert.match(sdlc(child, 'check', 'intent', slug), /GATE OPEN/);
   assert.ok(readFileSync(ctx.file, 'utf8').includes(`human: approved intent — "${words}"`));
+});
+
+test('an open item without an approval gate shows its work document read-only', async t => {
+  const ctx = await web(t);
+  const dir = project(ctx.root);
+  const slug = 'web-readonly';
+  const folder = feature(dir, slug);
+  sdlc(dir, 'approve', 'intent', slug, '--human', 'approved the planned outcomes');
+  const item = await core.add(ctx.file, 'Planning work', { project: dir, slug });
+  let shown = await request(ctx, `/api/artifact?id=${item.id}`);
+  assert.equal(shown.status, 200, shown.text);
+  assert.equal(shown.json.gate, '', 'no gate: nothing to approve');
+  assert.equal(realpathSync(shown.json.file), realpathSync(join(folder, 'intent.md')), 'before a plan exists, the intent is the work document');
+  assert.equal(shown.json.markdown, readFileSync(join(folder, 'intent.md'), 'utf8'));
+  const refused = await post(ctx, '/api/approve', { id: item.id, gate: 'plan', sha: shown.json.sha, words: 'approved what I read' });
+  assert.equal(refused.status, 409, refused.text);
+  gateClosed(dir, 'plan', slug);
+  writeFileSync(join(folder, 'PLAN.md'), plan);
+  shown = await request(ctx, `/api/artifact?id=${item.id}`);
+  assert.equal(realpathSync(shown.json.file), realpathSync(join(folder, 'PLAN.md')), 'once a plan exists, it is the work document');
 });
 
 test('S6/S7: plan approval binds displayed bytes and targets the selected project', async t => {
@@ -306,7 +340,7 @@ test('S6/S7: plan approval binds displayed bytes and targets the selected projec
   assert.ok(readFileSync(ctx.file, 'utf8').includes(`human: approved plan — "${words}"`));
 });
 
-test('artifact and approval validation reject unknown ids, gates, hashes and empty words', async t => {
+test('artifact and approval validation reject unknown ids, gates and hashes', async t => {
   const ctx = await web(t);
   const item = await core.add(ctx.file, 'No SDLC feature');
   for (const pathname of ['/api/artifact', '/api/artifact?id=missing', `/api/artifact?id=${item.id}`]) {
@@ -317,7 +351,6 @@ test('artifact and approval validation reject unknown ids, gates, hashes and emp
   for (const body of [
     {}, { id: item.id, gate: 'build', sha: 'a'.repeat(64), words: 'approved scope' },
     { id: item.id, gate: 'intent', sha: 'bad', words: 'approved scope' },
-    { id: item.id, gate: 'intent', sha: 'a'.repeat(64), words: '' },
     { id: 'missing', gate: 'intent', sha: 'a'.repeat(64), words: 'approved scope' },
   ]) {
     const response = await request(ctx, '/api/approve', { method: 'POST', body });
@@ -654,4 +687,22 @@ fi
   assert.equal(response.status, 200, response.text);
   assert.deepEqual(readFileSync(calls, 'utf8').trim().split(/\r?\n/), ['status', 'approve', 'status'], 'store lookup precedes approval; one inbox refresh follows');
   assert.ok(core.load(ctx.file).items[0].events.some(e => e.who === 'human' && e.what === 'approved intent — "approved shown scope"'));
+});
+
+test('language: payload and live snapshot carry the configured language; locale modules are served as JS', async t => {
+  const { languages, defaultLanguage } = await import('../todo/i18n.mjs');
+  const other = languages.find(l => l !== defaultLanguage);
+  assert.equal((await request(await web(t), '/api/items')).json.lang, defaultLanguage);
+  const ctx = await web(t, { lang: other });
+  assert.equal((await request(ctx, '/api/items')).json.lang, other);
+  const added = await request(ctx, '/api/items', { method: 'POST', body: { text: 'Translated page' } });
+  assert.equal(added.json.lang, other, 'mutation responses keep the language');
+  for (const pathname of ['/i18n.mjs', ...languages.map(l => `/locales/${l}.mjs`)]) {
+    const asset = await request(ctx, pathname, { token: null });
+    assert.equal(asset.status, 200, pathname);
+    assert.match(asset.headers['content-type'], /^text\/javascript/);
+  }
+  assert.equal((await request(ctx, '/locales/../web.mjs', { token: null })).status, 404);
+  assert.equal((await request(ctx, '/locales/xx.mjs', { token: null })).status, 404);
+  await assert.rejects(startWeb({ file: ctx.file, kit, lang: 'xx', onUrl() {} }), /invalid language/);
 });
