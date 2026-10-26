@@ -185,7 +185,7 @@ function updateRow(li, item) {
   }
   li.dataset.status = item.status;
   // Rebuild the small info line only when it changed, so a focused link keeps focus.
-  const sig = JSON.stringify([item.status, item.project, item.link, item.sdlc?.phase, item.sdlc?.action, item.done]);
+  const sig = JSON.stringify([item.status, item.project, item.link, item.sdlc?.phase, item.error, item.sdlc?.action, item.done]);
   if (sig === r.sig) return;
   r.sig = sig;
   const parts = [];
@@ -193,7 +193,7 @@ function updateRow(li, item) {
     if (item.status === 'waiting') parts.push(chip('Waiting', 'badge wait'));
     else if (item.status === 'blocked') {
       parts.push(chip('Blocked', 'badge blocked'));
-      parts.push(chip(item.sdlc?.action || 'Unknown error', 'row-error'));
+      parts.push(chip(item.error || item.sdlc?.action || 'Unknown error', 'row-error'));
     }
     else if (item.sdlc) parts.push(chip('In progress', 'badge busy'));
   }
@@ -464,7 +464,7 @@ function renderDetail() {
   const status = { waiting: 'Needs you', blocked: 'Blocked', workable: item.sdlc ? 'In progress' : 'Open', done: 'Done' }[item.status];
   field(dl, 'Status', status);
   if (item.status === 'waiting') field(dl, 'Waiting for', whatWaits(item));
-  if (item.status === 'blocked') field(dl, 'Problem', item.sdlc?.action || 'Unknown');
+  if (item.status === 'blocked') field(dl, 'Problem', item.error || item.sdlc?.action || 'Unknown');
   field(dl, 'Project', item.project);
   if (item.link && /^https?:\/\//i.test(item.link.url)) {
     const a = el('a', '', item.link.label);
@@ -586,8 +586,12 @@ $('detail-close').addEventListener('click', () => dialog.close());
 dialog.addEventListener('close', () => {
   const id = detailId;
   detailId = '';
-  if (opener?.isConnected && opener.getClientRects().length) opener.focus();
-  else (rows.get(id)?.querySelector('[data-role="open"]') || addText).focus();
+  const row = rows.get(id);
+  // Mobile row tools hide while the dialog has focus; reveal them before restoring the opener.
+  if (opener?.isConnected && !opener.getClientRects().length) row?.focus({ preventScroll: true });
+  const target = opener?.isConnected && opener.getClientRects().length ? opener
+    : row?.isConnected && row.getClientRects().length ? row : addText;
+  target.focus({ preventScroll: true });
 });
 
 // ---------- live updates ----------

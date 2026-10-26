@@ -12,6 +12,21 @@ import { render, reduce } from '../todo/tui.mjs';
 const item = (id, changes = {}) => ({ id, title: `작업 ${id}`, project: '~/code/web',
   link: { label: 'WEB-123', url: 'https://example.atlassian.net/browse/WEB-123' },
   sdlc: null, waiting: '', events: [], notes: [], status: 'workable', done: false, ...changes });
+
+for (const view of ['list', 'details']) {
+  for (const reason of ['error', 'action', 'both']) {
+    test(`S23: blocked ${view} shows the repair instruction from ${reason}`, () => {
+      const repair = 'relative project path: write an absolute or ~/ path';
+      const blocked = item('blocked', { status: 'blocked', project: './project',
+        error: reason !== 'action' ? repair : undefined,
+        sdlc: reason === 'error' ? null : { state: 'BLOCKED', action: reason === 'both' ? 'stale action' : repair } });
+      const text = render({ file: '/tmp/todo.md', items: [blocked], selected: 0, view },
+        { width: 100, height: 28 }).join('\n');
+      assert.ok(text.includes(`${view === 'list' ? 'blocked' : 'Action'}: ${repair}`), text);
+      assert.doesNotMatch(text, /blocked: blocked|Action: —|stale action/);
+    });
+  }
+}
 const fixture = () => ({ file: '/tmp/할 일/todo.md', selected: 0, view: 'list', items: [
   item('open', { title: '한글 제목과 가족 👨‍👩‍👧‍👦 그리고 긴 제목 '.repeat(3) }),
   item('progress', { sdlc: { slug: '261026-work', phase: 'build', state: 'READY', action: '' } }),
