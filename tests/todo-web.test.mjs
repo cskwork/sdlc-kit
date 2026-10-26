@@ -276,6 +276,26 @@ test('S6/S7/S8: intent artifact bytes bind approval; stale approval and replies 
   assert.ok(readFileSync(ctx.file, 'utf8').includes(`human: approved intent — "${words}"`));
 });
 
+test('an open item without an approval gate shows its work document read-only', async t => {
+  const ctx = await web(t);
+  const dir = project(ctx.root);
+  const slug = 'web-readonly';
+  const folder = feature(dir, slug);
+  sdlc(dir, 'approve', 'intent', slug, '--human', 'approved the planned outcomes');
+  const item = await core.add(ctx.file, 'Planning work', { project: dir, slug });
+  let shown = await request(ctx, `/api/artifact?id=${item.id}`);
+  assert.equal(shown.status, 200, shown.text);
+  assert.equal(shown.json.gate, '', 'no gate: nothing to approve');
+  assert.equal(realpathSync(shown.json.file), realpathSync(join(folder, 'intent.md')), 'before a plan exists, the intent is the work document');
+  assert.equal(shown.json.markdown, readFileSync(join(folder, 'intent.md'), 'utf8'));
+  const refused = await post(ctx, '/api/approve', { id: item.id, gate: 'plan', sha: shown.json.sha, words: 'approved what I read' });
+  assert.equal(refused.status, 409, refused.text);
+  gateClosed(dir, 'plan', slug);
+  writeFileSync(join(folder, 'PLAN.md'), plan);
+  shown = await request(ctx, `/api/artifact?id=${item.id}`);
+  assert.equal(realpathSync(shown.json.file), realpathSync(join(folder, 'PLAN.md')), 'once a plan exists, it is the work document');
+});
+
 test('S6/S7: plan approval binds displayed bytes and targets the selected project', async t => {
   const ctx = await web(t);
   const one = project(ctx.root, 'one');

@@ -176,7 +176,9 @@ function updateRow(li, item) {
   if (r.waitLine) {
     const needsYou = item.id === items.find(i => !i.done && i.status === 'waiting')?.id;
     li.classList.toggle('needs-you', needsYou);
-    r.waitLine.hidden = !needsYou;
+    // Every waiting row says what it waits for; only the first is highlighted.
+    r.waitLine.hidden = item.status !== 'waiting';
+    r.waitLabel.hidden = !needsYou;
     r.waitWhat.textContent = whatWaits(item);
     r.review.setAttribute('aria-label', `Review "${item.title}"`);
     r.up.setAttribute('aria-label', `Move "${item.title}" up`);
@@ -437,7 +439,8 @@ function openDetail(id, from) {
   renderDetail();
   dialog.showModal();
   $('detail-title').focus();
-  if (item.status === 'waiting') loadArtifact();
+  // Every open sdlc item shows its work document; only an approval gate adds the decision form.
+  if (!item.done && item.sdlc) loadArtifact();
 }
 function field(dl, name, value) {
   if (!value) return;
@@ -493,18 +496,19 @@ async function loadArtifact() {
   try {
     const data = await api(`/api/artifact?id=${encodeURIComponent(id)}`);
     if (id !== detailId || request !== artifactRequest) return;
-    $('artifact-box').hidden = !data.gate;
-    if (!data.gate) return;
+    $('artifact-box').hidden = false;
+    $('artifact-title').textContent = data.gate ? 'What you are asked to approve' : 'Work document';
     const { renderMarkdown } = await import('./markdown.js');
     const rendered = renderMarkdown(data.markdown || '');
     if (id !== detailId || request !== artifactRequest) return;
     // The renderer escapes all HTML first; this is the page's only innerHTML.
     $('artifact').innerHTML = rendered;
+    $('artifact-file').textContent = data.file || '';
+    if (!data.gate) return;
     artifact = { ...data, version };
     $('decide').hidden = false;
     $('approve-submit').disabled = false;
     const what = artifact.gate === 'intent' ? 'what will be done' : 'the plan';
-    $('artifact-file').textContent = artifact.file || '';
     $('approve-submit').textContent = artifact.gate === 'intent' ? 'Approve intent' : 'Approve plan';
     $('approve-help').textContent = `Approving records your words and lets the agent go ahead with ${what}, exactly as shown above (version ${artifact.sha.slice(0, 12)}). If the file changed since it was shown, the approval is refused.`;
   } catch (error) {
@@ -514,7 +518,9 @@ async function loadArtifact() {
     $('approve-submit').disabled = true;
     $('artifact-box').hidden = false;
     $('artifact-reload').hidden = false;
-    $('artifact').replaceChildren(el('p', 'field-error', `Could not load what needs approval: ${error.message}`));
+    $('artifact-title').textContent = 'Work document';
+    $('artifact-file').textContent = '';
+    $('artifact').replaceChildren(el('p', 'field-error', `Could not load the work document: ${error.message}`));
   }
 }
 function updateCount() { $('approve-count').textContent = `${$('approve-words').value.trim().length} / 500`; }

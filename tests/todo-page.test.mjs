@@ -142,6 +142,27 @@ for (const state of ['visible control', 'hidden mobile control', 'removed contro
   });
 }
 
+for (const gate of ['', 'intent']) {
+  test(`Details shows the work document of a waiting item ${gate ? 'with the decision form for its gate' : 'read-only for a question'}`, async () => {
+    const p = page('#t=test-token', {
+      source: source.replace("await import('./markdown.js')", '({ renderMarkdown: text => text })'),
+      fetch: async url => url === '/api/items' ? new Promise(() => {}) : {
+        ok: true, text: async () => JSON.stringify({ gate, file: '/p/.sdlc/work/x/intent.md', markdown: '# Scope', sha: 'a'.repeat(64) })
+      }
+    });
+    vm.runInContext(`
+      items = [{ id: 'abcdef', title: 'Waiting item', status: 'waiting', events: [], notes: [], project: '/p',
+        sdlc: { slug: 'x', phase: 'intent', state: 'NEEDS-HUMAN', action: ${JSON.stringify(gate ? 'approve intent --human' : 'Which scope should ship?')} } }];
+      openDetail('abcdef');
+    `, p.context);
+    await vm.runInContext('loadArtifact()', p.context);
+    assert.ok(p.requests.some(r => r.url.startsWith('/api/artifact')), 'a question needs its intent to be answered');
+    assert.equal(p.nodes.get('artifact-box').hidden, false);
+    assert.equal(p.nodes.get('artifact-title').textContent, gate ? 'What you are asked to approve' : 'Work document');
+    assert.equal(p.nodes.get('decide').hidden, !gate, 'only an approval gate offers the decision form');
+  });
+}
+
 test('B4: the page never uses Web Storage or cookies', () => {
   assert.equal(/\b(?:sessionStorage|localStorage)\b|\bcookie(?:Store)?\b/i.test(source), false,
     'app.js must not use browser storage or cookies');

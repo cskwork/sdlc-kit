@@ -28,12 +28,21 @@ function itemFor(file, id) {
   if (!item) fail(404, 'item not found');
   return item;
 }
+const slugPattern = /^[a-z0-9][a-z0-9._-]{0,79}$/;
+const gateIn = item => item.sdlc?.state === 'NEEDS-HUMAN' && item.sdlc.action.match(/\bapprove\s+(intent|plan)\b/)?.[1] || '';
 function approvalGate(item) {
   core.projectPath(item.project);
-  const gate = item.sdlc?.action.match(/\bapprove\s+(intent|plan)\b/)?.[1];
-  if (item.done || item.sdlc?.state !== 'NEEDS-HUMAN' || !gate || !item.project ||
-      !/^[a-z0-9][a-z0-9._-]{0,79}$/.test(item.sdlc.slug)) fail(409, 'item has no approval gate');
+  const gate = gateIn(item);
+  if (item.done || !gate || !item.project ||
+      !slugPattern.test(item.sdlc.slug)) fail(409, 'item has no approval gate');
   return gate;
+}
+// Any open sdlc item can show its work document; only an approval gate makes it approvable.
+function documentGate(item) {
+  core.projectPath(item.project);
+  if (item.done || !item.sdlc || !item.project ||
+      !slugPattern.test(item.sdlc.slug)) fail(409, 'item has no work document');
+  return gateIn(item);
 }
 // Bash can keep a junction cwd whose realpath would select a different store.
 async function projectStore(item, kit, statusRunner) {
@@ -47,7 +56,9 @@ async function artifact(item, gate, kit, statusRunner) {
   const store = await projectStore(item, kit, statusRunner);
   let folder = path.join(store, 'work', item.sdlc.slug);
   if (!fs.existsSync(folder)) folder = path.join(store, 'archive', item.sdlc.slug);
-  const file = path.join(folder, gate === 'intent' ? 'intent.md' : 'PLAN.md');
+  // Without a gate, show the plan once one exists, otherwise the intent.
+  const plan = gate ? gate === 'plan' : item.sdlc.phase !== 'intent' && fs.existsSync(path.join(folder, 'PLAN.md'));
+  const file = path.join(folder, plan ? 'PLAN.md' : 'intent.md');
   const bytes = fs.readFileSync(file);
   return { gate, file, markdown: bytes.toString('utf8'), sha: createHash('sha256').update(bytes).digest('hex') };
 }
@@ -132,7 +143,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
         } else if (url.pathname === '/api/artifact') {
           await core.sync(file, { kit });
           const item = itemFor(file, url.searchParams.get('id'));
-          json(200, await artifact(item, approvalGate(item), kit, statusRunner));
+          json(200, await artifact(item, documentGate(item), kit, statusRunner));
         } else if (url.pathname === '/events') {
           const initial = payload();
           res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', Connection: 'keep-alive' });
