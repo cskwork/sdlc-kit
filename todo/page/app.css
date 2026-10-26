@@ -65,15 +65,20 @@ a { color: var(--accent); text-underline-offset: 3px; }
 /* header */
 .top { margin-bottom: 1.75rem; }
 .timestamp { display: block; text-align: center; color: var(--muted); font-size: 0.8rem; margin-bottom: 1.75rem; }
-.meta { display: flex; flex-wrap: wrap; gap: 0.25rem 0.85rem; margin-top: 0.4rem; color: var(--muted); font-size: 0.8rem; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.85rem; margin-top: 0.4rem; color: var(--muted); font-size: 0.8rem; }
 .live { display: inline-flex; align-items: center; gap: 0.35rem; }
 .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); }
 .live[data-state="retry"] .dot { background: var(--yellow); animation: pulse 1.6s ease-in-out infinite; }
 .live[data-state="off"] .dot { background: var(--bad); }
+.lang {
+  margin-left: auto; min-height: 44px; padding: 0 0.5rem; border-radius: 8px;
+  border: 0; background: transparent; color: var(--control); font: inherit; cursor: pointer;
+}
+.lang:hover { color: var(--ink); background: var(--highlight); }
 @keyframes pulse { 50% { opacity: 0.35; } }
 
 /* controls */
-button, input, textarea { font: inherit; color: inherit; }
+button, input, textarea, select { font: inherit; color: inherit; }
 button {
   min-height: 44px; min-width: 44px; padding: 0 0.75rem; border-radius: 8px;
   border: 0; background: transparent; color: var(--accent); cursor: pointer;
@@ -140,6 +145,8 @@ a.chip { display: inline-block; min-height: 44px; min-width: 44px; line-height: 
 .badge + .chip::before { display: none; }
 .badge + .chip { margin-left: 0.4rem; }
 .badge.wait { color: var(--accent); background: var(--highlight); }
+/* On the highlighted stop row the pill keeps a paper fill so it still reads as a pill. */
+.needs-you .badge.wait { background: var(--paper); box-shadow: inset 0 0 0 1px var(--accent); }
 .badge.busy { color: var(--busy); background: var(--busy-bg); }
 .badge.ok { color: var(--ok); background: var(--ok-bg); }
 .badge.open { color: var(--muted); background: var(--open-bg); }
@@ -150,11 +157,10 @@ a.chip { display: inline-block; min-height: 44px; min-width: 44px; line-height: 
 .row[data-tone="wait"] .check::before { border-color: var(--accent); }
 .row[data-tone="blocked"] .check::before { border-color: var(--bad); }
 .row[data-tone="busy"] .check::before { border-color: var(--busy); }
-.needs-you .badge.wait { display: none; }
-.needs-you .badge.wait + .chip::before { display: none; }
 .badge.blocked { color: var(--bad); }
 .wait-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0 0.5rem; font-size: 0.8rem; color: var(--muted); }
 .wait-label { color: var(--accent); font-weight: 600; }
+.wait-label[data-actor="blocked"] { color: var(--bad); }
 .wait-line button { padding: 0 0.5rem; }
 .tools { grid-column: 3; grid-row: 1; display: flex; align-items: center; opacity: 0; pointer-events: none; }
 .row:hover .tools, .row:focus-within .tools { opacity: 1; pointer-events: auto; }
@@ -225,7 +231,7 @@ a.chip { display: inline-block; min-height: 44px; min-width: 44px; line-height: 
 /* Wide screens: one row per item with title, status and context side by side. */
 @media (min-width: 1024px) {
   .page { max-width: 1280px; }
-  .main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(14rem, 22rem); column-gap: 1.5rem; align-items: start; }
+  .main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 30rem); column-gap: 1.5rem; align-items: start; }
   .main > .title, .main > .edit { grid-column: 1; grid-row: 1; }
   .main > .info { grid-column: 2; grid-row: 1; min-height: 44px; align-content: center; }
   .main > .wait-line, .main > .when { grid-column: 1 / -1; }

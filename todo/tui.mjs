@@ -1,6 +1,8 @@
 import { emitKeypressEvents } from 'node:readline';
 import { spawn } from 'node:child_process';
 import * as core from './core.mjs';
+import { defaultLanguage, locales, nextLanguage, phaseLabel, translator } from './i18n.mjs';
+import { countsOf, queueOf, statusOf } from './status.mjs';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 const chars = text => [...segmenter.segment(String(text))].map(part => part.segment);
@@ -41,51 +43,56 @@ function wrap(text, width) {
 const visible = state => (state.items || []).filter(item => !item.done || state.showDone);
 const selected = state => visible(state)[state.selected || 0];
 const waiting = item => item?.status === 'waiting';
-const waitText = item => item.waiting || item.sdlc?.action || 'Needs your decision';
+const textOf = state => translator(state.lang || defaultLanguage);
+// What the human is asked to do: the explicit wait, else the sdlc action, else the generic step.
+const waitText = (item, t) => item.waiting || item.sdlc?.action || t(`next.${statusOf(item).kind}`);
 const doneTime = item => [...(item.events || [])].reverse().find(e => /^(done|DONE)(?:$| —)/.test(e.what))?.at || '';
-function status(item) {
-  if (item.done) return ['✓', 'done', '2;33'];
-  if (item.status === 'blocked') return ['✕', 'blocked', '31'];
-  if (waiting(item)) return ['●', 'needs you', '33'];
-  if (item.sdlc?.slug) return ['◐', 'in progress', '36'];
-  return ['○', 'open', ''];
+const looks = { done: ['✓', '2;33'], blocked: ['✕', '31'], you: ['●', '33'], agent: ['◐', '36'], new: ['○', ''] };
+function status(item, t) {
+  const { actor, kind } = statusOf(item);
+  return [...looks[kind === 'new' ? kind : actor], t(`status.${kind}`)];
 }
-function detailLines(item) {
-  const [glyph, label] = status(item);
-  return [item.title, `${glyph} ${label} · ${item.id}`, `Project: ${item.project || '—'}`,
-    `Link: ${item.link?.url || '—'}`, `SDLC: ${item.sdlc?.slug || '—'}`,
-    `Phase: ${item.sdlc?.phase || '—'} · ${item.sdlc?.state || '—'}`,
-    `Action: ${item.error || item.sdlc?.action || '—'}`, `Waiting: ${item.waiting || (waiting(item) ? waitText(item) : '—')}`,
-    ...(waiting(item) ? ['w: read and decide in the browser'] : []),
-    ...(item.done ? [`Done: ${doneTime(item) || '—'}`] : []), '', 'History',
-    ...(item.events || []).map(e => `${e.at} ${e.who}: ${e.what}`), '', 'Notes', ...(item.notes || [])];
+const webText = (state, t) => state.webUrl || (state.webError ? t('tui.webOffBecause', { reason: state.webError }) : t('tui.webOff'));
+function detailLines(item, t) {
+  const [glyph, , label] = status(item, t);
+  return [item.title, `${glyph} ${label} · ${item.id}`, t('tui.field.project', { value: item.project || '—' }),
+    t('tui.field.link', { value: item.link?.url || '—' }), t('tui.field.sdlc', { value: item.sdlc?.slug || '—' }),
+    t('tui.field.phase', { phase: item.sdlc?.phase ? phaseLabel(t, item.sdlc.phase) : '—', state: item.sdlc?.state || '—' }),
+    t('tui.field.action', { value: item.error || item.sdlc?.action || '—' }),
+    t('tui.field.next', { value: waiting(item) ? waitText(item, t) : '—' }),
+    ...(waiting(item) ? [t('tui.decideInBrowser')] : []),
+    ...(item.done ? [t('tui.field.done', { value: doneTime(item) || '—' })] : []), '', t('tui.history'),
+    ...(item.events || []).map(e => `${e.at} ${e.who}: ${e.what}`), '', t('tui.notes'), ...(item.notes || [])];
 }
-const help = ['Keys · ? / Esc close', '', '↑ ↓ / j k  Select       g G  First / last',
-  'a  Add                 Enter  Details', 'e  Edit title          x / Space  Toggle done',
-  'd  Delete (y/n)        u  Undo last delete/done/edit', 'J K  Move down/up      Tab  Show/hide Done',
-  'r  Reply when waiting  o  Open link', 'w  Open item in web    R  Sync now',
-  'q / Ctrl+C  Quit       Esc  Back / cancel', '',
-  'Input: ← → Home End Backspace · Ctrl+U clear', 'Enter submits · empty input cancels', '',
-  'Waiting: w: read and decide in the browser', 'Replies record your words; decide in the browser.',
-  'Details/help: ↑ ↓ j k / PgUp PgDn scroll · g G'];
+const helpKeys = [['↑ ↓ / j k', 'select', 'g G', 'ends'], ['a', 'add', 'Enter', 'details'], ['e', 'edit', 'x / Space', 'done'],
+  ['d', 'delete', 'u', 'undo'], ['J K', 'move', 'Tab', 'showDone'], ['r', 'reply', 'o', 'link'], ['w', 'web', 'R', 'sync'],
+  ['L', 'language', 'q / Ctrl+C', 'quit'], ['Esc', 'back']];
+function help(t) {
+  const pad = (text, size) => text + ' '.repeat(Math.max(0, size - widthOf(text)));
+  const cells = helpKeys.map(([key, label, ...rest]) => [`${key}  ${t(`tui.help.${label}`)}`, rest.length ? `${rest[0]}  ${t(`tui.help.${rest[1]}`)}` : '']);
+  const left = Math.max(...cells.map(([cell]) => widthOf(cell))) + 2;
+  return [t('tui.help.title'), '', ...cells.map(([a, b]) => b ? pad(a, left) + b : a), '',
+    t('tui.help.input'), t('tui.help.submit'), '', t('tui.help.legend'), t('tui.help.stop'), t('tui.help.decide'), t('tui.help.scroll')];
+}
 
 function headerLines(state, width) {
-  const items = state.items || [], open = items.filter(i => !i.done);
-  const web = state.webUrl || `web: off${state.webError ? ` (${state.webError})` : ''}`;
-  const counts = `To-do · ${open.length} open · ${open.filter(waiting).length} needs you · ${items.length - open.length} done`;
+  const t = textOf(state), items = state.items || [];
+  const web = webText(state, t);
+  const counts = t('tui.counts', countsOf(items));
   const combined = widthOf(counts + ' · ' + clean(web)) <= width;
   return [clip(combined ? `${counts} · ${web}` : counts, width), clip(state.file || '', width),
     ...(!combined ? wrap(web, width) : [])];
 }
 function detailContent(state, width) {
   const item = selected(state);
-  return (state.view === 'help' ? help : item ? detailLines(item) : []).flatMap(line => wrap(line, width));
+  const t = textOf(state);
+  return (state.view === 'help' ? help(t) : item ? detailLines(item, t) : []).flatMap(line => wrap(line, width));
 }
 
 export function render(state, { width = 80, height = 24, color = false } = {}) {
   width = Math.max(1, Math.floor(width)); height = Math.max(1, Math.floor(height));
   const paint = (text, code) => color && code ? `\x1b[${code}m${text}\x1b[0m` : text;
-  const items = state.items || [], open = items.filter(i => !i.done);
+  const t = textOf(state), items = state.items || [], open = items.filter(i => !i.done), { stop } = queueOf(items);
   // Only header URLs and detail text wrap; inbox rows never wrap.
   const lines = headerLines(state, width).map((line, i) => i ? paint(line, '2') : paint(line, '1;33'));
   const capacity = Math.max(0, height - lines.length - 2), item = selected(state);
@@ -98,46 +105,45 @@ export function render(state, { width = 80, height = 24, color = false } = {}) {
     const rows = [];
     let selectionRow = 0, doneHeading = false;
     for (const current of visible(state)) {
-      if (current.done && !doneHeading) { rows.push(`Done · ${items.length - open.length} (Tab to hide)`); doneHeading = true; }
+      if (current.done && !doneHeading) { rows.push(t('tui.doneHide', { count: items.length - open.length })); doneHeading = true; }
       const active = current === item;
       if (active) selectionRow = rows.length;
-      const [glyph, label, code] = status(current), prefix = `${active ? '›' : ' '} ${glyph} `;
+      const [glyph, code, label] = status(current, t), prefix = `${active ? '›' : ' '} ${glyph} `;
       const project = clean(current.project || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop();
       const meta = clean(current.done ? doneTime(current) : [project, current.link?.label ||
-        (current.link?.url ? core.linkLabel(current.link.url) : ''), current.sdlc?.phase].filter(Boolean).join(' · '));
+        (current.link?.url ? core.linkLabel(current.link.url) : ''), current.sdlc?.phase && phaseLabel(t, current.sdlc.phase)].filter(Boolean).join(' · '));
       const showMeta = meta && width >= 72 && widthOf(meta) <= Math.floor(width / 3);
       const title = clip(current.title, width - widthOf(prefix) - (showMeta ? widthOf(meta) + 2 : 0));
       let row = paint(`${active ? '›' : ' '} `, active ? '33' : '') + paint(`${glyph} ${title}`, current.done ? '2;33;9' : code);
       if (showMeta) row += ' '.repeat(Math.max(2, width - widthOf(prefix + title) - widthOf(meta))) + paint(meta, '2');
       rows.push(row);
-      if (waiting(current)) rows.push(paint(clip(`    ${waitText(current)} · w: read and decide in the browser`, width), '2'));
-      if (current.status === 'blocked') rows.push(paint(clip(`    blocked: ${current.error || current.sdlc?.action || label}`, width), code));
-      if (current.done && !showMeta) rows.push(paint(clip(`    Done ${doneTime(current)}`, width), '2'));
+      if (current === stop) rows.push(paint(clip(`    ${t(`stop.${statusOf(current).actor}`)}`, width), code));
+      if (waiting(current)) rows.push(paint(clip(`    ${waitText(current, t)} · ${t('tui.decideInBrowser')}`, width), '2'));
+      if (current.status === 'blocked') rows.push(paint(clip(`    ${t('tui.blockedRow', { reason: current.error || current.sdlc?.action || t('row.unknownError') })}`, width), code));
+      if (current.done && !showMeta) rows.push(paint(clip(`    ${t('tui.doneRow', { at: doneTime(current) })}`, width), '2'));
     }
-    if (!open.length && !visible(state).length) rows.push('No open items · a add');
+    if (!open.length && !visible(state).length) rows.push(t('tui.empty'));
     const rowCapacity = Math.max(0, capacity - (!state.showDone ? 1 : 0));
     let offset = Math.max(0, state.scroll || 0);
     if (selectionRow < offset) offset = selectionRow;
     if (selectionRow >= offset + rowCapacity) offset = Math.max(0, selectionRow - rowCapacity + 1);
     body = rows.slice(offset, offset + rowCapacity);
-    if (!state.showDone && capacity) body.push(`Done · ${items.length - open.length} (Tab to show)`);
+    if (!state.showDone && capacity) body.push(t('tui.doneShow', { count: items.length - open.length }));
   }
   lines.push(...body);
   while (lines.length < height - 2) lines.push('');
   let prompt = state.message || '';
-  if (state.confirm) prompt = `Delete “${state.confirm.title}”? y/n`;
+  if (state.confirm) prompt = t('tui.confirmDelete', { title: state.confirm.title });
   if (state.input) {
-    const input = state.input, units = chars(input.text), budget = Math.max(1, width - widthOf(`${input.kind}> `) - 1);
+    const input = state.input, units = chars(input.text), kind = `${t(`tui.input.${input.kind}`)}> `, budget = Math.max(1, width - widthOf(kind) - 1);
     let start = 0;
     while (widthOf(units.slice(start, input.cursor).join('')) >= budget && start < input.cursor) start++;
-    prompt = !input.text && input.kind === 'add' ? 'add> Title  ~/project  https://ticket' :
-      `${input.kind}> ${units.slice(start, input.cursor).join('')}│${units.slice(input.cursor).join('')}`;
+    prompt = !input.text && input.kind === 'add' ? kind + t('tui.addHint') :
+      `${kind}${units.slice(start, input.cursor).join('')}│${units.slice(input.cursor).join('')}`;
   }
   lines.push(clip(prompt, width));
-  lines.push(clip(state.input ? '← → Home End · Enter submit · Esc cancel · Ctrl+U clear' :
-    ['details', 'help'].includes(state.view) ? '↑↓ scroll · g G · Esc back · r reply · w web · q quit' :
-    waiting(item) ? 'r reply · w: read and decide in the browser · ? help · q quit' :
-    '↑↓ j k · a add · Enter details · x done · ? help · q quit', width));
+  lines.push(clip(t(state.input ? 'tui.keys.input' : ['details', 'help'].includes(state.view) ? 'tui.keys.details' :
+    waiting(item) ? 'tui.keys.waiting' : 'tui.keys.list'), width));
   return lines.slice(0, height);
 }
 
@@ -162,7 +168,7 @@ export function reduce(state, key) {
         if (input.kind === 'add') {
           const parsed = core.parseText(input.text);
           if (parsed.title) effect('add', { text: input.text, ...parsed, by: 'human' });
-          else next.message = 'Title required';
+          else next.message = textOf(state)('tui.titleRequired');
         } else effect(input.kind, { id: input.id, item: input.item, text: input.text.trim() });
       }
     } else if (chars(key).length === 1 && !/[\x00-\x1f\x7f-\x9f]/.test(key)) {
@@ -195,6 +201,10 @@ export function reduce(state, key) {
   } else if (key === 'Tab') { next.showDone = !state.showDone; next.view = 'list'; }
   else if (key === 'a') next.input = { kind: 'add', text: '', cursor: 0 };
   else if (key === 'R') effect('sync');
+  else if (key === 'L') {
+    next.lang = nextLanguage(state.lang || defaultLanguage);
+    next.message = translator(next.lang)('tui.language', { name: locales[next.lang].name });
+  }
   else if (key === 'u' && state.undo) { effect('undo', { undo: state.undo }); next.undo = null; }
   else if (item) {
     if (key === 'Enter') { next.view = 'details'; next.detailOffset = 0; }
@@ -218,8 +228,8 @@ export function reduce(state, key) {
   return { state: next, effects };
 }
 
-function openUrl(url) {
-  if (!['http:', 'https:'].includes(new URL(url).protocol)) throw new Error('Only http(s) URLs can be opened');
+function openUrl(url, t) {
+  if (!['http:', 'https:'].includes(new URL(url).protocol)) throw new Error(t('tui.error.url'));
   const [command, args] = process.platform === 'darwin' ? ['open', [url]] :
     process.platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', url]] : ['xdg-open', [url]];
   return new Promise((resolve, reject) => {
@@ -228,20 +238,21 @@ function openUrl(url) {
   });
 }
 const humanEvent = (item, what) => item.events.push({ at: core.stamp(), who: 'human', what });
-function requireItem(model, id) {
+function requireItem(model, id, t) {
   const item = model.items.find(i => i.id === id);
-  if (!item) throw new Error('Item changed or was removed; try again');
+  if (!item) throw new Error(t('tui.error.gone'));
   return item;
 }
 
-export async function runTui({ file, kit, web }) {
+export async function runTui({ file, kit, web, lang = defaultLanguage }) {
   const input = process.stdin, output = process.stdout;
   if (!input.isTTY || !output.isTTY || !input.setRawMode) throw new Error('A terminal is required for the TUI');
   const readItems = () => {
     const model = core.load(file);
     return model.items.map(item => ({ ...item, version: core.itemVersion(item, model) }));
   };
-  let state = { items: readItems(), file, selected: 0, view: 'list' };
+  let state = { items: readItems(), file, selected: 0, view: 'list', lang };
+  const t = (key, vars) => textOf(state)(key, vars);
   let server, webStart, stopWatch, messageTimer, stopped = false, failure, queue = Promise.resolve(), finish;
   const finished = new Promise(resolve => { finish = resolve; });
   const wasRaw = input.isRaw, wasFlowing = input.readableFlowing;
@@ -281,8 +292,8 @@ export async function runTui({ file, kit, web }) {
     // Core's helpers lack compare-before-write and an undo preimage. Capture both
     // under its lock, so derived IDs cannot silently target a different duplicate.
     const change = fn => core.mutate(file, model => {
-      const item = requireItem(model, effect.id);
-      if (core.itemVersion(item, model) !== effect.item.version) throw new Error('Item changed; review it and try again');
+      const item = requireItem(model, effect.id, t);
+      if (core.itemVersion(item, model) !== effect.item.version) throw new Error(t('tui.error.changed'));
       snapshot = { item: structuredClone(item), index: model.items.indexOf(item), version: core.itemVersion(item, model) };
       fn(item, model);
       return item;
@@ -293,13 +304,13 @@ export async function runTui({ file, kit, web }) {
       state.undo = { ...snapshot, kind, id: result.id };
     };
     switch (effect.type) {
-      case 'add': result = await core.add(file, effect.text, { by: 'human' }); message('Added'); break;
+      case 'add': result = await core.add(file, effect.text, { by: 'human' }); message(t('tui.added')); break;
       case 'edit':
         result = await change(item => { item.title = effect.text; humanEvent(item, 'edited'); });
-        remember('edit'); message('Edited · u undo'); break;
+        remember('edit'); message(t('tui.edited')); break;
       case 'reply':
         await change(item => { item.waiting = ''; humanEvent(item, `reply — ${effect.text}`); });
-        message('Reply recorded'); break;
+        message(t('tui.replied')); break;
       case 'done':
         result = await change((item, model) => {
           item.done = effect.done; item.waiting = ''; humanEvent(item, effect.done ? 'done' : 'reopened');
@@ -308,11 +319,11 @@ export async function runTui({ file, kit, web }) {
           model.items.splice(effect.done ? firstDone < 0 ? model.items.length : firstDone : 0, 0, item);
         });
         remember('done');
-        message(effect.done ? 'Moved to Done · u undo' : 'Reopened · u undo'); break;
+        message(t(effect.done ? 'tui.movedDone' : 'tui.reopened')); break;
       case 'remove':
         await change((item, model) => { model.items.splice(model.items.indexOf(item), 1); });
         state.undo = { ...snapshot, kind: 'remove' };
-        state.view = 'list'; message('Deleted · u undo'); break;
+        state.view = 'list'; message(t('tui.deleted')); break;
       case 'move':
         await change((item, model) => {
           const group = model.items.filter(i => i.done === item.done);
@@ -321,7 +332,7 @@ export async function runTui({ file, kit, web }) {
           const target = model.items.indexOf(group[to]);
           model.items.splice(model.items.indexOf(item), 1); model.items.splice(target, 0, item);
           humanEvent(item, effect.delta > 0 ? 'moved down' : 'moved up');
-        }); message('Moved'); break;
+        }); message(t('tui.moved')); break;
       case 'undo': {
         const undo = effect.undo;
         await core.mutate(file, model => {
@@ -333,7 +344,7 @@ export async function runTui({ file, kit, web }) {
           } else {
             item = model.items.find(item => item.id === undo.id);
             if (!item || core.itemVersion(item, model) !== undo.afterVersion) {
-              throw new Error('Cannot undo: item changed elsewhere');
+              throw new Error(t('tui.error.undo'));
             }
             if (undo.kind === 'edit') {
               item.title = undo.item.title;
@@ -344,13 +355,13 @@ export async function runTui({ file, kit, web }) {
           }
           humanEvent(item, `undo ${undo.kind}`); result = item;
         });
-        state.undo = null; if (result.done) state.showDone = true; message('Undone'); break;
+        state.undo = null; if (result.done) state.showDone = true; message(t('tui.undone')); break;
       }
-      case 'sync': await core.sync(file, { kit }); message('Synced'); break;
-      case 'open': await openUrl(effect.url); message('Opened link'); return;
+      case 'sync': await core.sync(file, { kit }); message(t('tui.synced')); break;
+      case 'open': await openUrl(effect.url, t); message(t('tui.openedLink')); return;
       case 'web': {
-        if (!state.webUrl) { message(`web: off${state.webError ? ` (${state.webError})` : ''}`); return; }
-        await openUrl(effect.url); message('Opened web'); return;
+        if (!state.webUrl) { message(webText(state, t)); return; }
+        await openUrl(effect.url, t); message(t('tui.openedWeb')); return;
       }
     }
     reload();
@@ -380,7 +391,7 @@ export async function runTui({ file, kit, web }) {
     state.items = readItems(); ready = true;
     emitKeypressEvents(input); input.on('keypress', keypress); input.resume();
     stopWatch = core.watch(file, refresh); draw();
-    if (web) webStart = import('./web.mjs').then(({ startWeb }) => startWeb({ file, kit, port: 0, open: false,
+    if (web) webStart = import('./web.mjs').then(({ startWeb }) => startWeb({ file, kit, port: 0, open: false, lang,
       onUrl: url => { state.webUrl = url; draw(); } }))
       .then(value => { server = value; state.webUrl = value.url; draw(); })
       .catch(error => { state.webUrl = ''; state.webError = error.message; draw(); });

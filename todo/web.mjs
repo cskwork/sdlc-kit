@@ -6,16 +6,22 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as core from './core.mjs';
+import { defaultLanguage, isLanguage, languages } from './i18n.mjs';
 
 const execute = promisify(execFile);
 const defaultKit = fileURLToPath(new URL('../', import.meta.url));
-const page = fileURLToPath(new URL('./page/', import.meta.url));
+const here = fileURLToPath(new URL('./', import.meta.url));
 const bodyLimit = 64 * 1024;
+const js = 'text/javascript; charset=utf-8';
+// Allow-list of served files; the page shares the language and status modules with the TUI.
 const assets = new Map([
-  ['/', ['index.html', 'text/html; charset=utf-8']],
-  ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
-  ['/app.css', ['app.css', 'text/css; charset=utf-8']],
-  ['/markdown.js', ['markdown.js', 'text/javascript; charset=utf-8']]
+  ['/', ['page/index.html', 'text/html; charset=utf-8']],
+  ['/app.js', ['page/app.js', js]],
+  ['/app.css', ['page/app.css', 'text/css; charset=utf-8']],
+  ['/markdown.js', ['page/markdown.js', js]],
+  ['/i18n.mjs', ['i18n.mjs', js]],
+  ['/status.mjs', ['status.mjs', js]],
+  ...languages.map(language => [`/locales/${language}.mjs`, [`locales/${language}.mjs`, js]])
 ]);
 const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
 function text(value, name, max = Infinity) {
@@ -96,15 +102,16 @@ function openBrowser(url) {
   });
 }
 
-export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute } = {}) {
+export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('invalid port');
+  if (!isLanguage(lang)) throw new Error(`invalid language: ${lang}`);
   if (!onUrl && !open && !process.stdout.isTTY) throw new Error('web requires a terminal or --open');
   const token = randomBytes(16).toString('hex'), expected = Buffer.from(token);
   const authorized = value => typeof value === 'string' && Buffer.byteLength(value) === expected.length && timingSafeEqual(Buffer.from(value), expected);
   const clients = new Set();
   const payload = () => {
     const model = core.load(file);
-    return { items: model.items.map(item => ({ ...item, version: core.itemVersion(item, model) })), file };
+    return { items: model.items.map(item => ({ ...item, version: core.itemVersion(item, model) })), file, lang };
   };
   const sendEvent = (res, value, event = '') => res.write(`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(value)}\n\n`);
   const broadcast = () => {
@@ -134,7 +141,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
       if (req.method === 'GET') {
         if (assets.has(url.pathname)) {
           const [name, type] = assets.get(url.pathname);
-          const content = fs.readFileSync(path.join(page, name));
+          const content = fs.readFileSync(path.join(here, name));
           res.writeHead(200, { 'Content-Type': type });
           res.end(content);
         } else if (url.pathname === '/api/items') {

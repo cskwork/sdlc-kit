@@ -2,6 +2,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as core from './core.mjs';
+import { defaultLanguage, languages, resolveLanguage } from './i18n.mjs';
 
 const kit = fileURLToPath(new URL('../', import.meta.url));
 const file = core.todoPath();
@@ -10,14 +11,15 @@ const usage = `Usage: node ${path.join(kit, 'todo', 'todo.mjs')} <command>
   next [--json] | list [--json] | sync
   start <id> --slug S [--phase P] | phase <id> <phase>
   wait <id> "what" | answer <id> "chat words" | note <id> "text"
-  done <id> ["result"] | web [--port N] [--open] | help
-  No command: TUI and web (--no-web for TUI only).`;
+  done <id> ["result"] | web [--port N] [--open] [--lang L] | help
+  No command: TUI and web (--no-web for TUI only, --lang L).
+  --lang ${languages.join('|')} sets the UI language; default SDLC_TODO_LANG, else ${defaultLanguage}.`;
 const bad = message => { throw Object.assign(new Error(`${message}\n${usage}`), { code: 2 }); };
 const schemas = {
   add: { project: true, link: true, slug: true, by: true },
   next: { json: false }, list: { json: false }, sync: {},
   start: { slug: true, phase: true }, phase: {}, wait: {}, answer: {}, note: {}, done: {},
-  web: { port: true, open: false }, help: {}, '': { 'no-web': false }
+  web: { port: true, open: false, lang: true }, help: {}, '': { 'no-web': false, lang: true }
 };
 function argumentsFor(argv) {
   const command = argv[0] && !argv[0].startsWith('--') ? argv.shift() : '';
@@ -43,10 +45,12 @@ function summary(item) {
 async function main() {
   const { command, flags, args } = argumentsFor(process.argv.slice(2));
   const arity = (min, max = min) => { if (args.length < min || args.length > max) bad(`invalid arguments for ${command || 'TUI'}`); };
+  let lang;
+  try { lang = resolveLanguage(flags.lang, process.env.SDLC_TODO_LANG); } catch (error) { bad(error.message); }
   if (!command) {
     arity(0);
     if (!process.stdout.isTTY) bad('a terminal is required for the TUI');
-    return import('./tui.mjs').then(m => m.runTui({ file, kit, web: !flags['no-web'] }));
+    return import('./tui.mjs').then(m => m.runTui({ file, kit, web: !flags['no-web'], lang }));
   }
   switch (command) {
     case 'help': arity(0); console.log(usage); return;
@@ -58,7 +62,7 @@ async function main() {
         if (!/^\d+$/.test(flags.port) || Number(flags.port) > 65535) bad('invalid port');
         port = Number(flags.port);
       }
-      return import('./web.mjs').then(m => m.startWeb({ file, kit, port, open: !!flags.open }));
+      return import('./web.mjs').then(m => m.startWeb({ file, kit, port, open: !!flags.open, lang }));
     }
     case 'add': {
       arity(0, 1);

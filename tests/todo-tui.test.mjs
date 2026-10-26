@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import * as core from '../todo/core.mjs';
 import { render, reduce } from '../todo/tui.mjs';
+import { defaultLanguage, languages, translator } from '../todo/i18n.mjs';
 
 const item = (id, changes = {}) => ({ id, title: `작업 ${id}`, project: '~/code/web',
   link: { label: 'WEB-123', url: 'https://example.atlassian.net/browse/WEB-123' },
@@ -66,10 +67,12 @@ for (const [columns, rows] of [[80, 24], [60, 12]]) {
 test('all five status glyphs, counts, wait text and metadata', () => {
   const text = render({ ...fixture(), showDone: true }, { width: 80, height: 24, color: true }).join('\n');
   for (const glyph of ['○', '◐', '●', '✕', '✓']) assert.ok(text.includes(glyph));
-  assert.match(text, /4 open · 1 needs you · 1 done/);
+  // Was "4 open · 1 needs you · 1 done": counts now say who acts next.
+  assert.match(text, /1 your turn · 2 agent · 1 blocked · 1 done/);
+  assert.match(text, /Agents stop here until you decide/);
   assert.match(text, /기획서 검토/);
   assert.match(text, /WEB-123/);
-  assert.match(text, /web · WEB-123 · build/);
+  assert.match(text, /web · WEB-123 · Build/);
   assert.match(text, /2026-10-26 10:00/);
 });
 test('Done collapsed until Tab and expanded titles have dim strike styling', () => {
@@ -101,7 +104,7 @@ test('details expose every field, author/time, notes and full long text via scro
     { at: '2026-10-26 11:01', who: 'human', what: 'edited' }];
   const detail = keys(state, 'Enter').state;
   const text = [0, 6, 12, 18].flatMap(detailOffset => render({ ...detail, detailOffset }, { width: 60, height: 12 })).join('\n');
-  for (const field of ['Project:', 'Link:', 'SDLC:', 'Phase:', 'Action:', 'Waiting:', 'History', 'Notes',
+  for (const field of ['Project:', 'Link:', 'SDLC:', 'Phase:', 'Action:', 'Your next step:' /* was 'Waiting:' */, 'History', 'Notes',
     '2026-10-26 11:00 jira: added', '2026-10-26 11:01 human: edited', 'preserved note']) assert.ok(text.includes(field), field);
   assert.equal(reduce(detail, 'Esc').state.view, 'list');
 });
@@ -327,7 +330,7 @@ for (const [state, web] of [['approved', false], ['approved', true], ['archived'
   assert.equal(current.sdlc.state, { approved: 'READY', archived: 'DONE', missing: 'BLOCKED' }[state],
     'startup must reconcile cached NEEDS-HUMAN without R or a web server');
   if (state === 'approved') assert.ok(!ui.screen().includes('approve intent --human'), 'no usable frame shows the stale approval wait');
-  if (state === 'archived') assert.match(ui.screen(), /0 open/);
+  if (state === 'archived') assert.match(ui.screen(), /0 your turn · 0 agent · 0 blocked/); // was /0 open/
   if (state === 'missing') assert.match(ui.screen(), /blocked/);
   await ui.close();
 });
@@ -518,4 +521,28 @@ test('R8 B1: ordinary undo uses the saved version after Done overflow archives a
   assert.equal(core.load(ui.file).items.filter(item => !item.done).length, 1, 'ordinary undo must use the post-archive version');
   assert.match(ui.screen(), /Undone/);
   await ui.close();
+});
+
+test('language: TUI renders the configured language, fits Korean and L cycles every registered language', () => {
+  const other = languages.find(l => l !== defaultLanguage), t = translator(other);
+  for (const extra of [{}, { showDone: true, selected: 4 }, { view: 'details', selected: 2 }, { view: 'help' }, { input: { kind: 'add', text: '', cursor: 0 } }]) {
+    for (const [columns, rows] of [[80, 24], [60, 12]]) {
+      const lines = render({ ...fixture(), lang: other, ...extra }, { width: columns, height: rows });
+      for (const line of lines) assert.ok(width(line) <= columns, `${width(line)} > ${columns}: ${line}`);
+    }
+  }
+  const list = render({ ...fixture(), lang: other }, { width: 100, height: 24 }).join('\n');
+  assert.ok(list.includes(t('tui.counts', { you: 1, agent: 2, blocked: 1, done: 1 })), list);
+  assert.ok(list.includes(t('stop.you')), list);
+  assert.doesNotMatch(list, /your turn|needs you/);
+  const details = render({ ...fixture(), lang: other, view: 'details', selected: 2 }, { width: 100, height: 24 }).join('\n');
+  assert.ok(details.includes(t('status.answer')), details);
+  const help = render({ ...fixture(), lang: other, view: 'help' }, { width: 100, height: 40 }).join('\n');
+  assert.ok(help.includes(t('tui.help.language')) && /\bL\b/.test(help), help);
+  let state = { ...fixture(), lang: defaultLanguage };
+  const seen = [];
+  for (const _ of languages) { state = reduce(state, 'L').state; seen.push(state.lang); }
+  assert.deepEqual(seen, [...languages.slice(1), languages[0]]);
+  assert.equal(reduce({ ...fixture() }, 'L').state.lang, languages[1], 'an unset language starts from the default');
+  assert.match(render({ ...fixture(), view: 'help' }, { width: 100, height: 40 }).join('\n'), /L +Next language/);
 });

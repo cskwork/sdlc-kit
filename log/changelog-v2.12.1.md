@@ -1,6 +1,6 @@
 # v2.12.1: To-do web page shows the work document, colours status and fits wide screens
 
-Follow-up to v2.12.0. Web page and server only; the inbox file, CLI, TUI and approval rules are unchanged.
+Follow-up to v2.12.0. Web page, server and TUI, plus the `--lang` option; the inbox file and approval rules are unchanged.
 
 ## Changes
 
@@ -10,10 +10,11 @@ Follow-up to v2.12.0. Web page and server only; the inbox file, CLI, TUI and app
 - **Status is colour-coded.** Waiting (amber), blocked (red), in progress (blue), open (grey) and done (green) show as pills with their word, a matching left bar on the row and a matching check ring. Every pair meets 4.5:1 contrast in light and dark mode.
 - **Details is wide and adjustable.** At 1024 px and wider Details fills the screen: the work document on the left, the decision, reply and history beside it, and the fields in two columns. A− and A+ set its text size from 80% to 160% in 10% steps; the size lasts until reload because the page never uses Web Storage. On phones the controls sit above the title.
 - **Text no longer breaks badly.** Korean wraps between words instead of mid-word (`word-break: keep-all`; long tokens still wrap). The Details Close button no longer shrinks into "Clos/e". The `·` before a ticket link is no longer underlined.
+- **English or Korean UI, and statuses that say who acts next.** The TUI and web page take `--lang en|ko` (or `SDLC_TODO_LANG`; the flag wins, default English, an invalid flag is a usage error) and switch at runtime with `L` or the page's language menu, re-rendering open rows and Details; the page never stores the choice. Phase names (Intent, Plan, Build, Evidence, Deliver) are translated too; an unknown phase shows as written. Locales live in `todo/locales/<code>.mjs` behind one registry in `todo/i18n.mjs`, which also sets the served files, so adding a language is a data-only change. The ambiguous "Waiting", "Needs you" and "In progress" became Approve intent, Approve plan or Answer needed (your turn, amber), Agent working (blue), Not started (grey), Blocked — fix needed (red) and Done; the row where agents stop says "Agents stop here until you decide" (or "…until this is fixed"), open rows below it say they are queued, your-turn rows offer "Approve…" or "Answer…", and the header counts your turn, agent, blocked and done. `todo.md`, item text, sdlc actions, server errors and CLI help stay as they are.
 - **Hover tools no longer reserve a column.** Between 561 and 1023 px the row tools float over the row's end on hover, so titles use the full width.
 
 ## Validation
 
-- macOS local (Node 22.19.0): to-do Node tests 161/161 passed. The new work-document tests (two page, one web) fail on v2.12.0 (red) and pass with this change; the status contrast and text-size checks are new assertions.
+- macOS local (Node 22.19.0): to-do Node tests 174/174 passed. The new work-document tests (two page, one web) fail on v2.12.0 (red) and pass with this change; the status contrast and text-size checks are new assertions. The 12 language and status tests (8 in `tests/todo-i18n.test.mjs`, two page, one TUI, one web) fail before this change (9 red with only the new locale and status modules present) and pass with it; three older assertions now expect the actor-based counts and the "Your next step" field.
 - Chrome at 1440, 800 and 390 px, light and dark: no element extends past the page or the open Details dialog, for a question item and a plan-approval item.
 - `tests/selftest.sh` was not run locally (a local hook blocks its `git reset --hard` fixtures); CI runs it.
