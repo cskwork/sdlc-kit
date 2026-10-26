@@ -387,3 +387,27 @@ test('B5: resize during startup cannot draw cached state before sync completes',
   finally { writeFileSync(release, 'sync may finish'); }
   await until(() => screen.includes('To-do')); child.stdin.write('q'); assert.equal(await exited, 0, error);
 });
+
+test('R7 B1: pending delete refuses a surviving identical same-minute duplicate', async t => {
+  const ui = await terminal(t, async file => {
+    await core.add(file, 'Duplicate', { project: dirname(file), by: 'human' });
+    await core.add(file, 'Duplicate', { project: dirname(file), by: 'human' });
+    await core.mutate(file, model => {
+      for (const item of model.items) item.events[0].at = '2026-10-26 09:41';
+    });
+  });
+  const model = core.load(ui.file);
+  assert.equal(core.serialize({ items: [model.items[0]] }), core.serialize({ items: [model.items[1]] }));
+  ui.send('d');
+  await until(() => ui.screen().includes('Delete “Duplicate”? y/n'));
+  await core.remove(ui.file, model.items[0].id);
+  const before = readFileSync(ui.file, 'utf8');
+  // Let the file watcher reload while the original confirmation stays pending.
+  await delay(350);
+  ui.send('y');
+  await until(() => /Deleted|Item changed/.test(ui.screen()));
+  assert.equal(core.load(ui.file).items.length, 1, 'stale confirmation must preserve the surviving duplicate');
+  assert.match(ui.screen(), /Item changed; review it and try again/);
+  assert.equal(readFileSync(ui.file, 'utf8'), before);
+  await ui.close();
+});

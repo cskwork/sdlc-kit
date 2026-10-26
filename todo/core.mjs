@@ -140,7 +140,11 @@ function renderItem(item) {
   lines.push(...item.notes);
   return lines.join('\n');
 }
-export const itemVersion = item => createHash('sha256').update(renderItem(item)).digest('hex');
+export function itemVersion(item, model) {
+  const block = renderItem(item);
+  const identical = model.items.filter(candidate => renderItem(candidate) === block);
+  return createHash('sha256').update(JSON.stringify([block, identical.indexOf(item), identical.length])).digest('hex');
+}
 export function serialize(model) {
   const group = done => model.items.filter(item => item.done === done).map(renderItem).join('\n\n');
   return `${model.preamble ?? header}## Open\n\n${group(false)}${group(false) ? '\n\n' : ''}## Done\n\n${group(true)}${group(true) ? '\n' : ''}`;
@@ -326,7 +330,7 @@ export async function add(file, text, options = {}) {
 }
 export const update = (file, id, fn, version) => mutate(file, async model => {
   const item = version === undefined ? findItem(model, id) : model.items.find(item => item.id === id);
-  if (version !== undefined && (!item || itemVersion(item) !== version)) {
+  if (version !== undefined && (!item || itemVersion(item, model) !== version)) {
     throw Object.assign(new Error('This item changed. Reload and try again.'), { status: 409 });
   }
   await fn(item, model);

@@ -783,3 +783,32 @@ test('B1: sync retries when a new slug is inserted while status runs outside the
   assert.equal(result.item.sdlc.state, 'NEEDS-HUMAN');
   assert.ok(readFileSync(calls, 'utf8').includes('new'), 'the new head was queried after the snapshot changed');
 });
+
+test('R7 B1: version hashes the block, identical-block position and count', async t => {
+  const { file } = scratch(t);
+  await core.add(file, 'Duplicate', { by: 'human' });
+  await core.add(file, 'Other');
+  await core.add(file, 'Duplicate', { by: 'human' });
+  await core.mutate(file, model => {
+    for (const item of model.items) item.events[0].at = '2026-10-26 09:41';
+  });
+  const model = core.load(file), [first, other, second] = model.items;
+  const block = item => core.serialize({ items: [item] }).split('\n\n').find(block => block.startsWith('- [ ]'));
+  assert.equal(block(first), block(second));
+  const firstVersion = core.itemVersion(first, model), secondVersion = core.itemVersion(second, model);
+  assert.notEqual(firstVersion, secondVersion, 'identical duplicates have distinct versions');
+  for (const [position, item] of [first, second].entries()) {
+    const expected = createHash('sha256').update(JSON.stringify([block(item), position, 2])).digest('hex');
+    assert.equal(core.itemVersion(item, model), expected);
+  }
+  await core.edit(file, other.id, { title: 'Other edited' });
+  await core.move(file, core.load(file).items[1].id, -1);
+  const edited = core.load(file);
+  assert.equal(core.itemVersion(edited.items[1], edited), firstVersion, 'unrelated edits and moves preserve the version');
+  assert.equal(core.itemVersion(edited.items[2], edited), secondVersion);
+  await core.remove(file, first.id);
+  const remaining = core.load(file), survivor = remaining.items.find(item => item.title === 'Duplicate');
+  assert.notEqual(core.itemVersion(survivor, remaining), firstVersion, 'survivor cannot inherit the deleted version');
+  assert.notEqual(core.itemVersion(survivor, remaining), secondVersion, 'membership changes invalidate even the surviving position');
+  assert.equal(core.itemVersion(survivor, remaining), createHash('sha256').update(JSON.stringify([block(survivor), 0, 1])).digest('hex'));
+});

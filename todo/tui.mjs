@@ -237,7 +237,11 @@ function requireItem(model, id) {
 export async function runTui({ file, kit, web }) {
   const input = process.stdin, output = process.stdout;
   if (!input.isTTY || !output.isTTY || !input.setRawMode) throw new Error('A terminal is required for the TUI');
-  let state = { items: core.load(file).items, file, selected: 0, view: 'list' };
+  const readItems = () => {
+    const model = core.load(file);
+    return model.items.map(item => ({ ...item, version: core.itemVersion(item, model) }));
+  };
+  let state = { items: readItems(), file, selected: 0, view: 'list' };
   let server, webStart, stopWatch, messageTimer, stopped = false, failure, queue = Promise.resolve(), finish;
   const finished = new Promise(resolve => { finish = resolve; });
   const wasRaw = input.isRaw, wasFlowing = input.readableFlowing;
@@ -251,7 +255,7 @@ export async function runTui({ file, kit, web }) {
   };
   const reload = () => {
     const id = selected(state)?.id;
-    state = { ...state, items: core.load(file).items };
+    state = { ...state, items: readItems() };
     const index = visible(state).findIndex(i => i.id === id);
     state.selected = index >= 0 ? index : Math.max(0, Math.min(state.selected, visible(state).length - 1));
     draw();
@@ -278,7 +282,7 @@ export async function runTui({ file, kit, web }) {
     // under its lock, so derived IDs cannot silently target a different duplicate.
     const change = fn => core.mutate(file, model => {
       const item = requireItem(model, effect.id);
-      if (JSON.stringify(item) !== JSON.stringify(effect.item)) throw new Error('Item changed; review it and try again');
+      if (core.itemVersion(item, model) !== effect.item.version) throw new Error('Item changed; review it and try again');
       snapshot = { item: structuredClone(item), index: model.items.indexOf(item) };
       fn(item, model);
       return item;
@@ -380,7 +384,7 @@ export async function runTui({ file, kit, web }) {
     input.setRawMode(true); output.write('\x1b[?1049h\x1b[?25l\x1b[?7l');
     await core.sync(file, { kit });
     if (stopped) { if (failure) throw failure; return; }
-    state.items = core.load(file).items; ready = true;
+    state.items = readItems(); ready = true;
     emitKeypressEvents(input); input.on('keypress', keypress); input.resume();
     stopWatch = core.watch(file, refresh); draw();
     if (web) webStart = import('./web.mjs').then(({ startWeb }) => startWeb({ file, kit, port: 0, open: false,
