@@ -4,49 +4,53 @@
 - Requested by: <who>
 - Source: <ticket, issue or document link | chat>
 
-## Bottom line
-- **Changes:** <the outcome: who can do what once done>
-- **Left out:** <largest Out of scope item, cited — or none>
-- **Needs you:** <the ⚠️ risk or decision, cited — or none>
+## At a glance
+- **What changes:** <who can do what once done>
+- **Not included:** <the biggest left-out item, cited — or none>
+- **Your call:** <the ⚠️ risk or decision, cited — or none>
 
-## Request
+## What was asked
 - <the human's words, verbatim or a faithful excerpt>
 
-## Understood as
-- In scope: <…>
-- Out of scope: <each with why>
-- O1: <**short name** — observable success criterion>
+## Why this came up
+- <the trigger or history, cited — or "(inferred) <reason> — <evidence>">
 
-## Risks in this intent
+## What we will do
+- Included: <…>
+- Not included: <each with why>
+- Done when:
+  - O1: <**short name** — what you will see once done>
+
+## Risks
 <!-- Most consequential first; ⚠️ = needs the human's authority. Resolved risks leave. -->
 - <risk — evidence — or none>
 
-## Delivery
-- Target: <local | pr | deploy>
-- Note: <optional: branch, environment or other delivery detail>
-- Authorized: <yes — "the human's words" | no>
+## Shipping
+- Ship to: <local | pr | deploy>
+- Note: <optional: branch, environment or other detail>
+- Allowed: <yes — "the human's words" | no>
 
-## Blocking questions
+## Questions for you
 - none
 <!-- blocks approval until the line ends with "— resolved: <answer, source>"; while pending, add "— asked: <where, when>" -->
 
 ---
 
-## Terms
+## Key terms
 <!-- Each term the request turns on, or none: ✅ one meaning, ⚠️ assumed, ❓ two readings, each with a real value. -->
 - ✅ **<term>** = <plain meaning>, e.g. <real value>
   - Source: <glossary line | requester's words | file:line> · Code: <identifier>
 
-## Clarity
-<!-- State: clear, assumed or open; under 90% blocks approval. How settled: one sentence and its Facts IDs, why it is assumed, or what is missing. -->
-| Area | State | How settled |
+## How sure we are
+<!-- State: clear, assumed or open. Based on: one sentence and its Facts IDs, why it is assumed, or what is missing. -->
+| Area | State | Based on |
 |---|---|---|
-| Outcome | <state> | <who gets what, and why — F1> |
-| Scope | <state> | <what is in and out, and who drew the line> |
-| AS-IS | <state> | <today's behavior as observed; a bug as reproduced> |
-| TO-BE | <state> | <the exact behavior: rules, values, messages, edge cases> |
-| Success | <state> | <how each O is observed> |
-| Constraints | <state> | <policies, compatibility, data, owners — or none found, where you looked> |
+| Goal | <state> | <who gets what, and why — F1> |
+| Boundaries | <state> | <what is in and out, and who drew the line> |
+| Today | <state> | <today's behavior as observed; a bug as reproduced> |
+| After | <state> | <the exact behavior: rules, values, messages, edge cases> |
+| Done when | <state> | <how each O is observed> |
+| Limits | <state> | <policies, compatibility, data, owners — or none found, where you looked> |
 
 ## Facts
 - F1: **<lead-in>** <fact> — <source>
