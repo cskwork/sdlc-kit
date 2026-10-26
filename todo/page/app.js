@@ -44,6 +44,8 @@ let token = '';
 let items = [], file = '';
 let seenSnapshot = false, changedAt = null;
 const drafts = new Map(); // item id -> {reply, words}
+// The inbox keeps one event per line, so the server rejects line breaks; join the lines the textarea allows.
+const oneLine = value => value.trim().replace(/\s*[\r\n]+\s*/g, ' / ');
 
 // ---------- server ----------
 class RequestError extends Error {
@@ -631,7 +633,7 @@ function scaleText(step) {
 }
 $('text-smaller').addEventListener('click', () => scaleText(-0.1));
 $('text-larger').addEventListener('click', () => scaleText(0.1));
-function updateCount() { $('approve-count').textContent = `${$('approve-words').value.trim().length} / 500`; }
+function updateCount() { $('approve-count').textContent = `${oneLine($('approve-words').value).length} / 500`; }
 $('approve-words').addEventListener('input', () => { draftFor(detailId).words = $('approve-words').value; updateCount(); });
 $('reply-text').addEventListener('input', () => {
   const draft = draftFor(detailId);
@@ -643,7 +645,7 @@ $('artifact-title').tabIndex = -1;
 
 $('approve-form').addEventListener('submit', async event => {
   event.preventDefault();
-  const words = $('approve-words').value.trim();
+  const words = oneLine($('approve-words').value);
   const error = $('approve-error');
   error.hidden = true;
   if (!artifact) return;
@@ -678,7 +680,7 @@ $('approve-form').addEventListener('submit', async event => {
 });
 $('reply-form').addEventListener('submit', async event => {
   event.preventDefault();
-  const text = $('reply-text').value.trim();
+  const text = oneLine($('reply-text').value);
   const error = $('reply-error');
   error.hidden = true;
   if (!text) { show(error, { key: 'reply.empty' }); error.hidden = false; $('reply-text').focus(); return; }
