@@ -106,9 +106,9 @@ function whatWaits(item) {
   const status = statusOf(item);
   return item.waiting || (status.gate ? t(`next.${status.kind}`) : item.sdlc?.action || t(`next.${status.kind}`));
 }
-// Colour tone of a status pill, row bar and check ring: amber you, blue agent, grey not started.
+// Colour tone of a status pill, row bar and check ring: amber you, blue agent, grey not started or not picked up.
 const tones = { you: 'wait', agent: 'busy', blocked: 'blocked', done: 'ok' };
-const toneOf = status => status.kind === 'new' ? 'open' : tones[status.actor];
+const toneOf = status => ['new', 'handoff'].includes(status.kind) ? 'open' : tones[status.actor];
 const pill = item => { const status = statusOf(item); return chip(t(`status.${status.kind}`), `badge ${toneOf(status)}`); };
 function doneAt(item) {
   const last = [...item.events].reverse().find(e => /^(done|DONE)\b/.test(e.what));

@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as core from '../todo/core.mjs';
+import { statusOf } from '../todo/status.mjs';
 
 const kit = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const entry = join(kit, 'todo', 'todo.mjs');
@@ -298,6 +299,27 @@ test('S18: forged approval stays history; a same-minute reply resumes a gate onl
   hasReply(answered, 'revise the outcome first');
   assert.throws(() => sdlc(dir, 'check', 'intent', 'approval-boundary'), /Command failed/);
   assert.equal((await next(file, 10)).id, a.id);
+});
+
+test('handoff: a reply to an sdlc wait reads as not picked up until take hands it to one worker', async t => {
+  const { root, file } = scratch(t);
+  const dir = project(root);
+  feature(dir, 'owned-elsewhere');
+  await core.add(file, 'top item');
+  const a = await core.add(file, 'A', { project: dir, slug: 'owned-elsewhere' });
+  await core.sync(file);
+  const item = () => core.load(file).items.find(i => i.id === a.id);
+  assert.equal(statusOf(item()).actor, 'you');
+  await core.reply(file, a.id, 'continue');
+  await core.sync(file);
+  assert.deepEqual(statusOf(item()), { actor: 'agent', kind: 'handoff' }, 'no agent has read the reply yet');
+  const listed = JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout).find(i => i.id === a.id);
+  hasReply(listed, 'continue');
+  const taken = checkCode(await cli(file, ['take', a.id, '--json']), 0);
+  hasReply(JSON.parse(taken.stdout), 'continue');
+  assert.equal(statusOf(item()).actor, 'you', 'after take the item waits for the human again');
+  assert.equal(JSON.parse(checkCode(await cli(file, ['take', a.id, '--json']), 10).stdout).replies.length, 0);
+  checkCode(await cli(file, ['take', 'zzzzzz', '--json']), 1);
 });
 
 test('S18: CLI cannot author human events or leak a piped web token', async t => {

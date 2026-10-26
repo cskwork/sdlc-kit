@@ -8,7 +8,7 @@ const kit = fileURLToPath(new URL('../', import.meta.url));
 const file = core.todoPath();
 const usage = `Usage: node ${path.join(kit, 'todo', 'todo.mjs')} <command>
   add ["text"] [--project P] [--link URL] [--slug S] [--by NAME]
-  next [--json] | list [--json] | sync
+  next [--json] | take <id> [--json] | list [--json] | sync
   start <id> --slug S [--phase P] | phase <id> <phase>
   wait <id> "what" | answer <id> "chat words" | note <id> "text"
   done <id> ["result"] | web [--port N] [--open] [--lang L] | help
@@ -17,7 +17,7 @@ const usage = `Usage: node ${path.join(kit, 'todo', 'todo.mjs')} <command>
 const bad = message => { throw Object.assign(new Error(`${message}\n${usage}`), { code: 2 }); };
 const schemas = {
   add: { project: true, link: true, slug: true, by: true },
-  next: { json: false }, list: { json: false }, sync: {},
+  next: { json: false }, take: { json: false }, list: { json: false }, sync: {},
   start: { slug: true, phase: true }, phase: {}, wait: {}, answer: {}, note: {}, done: {},
   web: { port: true, open: false, lang: true }, help: {}, '': { 'no-web': false, lang: true }
 };
@@ -40,7 +40,7 @@ function argumentsFor(argv) {
 function summary(item) {
   return { id: item.id, title: item.title, project: item.project, link: item.link,
     slug: item.sdlc?.slug || null, phase: item.sdlc?.phase || null, state: item.sdlc?.state || null,
-    action: item.sdlc?.action || '', waiting: item.waiting, replies: item.replies || [], status: item.status };
+    action: item.sdlc?.action || '', waiting: item.waiting, replies: item.replies || core.replies(item), status: item.status };
 }
 async function main() {
   const { command, flags, args } = argumentsFor(process.argv.slice(2));
@@ -81,9 +81,9 @@ async function main() {
       else for (const item of model.items) console.log(`${item.id} [${item.status}] ${item.title}`);
       return;
     }
-    case 'next': {
-      arity(0);
-      const result = await core.next(file, { kit });
+    case 'next': case 'take': {
+      arity(command === 'take' ? 1 : 0);
+      const result = command === 'take' ? await core.take(file, args[0], { kit }) : await core.next(file, { kit });
       if (flags.json) console.log(JSON.stringify(result.item ? summary(result.item) : null));
       else if (result.item) console.log(`${result.item.id} [${result.item.status}] ${result.item.title}${result.item.sdlc?.action ? ` — ${result.item.sdlc.action}` : result.item.waiting ? ` — ${result.item.waiting}` : ''}`);
       process.exitCode = result.code;
