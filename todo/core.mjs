@@ -26,6 +26,12 @@ export function projectPath(project) {
   if (isRelativeProject(project)) throw Object.assign(new Error(relativeProjectError), { status: 409 });
   return project === '~' ? os.homedir() : project.startsWith('~/') ? path.join(os.homedir(), project.slice(2)) : project;
 }
+// Bash stdout is not covered by MSYS's native-process argument conversion.
+export async function nativePath(value, { platform = process.platform, runner = execute } = {}) {
+  if (platform !== 'win32' || !value.startsWith('/') || value.startsWith('//')) return value;
+  const { stdout } = await runner('bash', ['-c', 'cygpath -w -- "$1"', 'sdlc-path', value]);
+  return stdout.replace(/\r?\n$/, '');
+}
 export const todoPath = () => process.env.SDLC_TODO || path.join(os.homedir(), '.sdlc', 'todo.md');
 export function stamp(date = new Date()) {
   const pad = n => String(n).padStart(2, '0');
@@ -368,7 +374,7 @@ async function readStatuses(file, kit) {
     const previous = item.sdlc;
     let current;
     try {
-      const { stdout } = await execute('bash', [path.join(kit, 'sdlc.sh'), 'status', previous.slug, '--json'], { cwd: projectPath(item.project) });
+      const { stdout } = await execute('bash', [path.join(kit, 'sdlc.sh'), 'status', previous.slug, '--json'], { cwd: await nativePath(projectPath(item.project)) });
       current = JSON.parse(stdout).features.find(f => f.slug === previous.slug);
       if (!current || !current.state) throw new Error(`feature not found: ${previous.slug}`);
     } catch (error) {

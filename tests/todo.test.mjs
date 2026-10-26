@@ -531,12 +531,13 @@ test('R5 B1: CLI binds a relative project to the adding cwd before selecting fro
 
 test('R5 B1: intake resolves every relative spelling and preserves tilde and portable absolute paths', async t => {
   const { root: temporaryRoot, file } = scratch(t), root = realpathSync(temporaryRoot);
-  for (const input of ['./project', '../project', 'x/y', '.\\project']) {
+  for (const [index, input] of ['./project', '../project', 'x/y', '.\\project'].entries()) {
     await t.test(input, async () => {
-      checkCode(await cli(file, ['add', 'Relative', '--project', input], { cwd: root }), 0);
+      const title = `Relative-${index}`;
+      checkCode(await cli(file, ['add', title, '--project', input], { cwd: root }), 0);
       const item = core.load(file).items.at(-1);
       assert.equal(item.project, resolve(root, input));
-      assert.equal(item.id, core.itemId({ project: resolve(root, input), title: 'Relative' }));
+      assert.equal(item.id, core.itemId({ project: resolve(root, input), title }));
     });
   }
   for (const input of ['~', '~/project', '/absolute/project', 'C:\\project', 'C:/project', '\\\\server\\share\\project', '//server/share/project']) {
@@ -811,4 +812,30 @@ test('R7 B1: version hashes the block, identical-block position and count', asyn
   assert.notEqual(core.itemVersion(survivor, remaining), firstVersion, 'survivor cannot inherit the deleted version');
   assert.notEqual(core.itemVersion(survivor, remaining), secondVersion, 'membership changes invalidate even the surviving position');
   assert.equal(core.itemVersion(survivor, remaining), createHash('sha256').update(JSON.stringify([block(survivor), 0, 1])).digest('hex'));
+});
+
+test('M: nativePath converts MSYS paths only on Windows and propagates conversion errors', async () => {
+  // The fallback represents the pre-fix path passthrough for assertion-red proof.
+  const nativePath = core.nativePath || (async value => value);
+  const paths = [
+    ['/tmp/inbox', 'C:\\Program Files\\Git\\tmp\\inbox'],
+    ['/c/Users/Name/project', 'C:\\Users\\Name\\project'],
+    ['/d/a/repo/repo', 'D:\\a\\repo\\repo'],
+    ["/d/a/space 'quote' $(literal)/project", "D:\\a\\space 'quote' $(literal)\\project"],
+  ];
+  for (const [input, expected] of paths) {
+    const calls = [];
+    const runner = async (...args) => { calls.push(args); return { stdout: `${expected}\r\n` }; };
+    assert.equal(await nativePath(input, { platform: 'win32', runner }), expected);
+    assert.deepEqual(calls, [['bash', ['-c', 'cygpath -w -- "$1"', 'sdlc-path', input]]], 'path is a positional argument, never shell source');
+  }
+  const unused = async () => assert.fail('identity paths must not start bash');
+  for (const platform of ['darwin', 'linux']) {
+    for (const [input] of paths) assert.equal(await nativePath(input, { platform, runner: unused }), input);
+  }
+  for (const input of ['C:\\Users\\Name', 'D:/a/repo', '\\\\server\\share\\project', '//server/share/project']) {
+    assert.equal(await nativePath(input, { platform: 'win32', runner: unused }), input);
+  }
+  const failure = new Error('cygpath unavailable');
+  await assert.rejects(nativePath('/tmp/inbox', { platform: 'win32', runner: async () => { throw failure; } }), error => error === failure);
 });
