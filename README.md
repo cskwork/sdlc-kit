@@ -149,11 +149,13 @@ node ~/sdlc-kit/todo/todo.mjs                     # TUI plus web page
 node ~/sdlc-kit/todo/todo.mjs web --open          # web page only
 node ~/sdlc-kit/todo/todo.mjs add "Fix login ~/code/web https://acme.atlassian.net/browse/WEB-123" --by jira
 node ~/sdlc-kit/todo/todo.mjs next                # first Open item
+node ~/sdlc-kit/todo/todo.mjs take <id> --json    # one item a worker owns, with its replies
 ```
 
 The TUI and web page show English or Korean: pass `--lang ko` (TUI or `web`) or set `SDLC_TODO_LANG=ko`; the flag wins, an unknown variable means English, and English is the default.
 Press `L` in the TUI or use the page's language menu to switch until restart or reload.
-Statuses say who acts next: your turn (approve intent, approve plan or answer), agent working, not started, blocked — fix needed, or done; the row where agents stop says so.
+Statuses say who acts next: your turn (approve intent, approve plan or answer), agent working, answered — not picked up yet, not started, blocked — fix needed, or done; the row where agents stop says so.
+A reply to an sdlc wait shows "answered — no agent has picked it up yet" until an agent reads it with `next` or `take`; then the item waits for you again until sdlc.sh moves on.
 To add a language, copy `todo/locales/en.mjs` to `todo/locales/<code>.mjs`, translate `name` and every message, and add its import to `locales` in `todo/i18n.mjs`.
 The flag, the TUI key, the page menu and the served files follow that registry; the parity test fails on a missing key or `{placeholder}`, and a missing key shows in English.
 

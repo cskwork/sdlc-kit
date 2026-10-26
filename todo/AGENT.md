@@ -15,6 +15,7 @@ Run `node <kit>/todo/todo.mjs next --json` and capture its exit code.
 - `30`: stop; nothing remains to do.
 
 Never skip the first item to work a lower one, including when waiting or blocked.
+A worker that owns specific items instead of the top-down queue (for example a ticket factory) reads one with `take <id> --json`; it returns the same exit codes and `replies` as `next` and marks those replies read, so the item shows as waiting for the human again until sdlc.sh moves on.
 Use the returned `id` for mutations; a slug shared by projects is ambiguous.
 
 ## Work
