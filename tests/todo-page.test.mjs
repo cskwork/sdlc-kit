@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import * as i18n from '../todo/i18n.mjs';
+import * as status from '../todo/status.mjs';
 
 const source = readFileSync(new URL('../todo/page/app.js', import.meta.url), 'utf8');
 
@@ -49,6 +51,8 @@ function page(hash = '', options = {}) {
       showModal() { this.open = true; },
       close() { this.open = false; this.listeners.close?.(); },
       setAttribute(name, value) { this.attributes[name] = value; },
+      matches() { return false; }, getClientRects() { return []; },
+      insertBefore(child) { this.children.push(child); child.parentElement = this; },
       append(...children) { this.children.push(...children); },
       replaceChildren(...children) { this.children = children; }
     });
@@ -63,12 +67,14 @@ function page(hash = '', options = {}) {
   let element = 0;
   const optionsHandler = options.fetch;
   const context = vm.createContext({
-    document: { getElementById: node, addEventListener() {},
+    document: { getElementById: node, addEventListener() {}, documentElement: { lang: 'en' }, querySelectorAll: () => [],
       createElement: () => node(`element-${++element}`),
       createElementNS: () => node(`element-${++element}`), createTextNode: text => ({ textContent: text }) },
     sessionStorage: storage(), localStorage: storage(),
     history: { replaceState(_state, _title, url) { location.href = new URL(url, location).href; } },
-    location, URLSearchParams, setTimeout, clearTimeout, Node: class {},
+    location, URLSearchParams, setTimeout, clearTimeout, Node: class {}, scrollX: 0, scrollY: 0, scrollTo() {},
+    // The browser imports these modules; the VM runs app.js as a script with their exports as globals.
+    ...i18n, ...status,
     EventSource: class {
       constructor(url) { streams.push(url); }
       addEventListener() {}
@@ -81,7 +87,7 @@ function page(hash = '', options = {}) {
       return { ok: true, text: async () => '{}' };
     }
   });
-  vm.runInContext(options.source || source, context);
+  vm.runInContext((options.source || source).replace(/^import .* from '\.\/(?:i18n|status)\.mjs';$/gm, ''), context);
   return { context, nodes, requests, streams, location };
 }
 
@@ -340,3 +346,50 @@ for (const kind of ['reply', 'approve']) {
     });
   }
 }
+
+test('language: the page follows the server language, switches at runtime and keeps the choice', () => {
+  const other = i18n.languages.find(l => l !== i18n.defaultLanguage);
+  const [en, ko] = [i18n.translator(i18n.defaultLanguage), i18n.translator(other)];
+  const p = page('#t=test-token');
+  const select = p.nodes.get('lang');
+  assert.deepEqual(select.children.map(o => o.value), i18n.languages, 'switcher lists every registered language');
+  const snapshot = lang => ({ lang, file: '/tmp/todo.md', items: [
+    { id: 'aaaaaa', title: 'Plan gate', status: 'waiting', done: false, events: [], notes: [], project: '/p',
+      sdlc: { slug: 'x', phase: 'plan', state: 'NEEDS-HUMAN', action: 'approve plan --human' } },
+    { id: 'bbbbbb', title: 'Queued work', status: 'workable', done: false, events: [], notes: [], sdlc: { slug: 'y', phase: 'build' } }] });
+  const texts = id => vm.runInContext(`rows.get('${id}')._refs.info.children.map(n => n.textContent).join('|')`, p.context);
+  const line = id => vm.runInContext(`[...Object.values(rows.get('${id}')._refs)].filter(n => n && typeof n === 'object' && 'textContent' in n && !n.hidden).map(n => n.textContent).join('|')`, p.context);
+  vm.runInContext(`received(${JSON.stringify(snapshot(other))})`, p.context);
+  vm.runInContext(`openDetail('aaaaaa')`, p.context);
+  assert.equal(p.context.document.documentElement.lang, other);
+  assert.equal(select.value, other);
+  assert.equal(p.nodes.get('counts').textContent, ko('page.counts', { you: 1, agent: 1, blocked: 0, done: 0 }));
+  assert.match(texts('aaaaaa'), new RegExp(ko('status.approve-plan')));
+  assert.match(texts('bbbbbb'), new RegExp(ko('status.agent')));
+  assert.match(line('aaaaaa'), new RegExp(ko('stop.you')));
+  assert.match(line('aaaaaa'), new RegExp(ko('action.approve-plan')));
+  assert.match(texts('bbbbbb'), new RegExp(ko('row.queued')), 'rows below the stop say they wait for you');
+  assert.equal(p.nodes.get('detail-fields').children[0].textContent, ko('field.status'));
+  assert.equal(p.nodes.get('live-text').textContent, ko('live.connecting'));
+  select.value = i18n.defaultLanguage;
+  select.listeners.change();
+  assert.equal(p.context.document.documentElement.lang, i18n.defaultLanguage);
+  assert.equal(p.nodes.get('counts').textContent, '1 your turn · 1 agent · 0 blocked · 0 done');
+  assert.match(texts('aaaaaa'), /Approve plan/);
+  assert.match(line('aaaaaa'), /Agents stop here until you decide/);
+  assert.match(line('aaaaaa'), /Approve…/);
+  assert.match(texts('bbbbbb'), /Agent working/);
+  assert.match(texts('bbbbbb'), /Queued behind your decision/);
+  assert.equal(p.nodes.get('detail-fields').children[0].textContent, 'Status', 'open Details re-renders');
+  assert.equal(p.nodes.get('live-text').textContent, 'Connecting');
+  vm.runInContext(`received(${JSON.stringify(snapshot(other))})`, p.context);
+  assert.equal(p.nodes.get('counts').textContent, en('page.counts', { you: 1, agent: 1, blocked: 0, done: 0 }), 'a live snapshot keeps the chosen language');
+});
+
+test('status names who acts next: not started, blocked and answer rows', () => {
+  const p = page();
+  const info = item => vm.runInContext(`(() => { const item = ${JSON.stringify(item)}; items = [item]; const row = buildRow(item); updateRow(row, item); return row._refs.info.children.map(n => n.textContent).join('|') + '#' + row.dataset.tone; })()`, p.context);
+  assert.equal(info({ id: 'a1a1a1', title: 'New', status: 'workable', events: [], notes: [] }), 'Not started#open');
+  assert.match(info({ id: 'b1b1b1', title: 'Q', status: 'waiting', waiting: 'Which DB?', events: [], notes: [] }), /^Answer needed#wait$/);
+  assert.match(info({ id: 'c1c1c1', title: 'B', status: 'blocked', error: 'bad path', events: [], notes: [] }), /^Blocked — fix needed\|bad path#blocked$/);
+});

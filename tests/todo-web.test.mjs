@@ -675,3 +675,21 @@ fi
   assert.deepEqual(readFileSync(calls, 'utf8').trim().split(/\r?\n/), ['status', 'approve', 'status'], 'store lookup precedes approval; one inbox refresh follows');
   assert.ok(core.load(ctx.file).items[0].events.some(e => e.who === 'human' && e.what === 'approved intent — "approved shown scope"'));
 });
+
+test('language: payload and live snapshot carry the configured language; locale modules are served as JS', async t => {
+  const { languages, defaultLanguage } = await import('../todo/i18n.mjs');
+  const other = languages.find(l => l !== defaultLanguage);
+  assert.equal((await request(await web(t), '/api/items')).json.lang, defaultLanguage);
+  const ctx = await web(t, { lang: other });
+  assert.equal((await request(ctx, '/api/items')).json.lang, other);
+  const added = await request(ctx, '/api/items', { method: 'POST', body: { text: 'Translated page' } });
+  assert.equal(added.json.lang, other, 'mutation responses keep the language');
+  for (const pathname of ['/i18n.mjs', ...languages.map(l => `/locales/${l}.mjs`)]) {
+    const asset = await request(ctx, pathname, { token: null });
+    assert.equal(asset.status, 200, pathname);
+    assert.match(asset.headers['content-type'], /^text\/javascript/);
+  }
+  assert.equal((await request(ctx, '/locales/../web.mjs', { token: null })).status, 404);
+  assert.equal((await request(ctx, '/locales/xx.mjs', { token: null })).status, 404);
+  await assert.rejects(startWeb({ file: ctx.file, kit, lang: 'xx', onUrl() {} }), /invalid language/);
+});
