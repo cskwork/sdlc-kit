@@ -89,6 +89,11 @@ function whatWaits(item) {
   if (gate) return gate === 'intent' ? 'Approve what will be done' : 'Approve the plan';
   return item.sdlc?.action || 'Your answer';
 }
+// Colour tone of a status pill, row bar and check ring.
+function toneOf(item) {
+  if (item.done) return 'ok';
+  return { waiting: 'wait', blocked: 'blocked' }[item.status] || (item.sdlc ? 'busy' : 'open');
+}
 function doneAt(item) {
   const last = [...item.events].reverse().find(e => /^(done|DONE)\b/.test(e.what));
   return last ? last.at : '';
@@ -186,6 +191,7 @@ function updateRow(li, item) {
     r.del.setAttribute('aria-label', `Delete "${item.title}"`);
   }
   li.dataset.status = item.status;
+  li.dataset.tone = toneOf(item);
   // Rebuild the small info line only when it changed, so a focused link keeps focus.
   const sig = JSON.stringify([item.status, item.project, item.link, item.sdlc?.phase, item.error, item.sdlc?.action, item.done]);
   if (sig === r.sig) return;
@@ -465,7 +471,7 @@ function renderDetail() {
   const dl = $('detail-fields');
   dl.replaceChildren();
   const status = { waiting: 'Needs you', blocked: 'Blocked', workable: item.sdlc ? 'In progress' : 'Open', done: 'Done' }[item.status];
-  field(dl, 'Status', status);
+  field(dl, 'Status', status && chip(status, `badge ${toneOf(item)}`));
   if (item.status === 'waiting') field(dl, 'Waiting for', whatWaits(item));
   if (item.status === 'blocked') field(dl, 'Problem', item.error || item.sdlc?.action || 'Unknown');
   field(dl, 'Project', item.project);
@@ -510,7 +516,7 @@ async function loadArtifact() {
     $('approve-submit').disabled = false;
     const what = artifact.gate === 'intent' ? 'what will be done' : 'the plan';
     $('approve-submit').textContent = artifact.gate === 'intent' ? 'Approve intent' : 'Approve plan';
-    $('approve-help').textContent = `Approving records your words and lets the agent go ahead with ${what}, exactly as shown above (version ${artifact.sha.slice(0, 12)}). If the file changed since it was shown, the approval is refused.`;
+    $('approve-help').textContent = `Approving records your words and lets the agent go ahead with ${what}, exactly as shown (version ${artifact.sha.slice(0, 12)}). If the file changed since it was shown, the approval is refused.`;
   } catch (error) {
     if (id !== detailId || request !== artifactRequest) return;
     artifact = null;
@@ -523,6 +529,17 @@ async function loadArtifact() {
     $('artifact').replaceChildren(el('p', 'field-error', `Could not load the work document: ${error.message}`));
   }
 }
+// Text size of Details only; kept in memory because the page never uses Web Storage.
+let textScale = 1;
+function scaleText(step) {
+  textScale = Math.min(1.6, Math.max(0.8, Math.round((textScale + step) * 10) / 10));
+  dialog.style.setProperty('--detail-scale', textScale);
+  $('text-smaller').disabled = textScale <= 0.8;
+  $('text-larger').disabled = textScale >= 1.6;
+  announce(`Text ${Math.round(textScale * 100)}%`);
+}
+$('text-smaller').addEventListener('click', () => scaleText(-0.1));
+$('text-larger').addEventListener('click', () => scaleText(0.1));
 function updateCount() { $('approve-count').textContent = `${$('approve-words').value.trim().length} / 500`; }
 $('approve-words').addEventListener('input', () => { draftFor(detailId).words = $('approve-words').value; updateCount(); });
 $('reply-text').addEventListener('input', () => {

@@ -31,6 +31,10 @@ for (const mode of ['light', 'dark']) {
       }
     }
     assert.ok(contrast(colors.bad, colors['bad-bg']) >= 4.5, `${mode} error notice text`);
+    for (const [foreground, background] of [['accent', 'highlight'], ['busy', 'busy-bg'], ['ok', 'ok-bg'], ['muted', 'open-bg'], ['bad', 'bad-bg'], ['busy', 'paper'], ['busy', 'highlight']]) {
+      const ratio = contrast(colors[foreground], colors[background]);
+      assert.ok(ratio >= 4.5, `${mode} status --${foreground} on --${background}: ${ratio.toFixed(3)}:1 < 4.5:1`);
+    }
   });
 }
 
@@ -162,6 +166,18 @@ for (const gate of ['', 'intent']) {
     assert.equal(p.nodes.get('decide').hidden, !gate, 'only an approval gate offers the decision form');
   });
 }
+
+test('Details text size steps by 10% between 80% and 160%', () => {
+  const p = page('#t=test-token');
+  const set = {};
+  p.nodes.get('detail').style = { setProperty: (name, value) => { set[name] = value; } };
+  for (let i = 0; i < 9; i++) p.nodes.get('text-larger').listeners.click();
+  assert.equal(set['--detail-scale'], 1.6);
+  assert.equal(p.nodes.get('text-larger').disabled, true, 'larger stops at 160%');
+  for (let i = 0; i < 12; i++) p.nodes.get('text-smaller').listeners.click();
+  assert.equal(set['--detail-scale'], 0.8);
+  assert.equal(p.nodes.get('text-smaller').disabled, true, 'smaller stops at 80%');
+});
 
 test('B4: the page never uses Web Storage or cookies', () => {
   assert.equal(/\b(?:sessionStorage|localStorage)\b|\bcookie(?:Store)?\b/i.test(source), false,

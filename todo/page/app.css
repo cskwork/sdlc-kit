@@ -12,6 +12,11 @@
   --bad: #b3261e;
   --bad-bg: #fff0ef;
   --focus: #806000;
+  --busy: #0b57a4;
+  --busy-bg: #e6f0fb;
+  --ok: #1e6b34;
+  --ok-bg: #e6f4ea;
+  --open-bg: #f2f2f7;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", system-ui, sans-serif;
   font-size: 100%;
   line-height: 1.55;
@@ -31,6 +36,11 @@
     --bad: #ff9b93;
     --bad-bg: #3a2424;
     --focus: #ffd60a;
+    --busy: #8ec5ff;
+    --busy-bg: #1a2838;
+    --ok: #7fd796;
+    --ok-bg: #1b3022;
+    --open-bg: #2c2c2e;
   }
 }
 * { box-sizing: border-box; }
@@ -125,8 +135,21 @@ label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.35
 /* Inline-block keeps the separator atomic so the link underline skips it. */
 a.chip { display: inline-block; min-height: 44px; min-width: 44px; line-height: 44px; }
 .row-error { color: var(--bad); overflow-wrap: anywhere; flex-basis: 100%; }
-.badge { font-weight: 500; }
-.badge.wait { color: var(--accent); }
+/* Status pills: colour plus the word, so colour is never the only cue. */
+.badge { display: inline-flex; align-items: center; padding: 0 0.55rem; border-radius: 999px; font-weight: 600; line-height: 1.7; }
+.badge + .chip::before { display: none; }
+.badge + .chip { margin-left: 0.4rem; }
+.badge.wait { color: var(--accent); background: var(--highlight); }
+.badge.busy { color: var(--busy); background: var(--busy-bg); }
+.badge.ok { color: var(--ok); background: var(--ok-bg); }
+.badge.open { color: var(--muted); background: var(--open-bg); }
+.badge.blocked { background: var(--bad-bg); }
+.row[data-tone="wait"] { box-shadow: inset 3px 0 0 var(--accent); }
+.row[data-tone="blocked"] { box-shadow: inset 3px 0 0 var(--bad); }
+.row[data-tone="busy"] { box-shadow: inset 3px 0 0 var(--busy); }
+.row[data-tone="wait"] .check::before { border-color: var(--accent); }
+.row[data-tone="blocked"] .check::before { border-color: var(--bad); }
+.row[data-tone="busy"] .check::before { border-color: var(--busy); }
 .needs-you .badge.wait { display: none; }
 .needs-you .badge.wait + .chip::before { display: none; }
 .badge.blocked { color: var(--bad); }
@@ -154,6 +177,7 @@ a.chip { display: inline-block; min-height: 44px; min-width: 44px; line-height: 
 /* detail */
 .detail {
   width: min(720px, calc(100vw - 1.5rem)); max-height: calc(100dvh - 1.5rem);
+  font-size: calc(1rem * var(--detail-scale, 1));
   padding: 1.75rem 2rem; border: 0; border-radius: 12px;
   background: var(--paper); color: var(--ink); overflow-wrap: anywhere;
 }
@@ -163,16 +187,20 @@ a.chip { display: inline-block; min-height: 44px; min-width: 44px; line-height: 
   display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem;
   margin: -1.75rem -2rem 0; padding: 1.75rem 2rem 0.5rem;
 }
-.detail-head h2 { padding-top: 0.45rem; min-width: 0; }
-.detail-head button { flex-shrink: 0; white-space: nowrap; }
-.fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.4rem 1rem; margin: 1.25rem 0 0; font-size: 0.9rem; }
+.detail-head h2 { padding-top: 0.45rem; min-width: 0; font-size: 1.3em; }
+.detail-tools { display: flex; flex-shrink: 0; align-items: center; }
+.detail-tools button { white-space: nowrap; padding: 0 0.6rem; }
+.detail h3 { font-size: 1.05em; }
+.detail .hint { font-size: 0.85em; }
+.detail label { font-size: 0.9em; }
+.fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.4rem 1rem; margin: 1.25rem 0 0; font-size: 0.9em; }
 .fields dt { color: var(--muted); }
 .fields dd { margin: 0; overflow-wrap: anywhere; }
 .fields a { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; }
-.artifact { font-size: 16px; overflow-wrap: anywhere; }
-.artifact h1 { font-size: 1.5rem; }
-.artifact h2 { font-size: 1.2rem; }
-.artifact h3, .artifact h4, .artifact h5, .artifact h6 { font-size: 1rem; }
+.artifact { font-size: 1.0625em; line-height: 1.7; max-width: 82ch; overflow-wrap: anywhere; }
+.artifact h1 { font-size: 1.45em; }
+.artifact h2 { font-size: 1.2em; }
+.artifact h3, .artifact h4, .artifact h5, .artifact h6 { font-size: 1.05em; }
 .artifact h1, .artifact h2, .artifact h3, .artifact h4, .artifact h5, .artifact h6 { margin: 1.5rem 0 0.5rem; font-weight: 700; }
 .artifact p, .artifact ul, .artifact ol, .artifact table, .artifact pre { margin: 0.65rem 0; }
 .artifact li { margin: 0.25rem 0; }
@@ -184,10 +212,10 @@ a.chip { display: inline-block; min-height: 44px; min-width: 44px; line-height: 
 .artifact a { display: inline-block; min-height: 44px; min-width: 44px; padding-block: 0.5rem; }
 .decide { margin-top: 2rem; }
 .decide h3 { margin-bottom: 0.75rem; }
-.history { margin: 0; padding-left: 1.25rem; font-size: 0.85rem; }
+.history { margin: 0; padding-left: 1.25rem; font-size: 0.85em; }
 .history li { margin: 0.35rem 0; overflow-wrap: anywhere; }
 .history time { font-variant-numeric: tabular-nums; color: var(--muted); }
-.notes { margin: 0; white-space: pre-wrap; font: inherit; font-size: 0.9rem; color: var(--muted); }
+.notes { margin: 0; white-space: pre-wrap; font: inherit; font-size: 0.9em; color: var(--muted); }
 /* Mid widths: hover tools float over the row's end instead of reserving a column. */
 @media (hover: hover) and (min-width: 561px) {
   .tools { position: absolute; top: 0.35rem; right: 0; padding-left: 1.5rem; border-radius: 6px;
@@ -202,7 +230,13 @@ a.chip { display: inline-block; min-height: 44px; min-width: 44px; line-height: 
   .main > .info { grid-column: 2; grid-row: 1; min-height: 44px; align-content: center; }
   .main > .wait-line, .main > .when { grid-column: 1 / -1; }
   .tools, .needs-you .tools { position: static; padding-left: 0; background: none; }
-  .detail { width: min(960px, calc(100vw - 1.5rem)); }
+  /* Details fills the screen: the document on the left, decision, reply and history beside it. */
+  .detail { width: min(1440px, calc(100vw - 2rem)); height: calc(100dvh - 2rem); max-height: none; }
+  .fields { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); }
+  .detail-body:has(.detail-main > :not([hidden])) {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(20rem, 28rem); column-gap: 3rem; align-items: start;
+  }
+  .detail-side { position: sticky; top: 4.5rem; max-height: calc(100dvh - 9rem); overflow-y: auto; padding-right: 0.25rem; }
 }
 @media (max-width: 560px) {
   .page { padding: 1.25rem 1rem 3rem; }
@@ -211,6 +245,10 @@ a.chip { display: inline-block; min-height: 44px; min-width: 44px; line-height: 
   .row:hover .tools, .row:focus-within .tools { display: flex; }
   .detail { padding: 1.25rem; }
   .detail-head { top: -1.25rem; margin: -1.25rem -1.25rem 0; padding: 1.25rem 1.25rem 0.5rem; }
+  /* Controls on their own line so a long title keeps the full width. */
+  .detail-head { flex-direction: column-reverse; align-items: stretch; gap: 0; }
+  .detail-tools { justify-content: flex-end; }
+  .detail-head h2 { padding-top: 0; }
   .fields { grid-template-columns: minmax(0, 1fr); gap: 0.15rem; }
   .fields dd { margin-bottom: 0.5rem; }
 }
