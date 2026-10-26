@@ -299,6 +299,22 @@ test('approval submits with a blank note', async () => {
   assert.equal(JSON.parse(sent.options.body).words, '');
 });
 
+test('a multi-line reply or note is sent as one line, which the server and inbox require', async () => {
+  const p = page('#t=test-token');
+  vm.runInContext(`
+    detailId = 'abcdef';
+    artifact = { gate: 'plan', sha: 'a'.repeat(64), version: 'shown-A' };
+    items = [{ id: 'abcdef', version: 'shown-A' }];
+  `, p.context);
+  p.nodes.get('reply-text').value = '  First line\r\n\n  second line \nthird  ';
+  p.nodes.get('reply-text').listeners.input();
+  await p.nodes.get('reply-form').listeners.submit({ preventDefault() {} });
+  assert.equal(JSON.parse(p.requests.find(r => r.url === '/api/item').options.body).text, 'First line / second line / third');
+  p.nodes.get('approve-words').value = 'Looks right\nship it';
+  await p.nodes.get('approve-form').listeners.submit({ preventDefault() {} });
+  assert.equal(JSON.parse(p.requests.find(r => r.url === '/api/approve').options.body).words, 'Looks right / ship it');
+});
+
 test('B1: an artifact response cannot replace the version of the item shown in Details', async () => {
   const p = page('#t=test-token', {
     // Stub only Markdown rendering; the real artifact request and item binding run in the VM.
