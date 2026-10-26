@@ -11,7 +11,7 @@ governs phase order, gates and proof.
 
 | # | Phase | Read | Writes in `.sdlc/work/<slug>/` | Leaves when |
 |---|---|---|---|---|
-| 1 | Intent | `phases/1-intent.md` | `intent.md`, `refs/`, `logs/` | Clarity 90%, intent approved |
+| 1 | Intent | `phases/1-intent.md` | `intent.md`, `refs/`, `logs/` | 90% clear, intent approved |
 | 2 | Plan | `phases/2-plan.md` | `refs/`, `PLAN.md` | plan approved |
 | 3 | Build | `phases/3-build.md` | code, `review.md`, `logs/` | review PASS |
 | 4 | Evidence | `phases/4-evidence.md` | `evidence.md`, `logs/` | `sdlc.sh score` routes |
@@ -22,7 +22,7 @@ finds `.git`.
 
 ## Route a request
 
-- "Work the to-do" or a host loop → `todo/AGENT.md`; every slug, new or resumed, must have a to-do item (see `todo/AGENT.md`).
+- "Work the to-do" or a host loop → `todo/AGENT.md`; every slug, new or resumed, must have a to-do item.
 - A change or fix, and `.sdlc/` exists → `sdlc.sh new <slug>`, then phase 1.
 - No `.sdlc/` yet → `sdlc.sh init` (`--memory <folder>` keeps memory
   elsewhere); fill `.sdlc/config.md` from the repo
@@ -89,6 +89,6 @@ was verified. The default `.sdlc/memory` stays on this machine; point
 
 A host can drive the loop: `sdlc.sh status --json` lists every feature, and
 `sdlc.sh next <slug>` exits 0 ready, 10 needs a human, 20 blocked, 30 done.
-An unattended run delivers no further than the human's recorded words allow:
+An unattended run ships no further than the human's recorded words allow:
 a local commit unless they said more. On Windows run `sdlc.sh` through Git Bash
 or WSL.

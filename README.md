@@ -40,13 +40,13 @@ flowchart LR
   B -->|review PASS| E["4 Evidence"]
   E -. plan was wrong, or same failure twice .-> P
   E -. code failed .-> B
-  E -->|every must passes, 95%+ overall| D(["deliver"])
+  E -->|every must passes, 95%+ overall| D(["ship"])
   E -->|no environment to run it| H(["you decide"])
 ```
 
 | Phase | What happens | Goes back when |
 |---|---|---|
-| **1 Intent** | What you asked, what the agent understood, and the risks in it, scored for clarity across six areas. Below 90% the agent explores, reproduces the bug, researches the spec or asks the requester on the ticket, issue or pull request. It opens with a three-line bottom line and keeps the agent's evidence at the bottom; you approve it by answering "is this what you want?". | — |
+| **1 Intent** | What you asked, what the agent understood, and the risks in it, scored for clarity across six areas. Below 90% the agent explores, reproduces the bug, researches the spec or asks the requester on the ticket, issue or pull request. It reads top-down in plain words — **At a glance** (What changes, Not included, Your call), **What was asked**, **Why this came up** (marked `(inferred)` when the agent had to infer it, with its evidence), **What we will do** with its Done when criteria, **Risks**, **Shipping** and **Questions for you** — and keeps the agent's evidence (**Key terms**, **How sure we are**, **Facts**) at the bottom; you approve it by answering "is this what you want?". | — |
 | **2 Plan** | Parallel scouts map source of truth, data, logic and user flow into `refs/`; one `PLAN.md` holds AS-IS → TO-BE, side effects and the scenarios QA will run. | the gap check finds holes |
 | **3 Build** | The smallest complete change, committed, then a separate adversarial reviewer. | the review FAILs: fix it, review again |
 | **4 Evidence** | Real checks, then every scenario as its persona through the real interface. `sdlc.sh score` scores and routes it; the agent does not judge. | the plan was wrong or the same failure came twice → Plan; code failed → Build |
@@ -79,11 +79,11 @@ always says what comes next.
 
 ```
 .sdlc/work/<slug>/
-  intent.md     what was asked, understood, risked, and how clear it is
+  intent.md     what was asked and why, what we will do, risks, and how sure we are
   refs/         scout findings and the intent check: source.md data.md logic.md flow.md learnings.md intent-check.md
   PLAN.md       one page: understanding, AS-IS → TO-BE, side effects, changes, scenarios
   review.md     reviewer rounds, each ending in VERDICT
-  evidence.md   checks, one result row per scenario, delivery
+  evidence.md   checks, one result row per scenario, shipping
   logs/         raw output behind every PASS and FAIL; scripts/ re-runs each scenario
 ```
 
@@ -122,7 +122,7 @@ vendors e2e's agent guide (Apache-2.0, pinned) so it works offline;
 - **Proof, not claims.** No environment means BLOCKED, never PASS. A bug fix
   needs a test that failed before the fix; a test for new behavior is seen
   failing once without it.
-- **Delivered means what was verified.** `close` refuses a delivered tree that
+- **Shipped means what was verified.** `close` refuses a shipped tree that
   differs from the verified commit.
 
 Build follows the [ponytail](https://github.com/DietrichGebert/ponytail) approach — the
@@ -134,7 +134,7 @@ other skill is needed.
 `sdlc.sh status --json` lists every feature with its phase, state, score and
 route. `sdlc.sh next <slug>` exits `0` ready, `10` needs a human, `20`
 blocked, `30` done. The scripts record and report; they never run a model. An
-unattended run delivers no further than your recorded words allow — a local
+unattended run ships no further than your recorded words allow — a local
 commit unless you said more. Windows: run `sdlc.sh` in Git Bash or WSL.
 
 ## Personal to-do
@@ -167,7 +167,7 @@ It includes Claude Code `/loop`, cron/launchd and Paseo recipes; the kit never r
 
 `next` exits `0` workable, `10` waiting for the human, `20` blocked with error text, or `30` nothing to do.
 Agents must stop at a waiting or blocked first item and never skip to a lower one.
-Gate approvals and intent blocking questions surface through sync; the agent stops without adding an explicit wait.
+Gate approvals and intent Questions for you surface through sync; the agent stops without adding an explicit wait.
 Use `wait` only for questions sdlc.sh does not track, such as which project or a question outside an sdlc artifact.
 Decide in the TUI, web page or chat; replies inform the artifact and never count as approval.
 The web page shows intent or plan before approval.
