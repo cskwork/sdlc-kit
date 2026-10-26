@@ -1,6 +1,6 @@
-# v2.12.1: To-do web page shows the work document, colours status and fits wide screens
+# v2.13.0: To-do in your language, statuses that say who acts, and Details beside the list
 
-Follow-up to v2.12.0. Web page, server and TUI, plus the `--lang` option; the inbox file and approval rules are unchanged.
+Follow-up to v2.12.0. Web page, server and TUI, plus the `--lang` option; the inbox file format and the sdlc approval rules are unchanged.
 
 ## Changes
 
