@@ -48,11 +48,18 @@ function page(hash = '', options = {}) {
       attributes: {}, listeners: {}, classList: { contains() { return false; }, toggle() {}, add() {}, remove() {} },
       addEventListener(type, fn) { this.listeners[type] = fn; },
       focus() { context.document.activeElement = this; },
-      showModal() { this.open = true; },
+      showModal() { this.open = true; this.modal = true; },
+      show() { this.open = true; this.modal = false; },
       close() { this.open = false; this.listeners.close?.(); },
       setAttribute(name, value) { this.attributes[name] = value; },
       matches() { return false; }, getClientRects() { return []; },
-      insertBefore(child) { this.children.push(child); child.parentElement = this; },
+      insertBefore(child, before) {
+        child.remove?.();
+        const at = before ? this.children.indexOf(before) : -1;
+        this.children.splice(at < 0 ? this.children.length : at, 0, child);
+        child.parentElement = this;
+      },
+      remove() { this.parentElement?.children.splice(this.parentElement.children.indexOf(this), 1); this.parentElement = null; },
       append(...children) { this.children.push(...children); },
       replaceChildren(...children) { this.children = children; }
     });
@@ -66,13 +73,14 @@ function page(hash = '', options = {}) {
   };
   let element = 0;
   const optionsHandler = options.fetch;
+  const media = { matches: !!options.wide, listeners: [], addEventListener(type, fn) { this.listeners.push(fn); } };
   const context = vm.createContext({
     document: { getElementById: node, addEventListener() {}, documentElement: { lang: 'en' }, querySelectorAll: () => [],
       createElement: () => node(`element-${++element}`),
       createElementNS: () => node(`element-${++element}`), createTextNode: text => ({ textContent: text }) },
     sessionStorage: storage(), localStorage: storage(),
     history: { replaceState(_state, _title, url) { location.href = new URL(url, location).href; } },
-    location, URLSearchParams, setTimeout, clearTimeout, Node: class {}, scrollX: 0, scrollY: 0, scrollTo() {},
+    location, URLSearchParams, setTimeout, clearTimeout, Node: class {}, scrollX: 0, scrollY: 0, scrollTo() {}, matchMedia: () => media,
     // The browser imports these modules; the VM runs app.js as a script with their exports as globals.
     ...i18n, ...status,
     EventSource: class {
@@ -88,7 +96,8 @@ function page(hash = '', options = {}) {
     }
   });
   vm.runInContext((options.source || source).replace(/^import .* from '\.\/(?:i18n|status)\.mjs';$/gm, ''), context);
-  return { context, nodes, requests, streams, location };
+  const setWide = wide => { media.matches = wide; for (const fn of media.listeners) fn({ matches: wide }); };
+  return { context, nodes, requests, streams, location, setWide };
 }
 
 for (const reason of ['error', 'action', 'both']) {
@@ -392,4 +401,74 @@ test('status names who acts next: not started, blocked and answer rows', () => {
   assert.equal(info({ id: 'a1a1a1', title: 'New', status: 'workable', events: [], notes: [] }), 'Not started#open');
   assert.match(info({ id: 'b1b1b1', title: 'Q', status: 'waiting', waiting: 'Which DB?', events: [], notes: [] }), /^Answer needed#wait$/);
   assert.match(info({ id: 'c1c1c1', title: 'B', status: 'blocked', error: 'bad path', events: [], notes: [] }), /^Blocked — fix needed\|bad path#blocked$/);
+});
+
+const paneItems = () => [
+  { id: 'aaaaaa', title: 'Agent task', status: 'workable', done: false, events: [], notes: [], sdlc: { slug: 'a', phase: 'build' } },
+  { id: 'bbbbbb', title: 'Stop here', status: 'waiting', waiting: 'Which DB?', done: false, events: [], notes: [] },
+  { id: 'cccccc', title: 'Queued task', status: 'workable', done: false, events: [], notes: [] }];
+const receive = (p, list) => vm.runInContext(`received(${JSON.stringify({ lang: 'en', file: '/tmp/todo.md', items: list })})`, p.context);
+const clickRow = (p, id, detail = 1) => vm.runInContext(`$('open').listeners.click({ detail: ${detail},
+  target: { closest: selector => selector === 'li.row' ? rows.get('${id}') : null } })`, p.context);
+const current = (p, id) => vm.runInContext(`rows.get('${id}').attributes['aria-current']`, p.context);
+
+test('wide: Details is a side pane that shows the stop item until a row is chosen', () => {
+  const p = page('#t=test-token', { wide: true });
+  receive(p, paneItems());
+  const dialog = p.nodes.get('detail');
+  assert.equal(dialog.open, true);
+  assert.equal(dialog.modal, false, 'the pane is not modal');
+  assert.equal(p.nodes.get('detail-title').textContent, 'Stop here', 'nothing chosen: the row where agents stop');
+  assert.equal(current(p, 'bbbbbb'), 'true');
+  assert.equal(current(p, 'aaaaaa'), 'false');
+  assert.notEqual(p.context.document.activeElement, p.nodes.get('detail-title'), 'a live update does not steal focus');
+});
+
+test('wide: clicking a row shows it in the pane; only keyboard activation moves focus there', () => {
+  const p = page('#t=test-token', { wide: true });
+  receive(p, paneItems());
+  clickRow(p, 'cccccc');
+  assert.equal(p.nodes.get('detail-title').textContent, 'Queued task');
+  assert.equal(current(p, 'cccccc'), 'true');
+  assert.equal(current(p, 'bbbbbb'), 'false');
+  assert.notEqual(p.context.document.activeElement, p.nodes.get('detail-title'), 'a mouse click keeps focus in the list');
+  vm.runInContext(`rows.get('aaaaaa').closest = selector => selector === 'li.row' ? rows.get('aaaaaa') : null;
+    $('open').listeners.keydown({ target: rows.get('aaaaaa'), key: 'Enter', preventDefault() {} })`, p.context);
+  assert.equal(p.nodes.get('detail-title').textContent, 'Agent task');
+  assert.equal(p.context.document.activeElement, p.nodes.get('detail-title'), 'Enter on a row moves focus to the pane');
+});
+
+test('wide: the chosen item survives live snapshots and falls back when it disappears', () => {
+  const p = page('#t=test-token', { wide: true });
+  receive(p, paneItems());
+  clickRow(p, 'cccccc');
+  p.nodes.get('reply-text').value = 'draft for C';
+  p.nodes.get('reply-text').listeners.input();
+  receive(p, [{ id: 'dddddd', title: 'New first', status: 'waiting', done: false, events: [], notes: [] }, ...paneItems()]);
+  assert.equal(p.nodes.get('detail-title').textContent, 'Queued task', 'a new stop item does not take over the pane');
+  assert.equal(p.nodes.get('reply-text').value, 'draft for C');
+  receive(p, paneItems().filter(item => item.id !== 'cccccc'));
+  assert.equal(p.nodes.get('detail-title').textContent, 'Stop here');
+  assert.equal(p.nodes.get('detail-gone').hidden, true);
+  receive(p, []);
+  assert.equal(p.nodes.get('detail').dataset.empty, 'true', 'an empty list shows the empty pane');
+});
+
+test('narrow keeps the modal; resizing moves the selection between modal and pane', () => {
+  const p = page('#t=test-token', { wide: false });
+  receive(p, paneItems());
+  const dialog = p.nodes.get('detail');
+  assert.equal(dialog.open, undefined, 'narrow screens do not open Details by themselves');
+  clickRow(p, 'cccccc');
+  assert.equal(dialog.open, undefined, 'a narrow row click does not open Details');
+  vm.runInContext(`openDetail('cccccc')`, p.context);
+  assert.equal(dialog.modal, true);
+  p.setWide(true);
+  assert.equal(dialog.open, true);
+  assert.equal(dialog.modal, false, 'no modal stays over the two panes');
+  assert.equal(p.nodes.get('detail-title').textContent, 'Queued task');
+  p.setWide(false);
+  assert.equal(dialog.open, false, 'the pane closes on a narrow screen');
+  p.setWide(true);
+  assert.equal(p.nodes.get('detail-title').textContent, 'Queued task', 'the selection is kept');
 });

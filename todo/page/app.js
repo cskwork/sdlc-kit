@@ -129,7 +129,7 @@ function button(label, role, text) {
 function buildRow(item) {
   const li = el('li', 'row');
   li.dataset.id = item.id;
-  li.tabIndex = -1;
+  li.tabIndex = 0;
   const check = el('input', 'check');
   check.type = 'checkbox';
   check.dataset.role = 'check';
@@ -308,6 +308,7 @@ function apply(data) {
       changed.textContent = new Intl.DateTimeFormat(lang, { dateStyle: 'long', timeStyle: 'short' }).format(changedAt);
     } else changed.hidden = true;
   }
+  syncPane();
   if (detailId) renderDetail();
   return before;
 }
@@ -391,7 +392,12 @@ function wireList(list) {
   });
   list.addEventListener('click', event => {
     const target = event.target.closest('[data-role]');
-    if (!target) return;
+    // Anywhere else on a row, including its title, shows it in the side pane; links and the rename box keep their own job.
+    if (!target || target.dataset.role === 'title') {
+      const li = event.target.closest('li.row');
+      if (li && isWide && !event.target.closest('a, input')) openDetail(li.dataset.id, li, event.detail === 0);
+      return;
+    }
     const li = rowOf(target);
     const role = target.dataset.role;
     if (role === 'open' || role === 'review') openDetail(li.dataset.id, target);
@@ -408,7 +414,13 @@ function wireList(list) {
   });
   list.addEventListener('keydown', event => {
     const li = rowOf(event.target);
-    if (!li || li._item.done) return;
+    if (!li) return;
+    if (event.target === li && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      openDetail(li.dataset.id, li);
+      return;
+    }
+    if (li._item.done) return;
     if (event.key === 'Escape' && li.classList.contains('actions-open') && !li.classList.contains('editing')) {
       li.classList.remove('actions-open');
       li._refs.more.setAttribute('aria-expanded', 'false');
@@ -443,35 +455,82 @@ $('add').addEventListener('submit', async event => {
 document.addEventListener('keydown', event => {
   if ((event.key !== '/' && event.key !== 'n') || event.altKey || event.ctrlKey || event.metaKey) return;
   const t = event.target;
-  if ($('detail').open || t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
+  if (($('detail').open && !isWide) || t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
   event.preventDefault();
   addText.focus();
 });
 
 // ---------- detail ----------
+// One <dialog>: a modal on narrow screens, a persistent side pane beside the list on wide ones.
 const dialog = $('detail');
-let detailId = '', opener = null, artifact = null, artifactRequest = 0, detailVersion = '';
+const wideQuery = matchMedia('(min-width: 1100px)');
+let isWide = wideQuery.matches, quietClose = false;
+// detailId is what the dialog shows ('' when closed); selectedId is the row chosen for the pane.
+let detailId = '', selectedId = '', opener = null, artifact = null, artifactRequest = 0, detailVersion = '';
 
 function draftFor(id) { if (!drafts.has(id)) drafts.set(id, { reply: '', words: '' }); return drafts.get(id); }
-function openDetail(id, from) {
+function openDetail(id, from, focus = true) {
   const item = items.find(i => i.id === id);
   if (!item) return;
-  detailId = id;
-  detailVersion = '';
+  selectedId = id;
+  delete dialog.dataset.empty;
+  if (id !== detailId || !dialog.open) {
+    detailId = id;
+    detailVersion = '';
+    artifact = null;
+    const d = draftFor(id);
+    $('reply-text').value = d.reply;
+    $('approve-words').value = d.words;
+    $('reply-error').hidden = $('approve-error').hidden = true;
+    $('artifact-box').hidden = $('decide').hidden = true;
+    updateCount();
+    renderDetail();
+    // Every open sdlc item shows its work document; only an approval gate adds the decision form.
+    if (!item.done && item.sdlc) loadArtifact();
+  }
   opener = from || document.activeElement;
-  artifact = null;
-  const d = draftFor(id);
-  $('reply-text').value = d.reply;
-  $('approve-words').value = d.words;
-  $('reply-error').hidden = $('approve-error').hidden = true;
-  $('artifact-box').hidden = $('decide').hidden = true;
-  updateCount();
-  renderDetail();
-  dialog.showModal();
-  $('detail-title').focus();
-  // Every open sdlc item shows its work document; only an approval gate adds the decision form.
-  if (!item.done && item.sdlc) loadArtifact();
+  if (!dialog.open) { if (isWide) showPane(); else dialog.showModal(); }
+  markSelected();
+  if (focus) $('detail-title').focus();
 }
+// show() runs the dialog focusing steps; a pane opened by a live update must not take focus.
+function showPane() {
+  const keep = document.activeElement;
+  dialog.show();
+  if (keep && keep !== document.body && keep.isConnected) keep.focus({ preventScroll: true });
+  else document.activeElement?.blur?.();
+}
+function markSelected() {
+  for (const [id, li] of rows) li.setAttribute('aria-current', String(isWide && id === selectedId));
+}
+// Wide screens always show an item: the chosen one, else where agents stop, else the first open one.
+function paneTarget() {
+  if (items.some(i => i.id === selectedId)) return selectedId;
+  return queue.stop?.id || items.find(i => !i.done)?.id || '';
+}
+function syncPane() {
+  if (!isWide) return markSelected();
+  const id = paneTarget();
+  if (id) { if (id !== detailId || !dialog.open) openDetail(id, null, false); return; }
+  selectedId = detailId = '';
+  dialog.dataset.empty = 'true';
+  if (!dialog.open) showPane();
+  markSelected();
+}
+function closeQuietly() {
+  if (!dialog.open) return;
+  const inside = dialog.contains?.(document.activeElement);
+  quietClose = true;
+  dialog.close();
+  quietClose = false;
+  if (inside) (rows.get(selectedId) || addText).focus({ preventScroll: true });
+}
+// Crossing the breakpoint never leaves a modal over the panes; the selection is kept.
+wideQuery.addEventListener('change', () => {
+  isWide = wideQuery.matches;
+  closeQuietly();
+  syncPane();
+});
 function field(dl, name, value) {
   if (!value) return;
   const dt = el('dt', '', name), dd = el('dd');
@@ -523,6 +582,13 @@ async function loadArtifact() {
   $('approve-submit').disabled = true;
   $('approve-error').hidden = true;
   $('artifact-reload').hidden = true;
+  // The document can take seconds (the server syncs with sdlc first); say so instead of showing nothing.
+  $('artifact-box').hidden = false;
+  show($('artifact-title'), { key: 'artifact.document' });
+  $('artifact-file').textContent = '';
+  const loading = el('p', 'hint');
+  show(loading, { key: 'artifact.loading' });
+  $('artifact').replaceChildren(loading);
   try {
     const data = await api(`/api/artifact?id=${encodeURIComponent(id)}`);
     if (id !== detailId || request !== artifactRequest) return;
@@ -634,6 +700,7 @@ $('detail-close').addEventListener('click', () => dialog.close());
 dialog.addEventListener('close', () => {
   const id = detailId;
   detailId = '';
+  if (quietClose) return;
   const row = rows.get(id);
   // Mobile row tools hide while the dialog has focus; reveal them before restoring the opener.
   if (opener?.isConnected && !opener.getClientRects().length) row?.focus({ preventScroll: true });

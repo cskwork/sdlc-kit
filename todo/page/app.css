@@ -244,6 +244,41 @@ a.chip { display: inline-block; min-height: 44px; min-width: 44px; line-height: 
   }
   .detail-side { position: sticky; top: 4.5rem; max-height: calc(100dvh - 9rem); overflow-y: auto; padding-right: 0.25rem; }
 }
+#detail-empty { display: none; }
+/* Two panes: a compact list beside a persistent, non-modal Details pane. */
+@media (min-width: 1100px) {
+  .shell { display: grid; grid-template-columns: minmax(26rem, 38%) minmax(0, 1fr); align-items: start; }
+  .shell > .page { max-width: none; margin: 0; padding-right: 1.5rem; }
+  .main { display: block; }
+  .main > .info { min-height: 0; }
+  .row { cursor: pointer; }
+  .row[aria-current="true"] { outline: 2px solid var(--control); outline-offset: -2px; border-radius: 6px; }
+  /* A row click already shows Details; the remaining tools sit at the row's bottom end, clear of the title. */
+  .tools [data-role="open"] { display: none; }
+  .tools, .needs-you .tools { position: absolute; top: auto; bottom: 0.35rem; right: 0.25rem; padding-left: 1.5rem;
+    background: linear-gradient(to right, transparent, var(--paper) 1.5rem); }
+  .needs-you .tools { background: linear-gradient(to right, transparent, var(--highlight) 1.5rem); }
+  .shell > .detail {
+    position: sticky; top: 0; inset: auto; margin: 0; width: auto; height: 100dvh; max-height: none;
+    border-radius: 0; border-left: 1px solid var(--line); overflow-y: auto;
+  }
+  .detail[data-empty] > :not(#detail-empty) { display: none; }
+  .detail[data-empty] > #detail-empty { display: block; }
+  #detail-close { display: none; }
+  .fields { grid-template-columns: max-content minmax(0, 1fr); }
+  .detail-body:has(.detail-main > :not([hidden])) { display: block; }
+  .detail-side { position: static; max-height: none; overflow: visible; padding-right: 0; }
+  /* Stacked pane: the document scrolls in its own box so the decision and reply stay in view. */
+  .artifact { max-height: 38dvh; overflow-y: auto; padding: 0.25rem 1rem 0.25rem 0; border-bottom: 1px solid var(--line); }
+}
+/* Very wide panes put the document and the decision side by side again. */
+@media (min-width: 1600px) {
+  .detail-body:has(.detail-main > :not([hidden])) {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem); column-gap: 2.5rem;
+  }
+  .detail-side { position: sticky; top: 4.5rem; max-height: calc(100dvh - 7rem); overflow-y: auto; }
+  .artifact { max-height: none; overflow-y: visible; border-bottom: 0; }
+}
 @media (max-width: 560px) {
   .page { padding: 1.25rem 1rem 3rem; }
   .timestamp { margin-bottom: 1.5rem; }
