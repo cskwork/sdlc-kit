@@ -283,19 +283,20 @@ export async function runTui({ file, kit, web }) {
     const change = fn => core.mutate(file, model => {
       const item = requireItem(model, effect.id);
       if (core.itemVersion(item, model) !== effect.item.version) throw new Error('Item changed; review it and try again');
-      snapshot = { item: structuredClone(item), index: model.items.indexOf(item) };
+      snapshot = { item: structuredClone(item), index: model.items.indexOf(item), version: core.itemVersion(item, model) };
       fn(item, model);
       return item;
+    }, (model, item) => {
+      snapshot.afterVersion = model.items.includes(item) ? core.itemVersion(item, model) : snapshot.version;
     });
-    const remember = (kind, after) => {
-      state.undo = { ...snapshot, kind, after, id: result.id, afterWaiting: result.waiting,
-        afterItem: structuredClone(result) };
+    const remember = kind => {
+      state.undo = { ...snapshot, kind, id: result.id };
     };
     switch (effect.type) {
       case 'add': result = await core.add(file, effect.text, { by: 'human' }); message('Added'); break;
       case 'edit':
         result = await change(item => { item.title = effect.text; humanEvent(item, 'edited'); });
-        remember('edit', result.title); message('Edited · u undo'); break;
+        remember('edit'); message('Edited · u undo'); break;
       case 'reply':
         await change(item => { item.waiting = ''; humanEvent(item, `reply — ${effect.text}`); });
         message('Reply recorded'); break;
@@ -306,7 +307,7 @@ export async function runTui({ file, kit, web }) {
           const firstDone = model.items.findIndex(i => i.done);
           model.items.splice(effect.done ? firstDone < 0 ? model.items.length : firstDone : 0, 0, item);
         });
-        remember('done', effect.done);
+        remember('done');
         message(effect.done ? 'Moved to Done · u undo' : 'Reopened · u undo'); break;
       case 'remove':
         await change((item, model) => { model.items.splice(model.items.indexOf(item), 1); });
@@ -330,21 +331,13 @@ export async function runTui({ file, kit, web }) {
             // never replaces another item, even if its ID now equals the deleted ID.
             item = structuredClone(undo.item); model.items.splice(Math.min(undo.index, model.items.length), 0, item);
           } else {
-            item = requireItem(model, undo.id);
-            const expected = undo.afterItem;
-            if (!expected.events.every((event, i) => JSON.stringify(event) === JSON.stringify(item.events[i]))) {
-              throw new Error('Cannot undo: item history changed elsewhere');
-            }
-            if (['project', 'link', 'sdlc'].some(key => JSON.stringify(item[key]) !== JSON.stringify(expected[key])) ||
-                !expected.notes.every((note, i) => note === item.notes[i])) {
+            item = model.items.find(item => item.id === undo.id);
+            if (!item || core.itemVersion(item, model) !== undo.afterVersion) {
               throw new Error('Cannot undo: item changed elsewhere');
             }
             if (undo.kind === 'edit') {
-              if (item.title !== undo.after) throw new Error('Cannot undo: title changed elsewhere');
               item.title = undo.item.title;
             } else {
-              if (item.done !== undo.after) throw new Error('Cannot undo: status changed elsewhere');
-              if (item.waiting !== undo.afterWaiting) throw new Error('Cannot undo: waiting changed elsewhere');
               item.done = undo.item.done; item.waiting = undo.item.waiting;
               model.items.splice(model.items.indexOf(item), 1); model.items.splice(Math.min(undo.index, model.items.length), 0, item);
             }

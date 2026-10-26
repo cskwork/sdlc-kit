@@ -242,7 +242,7 @@ async function reclaim(lock, observed) {
     removeLock(lock, observed, true, `${marker}.moved`);
   } finally { unlink(marker); }
 }
-export async function mutate(file, fn) {
+export async function mutate(file, fn, onSaved) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const lock = `${file}.lock`, deadline = Date.now() + 2000;
   for (;;) {
@@ -290,6 +290,8 @@ export async function mutate(file, fn) {
           model.items = model.items.filter(item => !overflow.includes(item));
         }
         await atomicWrite(file, serialize(model), owns);
+        // Observe the persisted postimage before releasing the original mutation lock.
+        onSaved?.(model, result);
         return result;
       });
     } catch (error) { if (error !== lockLost) throw error; }

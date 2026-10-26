@@ -236,7 +236,8 @@ test('persisted undo done refuses to overwrite a concurrent new waiting message'
   const item = core.load(ui.file).items[0];
   await core.wait(ui.file, item.id, 'new wait from agent');
   ui.send('u');
-  await until(() => ui.screen().includes('Cannot undo: waiting changed elsewhere'));
+await until(() => ui.screen().includes('Cannot undo:'));
+assert.match(ui.screen(), /Cannot undo: item changed elsewhere/);
   assert.equal(core.load(ui.file).items[0].waiting, 'new wait from agent');
   assert.equal(core.load(ui.file).items[0].done, true);
   await ui.close();
@@ -409,5 +410,112 @@ test('R7 B1: pending delete refuses a surviving identical same-minute duplicate'
   assert.equal(core.load(ui.file).items.length, 1, 'stale confirmation must preserve the surviving duplicate');
   assert.match(ui.screen(), /Item changed; review it and try again/);
   assert.equal(readFileSync(ui.file, 'utf8'), before);
+  await ui.close();
+});
+
+test('R8 B1: undo refuses a surviving identical completed duplicate', async t => {
+  const ui = await terminal(t, async file => {
+    const first = await core.add(file, 'Duplicate', { by: 'human' });
+    await core.done(file, first.id, '', 'human');
+    await core.add(file, 'Duplicate', { by: 'human' });
+    // Align the seeded histories with the TUI completion's current local minute.
+    await core.mutate(file, model => {
+      for (const item of model.items) for (const event of item.events) event.at = core.stamp();
+    });
+  });
+  ui.send('x');
+  await until(() => core.load(ui.file).items.every(item => item.done));
+  const model = core.load(ui.file);
+  // The histories must actually be identical for this to exercise duplicate membership.
+  assert.equal(core.serialize({ items: [model.items[0]] }), core.serialize({ items: [model.items[1]] }));
+  await core.remove(ui.file, model.items[0].id);
+  const before = readFileSync(ui.file, 'utf8');
+  await delay(350);
+  ui.send('u');
+  await until(() => /Undone|Cannot undo/.test(ui.screen()));
+  assert.equal(readFileSync(ui.file, 'utf8'), before, 'undo must preserve the surviving completed duplicate');
+  assert.match(ui.screen(), /Cannot undo: item changed elsewhere/);
+  await ui.close();
+});
+
+for (const action of ['done', 'undone', 'edit']) {
+  for (const change of ['event', 'note']) {
+    test(`R8 B1: undo ${action} refuses an appended ${change}`, async t => {
+      const ui = await terminal(t, async file => {
+        const item = await core.add(file, 'Original', { by: 'human' });
+        if (action === 'undone') await core.done(file, item.id, '', 'human');
+      });
+      ui.send(action === 'edit' ? 'e\x15Renamed\r' : action === 'undone' ? '\tx' : 'x');
+      await until(() => {
+        const item = core.load(ui.file).items[0];
+        return action === 'edit' ? item.title === 'Renamed' : item.done === (action === 'done');
+      });
+      await core.mutate(ui.file, model => {
+        const item = model.items[0];
+        if (change === 'event') item.events.push({ at: core.stamp(), who: 'agent', what: 'new information' });
+        else item.notes.push('  - new information');
+      });
+      const before = readFileSync(ui.file, 'utf8');
+      ui.send('u');
+      await until(() => /Undone|Cannot undo/.test(ui.screen()));
+      assert.equal(readFileSync(ui.file, 'utf8'), before, 'undo must preserve intervening information');
+      assert.match(ui.screen(), /Cannot undo: item changed elsewhere/);
+      await ui.close();
+    });
+  }
+  test(`R8 B1: ordinary undo ${action} succeeds without an intervening change`, async t => {
+    const ui = await terminal(t, async file => {
+      const item = await core.add(file, 'Original', { by: 'human' });
+      if (action === 'undone') await core.done(file, item.id, '', 'human');
+    });
+    ui.send(action === 'edit' ? 'e\x15Renamed\r' : action === 'undone' ? '\tx' : 'x');
+    await until(() => {
+      const item = core.load(ui.file).items[0];
+      return action === 'edit' ? item.title === 'Renamed' : item.done === (action === 'done');
+    });
+    ui.send('u');
+    await until(() => /Undone|Cannot undo/.test(ui.screen()));
+    const item = core.load(ui.file).items[0];
+    assert.equal(item.title, 'Original');
+    assert.equal(item.done, action === 'undone');
+    assert.ok(item.events.some(event => event.what === `undo ${action === 'edit' ? 'edit' : 'done'}`));
+    await ui.close();
+  });
+}
+
+test('R8 B1: undo refuses a removed target with the changed-item message', async t => {
+  const ui = await terminal(t, file => core.add(file, 'Original', { by: 'human' }));
+  ui.send('x');
+  await until(() => core.load(ui.file).items[0].done);
+  await core.remove(ui.file, core.load(ui.file).items[0].id);
+  const before = readFileSync(ui.file, 'utf8');
+  ui.send('u');
+  await until(() => /Cannot undo|Item changed or was removed/.test(ui.screen()));
+  assert.match(ui.screen(), /Cannot undo: item changed elsewhere/);
+  assert.equal(readFileSync(ui.file, 'utf8'), before);
+  await ui.close();
+});
+
+test('R8 B1: ordinary undo uses the saved version after Done overflow archives a duplicate', async t => {
+  const ui = await terminal(t, async file => {
+    await core.add(file, 'Duplicate', { by: 'human' });
+    await core.mutate(file, model => {
+      const open = structuredClone(model.items[0]);
+      model.items = [open, ...Array.from({ length: 30 }, () => ({
+        ...structuredClone(open), done: true,
+        events: [...structuredClone(open.events), { at: core.stamp(), who: 'human', what: 'done' }]
+      }))];
+    });
+  });
+  ui.send('x');
+  await until(() => core.load(ui.file).items.every(item => item.done));
+  const model = core.load(ui.file);
+  assert.equal(model.items.length, 30);
+  assert.equal(new Set(model.items.map(item => core.serialize({ items: [item] }))).size, 1);
+  assert.equal((readFileSync(join(dirname(ui.file), 'todo-archive.md'), 'utf8').match(/^- \[x\]/gm) || []).length, 1);
+  ui.send('u');
+  await until(() => /Undone|Cannot undo/.test(ui.screen()));
+  assert.equal(core.load(ui.file).items.filter(item => !item.done).length, 1, 'ordinary undo must use the post-archive version');
+  assert.match(ui.screen(), /Undone/);
   await ui.close();
 });
