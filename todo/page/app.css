@@ -15,6 +15,8 @@
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", system-ui, sans-serif;
   font-size: 100%;
   line-height: 1.55;
+  /* Break Korean between words, never mid-word; anywhere still splits a token too long for its line. */
+  word-break: keep-all;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -119,8 +121,9 @@ label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.35
 .edit { font-size: 17px; }
 .info { display: flex; align-items: center; flex-wrap: wrap; gap: 0 0.4rem; font-size: 0.8rem; color: var(--muted); }
 .chip { display: inline-flex; align-items: center; overflow-wrap: anywhere; max-width: 100%; }
-.chip + .chip::before { content: '·'; color: var(--muted); margin-right: 0.4rem; text-decoration: none; }
-a.chip { min-height: 44px; min-width: 44px; }
+.chip + .chip::before { content: '·'; display: inline-block; color: var(--muted); margin-right: 0.4rem; }
+/* Inline-block keeps the separator atomic so the link underline skips it. */
+a.chip { display: inline-block; min-height: 44px; min-width: 44px; line-height: 44px; }
 .row-error { color: var(--bad); overflow-wrap: anywhere; flex-basis: 100%; }
 .badge { font-weight: 500; }
 .badge.wait { color: var(--accent); }
@@ -160,7 +163,8 @@ a.chip { min-height: 44px; min-width: 44px; }
   display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem;
   margin: -1.75rem -2rem 0; padding: 1.75rem 2rem 0.5rem;
 }
-.detail-head h2 { padding-top: 0.45rem; }
+.detail-head h2 { padding-top: 0.45rem; min-width: 0; }
+.detail-head button { flex-shrink: 0; white-space: nowrap; }
 .fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.4rem 1rem; margin: 1.25rem 0 0; font-size: 0.9rem; }
 .fields dt { color: var(--muted); }
 .fields dd { margin: 0; overflow-wrap: anywhere; }
@@ -184,6 +188,22 @@ a.chip { min-height: 44px; min-width: 44px; }
 .history li { margin: 0.35rem 0; overflow-wrap: anywhere; }
 .history time { font-variant-numeric: tabular-nums; color: var(--muted); }
 .notes { margin: 0; white-space: pre-wrap; font: inherit; font-size: 0.9rem; color: var(--muted); }
+/* Mid widths: hover tools float over the row's end instead of reserving a column. */
+@media (hover: hover) and (min-width: 561px) {
+  .tools { position: absolute; top: 0.35rem; right: 0; padding-left: 1.5rem; border-radius: 6px;
+    background: linear-gradient(to right, transparent, var(--paper) 1.5rem); }
+  .needs-you .tools { background: linear-gradient(to right, transparent, var(--highlight) 1.5rem); }
+}
+/* Wide screens: one row per item with title, status and context side by side. */
+@media (min-width: 1024px) {
+  .page { max-width: 1280px; }
+  .main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(14rem, 22rem); column-gap: 1.5rem; align-items: start; }
+  .main > .title, .main > .edit { grid-column: 1; grid-row: 1; }
+  .main > .info { grid-column: 2; grid-row: 1; min-height: 44px; align-content: center; }
+  .main > .wait-line, .main > .when { grid-column: 1 / -1; }
+  .tools, .needs-you .tools { position: static; padding-left: 0; background: none; }
+  .detail { width: min(960px, calc(100vw - 1.5rem)); }
+}
 @media (max-width: 560px) {
   .page { padding: 1.25rem 1rem 3rem; }
   .timestamp { margin-bottom: 1.5rem; }
