@@ -35,11 +35,11 @@ function approvalGate(item) {
       !/^[a-z0-9][a-z0-9._-]{0,79}$/.test(item.sdlc.slug)) fail(409, 'item has no approval gate');
   return gate;
 }
-function projectPath(project) {
-  return fs.realpathSync(core.projectPath(project));
+async function projectPath(project) {
+  return fs.realpathSync(await core.nativePath(core.projectPath(project)));
 }
-function artifact(item, gate) {
-  let root = projectPath(item.project);
+async function artifact(item, gate) {
+  let root = await projectPath(item.project);
   while (!fs.existsSync(path.join(root, '.sdlc', 'config.md'))) {
     const parent = path.dirname(root);
     if (parent === root) fail(409, 'no .sdlc/config.md found');
@@ -132,7 +132,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
         } else if (url.pathname === '/api/artifact') {
           await core.sync(file, { kit });
           const item = itemFor(file, url.searchParams.get('id'));
-          json(200, artifact(item, approvalGate(item)));
+          json(200, await artifact(item, approvalGate(item)));
         } else if (url.pathname === '/events') {
           const initial = payload();
           res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', Connection: 'keep-alive' });
@@ -170,11 +170,10 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
       } else if (url.pathname === '/api/approve') {
         const words = text(body.words, 'words', 500);
         if (!['intent', 'plan'].includes(body.gate) || typeof body.sha !== 'string' || !/^[a-f0-9]{64}$/i.test(body.sha)) fail(400, 'invalid approval');
-        await core.sync(file, { kit });
         await core.update(file, body.id, async item => {
           if (approvalGate(item) !== body.gate) fail(409, 'approval gate changed');
           try {
-            await execute('bash', [path.join(kit, 'sdlc.sh'), 'approve', body.gate, item.sdlc.slug, '--human', words, '--sha', body.sha], { cwd: projectPath(item.project) });
+            await execute('bash', [path.join(kit, 'sdlc.sh'), 'approve', body.gate, item.sdlc.slug, '--human', words, '--sha', body.sha], { cwd: await projectPath(item.project) });
           } catch (error) { fail(409, error.stderr || error.message); }
           item.events.push({ at: core.stamp(), who: 'human', what: `approved ${body.gate} — "${words}"` });
         }, body.version ?? null);

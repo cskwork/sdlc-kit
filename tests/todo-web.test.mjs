@@ -73,7 +73,7 @@ function request(ctx, pathname, { method = 'GET', body, headers = {}, token = ct
       });
       res.on('error', reject);
     });
-    req.setTimeout(2000, () => req.destroy(new Error('HTTP request timed out')));
+    req.setTimeout(process.platform === 'win32' ? 60000 : 2000, () => req.destroy(new Error('HTTP request timed out')));
     req.on('error', reject);
     req.end(data);
   });
@@ -402,7 +402,8 @@ test('B3: symlinked project reads and approves the physical status store with a 
   const status = JSON.parse(sdlc(alias, 'status', slug, '--json'));
   const shown = await request(ctx, `/api/artifact?id=${item.id}`);
   assert.equal(shown.status, 200, shown.text);
-  assert.equal(realpathSync(shown.json.file), realpathSync(join(status.store, 'work', slug, 'intent.md')));
+  const store = await core.nativePath(status.store);
+  assert.equal(realpathSync(shown.json.file), realpathSync(join(store, 'work', slug, 'intent.md')));
   assert.match(shown.json.markdown, /Physical store/);
   items(await post(ctx, '/api/approve', { id: item.id, gate: 'intent', sha: shown.json.sha, words: 'approved physical scope' }), ctx.file);
   assert.match(sdlc(alias, 'check', 'intent', slug), /GATE OPEN/);
@@ -580,4 +581,33 @@ test('R7 B1: unrelated item edits keep the shown version usable', async t => {
   } });
   assert.equal(response.status, 200, response.text);
   assert.ok(core.load(ctx.file).items.find(item => item.title === 'Keep').done);
+});
+
+test('M: approval runs one authoritative approve and one status refresh', async t => {
+  const ctx = await web(t);
+  const stub = join(ctx.root, 'kit'), calls = join(stub, 'calls');
+  mkdirSync(stub);
+  writeFileSync(join(stub, 'sdlc.sh'), `printf '%s\\n' "$1" >> "$(dirname "$0")/calls"
+if [ "$1" = status ]; then
+  printf '%s\\n' '{"features":[{"slug":"probe","phase":"intent","state":"NEEDS-HUMAN","action":"approve intent --human"}]}'
+fi
+`);
+  const server = await startWeb({ file: ctx.file, kit: stub, onUrl() {} });
+  t.after(() => server.close());
+  const url = new URL(server.url), token = new URLSearchParams(url.hash.slice(1)).get('t');
+  const target = { ...ctx, url, token };
+  const dir = project(ctx.root), folder = feature(dir, 'probe');
+  const item = await core.add(ctx.file, 'Approve selected', { project: dir, slug: 'probe' });
+  const shown = await request(target, `/api/artifact?id=${item.id}`);
+  assert.equal(shown.status, 200, shown.text);
+  assert.equal(shown.json.markdown, readFileSync(join(folder, 'intent.md'), 'utf8'));
+  assert.deepEqual(readFileSync(calls, 'utf8').trim().split(/\r?\n/), ['status'], 'artifact still refreshes its gate');
+  const model = core.load(ctx.file), version = core.itemVersion(model.items[0], model);
+  writeFileSync(calls, '');
+  const response = await request(target, '/api/approve', { method: 'POST', body: {
+    id: item.id, version, gate: 'intent', sha: shown.json.sha, words: 'approved shown scope'
+  } });
+  assert.equal(response.status, 200, response.text);
+  assert.deepEqual(readFileSync(calls, 'utf8').trim().split(/\r?\n/), ['approve', 'status'], 'no redundant status before authoritative approval');
+  assert.ok(core.load(ctx.file).items[0].events.some(e => e.who === 'human' && e.what === 'approved intent — "approved shown scope"'));
 });
