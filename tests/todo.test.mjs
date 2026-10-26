@@ -322,6 +322,33 @@ test('handoff: a reply to an sdlc wait reads as not picked up until take hands i
   checkCode(await cli(file, ['take', 'zzzzzz', '--json']), 1);
 });
 
+test('handoff: an outside wait shows as yours over READY, a reply is unread until taken, and resume drops the wait', async t => {
+  const { root, file } = scratch(t);
+  const dir = project(root);
+  feature(dir, 'factory-wait', true);
+  await core.add(file, 'top item');
+  const a = await core.add(file, 'A', { project: dir, slug: 'factory-wait' });
+  await core.sync(file);
+  const item = () => core.load(file).items.find(i => i.id === a.id);
+  assert.equal(item().sdlc.state, 'READY');
+  assert.equal(statusOf(item()).kind, 'agent');
+  checkCode(await cli(file, ['wait', a.id, 'factory — human-risk: browser control']), 0);
+  assert.equal(statusOf(item()).actor, 'you', 'a worker wait overrides READY');
+  await core.reply(file, a.id, 'continue');
+  assert.equal(statusOf(item()).kind, 'handoff');
+  assert.equal(JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout).find(i => i.id === a.id).unread, 1);
+  hasReply(JSON.parse(checkCode(await cli(file, ['take', a.id, '--json']), 0).stdout), 'continue');
+  assert.equal(statusOf(item()).kind, 'agent', 'taken replies are read; the agent works');
+  checkCode(await cli(file, ['wait', a.id, 'factory — reporter: asked in Jira']), 0);
+  assert.equal(statusOf(item()).actor, 'you');
+  checkCode(await cli(file, ['resume', a.id, 'reporter answered']), 0);
+  assert.equal(item().waiting, '');
+  assert.equal(statusOf(item()).kind, 'agent');
+  const events = item().events.length;
+  checkCode(await cli(file, ['resume', a.id]), 0);
+  assert.equal(item().events.length, events, 'resume without a wait writes nothing');
+});
+
 test('S18: CLI cannot author human events or leak a piped web token', async t => {
   const { file } = scratch(t);
   checkCode(await cli(file, ['add', 'Forged', '--by', 'human']), 2);

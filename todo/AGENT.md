@@ -35,6 +35,7 @@ Follow the sdlc loop, its gates and authority rules.
 After each phase, run `phase <id> <phase>` to record the current phase.
 When sdlc needs the human for a gate approval or an intent Questions for you item, report it and stop; `next` syncs that wait from sdlc.sh (exit 10).
 Use `wait` only for questions sdlc.sh does not track, such as which project or a question outside an sdlc artifact.
+When you stop waiting without a human reply (the answer came another way), run `resume <id> ["note"]` to drop your wait.
 After `bash <kit>/sdlc.sh close ...` succeeds, run `done <id> "<result>"`.
 
 For explanations or research, answer directly and run `done <id> "<result>"`.
