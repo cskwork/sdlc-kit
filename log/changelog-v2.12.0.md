@@ -28,6 +28,11 @@
 
 ## Validation
 
-- pending: selftest
-- pending: independent review
-- pending: CI
+- macOS local (Node 22.22.3): selftest 130 checks passed; to-do Node tests 152/152 passed.
+- Independent review (Sol, diff mode): Round 9 PASS after 6 FAIL rounds, each blocker fixed with an assertion-red regression; every test has recorded red evidence.
+- QA round 1: every must scenario passed (21/21); S17, S23 and S24 were fixed afterwards and have not been re-run by QA.
+- CI run 40253460400: ubuntu and macOS passed; **windows failed** (6 to-do Node tests).
+
+## Known issue
+
+- Windows: the to-do does not pass on native Windows yet. Web approval tests time out, and paths that Git Bash prints (`/tmp/...`) are not converted for Node. The core `sdlc.sh` loop is unaffected. The fix ships in v2.12.1.
