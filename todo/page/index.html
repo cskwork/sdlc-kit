@@ -10,6 +10,7 @@
 <script type="module" src="app.js"></script>
 </head>
 <body>
+<div class="shell">
 <main class="page">
   <header class="top">
     <time id="changed" class="timestamp" aria-label="Last change" data-i18n-label="page.lastChange"></time>
@@ -50,6 +51,7 @@
 </main>
 
 <dialog id="detail" class="detail" aria-labelledby="detail-title">
+  <p id="detail-empty" class="hint" data-i18n="detail.empty">Nothing open. Add an item to see its details here.</p>
   <div class="detail-head">
     <h2 id="detail-title" tabindex="-1"></h2>
     <div class="detail-tools">
@@ -108,6 +110,7 @@
   </div>
   </div>
 </dialog>
+</div>
 
 <div id="announce" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
 </body>
