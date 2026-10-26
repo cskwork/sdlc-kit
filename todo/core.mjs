@@ -44,7 +44,7 @@ const isAnswer = event => (event.who === 'human' && event.what.startsWith('reply
   (event.who === 'agent' && event.what.startsWith('chat answer — '));
 const isWait = event => (event.who === 'agent' && event.what.startsWith('waiting — ')) ||
   (event.who === 'sdlc' && event.what.startsWith('NEEDS-HUMAN — '));
-function replies(item) {
+export function replies(item) {
   const lastWait = item.events.reduce((last, event, i) => isWait(event) ? i : last, -1);
   return item.events.filter((event, i) => i > lastWait && isAnswer(event));
 }
@@ -412,14 +412,22 @@ async function synced(file, kit, fn) {
   }
 }
 export const sync = (file, { kit = defaultKit } = {}) => synced(file, kit, model => model);
-export const next = (file, { kit = defaultKit } = {}) => synced(file, kit, model => {
-  const item = model.items.find(i => !i.done);
-  if (!item) return { code: 30, item: null };
+function handOut(item) {
   const result = { code: { workable: 0, waiting: 10, blocked: 20 }[item.status], item: { ...item, events: [...item.events], replies: replies(item) } };
   if (item.error) result.item.sdlc = { ...item.sdlc, state: 'BLOCKED', action: item.error };
   // A reply lets the agent read a gate answer once; only sdlc.sh can open the gate.
   if (result.code === 0 && item.sdlc?.state === 'NEEDS-HUMAN' && result.item.replies.length) event(item, 'sdlc', `NEEDS-HUMAN — ${item.sdlc.action}`);
   return result;
+}
+export const next = (file, { kit = defaultKit } = {}) => synced(file, kit, model => {
+  const item = model.items.find(i => !i.done);
+  return item ? handOut(item) : { code: 30, item: null };
+});
+// A worker that owns one item (not the top-down queue) reads its replies the same way.
+export const take = (file, id, { kit = defaultKit } = {}) => synced(file, kit, model => {
+  const item = findItem(model, id);
+  if (item.done) fail(`item is done: ${id}`, 1);
+  return handOut(item);
 });
 export function watch(file, onChange) {
   const listener = (current, previous) => { if (current.mtimeMs !== previous.mtimeMs || current.ctimeMs !== previous.ctimeMs || current.ino !== previous.ino || current.size !== previous.size) onChange(); };
