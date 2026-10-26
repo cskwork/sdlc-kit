@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, utimesSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, utimesSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -502,6 +502,63 @@ test('text and link helpers recognize portable project tokens and Jira, issue, p
     ['https://github.com/acme/widget/pull/7', 'widget#7'],
     ['http://example.test/docs', 'example.test'],
   ]) assert.equal(core.linkLabel(url), label);
+});
+
+test('R5 B1: CLI binds a relative project to the adding cwd before selecting from another folder', async t => {
+  const { root: temporaryRoot, file } = scratch(t), root = realpathSync(temporaryRoot);
+  const a = join(root, 'A'), b = join(root, 'B');
+  const target = project(a), other = project(b);
+  feature(target, 'probe');
+  feature(other, 'probe');
+  sdlc(other, 'approve', 'intent', 'probe', '--human', 'approved B only');
+  const added = checkCode(await cli(file, ['add', 'A work', '--project', './project', '--slug', 'probe'], { cwd: a }), 0);
+  await t.test('stored path and id bind A', () => {
+    assert.equal(core.load(file).items[0].project, target, 'store the absolute path from the adding process');
+    assert.equal(added.stdout.trim(), createHash('sha1').update(`${target}\0probe`).digest('hex').slice(0, 6));
+  });
+  for (const cwd of [a, b]) await t.test(`next from ${cwd === a ? 'A' : 'B'} waits for A`, async () => {
+    const selected = JSON.parse(checkCode(await cli(file, ['next', '--json'], { cwd }), 10).stdout);
+    assert.equal(selected.id, added.stdout.trim());
+    assert.equal(selected.project, target);
+    assert.equal(selected.state, 'NEEDS-HUMAN');
+    assert.match(selected.action, /intent not approved/);
+  });
+  const again = checkCode(await cli(file, ['add', '--project', target, '--slug', 'probe'], { cwd: b }), 0);
+  assert.equal(again.stdout.trim(), added.stdout.trim(), 'absolute and relative intake share one identity');
+  assert.equal(core.load(file).items.length, 1);
+  assert.throws(() => sdlc(target, 'check', 'intent', 'probe'), /Command failed/);
+});
+
+test('R5 B1: intake resolves every relative spelling and preserves tilde and portable absolute paths', async t => {
+  const { root: temporaryRoot, file } = scratch(t), root = realpathSync(temporaryRoot);
+  for (const input of ['./project', '../project', 'x/y', '.\\project']) {
+    await t.test(input, async () => {
+      checkCode(await cli(file, ['add', 'Relative', '--project', input], { cwd: root }), 0);
+      const item = core.load(file).items.at(-1);
+      assert.equal(item.project, resolve(root, input));
+      assert.equal(item.id, core.itemId({ project: resolve(root, input), title: 'Relative' }));
+    });
+  }
+  for (const input of ['~', '~/project', '/absolute/project', 'C:\\project', 'C:/project', '\\\\server\\share\\project', '//server/share/project']) {
+    const item = await core.add(file, 'Keep spelling', { project: input });
+    assert.equal(item.project, input);
+    assert.equal(core.load(file).items.at(-1).project, input);
+  }
+  const item = await core.add(file, 'Inline ./project');
+  assert.equal(item.project, resolve('./project'), 'the shared add path also handles TUI/web text');
+});
+
+for (const slug of ['probe', '']) test(`R5 B1: hand-edited relative project ${slug ? 'with' : 'without'} a slug blocks next`, async t => {
+  const { root, file } = scratch(t), dir = project(root);
+  feature(dir, 'probe', true);
+  writeFileSync(file, `# To-do\n\n## Open\n\n- [ ] Hand edited\n  - project: ./project\n${slug ? '  - sdlc: probe · plan · READY\n' : ''}  - 2026-10-26 09:00 human: reply — please proceed\n\n- [ ] Lower item\n\n## Done\n`);
+  const selected = JSON.parse(checkCode(await cli(file, ['next', '--json'], { cwd: root }), 20).stdout);
+  assert.equal(selected.title, 'Hand edited');
+  assert.equal(selected.project, './project', 'never repair a file path using the consuming cwd');
+  assert.equal(selected.action, 'relative project path: write an absolute or ~/ path');
+  assert.equal(core.load(file).items[0].status, 'blocked');
+  writeFileSync(file, readFileSync(file, 'utf8').replace('project: ./project', `project: ${dir}`));
+  checkCode(await cli(file, ['next', '--json'], { cwd: root }), 0);
 });
 
 test('watch observes an external file edit within one second and can be stopped', async t => {
