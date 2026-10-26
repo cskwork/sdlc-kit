@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defaultLanguage, languages, locales, phaseLabel, resolveLanguage, translator } from '../todo/i18n.mjs';
 
 const plural = /\.(?:zero|one|two|few|many|other)$/;
@@ -52,7 +53,8 @@ test('language: flag wins over SDLC_TODO_LANG, unknown env falls back, invalid f
   assert.throws(() => resolveLanguage('xx', other), /invalid language: xx/);
 });
 
-const entry = new URL('../todo/todo.mjs', import.meta.url).pathname;
+// fileURLToPath, not URL.pathname: on Windows the pathname keeps a leading slash before the drive.
+const entry = fileURLToPath(new URL('../todo/todo.mjs', import.meta.url));
 for (const args of [['--lang', 'xx'], ['web', '--lang', 'xx', '--open'], ['--lang']]) {
   test(`CLI refuses ${args.join(' ')} as a usage error`, () => {
     const run = spawnSync(process.execPath, [entry, ...args], { encoding: 'utf8', env: { ...process.env, SDLC_TODO: '/nonexistent/todo.md' } });
