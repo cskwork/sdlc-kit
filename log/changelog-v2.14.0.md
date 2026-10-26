@@ -1,6 +1,6 @@
 # v2.14.0: intent.md in plain words, with why the request came up
 
-Follow-up to v2.13.0. The intent and evidence templates, the prompts that name their labels, `sdlc.sh` messages and the to-do phase label; the approval rules, phase ids, `.state` keys and route values are unchanged.
+Follow-up to v2.13.1. The intent and evidence templates, the prompts that name their labels, `sdlc.sh` messages and the to-do phase label; the approval rules, phase ids, `.state` keys and route values are unchanged.
 
 ## Changes
 
