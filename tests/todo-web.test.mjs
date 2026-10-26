@@ -519,12 +519,12 @@ test('B1: approval checks the shown item inside the mutation lock before opening
   assert.doesNotMatch(readFileSync(ctx.file, 'utf8'), /human: approved/);
 });
 
-test('B1: snapshots expose sha256 of each serialized item block', async t => {
+test('R7 B1: snapshots expose sha256 of the block, identical-block position and count', async t => {
   const ctx = await web(t);
   await duplicateSnapshot(ctx);
   const shown = items(await request(ctx, '/api/items'), ctx.file)[0];
   const block = readFileSync(ctx.file, 'utf8').split('\n\n').find(block => block.startsWith('- [ ] Duplicate'));
-  assert.equal(shown.version, createHash('sha256').update(block).digest('hex'));
+  assert.equal(shown.version, createHash('sha256').update(JSON.stringify([block, 0, 1])).digest('hex'));
 });
 for (const scenario of ['missing target', 'missing version']) {
   test(`B1: approval rejects a ${scenario} with the changed-target message`, async t => {
@@ -543,3 +543,41 @@ for (const scenario of ['missing target', 'missing version']) {
     gateClosed(dir, 'intent', slug);
   });
 }
+
+for (const op of ['delete', 'done', 'move']) {
+  test(`R7 B1: stale ${op} refuses a surviving identical same-minute duplicate`, async t => {
+    const ctx = await web(t);
+    await core.add(ctx.file, 'Duplicate', { project: ctx.root, by: 'human' });
+    await core.add(ctx.file, 'Duplicate', { project: ctx.root, by: 'human' });
+    await core.mutate(ctx.file, model => {
+      for (const item of model.items) item.events[0].at = '2026-10-26 09:41';
+    });
+    const model = core.load(ctx.file);
+    assert.equal(core.serialize({ items: [model.items[0]] }), core.serialize({ items: [model.items[1]] }));
+    const shown = items(await request(ctx, '/api/items'), ctx.file)[0];
+    await core.remove(ctx.file, shown.id);
+    const before = readFileSync(ctx.file, 'utf8');
+    const response = await request(ctx, '/api/item', { method: 'POST', body: {
+      op, id: shown.id, version: shown.version, delta: 1
+    } });
+    assert.equal(response.status, 409, `stale ${op} must refuse the surviving duplicate`);
+    assert.equal(response.json.error, changedMessage);
+    assert.equal(core.load(ctx.file).items.length, 1);
+    assert.equal(readFileSync(ctx.file, 'utf8'), before);
+  });
+}
+
+test('R7 B1: unrelated item edits keep the shown version usable', async t => {
+  const ctx = await web(t);
+  await core.add(ctx.file, 'Keep');
+  const other = await core.add(ctx.file, 'Other');
+  const shown = items(await request(ctx, '/api/items'), ctx.file)[0];
+  await core.edit(ctx.file, other.id, { title: 'Other edited' });
+  const current = items(await request(ctx, '/api/items'), ctx.file)[0];
+  assert.equal(current.version, shown.version);
+  const response = await request(ctx, '/api/item', { method: 'POST', body: {
+    op: 'done', id: shown.id, version: shown.version
+  } });
+  assert.equal(response.status, 200, response.text);
+  assert.ok(core.load(ctx.file).items.find(item => item.title === 'Keep').done);
+});

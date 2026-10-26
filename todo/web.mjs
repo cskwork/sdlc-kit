@@ -91,7 +91,10 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   const token = randomBytes(16).toString('hex'), expected = Buffer.from(token);
   const authorized = value => typeof value === 'string' && Buffer.byteLength(value) === expected.length && timingSafeEqual(Buffer.from(value), expected);
   const clients = new Set();
-  const payload = () => ({ items: core.load(file).items.map(item => ({ ...item, version: core.itemVersion(item) })), file });
+  const payload = () => {
+    const model = core.load(file);
+    return { items: model.items.map(item => ({ ...item, version: core.itemVersion(item, model) })), file };
+  };
   const sendEvent = (res, value, event = '') => res.write(`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(value)}\n\n`);
   const broadcast = () => {
     try { const value = payload(); for (const res of clients) sendEvent(res, value); }
