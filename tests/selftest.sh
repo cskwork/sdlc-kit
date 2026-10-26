@@ -499,12 +499,12 @@ regression_round2() {
 sha_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum < "$1"; else shasum -a 256 < "$1"; fi | awk '{print $1}'; }
 regression_clarity() {
   repo regression-clarity
-  expect 0 new clarity-template; contains 'until its Clarity reaches 90%'
+  expect 0 new clarity-template; contains 'until How sure we are reaches 90%'
   SLUG=clarity-template; F=$PWD/.sdlc/work/$SLUG
-  replace '/^- O1:/ {$0="- O1: The operator observes it."} /^- Target:/ {$0="- Target: local"} {print}' "$F/intent.md"
-  expect 0 next "$SLUG"; contains 'READY intent'; contains 'Clarity Outcome: State must be clear, assumed or open'
-  expect 1 approve intent "$SLUG" --human 'template'; contains 'Clarity Constraints: State must be clear, assumed or open'
-  ok 'clarity 1: an unfilled Clarity table from the template blocks intent approval'
+  replace '/^ *- O1:/ {$0="  - O1: The operator observes it."} /^- Ship to:/ {$0="- Ship to: local"} {print}' "$F/intent.md"
+  expect 0 next "$SLUG"; contains 'READY intent'; contains 'Goal (How sure we are): State must be clear, assumed or open'
+  expect 1 approve intent "$SLUG" --human 'template'; contains 'Limits (How sure we are): State must be clear, assumed or open'
+  ok 'clarity 1: an unfilled How sure we are table from the template blocks intent approval'
   feature clarity-one-assumed
   replace '/^\| TO-BE \|/ {$0="| TO-BE | assumed | wording of the error message not given"} /^\| Constraints \|/ {$0="| Constraints | clear | <200 ms p95, per the SLA page |"} {print}' "$F/intent.md"
   expect 0 approve intent "$SLUG" --human 'one assumption'
@@ -525,19 +525,19 @@ regression_clarity() {
   feature clarity-shape
   replace '/^\| Success \|/ {next} /^\| Scope \|/ {$0="| Scope | clear |  |"} /^\| Outcome \|/ {print; print "| Outcome | clear | again |"; print "| Budget | clear | invented |"; next} /^\| AS-IS \|/ {$0="| AS-IS | clear | <…> |"} /^\| TO-BE \|/ {$0="| TO-BE | clear | — |"} /^\| Constraints \|/ {$0="| Constraints | clear | <policy \\| owner> |"} {print}' "$F/intent.md"
   expect 1 approve intent "$SLUG" --human 'bad shape'
-  for problem in 'Clarity needs a row for Success' 'Clarity Scope: How settled needs its evidence or reason' 'Clarity: duplicate area Outcome' 'Clarity: unknown area Budget' 'Clarity AS-IS: How settled needs its evidence or reason' 'Clarity TO-BE: How settled needs its evidence or reason' 'Clarity Constraints: How settled needs its evidence or reason'; do contains "$problem"; done
+  for problem in 'How sure we are needs a row for Done when (was Success)' 'Scope (How sure we are): Based on needs its evidence or reason' 'How sure we are: duplicate area Outcome' 'How sure we are: unknown area Budget' 'AS-IS (How sure we are): Based on needs its evidence or reason' 'TO-BE (How sure we are): Based on needs its evidence or reason' 'Constraints (How sure we are): Based on needs its evidence or reason'; do contains "$problem"; done
   case "$OUTPUT" in *'clarity '*'% < 90%'*) fail "score shown beside table problems: $OUTPUT";; esac
   ok 'clarity 4: a missing, duplicate, unknown or unsettled area is named, and no score is shown beside it'
   expect 0 new clarity-legacy
   SLUG=clarity-legacy; F=$PWD/.sdlc/work/$SLUG
   printf '# Intent\n## Understood as\n- O1: The operator observes it.\n## Blocking questions\n- none\n## Delivery\n- Target: local\n- Authorized: no\n' > "$F/intent.md"
-  expect 1 approve intent "$SLUG" --human 'no table'; contains 'Clarity table missing under a "## Clarity" heading'
+  expect 1 approve intent "$SLUG" --human 'no table'; contains 'How sure we are table missing under a "## How sure we are" heading'
   printf 'intent: %s human 1 2026-10-01T00:00:00Z approved by v2.5.1\n' "$(sha_of "$F/intent.md")" >> "$F/.state"
   expect 0 check intent "$SLUG"; contains 'GATE OPEN'
   expect 0 next "$SLUG"; contains 'READY plan'
   expect 0 approve intent "$SLUG" --human 'again'; contains 'intent already approved'
   printf '\nedited after approval\n' >> "$F/intent.md"
-  expect 0 next "$SLUG"; contains 'intent.md changed after approval; Clarity table missing'
+  expect 0 next "$SLUG"; contains 'intent.md changed after approval; How sure we are table missing'
   ok 'clarity 5: an intent approved before Clarity existed stays approved; editing it brings the bar back'
 }
 regression_ultra() {
@@ -706,7 +706,7 @@ regression_paths() {
   replace '/Commit:/ {$0=$0" (reviewed)"} {print}' "$E"
   expect 1 score "$SLUG"; contains "Commit path '(reviewed)' is not a directory under the project root: write '- Commit: <sha> <relative-path>'"
   evidence; route deliver; delivery local "$SHA nowhere"
-  expect 1 close "$SLUG" shipped 'delivered path is not a folder'; contains "Delivered missing for repo: .: add '- Delivered: <sha> .'"; contains "the line for 'nowhere' was skipped: it is not a folder under the project root"
+  expect 1 close "$SLUG" shipped 'delivered path is not a folder'; contains "Shipped missing for repo: .: add '- Shipped: <sha> .'"; contains "the line for 'nowhere' was skipped: it is not a folder under the project root"
   ok 'a Commit path that is not a folder says so with the line format; a Delivered line for no folder is skipped and named when nothing matches'
   evidence; route deliver; delivery local "$SHA deploy-repo"; printf -- '- Delivered: %s\n' "$SHA" >> "$E"
   expect 0 close "$SLUG" shipped 'extra Delivered line for a repository not checked out here'; contains 'Archived'
@@ -1013,6 +1013,85 @@ regression_target() {
   case "$OUTPUT" in *'")deploy'*|*'"deploy (dev)"deploy'*) fail "Target repeated: $OUTPUT";; esac
   ok 'an intent or evidence Target error quotes what it found once and points intent detail to a Note line'
 }
+# v2.14.0 renamed the intent and evidence labels; features started earlier keep the old ones and must still parse.
+shipping() {
+  cat >> "$E" <<DOC
+## Shipping
+- **Ship to**: ${1:-local}
+- **Shipped**: ${2:-$SHA}
+- Checked with: git rev-parse HEAD
+- Output: $SHA
+- **Allowed**: ${3:-no}
+DOC
+}
+labels_intent() {
+  cat > "$F/intent.md" <<'DOC'
+# Intent
+## At a glance
+- **What changes:** the operator sees the requested behavior
+## What was asked
+- add the behavior
+## Why this came up
+- (inferred) the old output confused operators — ABC-1 history
+## What we will do
+- Included: the CLI output
+- Not included: the web page, later
+- Done when:
+  - O1: **visible** — the operator observes the requested behavior.
+## Shipping
+- **Ship to**: pr
+- Note: push the branch after review
+- **Allowed**: yes — "push the branch"
+## Questions for you
+- none
+## How sure we are
+| Area | State | Based on |
+|---|---|---|
+| Goal | clear | the operator's request |
+| Boundaries | clear | the operator's request |
+| Today | clear | observed with the real CLI |
+| After | clear | the operator's request |
+| Done when | clear | O1 is CLI output |
+| Limits | clear | none found in config.md |
+DOC
+}
+regression_labels() {
+  repo regression-labels
+  expect 0 new labels-template; SLUG=labels-template; F=$PWD/.sdlc/work/$SLUG
+  replace '/^ *- O1:/ {$0="  - O1: **visible** — the operator sees it."} /^- Ship to:/ {$0="- Ship to: local"} /^\| [A-Z][a-z ]+ \| <state> \|/ {sub(/<state> \| <[^|]*>/,"clear | the operator request")} {print}' "$F/intent.md"
+  expect 0 approve intent "$SLUG" --human 'yes, this is what I want'
+  expect 0 next "$SLUG"; contains 'READY plan'
+  ok 'labels 1: the new intent template, once filled, parses and approves'
+  expect 0 new labels-new; SLUG=labels-new; F=$PWD/.sdlc/work/$SLUG; labels_intent
+  replace '/^\| (After|Limits) \|/ {sub(/\| clear \|/,"| assumed |")} {print}' "$F/intent.md"
+  expect 1 approve intent "$SLUG" --human 'two assumed'; contains 'clarity 83% < 90%: settle After assumed, Limits assumed'
+  replace '/^\| Done when \|/ {next} /^\| Goal \|/ {print; print "| Outcome | clear | again |"; next} {print}' "$F/intent.md"
+  expect 1 approve intent "$SLUG" --human 'bad shape'; contains 'How sure we are: duplicate area Outcome'; contains 'How sure we are needs a row for Done when (was Success)'
+  labels_intent; replace '/^- none$/ {print "- Which account? — asked: ABC-1 comment, 2026-10-26"; next} {print}' "$F/intent.md"
+  expect 10 next "$SLUG"; contains 'Which account?'
+  expect 1 approve intent "$SLUG" --human 'yes, this is what I want'
+  replace '{sub(/— asked: ABC-1 comment, 2026-10-26/, "— resolved: \"the operator\" (requester, ABC-1)")} {print}' "$F/intent.md"
+  expect 0 approve intent "$SLUG" --human 'yes, this is what I want'
+  plan 1; expect 0 approve plan "$SLUG" --agent reviewed; reviewed "$SLUG" pass reviewed
+  evidence; shipping pr; route deliver
+  expect 0 next "$SLUG"; contains 'READY deliver: ship, fill Shipping, sdlc.sh close'
+  evidence; shipping deploy; route deliver
+  expect 10 next "$SLUG"; contains 'authorize deploy'
+  evidence; shipping deploy "$SHA" 'Yes — deploy approved'; route deliver
+  expect 0 next "$SLUG"; contains 'READY deliver'
+  evidence; shipping local "$SHA nowhere"; route deliver
+  expect 1 close "$SLUG" shipped 'no Shipped line here'; contains "Shipped missing for repo: .: add '- Shipped: <sha> .'"
+  evidence; shipping local; route deliver
+  expect 0 close "$SLUG" shipped 'new labels verified'; contains 'Archived'
+  ok 'labels 2: What we will do, How sure we are (new areas), Questions for you, Shipping with Ship to and Allowed; evidence Shipping and Shipped'
+  ready labels-old 1
+  grep -q '^## Understood as' "$F/intent.md" && grep -q '^| Outcome |' "$F/intent.md" && grep -q '^- Target: local' "$F/intent.md" || fail 'old-format fixture changed'
+  expect 0 next "$SLUG"; contains 'READY evidence'
+  evidence; delivery; route deliver
+  expect 0 next "$SLUG"; contains 'READY deliver'
+  expect 0 close "$SLUG" shipped 'old labels verified'; contains 'Archived'
+  ok 'labels 3: an old-format intent (Understood as, Clarity, Blocking questions, Delivery Target) and evidence (Delivery, Delivered) still parse, approve and ship'
+}
 regression_sha() {
   repo regression-sha
   feature sha-bound
@@ -1060,11 +1139,11 @@ run_regressions() {
     init) regression_init;; ultra) regression_ultra;; round2-[abcde]) regression_round2 "${1#round2-}";; round3) regression_round3;;
     repos) regression_repos;; cells) regression_cells;; paths) regression_paths;; uncommitted) regression_uncommitted;;
     nested) regression_nested;; interrupt) regression_interrupt;; scoped) regression_scoped;; fingerprint) regression_fingerprint;; optin) regression_optin;;
-    reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;; sha) regression_sha;;
+    reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;; labels) regression_labels;; sha) regression_sha;;
     all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init; regression_ultra
       for round2 in a b c d e; do regression_round2 "$round2"; done; regression_round3
       regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint; regression_optin
-      regression_reposflag; regression_carry; regression_target; regression_clarity; regression_sha;;
+      regression_reposflag; regression_carry; regression_target; regression_clarity; regression_labels; regression_sha;;
     *) fail "unknown regression group: $1";;
   esac
 }
@@ -1156,7 +1235,7 @@ assert_file "$F/.state"
 assert_file "$F/intent.md"
 [ -d "$F/refs" ] && [ -d "$F/logs" ] || fail 'new directories'
 case "$(cat "$F/intent.md")" in *'<slug>'*) fail 'unreplaced slug';; esac
-expect 0 next first; contains 'criterion; Delivery Target must be'
+expect 0 next first; contains 'O1 line (done when); Ship to (under Shipping) must be'
 [ "$(awk '/Date:/ {print $3}' "$F/intent.md")" = "$(date +%Y-%m-%d)" ] || fail 'new date'
 expect 1 new first
 for bad in '../escape' 'Bad' '-bad' 'bad space' ''; do expect 2 new "$bad"; done
@@ -1446,11 +1525,11 @@ assert_file .sdlc/archive/no-route/.state
 ok 'close requires deliver route; dropped feature archives'
 ready local 1
 evidence
-awk '/^## Delivery/ {delivery=1} delivery {print}' "$KIT/templates/evidence.md" >> "$E"
+awk '/^## Shipping/ {delivery=1} delivery {print}' "$KIT/templates/evidence.md" >> "$E"
 route deliver
 expect 0 next "$SLUG"; contains 'READY deliver'
-expect 1 close "$SLUG" shipped 'delivery placeholders not filled'; contains 'Delivery Target must be local, pr or deploy'
-ok "raw template Delivery allows scoring; next falls back to intent's target; close requires a valid target"
+expect 1 close "$SLUG" shipped 'delivery placeholders not filled'; contains 'Ship to (under Shipping) must be local, pr or deploy'
+ok "raw template Shipping allows scoring; next falls back to intent's target; close requires a valid target"
 evidence; route deliver
 OLD_SHA=$SHA
 printf 'different tree\n' > README
