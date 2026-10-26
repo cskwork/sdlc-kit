@@ -55,7 +55,7 @@ function detailLines(item) {
   return [item.title, `${glyph} ${label} · ${item.id}`, `Project: ${item.project || '—'}`,
     `Link: ${item.link?.url || '—'}`, `SDLC: ${item.sdlc?.slug || '—'}`,
     `Phase: ${item.sdlc?.phase || '—'} · ${item.sdlc?.state || '—'}`,
-    `Action: ${item.sdlc?.action || '—'}`, `Waiting: ${item.waiting || (waiting(item) ? waitText(item) : '—')}`,
+    `Action: ${item.error || item.sdlc?.action || '—'}`, `Waiting: ${item.waiting || (waiting(item) ? waitText(item) : '—')}`,
     ...(waiting(item) ? ['w: read and decide in the browser'] : []),
     ...(item.done ? [`Done: ${doneTime(item) || '—'}`] : []), '', 'History',
     ...(item.events || []).map(e => `${e.at} ${e.who}: ${e.what}`), '', 'Notes', ...(item.notes || [])];
@@ -111,7 +111,7 @@ export function render(state, { width = 80, height = 24, color = false } = {}) {
       if (showMeta) row += ' '.repeat(Math.max(2, width - widthOf(prefix + title) - widthOf(meta))) + paint(meta, '2');
       rows.push(row);
       if (waiting(current)) rows.push(paint(clip(`    ${waitText(current)} · w: read and decide in the browser`, width), '2'));
-      if (current.status === 'blocked') rows.push(paint(clip(`    blocked: ${current.sdlc?.action || label}`, width), code));
+      if (current.status === 'blocked') rows.push(paint(clip(`    blocked: ${current.error || current.sdlc?.action || label}`, width), code));
       if (current.done && !showMeta) rows.push(paint(clip(`    Done ${doneTime(current)}`, width), '2'));
     }
     if (!open.length && !visible(state).length) rows.push('No open items · a add');

@@ -5,6 +5,35 @@ import vm from 'node:vm';
 
 const source = readFileSync(new URL('../todo/page/app.js', import.meta.url), 'utf8');
 
+function contrast(foreground, background) {
+  const luminance = hex => {
+    const rgb = hex.match(/[a-f\d]{2}/gi).map(pair => parseInt(pair, 16) / 255)
+      .map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+  };
+  const a = luminance(foreground), b = luminance(background);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+const css = readFileSync(new URL('../todo/page/app.css', import.meta.url), 'utf8');
+const palettes = [...css.matchAll(/:root\s*\{([^}]+)\}/g)].map(match =>
+  Object.fromEntries([...match[1].matchAll(/--([\w-]+):\s*(#[a-f\d]{6})/gi)].map(([, name, value]) => [name, value])));
+for (const mode of ['light', 'dark']) {
+  test(`S17: ${mode} text custom properties meet WCAG AA contrast`, () => {
+    assert.equal(contrast('#000000', '#ffffff'), 21);
+    assert.equal(contrast('#ffffff', '#ffffff'), 1);
+    assert.equal(palettes.length, 2, 'read both light and dark palettes');
+    const colors = { ...palettes[0], ...(mode === 'dark' ? palettes[1] : {}) };
+    for (const background of ['paper', 'highlight']) {
+      for (const foreground of ['ink', 'muted', 'control', 'accent', 'bad']) {
+        const ratio = contrast(colors[foreground], colors[background]);
+        assert.ok(ratio >= 4.5, `${mode} --${foreground} on --${background}: ${ratio.toFixed(3)}:1 < 4.5:1`);
+      }
+    }
+    assert.ok(contrast(colors.bad, colors['bad-bg']) >= 4.5, `${mode} error notice text`);
+  });
+}
+
 function page(hash = '', options = {}) {
   const nodes = new Map(), requests = [], streams = [];
   const node = id => {
@@ -50,6 +79,67 @@ function page(hash = '', options = {}) {
   });
   vm.runInContext(options.source || source, context);
   return { context, nodes, requests, streams, location };
+}
+
+for (const reason of ['error', 'action', 'both']) {
+  for (const view of ['list', 'detail']) {
+    test(`S24: blocked ${view} shows the repair instruction from ${reason}`, () => {
+      const p = page();
+      vm.runInContext(`
+        const repair = 'relative project path: write an absolute or ~/ path';
+        const blocked = { id: 'abcdef', title: 'Broken project', status: 'blocked', done: false,
+          project: './project', events: [], notes: [],
+          error: ${reason !== 'action' ? 'repair' : 'undefined'},
+          sdlc: ${reason === 'error' ? 'null' : `{ state: 'BLOCKED', action: ${reason === 'both' ? "'stale action'" : 'repair'} }`} };
+        items = [blocked];
+        const row = buildRow(blocked);
+        updateRow(row, blocked);
+        openDetail(blocked.id);
+      `, p.context);
+      const text = view === 'list' ? vm.runInContext('row._refs.info.children.map(n => n.textContent).join("\\n")', p.context)
+        : p.nodes.get('detail-fields').children.map(n => n.textContent).join('\n');
+      assert.match(text, /relative project path: write an absolute or ~\/ path/);
+      assert.doesNotMatch(text, /Unknown|stale action/);
+    });
+  }
+}
+
+test('S24: a live item.error change refreshes the blocked list reason', () => {
+  const p = page();
+  const text = vm.runInContext(`
+    const blocked = { id: 'abcdef', title: 'Broken project', status: 'blocked', error: 'first reason', events: [], notes: [] };
+    const row = buildRow(blocked);
+    updateRow(row, blocked);
+    updateRow(row, { ...blocked, error: 'updated repair instruction' });
+    row._refs.info.children.map(n => n.textContent).join('\\n');
+  `, p.context);
+  assert.match(text, /updated repair instruction/);
+  assert.doesNotMatch(text, /first reason/);
+});
+
+for (const state of ['visible control', 'hidden mobile control', 'removed control', 'removed row']) {
+  test(`S17: closing keyboard Details restores focus with ${state}`, () => {
+    const p = page();
+    vm.runInContext(`
+      items = [{ id: 'abcdef', title: 'Keyboard item', status: 'workable', events: [], notes: [] }];
+      const row = buildRow(items[0]);
+      const control = row._refs.open;
+      rows.set('abcdef', row);
+      row.isConnected = ${state !== 'removed row'};
+      control.isConnected = ${!state.startsWith('removed')};
+      row.getClientRects = () => row.isConnected ? [{}] : [];
+      control.getClientRects = () => ${state === 'hidden mobile control' ? 'document.activeElement === row' : 'control.isConnected'} ? [{}] : [];
+      row.querySelector = () => control;
+      control.focus = () => { if (control.isConnected && control.getClientRects().length) document.activeElement = control; };
+      control.focus();
+      openDetail('abcdef', control);
+    `, p.context);
+    p.nodes.get('detail-close').listeners.click();
+    const expected = state === 'removed row' ? p.nodes.get('add-text')
+      : vm.runInContext(state === 'removed control' ? 'row' : 'control', p.context);
+    assert.ok(p.context.document.activeElement === expected, 'focus must return to a usable row control, row or add line');
+    assert.equal(p.nodes.get('detail').open, false);
+  });
 }
 
 test('B4: the page never uses Web Storage or cookies', () => {

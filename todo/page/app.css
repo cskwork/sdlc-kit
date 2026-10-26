@@ -2,7 +2,7 @@
   color-scheme: light dark;
   --paper: #ffffff;
   --ink: #1d1d1f;
-  --muted: #8e8e93;
+--muted: #6e6e73;
   --control: #6e6e73;
   --ring: #c7c7cc;
   --line: #e5e5ea;
@@ -20,6 +20,7 @@
   :root {
     --paper: #1c1c1e;
     --ink: #f5f5f7;
+--muted: #a1a1a6;
     --control: #aeaeb2;
     --line: #38383a;
     --yellow: #ffd60a;
