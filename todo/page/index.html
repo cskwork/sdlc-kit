@@ -5,42 +5,45 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
-<title>To-do</title>
+<title data-i18n="page.title">To-do</title>
 <link rel="stylesheet" href="app.css">
 <script type="module" src="app.js"></script>
 </head>
 <body>
+<div class="shell">
 <main class="page">
   <header class="top">
-    <time id="changed" class="timestamp" aria-label="Last change"></time>
-    <h1>To-do</h1>
+    <time id="changed" class="timestamp" aria-label="Last change" data-i18n-label="page.lastChange"></time>
+    <h1 data-i18n="page.title">To-do</h1>
     <p class="meta">
-      <span id="counts">0 open · 0 need you · 0 done</span>
+      <span id="counts">0 your turn · 0 agent · 0 blocked · 0 done</span>
       <span class="live" id="live" data-state="connecting"><span class="dot" aria-hidden="true"></span><span id="live-text">Connecting</span></span>
+      <label for="lang" class="visually-hidden" data-i18n="page.language">Language</label>
+      <select id="lang" class="lang"></select>
     </p>
   </header>
 
   <div id="error" class="error" role="alert" hidden>
     <p id="error-text"></p>
-    <button type="button" id="error-dismiss" class="quiet">Dismiss</button>
+    <button type="button" id="error-dismiss" class="quiet" data-i18n="error.dismiss">Dismiss</button>
   </div>
 
   <section aria-labelledby="open-title">
-    <h2 id="open-title" class="visually-hidden">Open</h2>
-    <p id="empty" class="visually-hidden" hidden>Nothing open. Add your first item below.</p>
+    <h2 id="open-title" class="visually-hidden" data-i18n="list.open">Open</h2>
+    <p id="empty" class="visually-hidden" hidden data-i18n="list.empty">Nothing open. Add your first item below.</p>
     <ul id="open" class="rows"></ul>
     <form id="add" class="add" autocomplete="off">
-      <label for="add-text" class="visually-hidden">New to-do</label>
+      <label for="add-text" class="visually-hidden" data-i18n="add.label">New to-do</label>
       <label for="add-text" class="add-circle" aria-hidden="true"></label>
       <input id="add-text" name="text" type="text" maxlength="2000" enterkeyhint="done"
-        placeholder="New item" aria-describedby="add-hint">
-      <p id="add-hint" class="visually-hidden">Enter adds. Include ~/project and https://ticket. Press / or n to come back here.</p>
+        placeholder="New item" data-i18n-placeholder="add.placeholder" aria-describedby="add-hint">
+      <p id="add-hint" class="visually-hidden" data-i18n="add.hint">Enter adds. Include ~/project and https://ticket. Press / or n to come back here.</p>
     </form>
-    <p class="visually-hidden">On a row: Enter or double-click a title to rename, Escape cancels. Alt+↑ and Alt+↓ move it.</p>
+    <p class="visually-hidden" data-i18n="list.keys">On a row: Enter or double-click a title to rename, Escape cancels. Alt+↑ and Alt+↓ move it.</p>
   </section>
 
   <details id="done-box" class="done-box" hidden>
-    <summary>Done · <span id="done-count">0</span></summary>
+    <summary><span data-i18n="list.done">Done</span> · <span id="done-count">0</span></summary>
     <ul id="done" class="rows done-rows"></ul>
   </details>
 
@@ -48,54 +51,66 @@
 </main>
 
 <dialog id="detail" class="detail" aria-labelledby="detail-title">
+  <p id="detail-empty" class="hint" data-i18n="detail.empty">Nothing open. Add an item to see its details here.</p>
   <div class="detail-head">
     <h2 id="detail-title" tabindex="-1"></h2>
-    <button type="button" id="detail-close" class="quiet">Close</button>
+    <div class="detail-tools">
+      <span role="group" aria-label="Text size" data-i18n-label="detail.textSize">
+        <button type="button" id="text-smaller" class="quiet" aria-label="Smaller text" data-i18n-label="detail.smaller">A−</button>
+        <button type="button" id="text-larger" class="quiet" aria-label="Larger text" data-i18n-label="detail.larger">A+</button>
+      </span>
+      <button type="button" id="detail-close" class="quiet" data-i18n="detail.close">Close</button>
+    </div>
   </div>
-  <p id="detail-gone" class="notice" hidden>This item changed or was removed. Close and open it again from the list.</p>
+  <p id="detail-gone" class="notice" hidden data-i18n="detail.gone">This item changed or was removed. Close and open it again from the list.</p>
   <dl id="detail-fields" class="fields"></dl>
 
+  <div class="detail-body">
+  <div class="detail-main">
   <section id="artifact-box" class="artifact-box" hidden aria-labelledby="artifact-title">
-    <h3 id="artifact-title">What you are asked to approve</h3>
+    <h3 id="artifact-title" data-i18n="artifact.approve">What you are asked to approve</h3>
     <p class="hint" id="artifact-file"></p>
     <div id="artifact" class="artifact"></div>
   </section>
-
+  <button type="button" id="artifact-reload" class="quiet" hidden data-i18n="artifact.reload">Reload artifact</button>
+  </div>
+  <div class="detail-side">
   <section id="decide" class="decide" hidden aria-labelledby="decide-title">
-    <h3 id="decide-title">Your decision</h3>
+    <h3 id="decide-title" data-i18n="decide.title">Your decision</h3>
     <form id="approve-form" novalidate>
-      <label for="approve-words">Your words</label>
-      <textarea id="approve-words" rows="3" maxlength="500" required aria-describedby="approve-help approve-count"></textarea>
+      <label for="approve-words" data-i18n="decide.words">Note (optional)</label>
+      <textarea id="approve-words" rows="3" maxlength="500" aria-describedby="approve-help approve-count"></textarea>
       <p class="hint" id="approve-help"></p>
       <p class="hint" id="approve-count" aria-live="off">0 / 500</p>
       <p id="approve-error" class="field-error" role="alert" hidden></p>
       <div class="actions">
-        <button type="submit" id="approve-submit" class="primary">Approve</button>
+        <button type="submit" id="approve-submit" class="primary" data-i18n="decide.approve">Approve</button>
       </div>
     </form>
   </section>
-
-      <button type="button" id="artifact-reload" class="quiet" hidden>Reload artifact</button>
-      <section id="reply-box" class="reply-box" hidden aria-labelledby="reply-title">
-    <h3 id="reply-title">Reply</h3>
+  <section id="reply-box" class="reply-box" hidden aria-labelledby="reply-title">
+    <h3 id="reply-title" data-i18n="reply.title">Reply</h3>
     <form id="reply-form" novalidate>
-      <label for="reply-text">Your answer</label>
+      <label for="reply-text" data-i18n="reply.label">Your answer</label>
       <textarea id="reply-text" rows="3" maxlength="2000" aria-describedby="reply-help"></textarea>
-      <p class="hint" id="reply-help">A reply answers a question. It is not an approval.</p>
+      <p class="hint" id="reply-help" data-i18n="reply.help">A reply answers a question. It is not an approval.</p>
       <p id="reply-error" class="field-error" role="alert" hidden></p>
-      <div class="actions"><button type="submit" class="secondary">Reply</button></div>
+      <div class="actions"><button type="submit" class="secondary" data-i18n="reply.send">Reply</button></div>
     </form>
   </section>
 
   <section aria-labelledby="history-title">
-    <h3 id="history-title">History</h3>
+    <h3 id="history-title" data-i18n="history.title">History</h3>
     <ol id="history" class="history"></ol>
   </section>
   <section id="notes-box" hidden aria-labelledby="notes-title">
-    <h3 id="notes-title">Notes</h3>
+    <h3 id="notes-title" data-i18n="notes.title">Notes</h3>
     <pre id="notes" class="notes"></pre>
   </section>
+  </div>
+  </div>
 </dialog>
+</div>
 
 <div id="announce" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
 </body>
