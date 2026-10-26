@@ -22,6 +22,7 @@ finds `.git`.
 
 ## Route a request
 
+- "Work the to-do" or a host loop → `todo/AGENT.md`; every slug, new or resumed, must have a to-do item (see `todo/AGENT.md`).
 - A change or fix, and `.sdlc/` exists → `sdlc.sh new <slug>`, then phase 1.
 - No `.sdlc/` yet → `sdlc.sh init` (`--memory <folder>` keeps memory
   elsewhere); fill `.sdlc/config.md` from the repo
@@ -74,13 +75,9 @@ finds `.git`.
 
 ## Config and records
 
-`.sdlc/config.md` holds every project value: `build`, `test`, `lint`, `run`,
-`e2e`, `qa` (the tool that drives screens or APIs), `qa_runner` (an optional
-adapter in `adapters/`, such as `e2e`) and `qa_session` (its sign-in command),
-`human_gates` (default
-`intent`), `memory` (older configs: `knowledge:`) and `repos` (the
-repositories a review binds; empty means every one under the project root;
-`review --repos` names them for one review).
+`.sdlc/config.md` holds every project value; `templates/config.md` documents
+each key, the `knowledge:` alias and `review --repos`.
+Default `human_gates`: `intent`.
 Records are working
 knowledge, not source: `init` keeps `.sdlc/` out of git through
 `.git/info/exclude`, changing no tracked file. Closed features move

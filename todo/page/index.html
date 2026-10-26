@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>To-do</title>
+<link rel="stylesheet" href="app.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<main class="page">
+  <header class="top">
+    <time id="changed" class="timestamp" aria-label="Last change"></time>
+    <h1>To-do</h1>
+    <p class="meta">
+      <span id="counts">0 open · 0 need you · 0 done</span>
+      <span class="live" id="live" data-state="connecting"><span class="dot" aria-hidden="true"></span><span id="live-text">Connecting</span></span>
+    </p>
+  </header>
+
+  <div id="error" class="error" role="alert" hidden>
+    <p id="error-text"></p>
+    <button type="button" id="error-dismiss" class="quiet">Dismiss</button>
+  </div>
+
+  <section aria-labelledby="open-title">
+    <h2 id="open-title" class="visually-hidden">Open</h2>
+    <p id="empty" class="visually-hidden" hidden>Nothing open. Add your first item below.</p>
+    <ul id="open" class="rows"></ul>
+    <form id="add" class="add" autocomplete="off">
+      <label for="add-text" class="visually-hidden">New to-do</label>
+      <label for="add-text" class="add-circle" aria-hidden="true"></label>
+      <input id="add-text" name="text" type="text" maxlength="2000" enterkeyhint="done"
+        placeholder="New item" aria-describedby="add-hint">
+      <p id="add-hint" class="visually-hidden">Enter adds. Include ~/project and https://ticket. Press / or n to come back here.</p>
+    </form>
+    <p class="visually-hidden">On a row: Enter or double-click a title to rename, Escape cancels. Alt+↑ and Alt+↓ move it.</p>
+  </section>
+
+  <details id="done-box" class="done-box" hidden>
+    <summary>Done · <span id="done-count">0</span></summary>
+    <ul id="done" class="rows done-rows"></ul>
+  </details>
+
+  <p class="file" id="file"></p>
+</main>
+
+<dialog id="detail" class="detail" aria-labelledby="detail-title">
+  <div class="detail-head">
+    <h2 id="detail-title" tabindex="-1"></h2>
+    <button type="button" id="detail-close" class="quiet">Close</button>
+  </div>
+  <p id="detail-gone" class="notice" hidden>This item changed or was removed. Close and open it again from the list.</p>
+  <dl id="detail-fields" class="fields"></dl>
+
+  <section id="artifact-box" class="artifact-box" hidden aria-labelledby="artifact-title">
+    <h3 id="artifact-title">What you are asked to approve</h3>
+    <p class="hint" id="artifact-file"></p>
+    <div id="artifact" class="artifact"></div>
+  </section>
+
+  <section id="decide" class="decide" hidden aria-labelledby="decide-title">
+    <h3 id="decide-title">Your decision</h3>
+    <form id="approve-form" novalidate>
+      <label for="approve-words">Your words</label>
+      <textarea id="approve-words" rows="3" maxlength="500" required aria-describedby="approve-help approve-count"></textarea>
+      <p class="hint" id="approve-help"></p>
+      <p class="hint" id="approve-count" aria-live="off">0 / 500</p>
+      <p id="approve-error" class="field-error" role="alert" hidden></p>
+      <div class="actions">
+        <button type="submit" id="approve-submit" class="primary">Approve</button>
+      </div>
+    </form>
+  </section>
+
+      <button type="button" id="artifact-reload" class="quiet" hidden>Reload artifact</button>
+      <section id="reply-box" class="reply-box" hidden aria-labelledby="reply-title">
+    <h3 id="reply-title">Reply</h3>
+    <form id="reply-form" novalidate>
+      <label for="reply-text">Your answer</label>
+      <textarea id="reply-text" rows="3" maxlength="2000" aria-describedby="reply-help"></textarea>
+      <p class="hint" id="reply-help">A reply answers a question. It is not an approval.</p>
+      <p id="reply-error" class="field-error" role="alert" hidden></p>
+      <div class="actions"><button type="submit" class="secondary">Reply</button></div>
+    </form>
+  </section>
+
+  <section aria-labelledby="history-title">
+    <h3 id="history-title">History</h3>
+    <ol id="history" class="history"></ol>
+  </section>
+  <section id="notes-box" hidden aria-labelledby="notes-title">
+    <h3 id="notes-title">Notes</h3>
+    <pre id="notes" class="notes"></pre>
+  </section>
+</dialog>
+
+<div id="announce" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+</body>
+</html>

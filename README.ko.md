@@ -23,8 +23,8 @@ Intent → Plan → Build → Evidence. 코드를 쓰기 전에는 여러 탐색
 맨 뒤에 두고, 그 사이는 작게 유지합니다.
 
 [Anthropic의 AI-Native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook)을
-바탕으로 했고, 특정 하네스가 필요 없습니다. Markdown 파일과 셸 스크립트 하나로
-되어 있습니다.
+바탕으로 했고, 특정 하네스가 필요 없습니다. 핵심 루프는 Markdown 파일과 셸 스크립트
+하나로 되어 있습니다. 개인 to-do는 Node 18+가 필요한 선택 기능입니다.
 
 > sdlc-kit은 독립 프로젝트이며 Anthropic과 관계가 없습니다.
 
@@ -129,6 +129,43 @@ Build는 [ponytail](https://github.com/DietrichGebert/ponytail) 방식(가장 �
 끝납니다. 스크립트는 기록하고 보고할 뿐 모델을 돌리지 않습니다. 무인 실행은
 기록된 사람의 허락만큼만 납품합니다. 따로 허락하지 않았다면 로컬 커밋까지입니다.
 Windows에서는 Git Bash나 WSL로 `sdlc.sh`를 실행하세요.
+
+## 개인 to-do
+
+여러 프로젝트의 할 일을 사람이 읽을 수 있는 `~/.sdlc/todo.md` 하나에 모읍니다.
+TUI와 localhost 웹 페이지는 같은 파일을 실시간으로 보여 주고 고칩니다.
+다른 파일을 쓰려면 `SDLC_TODO`를 지정하세요.
+이 선택 기능에는 Node 18+가 필요하고, 핵심 루프는 여전히 bash만 있으면 됩니다.
+
+```bash
+node ~/sdlc-kit/todo/todo.mjs                     # TUI와 웹 페이지
+node ~/sdlc-kit/todo/todo.mjs web --open          # 웹 페이지만 열기
+node ~/sdlc-kit/todo/todo.mjs add "Fix login ~/code/web https://acme.atlassian.net/browse/WEB-123" --by jira
+node ~/sdlc-kit/todo/todo.mjs next                # 첫 Open 항목
+```
+
+에이전트와 외부 프로그램은 `todo.mjs add`로 프로젝트 경로와 Jira 같은 티켓 링크를 붙입니다.
+키트가 Jira API를 호출하지는 않습니다.
+새로 만들거나 재개하는 모든 sdlc slug에는 to-do 항목이 하나씩 있습니다.
+호스트가 [todo/AGENT.md](todo/AGENT.md)를 따르도록 하면 에이전트가 먼저 할 일을 처리합니다.
+Claude Code `/loop`, cron/launchd, Paseo 예약 실행 예시가 들어 있고, 키트는 모델을 직접 돌리지 않습니다.
+
+`next`의 종료 코드는 `0` 진행 가능, `10` 사람 대기, `20` 오류 문구와 함께 막힘, `30` 할 일 없음입니다.
+에이전트는 첫 항목이 사람을 기다리거나 막혀 있으면 멈추고, 아래 항목으로 넘어가지 않습니다.
+게이트 승인과 intent의 차단 질문은 sync에 나타나므로 에이전트는 별도 `wait` 없이 멈춥니다.
+`wait`는 프로젝트 선택이나 sdlc 산출물 밖의 질문처럼 sdlc.sh가 추적하지 않는 질문에만 씁니다.
+TUI, 웹 페이지, 채팅에서 결정하세요. 답은 산출물에 반영할 내용이며 승인이 아닙니다.
+웹 페이지에서 intent나 plan을 읽고 승인할 수 있습니다.
+
+끝난 항목은 체크와 취소선을 붙여 Done 맨 위로 옮깁니다.
+Done에는 최근 30개를 두고, 넘치면 오래된 항목부터 같은 폴더의 `todo-archive.md`로 옮깁니다.
+기록에는 로컬 시간 `YYYY-MM-DD HH:MM`, 작성자, 한 일이 남습니다.
+파일을 직접 고쳐도 됩니다. 다만 편집기에 오래 열어 둔 내용을 저장하면 그사이 바뀐 내용을 덮어쓸 수 있습니다.
+
+웹 서버는 `127.0.0.1`에만 열리고 Host/Origin을 검사합니다. 실행마다 새 토큰을 만들고 서버와 페이지의 메모리에 보관합니다.
+키트는 토큰을 디스크에 쓰지 않습니다. 브라우저는 연 URL을 방문 기록에 남길 수 있으며, 프로세스가 종료되면 토큰도 효력을 잃습니다.
+승인은 `sdlc.sh approve <intent|plan> <slug> --human "<words>" --sha <hex>`로 화면에 보여 준 바이트에 묶이며, 내용이 바뀌면 거부됩니다.
+같은 사용자 계정으로 실행되는 프로그램은 기존 `--human`과 마찬가지로 이 보안 경계 밖에 있습니다.
 
 ## v0.x에서 올리기
 

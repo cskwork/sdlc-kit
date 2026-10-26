@@ -1013,17 +1013,58 @@ regression_target() {
   case "$OUTPUT" in *'")deploy'*|*'"deploy (dev)"deploy'*) fail "Target repeated: $OUTPUT";; esac
   ok 'an intent or evidence Target error quotes what it found once and points intent detail to a Note line'
 }
+regression_sha() {
+  repo regression-sha
+  feature sha-bound
+  expect 0 approve intent "$SLUG" --human 'approved scope'
+  expect 0 check intent "$SLUG"; contains 'GATE OPEN'
+  shown=$(sha_of "$F/intent.md")
+  printf '\nChanged since shown\n' >> "$F/intent.md"
+  cp "$F/.state" "$TMP/sha-state.before"
+  expect 1 approve intent "$SLUG" --human 'approved shown scope' --sha "$shown"
+  contains 'intent.md changed since it was shown'
+  cmp "$F/.state" "$TMP/sha-state.before" || fail 'stale intent approval changed state'
+  expect 1 check intent "$SLUG"; contains 'GATE CLOSED'
+  current=$(sha_of "$F/intent.md")
+  expect 0 approve intent "$SLUG" --human 'approved current scope' --sha "$current"
+  expect 0 check intent "$SLUG"; contains 'GATE OPEN'
+  plan 1
+  shown=$(sha_of "$F/PLAN.md")
+  expect 0 approve plan "$SLUG" --human 'approved shown plan' --sha "$shown"
+  expect 0 check plan "$SLUG"; contains 'GATE OPEN'
+  printf '\nChanged since shown\n' >> "$F/PLAN.md"
+  cp "$F/.state" "$TMP/sha-state.before"
+  expect 1 approve plan "$SLUG" --human 'approved shown plan' --sha "$shown"
+  contains 'PLAN.md changed since it was shown'
+  cmp "$F/.state" "$TMP/sha-state.before" || fail 'stale plan approval changed state'
+  expect 1 check plan "$SLUG"; contains 'GATE CLOSED'
+  current=$(sha_of "$F/PLAN.md" | tr 'a-f' 'A-F')
+  expect 0 approve plan "$SLUG" --human 'approved current plan' --sha "$current"
+  expect 0 check plan "$SLUG"; contains 'GATE OPEN'
+  ok 'four-argument approval stays compatible; intent and plan bind the shown hash before saving'
+  cp "$F/.state" "$TMP/sha-state.before"
+  for gate in intent plan; do
+    expect 2 approve "$gate" "$SLUG" --human approved --sha
+    expect 2 approve "$gate" "$SLUG" --human approved --sha invalid
+    expect 2 approve "$gate" "$SLUG" --human approved --sha "${current}0"
+    expect 2 approve "$gate" "$SLUG" --human approved --sha "${current%?}g"
+    expect 2 approve "$gate" "$SLUG" --human approved --hash "$current"
+    expect 2 approve "$gate" "$SLUG" --human approved --sha "$current" extra
+  done
+  cmp "$F/.state" "$TMP/sha-state.before" || fail 'malformed hash approval changed state'
+  ok 'approve rejects missing, malformed and extra hash arguments with usage exit 2'
+}
 run_regressions() {
   case "$1" in
     stop) regression_stop;; scenarios) regression_scenarios;; delivery) regression_delivery;; review) regression_review;; other) regression_other;;
     init) regression_init;; ultra) regression_ultra;; round2-[abcde]) regression_round2 "${1#round2-}";; round3) regression_round3;;
     repos) regression_repos;; cells) regression_cells;; paths) regression_paths;; uncommitted) regression_uncommitted;;
     nested) regression_nested;; interrupt) regression_interrupt;; scoped) regression_scoped;; fingerprint) regression_fingerprint;; optin) regression_optin;;
-    reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;;
+    reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;; sha) regression_sha;;
     all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init; regression_ultra
       for round2 in a b c d e; do regression_round2 "$round2"; done; regression_round3
       regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint; regression_optin
-      regression_reposflag; regression_carry; regression_target; regression_clarity;;
+      regression_reposflag; regression_carry; regression_target; regression_clarity; regression_sha;;
     *) fail "unknown regression group: $1";;
   esac
 }
@@ -1058,6 +1099,13 @@ contains '.sdlc/memory is not the memory folder (.sdlc/knowledge)'
 ok 'memory folder: init default, older knowledge: line, stray default folder reported'
 
 cd "$KIT"
+if command -v node >/dev/null 2>&1; then
+  node --test "$KIT"/tests/todo*.test.mjs || fail 'to-do node tests failed'
+  ok 'to-do node tests'
+else
+  skip 'node is unavailable for to-do tests'
+fi
+[ ! -f todo/AGENT.md ] || [ "$(wc -w < todo/AGENT.md)" -le 600 ] || fail 'todo/AGENT.md exceeds 600 words'
 words=$(cat SKILL.md phases/*.md roles/*.md templates/*.md | wc -w | tr -d ' ')
 [ "$words" -le 6000 ] || fail "prompt total $words words > 6000"
 for phase in intent plan build evidence; do
