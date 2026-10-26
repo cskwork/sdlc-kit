@@ -247,6 +247,20 @@ test('S3: SSE observes an external core write within one second without reloadin
   assert.equal(update.items.length, 2);
 });
 
+test('approval without a note opens the gate and records the shown version', async t => {
+  const ctx = await web(t);
+  const dir = project(ctx.root);
+  const slug = 'web-blank-note';
+  feature(dir, slug);
+  const item = await core.add(ctx.file, 'Approve without a note', { project: dir, slug });
+  const shown = await request(ctx, `/api/artifact?id=${item.id}`);
+  assert.equal(shown.json.gate, 'intent', shown.text);
+  items(await post(ctx, '/api/approve', { id: item.id, gate: 'intent', sha: shown.json.sha, words: '  ' }), ctx.file);
+  assert.match(sdlc(dir, 'check', 'intent', slug), /GATE OPEN/);
+  assert.ok(readFileSync(ctx.file, 'utf8').includes(
+    `human: approved intent — "approved as shown in the to-do web page (version ${shown.json.sha.slice(0, 12)})"`));
+});
+
 test('S6/S7/S8: intent artifact bytes bind approval; stale approval and replies keep the gate closed', async t => {
   const ctx = await web(t);
   const dir = project(ctx.root);
@@ -326,7 +340,7 @@ test('S6/S7: plan approval binds displayed bytes and targets the selected projec
   assert.ok(readFileSync(ctx.file, 'utf8').includes(`human: approved plan — "${words}"`));
 });
 
-test('artifact and approval validation reject unknown ids, gates, hashes and empty words', async t => {
+test('artifact and approval validation reject unknown ids, gates and hashes', async t => {
   const ctx = await web(t);
   const item = await core.add(ctx.file, 'No SDLC feature');
   for (const pathname of ['/api/artifact', '/api/artifact?id=missing', `/api/artifact?id=${item.id}`]) {
@@ -337,7 +351,6 @@ test('artifact and approval validation reject unknown ids, gates, hashes and emp
   for (const body of [
     {}, { id: item.id, gate: 'build', sha: 'a'.repeat(64), words: 'approved scope' },
     { id: item.id, gate: 'intent', sha: 'bad', words: 'approved scope' },
-    { id: item.id, gate: 'intent', sha: 'a'.repeat(64), words: '' },
     { id: 'missing', gate: 'intent', sha: 'a'.repeat(64), words: 'approved scope' },
   ]) {
     const response = await request(ctx, '/api/approve', { method: 'POST', body });

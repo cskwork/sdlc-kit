@@ -285,6 +285,20 @@ test('B1: approval sends the version of the item whose artifact was shown', asyn
 });
 
 
+test('approval submits with a blank note', async () => {
+  const p = page('#t=test-token');
+  vm.runInContext(`
+    detailId = 'abcdef';
+    artifact = { gate: 'plan', sha: 'a'.repeat(64), version: 'shown-A' };
+    items = [{ id: 'abcdef', version: 'shown-A' }];
+  `, p.context);
+  p.nodes.get('approve-words').value = '';
+  await p.nodes.get('approve-form').listeners.submit({ preventDefault() {} });
+  const sent = p.requests.find(r => r.url === '/api/approve');
+  assert.ok(sent, 'a blank note must not block approval');
+  assert.equal(JSON.parse(sent.options.body).words, '');
+});
+
 test('B1: an artifact response cannot replace the version of the item shown in Details', async () => {
   const p = page('#t=test-token', {
     // Stub only Markdown rendering; the real artifact request and item binding run in the VM.

@@ -186,8 +186,11 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
           default: fail(400, 'invalid operation');
         }
       } else if (url.pathname === '/api/approve') {
-        const words = text(body.words, 'words', 500);
+        // The note is optional: pressing Approve is the human's act; sdlc.sh still needs a note, so a blank one names the shown version.
+        const blank = body.words === undefined || (typeof body.words === 'string' && !body.words.trim());
+        const typed = blank ? '' : text(body.words, 'words', 500);
         if (!['intent', 'plan'].includes(body.gate) || typeof body.sha !== 'string' || !/^[a-f0-9]{64}$/i.test(body.sha)) fail(400, 'invalid approval');
+        const words = typed || `approved as shown in the to-do web page (version ${body.sha.slice(0, 12).toLowerCase()})`;
         await core.update(file, body.id, async item => {
           if (approvalGate(item) !== body.gate) fail(409, 'approval gate changed');
           try {

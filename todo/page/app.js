@@ -647,7 +647,7 @@ $('approve-form').addEventListener('submit', async event => {
   const error = $('approve-error');
   error.hidden = true;
   if (!artifact) return;
-  if (words.length < 1 || words.length > 500) {
+  if (words.length > 500) {
     show(error, { key: 'decide.length' });
     error.hidden = false;
     $('approve-words').focus();
