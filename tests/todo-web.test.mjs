@@ -37,11 +37,11 @@ const plan = `# Plan
 | S1 | operator | run real CLI | observable output | yes | O1 |
 `;
 
-async function web(t) {
+async function web(t, options = {}) {
   const root = mkdtempSync(join(tmpdir(), 'sdlc-todo-web-'));
   const file = join(root, 'todo.md');
   let opened;
-  const server = await startWeb({ file, kit, port: 0, open: false, onUrl(url) { opened = url; } });
+  const server = await startWeb({ file, kit, port: 0, open: false, onUrl(url) { opened = url; }, ...options });
   t.after(async () => { await server.close(); rmSync(root, { recursive: true, force: true }); });
   const url = new URL(opened || server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get('t');
@@ -389,7 +389,7 @@ for (const channel of ['web', 'chat']) test(`B2: documented ${channel} approval 
   assert.equal(waiting.item.waiting, 'which environment?');
 });
 
-test('B3: symlinked project reads and approves the physical status store with a duplicate slug', async t => {
+test('B3: symlinked project reads and approves the reported status store with a duplicate slug', async t => {
   const ctx = await web(t);
   const logical = project(ctx.root, 'logical'), physical = project(ctx.root, 'physical');
   const slug = 'probe';
@@ -404,10 +404,54 @@ test('B3: symlinked project reads and approves the physical status store with a 
   assert.equal(shown.status, 200, shown.text);
   const store = await core.nativePath(status.store);
   assert.equal(realpathSync(shown.json.file), realpathSync(join(store, 'work', slug, 'intent.md')));
-  assert.match(shown.json.markdown, /Physical store/);
+  const selected = realpathSync(store) === realpathSync(join(logical, '.sdlc')) ? logical : physical;
+  const other = selected === logical ? physical : logical;
+  assert.equal(shown.json.markdown, readFileSync(join(selected, '.sdlc', 'work', slug, 'intent.md'), 'utf8'));
   items(await post(ctx, '/api/approve', { id: item.id, gate: 'intent', sha: shown.json.sha, words: 'approved physical scope' }), ctx.file);
   assert.match(sdlc(alias, 'check', 'intent', slug), /GATE OPEN/);
-  gateClosed(logical, 'intent', slug);
+  gateClosed(other, 'intent', slug);
+});
+
+test('N: artifact and approval use the status runner store instead of the realpath ancestor', async t => {
+  let store;
+  const calls = [];
+  const ctx = await web(t, { statusRunner: async (...args) => {
+    calls.push(args);
+    return { stdout: JSON.stringify({ store }) };
+  } });
+  const physical = project(ctx.root, 'physical'), reported = project(ctx.root, 'reported'), slug = 'probe';
+  const wrong = feature(physical, slug), right = feature(reported, slug);
+  writeFileSync(join(wrong, 'intent.md'), intent + '\nWrong realpath store.\n');
+  writeFileSync(join(right, 'intent.md'), intent + '\nReported store.\n');
+  mkdirSync(join(physical, 'src'));
+  const dir = join(physical, 'src');
+  store = join(reported, '.sdlc');
+  const item = await core.add(ctx.file, 'Reported store', { project: dir, slug });
+  const shown = await request(ctx, `/api/artifact?id=${item.id}`);
+  assert.equal(shown.status, 200, shown.text);
+  assert.equal(realpathSync(shown.json.file), realpathSync(join(right, 'intent.md')), 'artifact must use the reported store');
+  assert.equal(shown.json.markdown, readFileSync(join(right, 'intent.md'), 'utf8'));
+  items(await post(ctx, '/api/approve', { id: item.id, gate: 'intent', sha: shown.json.sha, words: 'approved reported scope' }), ctx.file);
+  assert.match(sdlc(reported, 'check', 'intent', slug), /GATE OPEN/);
+  gateClosed(physical, 'intent', slug);
+  assert.deepEqual(calls, Array(2).fill(['bash', [join(kit, 'sdlc.sh'), 'status', slug, '--json'], { cwd: dir }]));
+});
+
+for (const missing of [true, false]) test(`N: store lookup ${missing ? 'without a reported store' : 'failure'} never falls back to a project ancestor`, async t => {
+  const ctx = await web(t, { statusRunner: async () => {
+    if (missing) return { stdout: '{}' };
+    throw new Error('status runner failed');
+  } });
+  const dir = project(ctx.root), slug = 'probe', folder = feature(dir, slug);
+  const item = await core.add(ctx.file, 'No fallback', { project: dir, slug });
+  const shown = await request(ctx, `/api/artifact?id=${item.id}`);
+  assert.equal(shown.status, missing ? 409 : 400, 'artifact must refuse a failed store lookup');
+  assert.match(shown.json.error, missing ? /status did not report a store/ : /status runner failed/);
+  const sha = createHash('sha256').update(readFileSync(join(folder, 'intent.md'))).digest('hex');
+  const response = await post(ctx, '/api/approve', { id: item.id, gate: 'intent', sha, words: 'approved scope' });
+  assert.equal(response.status, 409, response.text);
+  gateClosed(dir, 'intent', slug);
+  assert.doesNotMatch(readFileSync(ctx.file, 'utf8'), /human: approved/);
 });
 
 test('R5 B1: web add stores a relative project against the server cwd', async t => {
@@ -583,13 +627,13 @@ test('R7 B1: unrelated item edits keep the shown version usable', async t => {
   assert.ok(core.load(ctx.file).items.find(item => item.title === 'Keep').done);
 });
 
-test('M: approval runs one authoritative approve and one status refresh', async t => {
+test('M: approval resolves its store, runs one authoritative approve and refreshes status', async t => {
   const ctx = await web(t);
   const stub = join(ctx.root, 'kit'), calls = join(stub, 'calls');
   mkdirSync(stub);
   writeFileSync(join(stub, 'sdlc.sh'), `printf '%s\\n' "$1" >> "$(dirname "$0")/calls"
 if [ "$1" = status ]; then
-  printf '%s\\n' '{"features":[{"slug":"probe","phase":"intent","state":"NEEDS-HUMAN","action":"approve intent --human"}]}'
+  printf '{"store":"%s/.sdlc","features":[{"slug":"probe","phase":"intent","state":"NEEDS-HUMAN","action":"approve intent --human"}]}\\n' "$PWD"
 fi
 `);
   const server = await startWeb({ file: ctx.file, kit: stub, onUrl() {} });
@@ -601,13 +645,13 @@ fi
   const shown = await request(target, `/api/artifact?id=${item.id}`);
   assert.equal(shown.status, 200, shown.text);
   assert.equal(shown.json.markdown, readFileSync(join(folder, 'intent.md'), 'utf8'));
-  assert.deepEqual(readFileSync(calls, 'utf8').trim().split(/\r?\n/), ['status'], 'artifact still refreshes its gate');
+  assert.deepEqual(readFileSync(calls, 'utf8').trim().split(/\r?\n/), ['status', 'status'], 'artifact refreshes its gate and resolves its store');
   const model = core.load(ctx.file), version = core.itemVersion(model.items[0], model);
   writeFileSync(calls, '');
   const response = await request(target, '/api/approve', { method: 'POST', body: {
     id: item.id, version, gate: 'intent', sha: shown.json.sha, words: 'approved shown scope'
   } });
   assert.equal(response.status, 200, response.text);
-  assert.deepEqual(readFileSync(calls, 'utf8').trim().split(/\r?\n/), ['approve', 'status'], 'no redundant status before authoritative approval');
+  assert.deepEqual(readFileSync(calls, 'utf8').trim().split(/\r?\n/), ['status', 'approve', 'status'], 'store lookup precedes approval; one inbox refresh follows');
   assert.ok(core.load(ctx.file).items[0].events.some(e => e.who === 'human' && e.what === 'approved intent — "approved shown scope"'));
 });
