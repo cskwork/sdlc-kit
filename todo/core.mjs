@@ -16,6 +16,16 @@ const line = value => {
   if (/[\r\n]/.test(text)) fail('fields must fit on one line');
   return text;
 };
+const relativeProjectError = 'relative project path: write an absolute or ~/ path';
+const isRelativeProject = project => !!project && project !== '~' && !/^(?:~\/|\/|[A-Za-z]:[\\/]|\\\\)/.test(project);
+function normalizeProject(value) {
+  const project = line(value);
+  return isRelativeProject(project) ? path.resolve(project) : project;
+}
+export function projectPath(project) {
+  if (isRelativeProject(project)) throw Object.assign(new Error(relativeProjectError), { status: 409 });
+  return project === '~' ? os.homedir() : project.startsWith('~/') ? path.join(os.homedir(), project.slice(2)) : project;
+}
 export const todoPath = () => process.env.SDLC_TODO || path.join(os.homedir(), '.sdlc', 'todo.md');
 export function stamp(date = new Date()) {
   const pad = n => String(n).padStart(2, '0');
@@ -33,7 +43,10 @@ function replies(item) {
   return item.events.filter((event, i) => i > lastWait && isAnswer(event));
 }
 function derive(item) {
-  item.status = item.done ? 'done' : item.sdlc?.state === 'BLOCKED' ? 'blocked' :
+  // A file edit has no trustworthy cwd, even before a slug is attached.
+  if (isRelativeProject(item.project)) item.error = relativeProjectError;
+  else delete item.error;
+  item.status = item.done ? 'done' : item.error || item.sdlc?.state === 'BLOCKED' ? 'blocked' :
     ((item.waiting || item.sdlc?.state === 'NEEDS-HUMAN') && !replies(item).length) ? 'waiting' : 'workable';
   return item;
 }
@@ -292,9 +305,9 @@ export function findItem(model, idOrSlug) {
   return matches[0];
 }
 export async function add(file, text, options = {}) {
+  const parsed = parseText(text);
+  const project = normalizeProject(options.project ?? parsed.project), slug = line(options.slug || '');
   return mutate(file, model => {
-    const parsed = parseText(text);
-    const project = line(options.project ?? parsed.project), slug = line(options.slug || '');
     if (slug) {
       const existing = model.items.find(i => i.project === project && i.sdlc?.slug === slug);
       if (existing) return existing;
@@ -342,7 +355,6 @@ export const note = (file, id, words) => update(file, id, item => event(item, 'a
 export const start = (file, id, slug, phase = 'intent') => update(file, id, item => { item.sdlc = { slug: line(slug), phase: line(phase), state: '', action: '' }; event(item, 'agent', `started ${item.sdlc.slug}`); });
 export const phase = (file, id, value) => update(file, id, item => { if (!item.sdlc) fail('item has no slug'); item.sdlc.phase = line(value); event(item, 'agent', `phase ${item.sdlc.phase}`); });
 export const approved = (file, id, gate, words) => update(file, id, item => event(item, 'human', `approved ${line(gate)} — "${line(words)}"`));
-const expandProject = project => project === '~' ? os.homedir() : project.startsWith('~/') ? path.join(os.homedir(), project.slice(2)) : project;
 async function readStatuses(file, kit) {
   const statuses = [];
   for (const item of load(file).items) {
@@ -350,7 +362,7 @@ async function readStatuses(file, kit) {
     const previous = item.sdlc;
     let current;
     try {
-      const { stdout } = await execute('bash', [path.join(kit, 'sdlc.sh'), 'status', previous.slug, '--json'], { cwd: expandProject(item.project) });
+      const { stdout } = await execute('bash', [path.join(kit, 'sdlc.sh'), 'status', previous.slug, '--json'], { cwd: projectPath(item.project) });
       current = JSON.parse(stdout).features.find(f => f.slug === previous.slug);
       if (!current || !current.state) throw new Error(`feature not found: ${previous.slug}`);
     } catch (error) {
@@ -392,6 +404,7 @@ export const next = (file, { kit = defaultKit } = {}) => synced(file, kit, model
   const item = model.items.find(i => !i.done);
   if (!item) return { code: 30, item: null };
   const result = { code: { workable: 0, waiting: 10, blocked: 20 }[item.status], item: { ...item, events: [...item.events], replies: replies(item) } };
+  if (item.error) result.item.sdlc = { ...item.sdlc, state: 'BLOCKED', action: item.error };
   // A reply lets the agent read a gate answer once; only sdlc.sh can open the gate.
   if (result.code === 0 && item.sdlc?.state === 'NEEDS-HUMAN' && result.item.replies.length) event(item, 'sdlc', `NEEDS-HUMAN — ${item.sdlc.action}`);
   return result;

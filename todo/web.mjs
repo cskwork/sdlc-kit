@@ -1,7 +1,6 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
@@ -30,13 +29,14 @@ function itemFor(file, id) {
   return item;
 }
 function approvalGate(item) {
+  core.projectPath(item.project);
   const gate = item.sdlc?.action.match(/\bapprove\s+(intent|plan)\b/)?.[1];
   if (item.done || item.sdlc?.state !== 'NEEDS-HUMAN' || !gate || !item.project ||
       !/^[a-z0-9][a-z0-9._-]{0,79}$/.test(item.sdlc.slug)) fail(409, 'item has no approval gate');
   return gate;
 }
 function projectPath(project) {
-  return fs.realpathSync(path.resolve(project === '~' ? os.homedir() : project.startsWith('~/') ? path.join(os.homedir(), project.slice(2)) : project));
+  return fs.realpathSync(core.projectPath(project));
 }
 function artifact(item, gate) {
   let root = projectPath(item.project);

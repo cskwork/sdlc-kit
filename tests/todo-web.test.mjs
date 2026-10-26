@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
 import { tmpdir, networkInterfaces } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, relative as pathRelative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startWeb } from '../todo/web.mjs';
 import * as core from '../todo/core.mjs';
@@ -407,6 +407,32 @@ test('B3: symlinked project reads and approves the physical status store with a 
   items(await post(ctx, '/api/approve', { id: item.id, gate: 'intent', sha: shown.json.sha, words: 'approved physical scope' }), ctx.file);
   assert.match(sdlc(alias, 'check', 'intent', slug), /GATE OPEN/);
   gateClosed(logical, 'intent', slug);
+});
+
+test('R5 B1: web add stores a relative project against the server cwd', async t => {
+  const ctx = await web(t);
+  const list = items(await request(ctx, '/api/items', { method: 'POST', body: { text: 'Web work ./project' } }), ctx.file);
+  const expected = resolve('./project');
+  assert.equal(list[0].project, expected);
+  assert.equal(core.load(ctx.file).items[0].project, expected);
+  assert.equal(list[0].id, core.itemId({ project: expected, title: 'Web work' }));
+});
+
+for (const operation of ['artifact', 'approve']) test(`R5 B1: web ${operation} refuses a hand-edited relative project`, async t => {
+  const ctx = await web(t), dir = project(ctx.root), slug = 'relative-web';
+  const folder = feature(dir, slug);
+  // This path exists from the server cwd: refusing must precede any project lookup.
+  const relative = './' + pathRelative(process.cwd(), dir);
+  writeFileSync(ctx.file, `# To-do\n\n## Open\n\n- [ ] Hand edited\n  - project: ${relative}\n  - sdlc: ${slug} · intent · NEEDS-HUMAN — approve intent --human\n\n## Done\n`);
+  const item = core.load(ctx.file).items[0];
+  const response = operation === 'artifact' ? await request(ctx, `/api/artifact?id=${item.id}`) :
+    await post(ctx, '/api/approve', { id: item.id, gate: 'intent',
+      sha: createHash('sha256').update(readFileSync(join(folder, 'intent.md'))).digest('hex'), words: 'approved shown scope' });
+  assert.equal(response.status, 409, response.text);
+  assert.equal(response.json.error, 'relative project path: write an absolute or ~/ path');
+  assert.equal(core.load(ctx.file).items[0].project, relative);
+  gateClosed(dir, 'intent', slug);
+  assert.doesNotMatch(readFileSync(ctx.file, 'utf8'), /human: approved/);
 });
 
 
