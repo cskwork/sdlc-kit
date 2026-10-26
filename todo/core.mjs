@@ -44,9 +44,16 @@ const isAnswer = event => (event.who === 'human' && event.what.startsWith('reply
   (event.who === 'agent' && event.what.startsWith('chat answer — '));
 const isWait = event => (event.who === 'agent' && event.what.startsWith('waiting — ')) ||
   (event.who === 'sdlc' && event.what.startsWith('NEEDS-HUMAN — '));
+const isRead = event => event.who === 'agent' && event.what === 'read replies';
+const lastIndex = (item, match) => item.events.reduce((last, event, i) => match(event) ? i : last, -1);
 export function replies(item) {
-  const lastWait = item.events.reduce((last, event, i) => isWait(event) ? i : last, -1);
+  const lastWait = lastIndex(item, isWait);
   return item.events.filter((event, i) => i > lastWait && isAnswer(event));
+}
+// Human replies no agent has been handed yet; next and take mark them read.
+export function unread(item) {
+  const from = Math.max(lastIndex(item, isWait), lastIndex(item, isRead));
+  return item.events.filter((event, i) => i > from && event.who === 'human' && isAnswer(event));
 }
 function derive(item) {
   // A file edit has no trustworthy cwd, even before a slug is attached.
@@ -54,6 +61,7 @@ function derive(item) {
   else delete item.error;
   item.status = item.done ? 'done' : item.error || item.sdlc?.state === 'BLOCKED' ? 'blocked' :
     ((item.waiting || item.sdlc?.state === 'NEEDS-HUMAN') && !replies(item).length) ? 'waiting' : 'workable';
+  item.unread = unread(item).length;
   return item;
 }
 function identify(model) {
@@ -362,6 +370,12 @@ export const remove = (file, id, version) => update(file, id, (item, model) => {
 export const done = (file, id, words = '', by = 'agent', version) => update(file, id, (item, model) => finish(model, item, by, `done${words ? ` — ${line(words)}` : ''}`), version);
 export const reply = (file, id, words, version) => update(file, id, item => { item.waiting = ''; event(item, 'human', `reply — ${line(words)}`); }, version);
 export const wait = (file, id, words) => update(file, id, item => { item.waiting = line(words); if (!item.waiting) fail('wait text required'); event(item, 'agent', `waiting — ${item.waiting}`); });
+// An agent drops its own wait once it no longer waits; a missing wait is a no-op.
+export const resume = (file, id, words = '') => update(file, id, item => {
+  if (!item.waiting) return;
+  item.waiting = '';
+  event(item, 'agent', `resumed${line(words) ? ` — ${line(words)}` : ''}`);
+});
 export const answer = (file, id, words) => update(file, id, item => { item.waiting = ''; event(item, 'agent', `chat answer — ${line(words)}`); });
 export const note = (file, id, words) => update(file, id, item => event(item, 'agent', line(words)));
 export const start = (file, id, slug, phase = 'intent') => update(file, id, item => { item.sdlc = { slug: line(slug), phase: line(phase), state: '', action: '' }; event(item, 'agent', `started ${item.sdlc.slug}`); });
@@ -417,6 +431,7 @@ function handOut(item) {
   if (item.error) result.item.sdlc = { ...item.sdlc, state: 'BLOCKED', action: item.error };
   // A reply lets the agent read a gate answer once; only sdlc.sh can open the gate.
   if (result.code === 0 && item.sdlc?.state === 'NEEDS-HUMAN' && result.item.replies.length) event(item, 'sdlc', `NEEDS-HUMAN — ${item.sdlc.action}`);
+  else if (result.code === 0 && item.unread) event(item, 'agent', 'read replies');
   return result;
 }
 export const next = (file, { kit = defaultKit } = {}) => synced(file, kit, model => {
