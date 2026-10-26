@@ -7,7 +7,7 @@ export default {
     'phase.plan': 'Plan',
     'phase.build': 'Build',
     'phase.evidence': 'Evidence',
-    'phase.deliver': 'Deliver',
+    'phase.deliver': 'Ship',
     'phase.legacy': 'Legacy',
     'phase.done': 'Done',
     'status.approve-intent': 'Approve intent',

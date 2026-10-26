@@ -6,7 +6,7 @@ export default {
     'phase.plan': '계획',
     'phase.build': '구현',
     'phase.evidence': '검증',
-    'phase.deliver': '전달',
+    'phase.deliver': '반영',
     'phase.legacy': '구버전',
     'phase.done': '완료',
     'status.approve-intent': '범위 승인 필요',
