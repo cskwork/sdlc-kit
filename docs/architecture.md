@@ -105,4 +105,6 @@ checks in order and returns the first thing that is missing as the next action.
 
 ## Decisions
 
-See [adr/](adr/) for the reasoning behind the main design choices.
+The reasoning behind the main design choices is in the ADRs: [0001 four phases, one script](adr/0001-four-phases-one-script.md),
+[0002 hash-bound approvals](adr/0002-hash-bound-approvals.md) and
+[0003 the script scores and routes evidence](adr/0003-script-scores-and-routes-evidence.md).
