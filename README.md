@@ -56,6 +56,43 @@ three to Build — then the loop stops for you, and only
 `sdlc.sh approve plan --human` resumes it. A scenario that could not run counts
 as failed, only you can remove a scenario, and every PASS needs its log.
 
+## How it is built
+
+No runtime: Markdown prompts the agent reads, one Bash script that records
+and routes, and an optional Node to-do. Full map:
+[docs/architecture.md](docs/architecture.md).
+
+```mermaid
+flowchart LR
+  K["SKILL.md · phases/ · roles/"] --> A["agent (author)"]
+  A -->|writes| W[".sdlc/work/slug/<br/>intent.md · PLAN.md · review.md · evidence.md"]
+  SUB["scouts · reviewer · QA<br/>(fresh contexts)"] -->|write| W
+  W --> S["sdlc.sh<br/>awk parsers + .state"]
+  HU["you"] -->|approve --human| S
+  S -->|"next: exit 0/10/20/30<br/>status --json"| A
+  T["todo/ (Node, optional)"] -->|status slug --json| S
+```
+
+Key decisions ([ADRs](docs/adr/)):
+
+- **Approvals bind bytes.** `approve` stores the sha256 of `intent.md` or
+  `PLAN.md` (the plan also stores the intent hash it was approved against) and
+  who approved; any edit closes the gate (`gate_intent`, `gate_plan` in
+  [`sdlc.sh`](sdlc.sh), [ADR 0002](docs/adr/0002-hash-bound-approvals.md)).
+- **Reviewed code is shipped code.** A review PASS records every bound repo's
+  HEAD; `score` and `close` refuse a different or dirty commit
+  (`review_heads`, `validate_commits` in `sdlc.sh`).
+- **The script routes, not the agent.** `sdlc.sh score` sends failures to Plan
+  or Build, or to you, with fixed caps of three
+  ([ADR 0003](docs/adr/0003-script-scores-and-routes-evidence.md)).
+- **One script, four phases.** v2 replaced six stages and about 7,000 script
+  lines with `sdlc.sh` (about 600 lines today)
+  ([ADR 0001](docs/adr/0001-four-phases-one-script.md),
+  [v2.0.0 changelog](log/changelog-v2.0.0.md)).
+- **Independent eyes by contract.** Scouts, reviewer and QA are separate role
+  prompts ([`roles/`](roles/)) run as subagents; this is a rule in
+  [`SKILL.md`](SKILL.md), not something the script can enforce.
+
 ## Quick start
 
 ```bash
@@ -210,7 +247,28 @@ bash tests/selftest.sh
 
 Word budgets for every prompt, the gate and routing rules, and one real
 feature driven through all four phases on a small CLI fixture. CI runs it on
-Linux, macOS and Windows.
+Linux, macOS and Windows. When `node` is on `PATH`, the selftest also runs the
+to-do suites (`node --test tests/todo*.test.mjs`).
+
+Last observed (2026-10-28, `bash tests/selftest.sh` in CI on ubuntu-latest):
+133 selftest checks passed and the to-do suites reported 183 tests, 183
+passed, 0 failed, 0 skipped. macOS also passed 133 checks; Windows passed 131 and
+skipped 2 that need POSIX signals or permissions
+([run 40613802450](https://github.com/cskwork/sdlc-kit/actions/runs/40613802450)).
+The full selftest takes several minutes because it creates many throwaway git
+repositories.
+
+## Limitations
+
+- Independence of the reviewer and QA depends on the harness supporting
+  subagents or fresh sessions; the script records verdicts but cannot prove
+  who wrote them.
+- `--human` is a recorded claim, not authentication: any program running as
+  the same user can call it.
+- Parsing is awk over Markdown tables, so artifacts must keep the template's
+  headings and columns; the script reports a malformed row instead of guessing.
+- The selftest is slow (it builds many throwaway git repositories), and there
+  is no shellcheck step in CI.
 
 ## License
 
