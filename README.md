@@ -252,7 +252,8 @@ to-do suites (`node --test tests/todo*.test.mjs`).
 
 Last observed (2026-10-28, `bash tests/selftest.sh` in CI on ubuntu-latest):
 133 selftest checks passed and the to-do suites reported 183 tests, 183
-passed, 0 failed, 0 skipped. macOS also passed 133 checks; Windows passed 131
+passed, 0 failed, 0 skipped. macOS also passed 133 checks; Windows passed 131 and
+skipped 2 that need POSIX signals or permissions
 ([run 40613802450](https://github.com/cskwork/sdlc-kit/actions/runs/40613802450)).
 The full selftest takes several minutes because it creates many throwaway git
 repositories.
