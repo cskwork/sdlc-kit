@@ -152,12 +152,14 @@ Windows에서는 Git Bash나 WSL로 `sdlc.sh`를 실행하세요.
 ## 개인 to-do
 
 여러 프로젝트의 할 일을 사람이 읽을 수 있는 `~/.sdlc/todo.md` 하나에 모읍니다.
-TUI와 localhost 웹 페이지는 같은 파일을 실시간으로 보여 주고 고칩니다.
+트레이 앱, TUI, localhost 웹 페이지는 같은 파일을 실시간으로 보여 주고 고칩니다.
 다른 파일을 쓰려면 `SDLC_TODO`를 지정하세요.
 이 선택 기능에는 Node 18+가 필요하고, 핵심 루프는 여전히 bash만 있으면 됩니다.
 
 ```bash
-node ~/sdlc-kit/todo/todo.mjs                     # TUI와 웹 페이지
+cargo build --release --manifest-path ~/sdlc-kit/todo/app/Cargo.toml   # 앱을 쓸 때 한 번 (Rust 1.88+)
+node ~/sdlc-kit/todo/todo.mjs                     # 앱 (앱을 빌드하지 않았으면 웹 링크가 있는 TUI)
+node ~/sdlc-kit/todo/todo.mjs --ui tui,web        # tui, web, app 중 원하는 것
 node ~/sdlc-kit/todo/todo.mjs web --open          # 웹 페이지만 열기
 node ~/sdlc-kit/todo/todo.mjs add "Fix login ~/code/web https://acme.atlassian.net/browse/WEB-123" --by jira
 node ~/sdlc-kit/todo/todo.mjs next                # 첫 Open 항목
@@ -168,6 +170,10 @@ TUI와 웹 페이지는 영어나 한국어로 표시합니다. `--lang ko`(TUI 
 TUI에서는 `L`, 웹 페이지에서는 언어 메뉴로 바꾸며 다시 시작하거나 새로 고칠 때까지 유지됩니다.
 상태는 다음에 누가 움직일지 보여 줍니다. 내 차례(범위 승인·계획 승인·답변), 에이전트 진행 중, 답변 전달됨 — 에이전트 수신 전, 시작 전, 막힘 — 조치 필요, 완료이며, 에이전트가 멈추는 행에는 그 사실을 적습니다.
 단 답은 에이전트가 `next`나 `take`로 읽기 전까지 "답변 전달됨 — 에이전트 수신 전"으로 보이고, sdlc 대기였다면 읽은 뒤 sdlc.sh가 다음 단계로 넘어갈 때까지 다시 내 차례로 돌아옵니다. sdlc 밖에서 사람을 기다리는 작업자(승인, 티켓 답변 등)는 `wait`로 남기고 `resume`으로 지웁니다.
+모든 화면은 서버 하나를 같이 씁니다. 처음 띄운 쪽이 포트와 토큰을 to-do 파일 옆 `todo-web.json`(소유자만 읽기)에 남기고, 뒤에 띄운 화면·앱·`todo.mjs serve`는 그 서버가 응답하는 동안 다시 씁니다.
+앱(`todo/app`, macOS·Windows)은 메뉴 막대나 트레이에서 내 차례 건수를 보여 주고, 새로 생기면 알림을 띄우며, 답변·승인·자가 조치를 같은 웹 API로 보냅니다. `todo.md`를 직접 쓰지 않습니다. 창을 닫아도 트레이에 남고, 종료하면 앱이 띄운 서버도 멈춥니다.
+막힌 sdlc 항목의 **자가 조치**(앱·페이지 버튼, TUI `f`)는 `fix requested`를 남기고, 다음 `next`나 `take`가 그 막힘을 에이전트에게 한 번 넘깁니다(종료 코드 `0`, `"fix": true`). 그 뒤 풀릴 때까지는 다시 큐를 멈춥니다.
+바로 에이전트를 띄우려면 to-do 파일 옆 `todo-agent.json`에 명령을 적으세요. 예: `{"fix": ["claude", "-p", "follow {kit}/todo/AGENT.md; take {id} and clear its block"]}`. `{id}`·`{kit}`·`{project}`를 채워 프로젝트 폴더에서 분리 실행합니다.
 언어를 더하려면 `todo/locales/en.mjs`를 `todo/locales/<code>.mjs`로 복사해 `name`과 모든 문구를 옮기고, `todo/i18n.mjs`의 `locales`에 import를 하나 더하세요.
 플래그·TUI 키·페이지 메뉴·제공 파일은 이 목록을 따릅니다. 키나 `{placeholder}`가 빠지면 parity 테스트가 실패하고, 실행 중 빠진 키는 영어로 보입니다.
 

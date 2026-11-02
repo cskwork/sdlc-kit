@@ -177,12 +177,14 @@ commit unless you said more. Windows: run `sdlc.sh` in Git Bash or WSL.
 ## Personal to-do
 
 Keep work across projects in one human-readable `~/.sdlc/todo.md`.
-The TUI and localhost web page show and update the same file live.
+A tray app, a TUI and a localhost web page show and update the same file live.
 Set `SDLC_TODO` to use another file.
 This optional add-on requires Node 18+; the core loop still needs only bash.
 
 ```bash
-node ~/sdlc-kit/todo/todo.mjs                     # TUI plus web page
+cargo build --release --manifest-path ~/sdlc-kit/todo/app/Cargo.toml   # once, for the app (Rust 1.88+)
+node ~/sdlc-kit/todo/todo.mjs                     # the app (TUI with its web link if the app is not built)
+node ~/sdlc-kit/todo/todo.mjs --ui tui,web        # any of tui, web, app
 node ~/sdlc-kit/todo/todo.mjs web --open          # web page only
 node ~/sdlc-kit/todo/todo.mjs add "Fix login ~/code/web https://acme.atlassian.net/browse/WEB-123" --by jira
 node ~/sdlc-kit/todo/todo.mjs next                # first Open item
@@ -193,6 +195,10 @@ The TUI and web page show English or Korean: pass `--lang ko` (TUI or `web`) or 
 Press `L` in the TUI or use the page's language menu to switch until restart or reload.
 Statuses say who acts next: your turn (approve intent, approve plan or answer), agent working, answered — not picked up yet, not started, blocked — fix needed, or done; the row where agents stop says so.
 A reply shows "answered — no agent has picked it up yet" until an agent reads it with `next` or `take`; after an sdlc wait the item then waits for you again until sdlc.sh moves on. A worker that waits on you outside sdlc (an approval, a ticket answer) records it with `wait` and drops it with `resume`.
+All surfaces share one server: the first launch writes its port and token to `todo-web.json` beside the to-do file (owner-only), and later launches, the app and `todo.mjs serve` reuse it while it answers.
+The app (`todo/app`, macOS and Windows) sits in the menu bar or tray with a count of items that need you, notifies you when one appears, and answers, approves and requests fixes through the same web API, so it never writes `todo.md` itself; closing the window keeps it in the tray, and Quit stops the server it started.
+**Fix by agent** (app and page button, TUI `f`) on a blocked sdlc item records `fix requested`; the next `next` or `take` hands the block to an agent once (exit `0`, `"fix": true`), then it stops the queue again until cleared.
+To start an agent right away, put a command in `todo-agent.json` beside the to-do file, for example `{"fix": ["claude", "-p", "follow {kit}/todo/AGENT.md; take {id} and clear its block"]}`; `{id}`, `{kit}` and `{project}` are filled in and it runs detached in the project.
 To add a language, copy `todo/locales/en.mjs` to `todo/locales/<code>.mjs`, translate `name` and every message, and add its import to `locales` in `todo/i18n.mjs`.
 The flag, the TUI key, the page menu and the served files follow that registry; the parity test fails on a missing key or `{placeholder}`, and a missing key shows in English.
 

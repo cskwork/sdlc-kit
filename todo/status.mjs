@@ -2,7 +2,8 @@
 export const gateOf = item => item.sdlc?.state === 'NEEDS-HUMAN' && item.sdlc.action?.match(/\bapprove (intent|plan)\b/)?.[1] || '';
 export function statusOf(item) {
   if (item.done) return { actor: 'done', kind: 'done' };
-  if (item.status === 'blocked') return { actor: 'blocked', kind: 'blocked' };
+  // A block the human asked an agent to fix waits for that agent, like an unread reply.
+  if (item.status === 'blocked') return item.fixRequested ? { actor: 'agent', kind: 'handoff' } : { actor: 'blocked', kind: 'blocked' };
   if (item.status === 'waiting') { const gate = gateOf(item); return { actor: 'you', kind: gate ? `approve-${gate}` : 'answer', gate }; }
   // A reply stays unread until an agent takes it with next or take; nobody is working on it yet.
   if (item.unread) return { actor: 'agent', kind: 'handoff' };

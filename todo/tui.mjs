@@ -43,6 +43,8 @@ function wrap(text, width) {
 const visible = state => (state.items || []).filter(item => !item.done || state.showDone);
 const selected = state => visible(state)[state.selected || 0];
 const waiting = item => item?.status === 'waiting';
+const fixMessage = (t, launch) => launch.startsWith('failed: ') ? t('fix.failed', { reason: launch.slice(8) }) : t(launch === 'started' ? 'fix.started' : 'fix.queued');
+const fixable = item => item?.status === 'blocked' && !item.error && !item.done;
 const textOf = state => translator(state.lang || defaultLanguage);
 // What the human is asked to do: the explicit wait, else the sdlc action, else the generic step.
 const waitText = (item, t) => item.waiting || item.sdlc?.action || t(`next.${statusOf(item).kind}`);
@@ -66,7 +68,7 @@ function detailLines(item, t) {
 }
 const helpKeys = [['↑ ↓ / j k', 'select', 'g G', 'ends'], ['a', 'add', 'Enter', 'details'], ['e', 'edit', 'x / Space', 'done'],
   ['d', 'delete', 'u', 'undo'], ['J K', 'move', 'Tab', 'showDone'], ['r', 'reply', 'o', 'link'], ['w', 'web', 'R', 'sync'],
-  ['L', 'language', 'q / Ctrl+C', 'quit'], ['Esc', 'back']];
+  ['L', 'language', 'q / Ctrl+C', 'quit'], ['f', 'fix', 'Esc', 'back']];
 function help(t) {
   const pad = (text, size) => text + ' '.repeat(Math.max(0, size - widthOf(text)));
   const cells = helpKeys.map(([key, label, ...rest]) => [`${key}  ${t(`tui.help.${label}`)}`, rest.length ? `${rest[0]}  ${t(`tui.help.${rest[1]}`)}` : '']);
@@ -143,7 +145,7 @@ export function render(state, { width = 80, height = 24, color = false } = {}) {
   }
   lines.push(clip(prompt, width));
   lines.push(clip(t(state.input ? 'tui.keys.input' : ['details', 'help'].includes(state.view) ? 'tui.keys.details' :
-    waiting(item) ? 'tui.keys.waiting' : 'tui.keys.list'), width));
+    waiting(item) ? 'tui.keys.waiting' : fixable(item) ? 'tui.keys.blocked' : 'tui.keys.list'), width));
   return lines.slice(0, height);
 }
 
@@ -210,6 +212,7 @@ export function reduce(state, key) {
     if (key === 'Enter') { next.view = 'details'; next.detailOffset = 0; }
     else if (key === 'e') next.input = { kind: 'edit', id: item.id, item, text: item.title, cursor: chars(item.title).length };
     else if (key === 'r' && waiting(item)) next.input = { kind: 'reply', id: item.id, item, text: '', cursor: 0 };
+    else if (key === 'f' && fixable(item)) effect('fix', { id: item.id, item });
     else if (key === 'x' || key === ' ') effect('done', { id: item.id, item, done: !item.done });
     else if (key === 'd') next.confirm = item;
     else if (key === 'J' || key === 'K') effect('move', { id: item.id, item, delta: key === 'J' ? 1 : -1 });
@@ -311,6 +314,10 @@ export async function runTui({ file, kit, web, lang = defaultLanguage }) {
       case 'reply':
         await change(item => { item.waiting = ''; humanEvent(item, `reply — ${effect.text}`); });
         message(t('tui.replied')); break;
+      case 'fix': {
+        const { launch } = await core.requestFix(file, effect.id, effect.item.version, { kit });
+        message(fixMessage(t, launch)); break;
+      }
       case 'done':
         result = await change((item, model) => {
           item.done = effect.done; item.waiting = ''; humanEvent(item, effect.done ? 'done' : 'reopened');
@@ -391,7 +398,8 @@ export async function runTui({ file, kit, web, lang = defaultLanguage }) {
     state.items = readItems(); ready = true;
     emitKeypressEvents(input); input.on('keypress', keypress); input.resume();
     stopWatch = core.watch(file, refresh); draw();
-    if (web) webStart = import('./web.mjs').then(({ startWeb }) => startWeb({ file, kit, port: 0, open: false, lang,
+    if (typeof web === 'string') { state.webUrl = web; draw(); }
+    else if (web) webStart = import('./web.mjs').then(({ startWeb }) => startWeb({ file, kit, port: 0, open: false, lang,
       onUrl: url => { state.webUrl = url; draw(); } }))
       .then(value => { server = value; state.webUrl = value.url; draw(); })
       .catch(error => { state.webUrl = ''; state.webError = error.message; draw(); });

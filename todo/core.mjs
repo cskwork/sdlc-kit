@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
@@ -33,6 +33,8 @@ export async function nativePath(value, { platform = process.platform, runner = 
   return stdout.replace(/\r?\n$/, '');
 }
 export const todoPath = () => process.env.SDLC_TODO || path.join(os.homedir(), '.sdlc', 'todo.md');
+export const agentPath = (file = todoPath()) => process.env.SDLC_TODO_AGENT || path.join(path.dirname(file), 'todo-agent.json');
+export const sessionPath = () => process.env.SDLC_TODO_SESSION || path.join(path.dirname(todoPath()), 'todo-web.json');
 export function stamp(date = new Date()) {
   const pad = n => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -46,6 +48,9 @@ const isWait = event => (event.who === 'agent' && event.what.startsWith('waiting
   (event.who === 'sdlc' && event.what.startsWith('NEEDS-HUMAN — '));
 const isRead = event => event.who === 'agent' && event.what === 'read replies';
 const lastIndex = (item, match) => item.events.reduce((last, event, i) => match(event) ? i : last, -1);
+// Only an explicit fix request hands a block to an agent; a plain reply leaves it stopped.
+export const fixRequest = 'fix requested';
+const fixPending = item => lastIndex(item, event => event.who === 'human' && event.what === fixRequest) > lastIndex(item, isRead);
 export function replies(item) {
   const lastWait = lastIndex(item, isWait);
   return item.events.filter((event, i) => i > lastWait && isAnswer(event));
@@ -62,6 +67,7 @@ function derive(item) {
   item.status = item.done ? 'done' : item.error || item.sdlc?.state === 'BLOCKED' ? 'blocked' :
     ((item.waiting || item.sdlc?.state === 'NEEDS-HUMAN') && !replies(item).length) ? 'waiting' : 'workable';
   item.unread = unread(item).length;
+  item.fixRequested = item.status === 'blocked' && !item.error && fixPending(item);
   return item;
 }
 function identify(model) {
@@ -369,6 +375,37 @@ export const move = (file, id, delta, version) => update(file, id, (item, model)
 export const remove = (file, id, version) => update(file, id, (item, model) => { model.items.splice(model.items.indexOf(item), 1); }, version);
 export const done = (file, id, words = '', by = 'agent', version) => update(file, id, (item, model) => finish(model, item, by, `done${words ? ` — ${line(words)}` : ''}`), version);
 export const reply = (file, id, words, version) => update(file, id, item => { item.waiting = ''; event(item, 'human', `reply — ${line(words)}`); }, version);
+// The kit never runs a model: a fix request is recorded for the next agent run, and the
+// human's own todo-agent.json may name a command that starts one now ({id} {kit} {project}).
+function agentCommand(file, name, values) {
+  const where = agentPath(file);
+  let config;
+  try { config = JSON.parse(fs.readFileSync(where, 'utf8')); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw new Error(`invalid ${where}: ${error.message}`); }
+  const argv = config?.[name];
+  if (argv === undefined) return null;
+  if (!Array.isArray(argv) || !argv.length || argv.some(arg => typeof arg !== 'string' || !arg)) throw new Error(`${where}: ${name} must be a non-empty array of strings`);
+  return argv.map(arg => arg.replace(/\{(id|kit|project)\}/g, (_, key) => values[key]));
+}
+function launch([program, ...args], cwd) {
+  return new Promise(resolve => {
+    const child = spawn(program, args, { cwd, detached: true, stdio: 'ignore', shell: false });
+    child.once('error', error => resolve(`failed: ${error.code || error.message}`));
+    child.once('spawn', () => { child.unref(); resolve('started'); });
+  });
+}
+export async function requestFix(file, id, version, { kit = defaultKit } = {}) {
+  const item = await update(file, id, item => {
+    if (item.done || item.status !== 'blocked' || item.error) throw Object.assign(new Error('only a blocked sdlc item can be fixed by an agent'), { code: 2, status: 409 });
+    event(item, 'human', fixRequest);
+  }, version);
+  let argv;
+  try { argv = agentCommand(file, 'fix', { id: item.id, kit, project: item.project || '' }); }
+  catch (error) { return { item, launch: `failed: ${error.message}` }; }
+  if (!argv) return { item, launch: 'queued' };
+  const cwd = item.project && path.isAbsolute(item.project) && fs.existsSync(item.project) ? item.project : os.homedir();
+  return { item, launch: await launch(argv, cwd) };
+}
 export const wait = (file, id, words) => update(file, id, item => { item.waiting = line(words); if (!item.waiting) fail('wait text required'); event(item, 'agent', `waiting — ${item.waiting}`); });
 // An agent drops its own wait once it no longer waits; a missing wait is a no-op.
 export const resume = (file, id, words = '') => update(file, id, item => {
@@ -427,11 +464,11 @@ async function synced(file, kit, fn) {
 }
 export const sync = (file, { kit = defaultKit } = {}) => synced(file, kit, model => model);
 function handOut(item) {
-  const result = { code: { workable: 0, waiting: 10, blocked: 20 }[item.status], item: { ...item, events: [...item.events], replies: replies(item) } };
+  const result = { code: item.fixRequested ? 0 : { workable: 0, waiting: 10, blocked: 20 }[item.status], item: { ...item, events: [...item.events], replies: replies(item) } };
   if (item.error) result.item.sdlc = { ...item.sdlc, state: 'BLOCKED', action: item.error };
   // A reply lets the agent read a gate answer once; only sdlc.sh can open the gate.
   if (result.code === 0 && item.sdlc?.state === 'NEEDS-HUMAN' && result.item.replies.length) event(item, 'sdlc', `NEEDS-HUMAN — ${item.sdlc.action}`);
-  else if (result.code === 0 && item.unread) event(item, 'agent', 'read replies');
+  else if (result.code === 0 && (item.unread || item.fixRequested)) event(item, 'agent', 'read replies');
   return result;
 }
 export const next = (file, { kit = defaultKit } = {}) => synced(file, kit, model => {

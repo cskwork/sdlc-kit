@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync, realpathSync, statSync, existsSync } from 'node:fs';
 import { tmpdir, networkInterfaces } from 'node:os';
 import { dirname, join, resolve, relative as pathRelative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startWeb } from '../todo/web.mjs';
+import { startWeb, liveSession } from '../todo/web.mjs';
 import * as core from '../todo/core.mjs';
 
 const kit = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -705,4 +705,40 @@ test('language: payload and live snapshot carry the configured language; locale 
   assert.equal((await request(ctx, '/locales/../web.mjs', { token: null })).status, 404);
   assert.equal((await request(ctx, '/locales/xx.mjs', { token: null })).status, 404);
   await assert.rejects(startWeb({ file: ctx.file, kit, lang: 'xx', onUrl() {} }), /invalid language/);
+});
+
+test('session file shares the running server with the owner only and goes away on close', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'sdlc-todo-session-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = join(root, 'todo.md'), session = join(root, 'todo-web.json');
+  await core.add(file, 'Needs nothing yet');
+  const server = await startWeb({ file, kit, port: 0, open: false, onUrl() {}, session });
+  const stored = JSON.parse(readFileSync(session, 'utf8'));
+  assert.match(stored.token, /^[a-f0-9]{32}$/);
+  assert.equal(stored.pid, process.pid);
+  if (process.platform !== 'win32') assert.equal(statSync(session).mode & 0o777, 0o600);
+  const live = await liveSession(session);
+  assert.equal(live.url, server.url);
+  const url = new URL(server.url);
+  const listed = items(await request({ url, token: stored.token }, '/api/items'), file);
+  assert.deepEqual(listed[0].turn, { actor: 'agent', kind: 'new' });
+  await server.close();
+  assert.equal(existsSync(session), false);
+  assert.equal(await liveSession(session), null);
+  writeFileSync(session, JSON.stringify({ port: Number(url.port), token: stored.token, pid: 1 }));
+  assert.equal(await liveSession(session), null, 'a stale file whose server is gone is not live');
+});
+
+test('web fix records the request on a block and reports whether an agent started', async t => {
+  const ctx = await web(t), dir = project(ctx.root);
+  mkdirSync(join(dir, '.sdlc', 'work', 'legacy'));
+  const blocked = await core.add(ctx.file, 'Blocked legacy', { project: dir, slug: 'legacy' });
+  const open = await core.add(ctx.file, 'Workable');
+  const refused = await post(ctx, '/api/item', { id: open.id, op: 'fix' });
+  assert.equal(refused.status, 409, refused.text);
+  const response = await post(ctx, '/api/item', { id: blocked.id, op: 'fix' });
+  assert.equal(response.json.launch, 'queued');
+  const item = items(response, ctx.file).find(i => i.id === blocked.id);
+  assert.deepEqual(item.turn, { actor: 'agent', kind: 'handoff' });
+  assert.equal(item.events.at(-1).what, 'fix requested');
 });
