@@ -361,7 +361,7 @@ impl App {
             egui::Frame::new().fill(bg).corner_radius(CornerRadius::same(10)).inner_margin(Margin::symmetric(12, 10)).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.label(RichText::new(label).color(fg).size(11.5).strong());
-                ui.label(RichText::new(&ask).size(13.5));
+                ui.label(RichText::new(clip(&ask, 160)).size(13.5)).on_hover_text(&ask);
             });
         }
         // Background and intent come from the work document (intent.md or PLAN.md).
@@ -421,22 +421,22 @@ impl App {
         if busy { ui.spinner(); }
     }
 
-    /// The decision brief: summary, background, intent, open questions and risks; the full text folds below.
+    /// The decision brief: what to decide, the gist and why, a few short lines each; the rest folds away.
     fn document(&mut self, ui: &mut egui::Ui, p: &theme::Palette, item: &Item, doc: &Artifact) {
         let lang = self.lang;
         let sections = sections(&doc.markdown);
-        let brief: Vec<(&str, &str)> = BRIEF.iter()
-            .filter_map(|(heading, key)| sections.iter().find(|(title, _)| title.eq_ignore_ascii_case(heading)).map(|(_, body)| (t(lang, key), body.as_str())))
-            .filter(|(_, body)| !body.trim().is_empty())
-            .collect();
-        if brief.is_empty() {
-            markdown(ui, p, &doc.markdown);
-            return;
-        }
-        for (label, body) in brief {
+        let body = |names: &[&str]| sections.iter().find(|(title, _)| names.iter().any(|n| title.eq_ignore_ascii_case(n))).map(|(_, b)| b.as_str()).unwrap_or("");
+        let brief = [
+            ("doc.questions", points(body(&["Questions for you", "Out of scope and open questions"]), 3)),
+            ("doc.summary", points(body(&["At a glance", "Summary"]), 1)),
+            ("doc.why", points(body(&["Why this came up", "Understanding"]), 1)),
+        ];
+        for (key, lines) in brief.iter().filter(|(_, lines)| !lines.is_empty()) {
             ui.add_space(2.0);
-            ui.label(RichText::new(label).color(p.accent).size(11.5).strong());
-            markdown(ui, p, body);
+            ui.label(RichText::new(t(lang, key)).color(p.accent).size(11.5).strong());
+            for line in lines {
+                ui.horizontal_top(|ui| { ui.label(RichText::new("•").color(p.accent)); ui.add(egui::Label::new(RichText::new(line).size(13.0)).wrap()); });
+            }
         }
         egui::CollapsingHeader::new(RichText::new(t(lang, "doc.full")).color(p.muted).size(12.0))
             .id_salt(("full", &item.id))
@@ -458,15 +458,6 @@ impl App {
     }
 }
 
-/// Sections worth reading before a decision, in reading order: intent.md and PLAN.md headings.
-const BRIEF: &[(&str, &str)] = &[
-    ("At a glance", "doc.summary"), ("Summary", "doc.summary"),
-    ("Why this came up", "doc.background"), ("Understanding", "doc.background"),
-    ("What we will do", "doc.intent"), ("AS-IS → TO-BE", "doc.change"),
-    ("Questions for you", "doc.questions"), ("Out of scope and open questions", "doc.questions"),
-    ("Risks", "doc.risks"), ("Side effects", "doc.risks"),
-];
-
 fn sections(markdown: &str) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = Vec::new();
     for line in markdown.lines() {
@@ -474,6 +465,24 @@ fn sections(markdown: &str) -> Vec<(String, String)> {
         else if let Some((_, body)) = out.last_mut() { body.push_str(line); body.push('\n'); }
     }
     out
+}
+
+/// The first few points of a section as plain one-liners: bullets, else sentences.
+fn points(body: &str, limit: usize) -> Vec<String> {
+    let plain = |text: &str| text.replace("**", "").replace('`', "").trim().to_string();
+    let bullets: Vec<String> = body.lines()
+        .filter_map(|l| l.trim_start().strip_prefix("- ").or_else(|| l.trim_start().strip_prefix("* ")))
+        .map(plain).filter(|l| !l.is_empty() && !l.eq_ignore_ascii_case("none")).collect();
+    let lines = if bullets.is_empty() {
+        let text = plain(&body.lines().filter(|l| !l.trim_start().starts_with('|')).collect::<Vec<_>>().join(" "));
+        text.split_inclusive(['.', '。']).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+    } else { bullets };
+    lines.into_iter().take(limit).map(|l| clip(&l, 140)).collect()
+}
+
+fn clip(text: &str, max: usize) -> String {
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if text.chars().count() <= max { text } else { format!("{}…", text.chars().take(max).collect::<String>().trim_end()) }
 }
 
 fn has_document(item: &Item) -> bool {
