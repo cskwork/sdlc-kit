@@ -533,6 +533,26 @@ wideQuery.addEventListener('change', () => {
   closeQuietly();
   syncPane();
 });
+// Fix asks an agent to clear the block; the server records the request and starts the human's configured agent, if any.
+function fixButton(item) {
+  const button = el('button', 'quiet', t('fix.button'));
+  button.type = 'button';
+  button.title = t('fix.help');
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      const data = await api('/api/item', { id: item.id, version: item.version, op: 'fix' });
+      if (data.items) apply(data);
+      const launch = data.launch || 'queued';
+      if (launch.startsWith('failed: ')) showError(t('fix.failed', { reason: launch.slice(8) }));
+      else announce(t(launch === 'started' ? 'fix.started' : 'fix.queued'));
+    } catch (failure) {
+      showError(sourceOf(failure));
+      button.disabled = false;
+    }
+  });
+  return button;
+}
 function field(dl, name, value) {
   if (!value) return;
   const dt = el('dt', '', name), dd = el('dd');
@@ -559,6 +579,7 @@ function renderDetail() {
   field(dl, t('field.status'), pill(item));
   if (actor === 'you') field(dl, t('field.next'), whatWaits(item));
   if (actor === 'blocked') field(dl, t('field.problem'), item.error || item.sdlc?.action || t('field.unknown'));
+  if (actor === 'blocked' && !item.error) field(dl, t('field.next'), fixButton(item));
   field(dl, t('field.project'), item.project);
   if (item.link && /^https?:\/\//i.test(item.link.url)) {
     const a = el('a', '', item.link.label);

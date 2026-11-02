@@ -5,9 +5,10 @@
 - Source: <ticket, issue or document link | chat>
 
 ## At a glance
+- **Your call:** <the decision, as a question — or none>
 - **What changes:** <who can do what once done>
-- **Not included:** <the biggest left-out item, cited — or none>
-- **Your call:** <the ⚠️ risk or decision, cited — or none>
+- **Background:** <what happens today>
+- **Why:** <why now>
 
 ## What was asked
 - <the human's words, verbatim or a faithful excerpt>
@@ -48,9 +49,9 @@
 | Goal | <state> | <who gets what, and why — F1> |
 | Boundaries | <state> | <what is in and out, and who drew the line> |
 | Today | <state> | <today's behavior as observed; a bug as reproduced> |
-| After | <state> | <the exact behavior: rules, values, messages, edge cases> |
+| After | <state> | <exact behavior: rules, values, messages, edge cases> |
 | Done when | <state> | <how each O is observed> |
-| Limits | <state> | <policies, compatibility, data, owners — or none found, where you looked> |
+| Limits | <state> | <policies, compatibility, data, owners — or none, where you looked> |
 
 ## Facts
 - F1: **<lead-in>** <fact> — <source>
