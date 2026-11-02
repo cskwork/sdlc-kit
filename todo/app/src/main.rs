@@ -535,9 +535,12 @@ fn args() -> Result<Args, String> {
     let mut parsed = Args {
         session: std::env::var_os("SDLC_TODO_SESSION").map(PathBuf::from)
             .unwrap_or_else(|| todo.parent().map(|d| d.join("todo-web.json")).unwrap_or_default()),
-        // Built in place, the binary sits at <kit>/todo/app/target/release/.
-        kit: std::env::current_exe().ok().and_then(|exe| exe.ancestors().nth(5).map(PathBuf::from)).unwrap_or_default(),
-        node: "node".into(),
+        // An app bundle names the kit and node in its Info.plist environment; built in place,
+        // the binary sits at <kit>/todo/app/target/release/.
+        kit: std::env::var_os("SDLC_TODO_KIT").map(PathBuf::from)
+            .or_else(|| std::env::current_exe().ok().and_then(|exe| exe.ancestors().nth(5).map(PathBuf::from)))
+            .unwrap_or_default(),
+        node: std::env::var("SDLC_TODO_NODE").unwrap_or_else(|_| "node".into()),
         lang: std::env::var("SDLC_TODO_LANG").unwrap_or_else(|_| "en".into()),
     };
     let mut list = std::env::args().skip(1);

@@ -15,7 +15,7 @@ and an optional Node.js to-do add-on. The script never runs a model; the agent
 | Templates | `templates/config.md`, `intent.md`, `PLAN.md`, `evidence.md`, `ref.md` | Skeletons the script copies and later parses. |
 | State machine | `sdlc.sh` | `init`, `new`, `status [--json]`, `next`, `check`, `approve`, `review`, `score`, `close`. Parses the Markdown artifacts with awk, keeps per-feature state in `.sdlc/work/<slug>/.state`, and derives phase, state and next action. |
 | QA adapter (optional) | `adapters/e2e/` | Templates and a vendored agent guide for writing browser/mobile scenarios as `e2e` tests when `qa_runner: e2e`. |
-| Personal to-do (optional) | `todo/todo.mjs`, `todo/core.mjs`, `todo/tui.mjs`, `todo/web.mjs`, `todo/locales/` | One Markdown to-do file (`~/.sdlc/todo.md`) shown in a TUI and a localhost web page; syncs each item's sdlc status by calling `sdlc.sh status <slug> --json`. |
+| Personal to-do (optional) | `todo/todo.mjs`, `todo/core.mjs`, `todo/tui.mjs`, `todo/web.mjs`, `todo/locales/`, `todo/app/` | One Markdown to-do file (`~/.sdlc/todo.md`) shown in a tray app, a TUI and a localhost web page that share one server; syncs each item's sdlc status by calling `sdlc.sh status <slug> --json`. The Rust app only calls the web API. |
 | Tests | `tests/selftest.sh`, `tests/todo*.test.mjs`, `tests/fixture/` | Bash selftest of the script and prompt budgets, plus `node --test` suites for the to-do. |
 | Site | `docs/index.html` | The GitHub Pages landing page (published from `main:/docs`). |
 
@@ -78,7 +78,7 @@ checks in order and returns the first thing that is missing as the next action.
 
 - **Core loop:** Bash, awk, git, and one of `sha256sum`, `shasum` or `openssl`
   (`sha()` in `sdlc.sh` tries them in that order). On Windows, Git Bash or WSL.
-- **To-do add-on:** Node.js 18+, standard library only (no `package.json`).
+- **To-do add-on:** Node.js 18+, standard library only (no `package.json`). The optional tray app needs Rust 1.88+ to build (`todo/app/Cargo.toml`).
 - **QA adapter:** the `e2e` npm package, pinned by `adapters/e2e/VERSION`, only
   when a project opts in.
 - **Agent harness:** any that can read a skill folder or an instruction file
@@ -101,7 +101,9 @@ checks in order and returns the first thing that is missing as the next action.
   `30` done; usage errors exit `2`. Hosts branch on these instead of parsing
   text.
 - **To-do web boundary.** Binds `127.0.0.1` only, checks `Host`/`Origin`, and
-  requires a per-run token held in memory (`todo/web.mjs`).
+  requires a per-run token (`todo/web.mjs`). The token is also written to an
+  owner-only `todo-web.json` beside the to-do file so the app and later
+  launches can reach the server; agents never read it.
 
 ## Decisions
 
