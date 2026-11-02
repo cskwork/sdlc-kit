@@ -11,8 +11,8 @@ risks, at least 90% clear and confirmed before planning.
    a bold lead-in so the bold alone carries the gist, each warning on the
    line it guards; proof goes to Facts. Each fact appears once; elsewhere
    cite it (O2, F3, Q1, What was asked). Write in the requester's language;
-   headings, labels and State words stay English. Older files keep their
-   labels; `sdlc.sh` reads both.
+   headings, labels and State words stay English. At a glance is four
+   warm, plain lines a newcomer follows, no file names or codes.
    - **Why this came up** — when the request, ticket or thread says why,
      quote or cite it; otherwise infer it from the whole context (ticket
      history, linked issues, commits, `memory`), start the line with

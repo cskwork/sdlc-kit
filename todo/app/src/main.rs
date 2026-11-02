@@ -352,6 +352,8 @@ impl App {
         let action = item.sdlc.as_ref().map(|s| s.action.clone()).unwrap_or_default();
         // The question or problem comes first: it is what the human decides on.
         let (label, ask) = match item.turn.actor.as_str() {
+            // A gate's sdlc action is a command for agents; say what it asks in words.
+            "you" if !item.turn.gate.is_empty() && item.waiting.is_empty() => (t(lang, "waits"), t(lang, if item.turn.gate == "plan" { "ask.plan" } else { "ask.intent" }).to_string()),
             "you" => (t(lang, "waits"), if item.waiting.is_empty() { action.clone() } else { item.waiting.clone() }),
             "blocked" => (t(lang, "problem"), item.error.clone().unwrap_or(action.clone())),
             _ => ("", String::new()),
@@ -426,10 +428,17 @@ impl App {
         let lang = self.lang;
         let sections = sections(&doc.markdown);
         let body = |names: &[&str]| sections.iter().find(|(title, _)| names.iter().any(|n| title.eq_ignore_ascii_case(n))).map(|(_, b)| b.as_str()).unwrap_or("");
+        // At a glance carries the four lines by label; older documents fall back to their sections.
+        let glance = body(&["At a glance"]);
+        let field = |label: &str| labeled(glance, label);
+        let or = |line: Option<String>, names: &[&str], limit: usize| line.map(|l| vec![l]).unwrap_or_else(|| points(body(names), limit));
+        let questions = points(body(&["Questions for you", "Out of scope and open questions"]), 3);
+        let decide = field("Your call").map(|l| vec![l]).filter(|_| questions.is_empty()).unwrap_or(questions);
         let brief = [
-            ("doc.questions", points(body(&["Questions for you", "Out of scope and open questions"]), 3)),
-            ("doc.summary", points(body(&["At a glance", "Summary"]), 1)),
-            ("doc.why", points(body(&["Why this came up", "Understanding"]), 1)),
+            ("doc.questions", decide),
+            ("doc.summary", or(field("What changes"), &["Summary"], 1)),
+            ("doc.background", or(field("Background"), &["Understanding"], 1)),
+            ("doc.why", or(field("Why"), &["Why this came up"], 1)),
         ];
         for (key, lines) in brief.iter().filter(|(_, lines)| !lines.is_empty()) {
             ui.add_space(2.0);
@@ -467,14 +476,25 @@ fn sections(markdown: &str) -> Vec<(String, String)> {
     out
 }
 
+/// The text after `**Label:**` in a section, unless it says none.
+fn labeled(body: &str, label: &str) -> Option<String> {
+    body.lines().find_map(|line| {
+        let rest = line.trim_start().strip_prefix("- ")?.trim_start().strip_prefix(&format!("**{label}:**"))?;
+        let text = rest.replace("**", "").replace('`', "").trim().to_string();
+        (!text.is_empty() && !text.eq_ignore_ascii_case("none") && !text.starts_with('<')).then(|| clip(&text, 160))
+    })
+}
+
 /// The first few points of a section as plain one-liners: bullets, else sentences.
 fn points(body: &str, limit: usize) -> Vec<String> {
     let plain = |text: &str| text.replace("**", "").replace('`', "").trim().to_string();
-    let bullets: Vec<String> = body.lines()
+    let raw: Vec<String> = body.lines()
         .filter_map(|l| l.trim_start().strip_prefix("- ").or_else(|| l.trim_start().strip_prefix("* ")))
-        .map(plain).filter(|l| !l.is_empty() && !l.eq_ignore_ascii_case("none")).collect();
-    let lines = if bullets.is_empty() {
-        let text = plain(&body.lines().filter(|l| !l.trim_start().starts_with('|')).collect::<Vec<_>>().join(" "));
+        .map(plain).collect();
+    let bullets: Vec<String> = raw.iter().filter(|l| !l.is_empty() && !l.eq_ignore_ascii_case("none")).cloned().collect();
+    // A list that only says "none" means nothing to show, not "read the prose instead".
+    let lines = if raw.is_empty() {
+        let text = plain(&body.lines().map(str::trim).filter(|l| !l.starts_with('|') && !l.starts_with("<!--") && *l != "---").collect::<Vec<_>>().join(" "));
         text.split_inclusive(['.', '。']).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
     } else { bullets };
     lines.into_iter().take(limit).map(|l| clip(&l, 140)).collect()
