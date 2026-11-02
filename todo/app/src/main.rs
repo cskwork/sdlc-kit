@@ -40,6 +40,7 @@ struct App {
     lang: Lang,
     tab: Tab,
     open: HashSet<String>,
+    closed: HashSet<String>,
     drafts: HashMap<String, String>,
     notes: HashMap<String, String>,
     tray: Option<TrayIcon>,
@@ -139,7 +140,6 @@ impl App {
         let (menu_state, menu_ctx) = (state.clone(), ctx.clone());
         MenuEvent::set_event_handler(Some(move |event: MenuEvent| match event.id.0.as_str() {
             "open" => { menu_ctx.send_viewport_cmd(ViewportCommand::Visible(true)); menu_ctx.send_viewport_cmd(ViewportCommand::Focus); }
-            "web" => { if let Some(session) = menu_state.lock().unwrap().session.clone() { open_url(&session.page(None)); } }
             "quit" => quit(&menu_state),
             _ => {}
         }));
@@ -151,7 +151,7 @@ impl App {
             }
         }));
         connect(state.clone(), ctx, launcher, lang);
-        App { state, lang, tab: Tab::Focus, open: HashSet::new(), drafts: HashMap::new(), notes: HashMap::new(), tray, badge: None }
+        App { state, lang, tab: Tab::Focus, open: HashSet::new(), closed: HashSet::new(), drafts: HashMap::new(), notes: HashMap::new(), tray, badge: None }
     }
 
     /// Runs one request off the UI thread; the event stream brings the new list back.
@@ -186,7 +186,6 @@ fn build_tray(lang: Lang) -> Result<TrayIcon, String> {
     let menu = Menu::new();
     let items = [
         MenuItem::with_id("open", t(lang, "tray.open"), true, None),
-        MenuItem::with_id("web", t(lang, "tray.web"), true, None),
     ];
     for item in &items { menu.append(item).map_err(|e| e.to_string())?; }
     menu.append(&PredefinedMenuItem::separator()).map_err(|e| e.to_string())?;
@@ -222,7 +221,7 @@ fn markdown(ui: &mut egui::Ui, p: &theme::Palette, text: &str) {
         else if let Some(h) = trimmed.strip_prefix("## ") { ui.add_space(4.0); ui.label(RichText::new(h).size(15.0).strong()); }
         else if let Some(h) = trimmed.strip_prefix("### ") { ui.label(RichText::new(h).strong()); }
         else if let Some(b) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")) {
-            ui.horizontal_wrapped(|ui| { ui.label(RichText::new("•").color(p.accent)); ui.label(b.replace("**", "").replace('`', "")); });
+            ui.horizontal_top(|ui| { ui.label(RichText::new("•").color(p.accent)); ui.add(egui::Label::new(b.replace("**", "").replace('`', "")).wrap()); });
         } else { ui.label(trimmed.replace("**", "").replace('`', "")); }
     }
 }
@@ -302,7 +301,7 @@ impl eframe::App for App {
                         ui.vertical_centered(|ui| ui.label(RichText::new(t(lang, if self.tab == Tab::Focus { "empty.focus" } else { "empty" })).color(p.muted)));
                     }
                     for item in shown {
-                        self.card(ui, ctx, &p, dark, item, busy.contains(&item.id), artifacts.get(&item.id));
+                        self.card(ui, ctx, &p, dark, item, busy.contains(&item.id), artifacts.get(&artifact_key(item)));
                         ui.add_space(8.0);
                     }
                 });
@@ -319,7 +318,8 @@ impl App {
     #[allow(clippy::too_many_arguments)]
     fn card(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, p: &theme::Palette, dark: bool, item: &Item, busy: bool, artifact: Option<&Result<Artifact, String>>) {
         let lang = self.lang;
-        let expanded = self.open.contains(&item.id);
+        // Items that need a decision open by default; others open on demand.
+        let expanded = if needs_you(item) { !self.closed.contains(&item.id) } else { self.open.contains(&item.id) };
         let id = item.id.clone();
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -338,24 +338,42 @@ impl App {
             }
             if let Some(link) = &item.link { meta.push(link.label.clone()); }
             if !meta.is_empty() { ui.label(RichText::new(meta.join(" · ")).color(p.muted).size(12.0)); }
-            if header.clicked() { if expanded { self.open.remove(&id); } else { self.open.insert(id.clone()); } }
+            if header.clicked() {
+                let set = if needs_you(item) { &mut self.closed } else { &mut self.open };
+                if !set.remove(&id) { set.insert(id.clone()); }
+            }
             if expanded { ui.add_space(6.0); self.details(ui, ctx, p, item, busy, artifact); }
         });
     }
 
     fn details(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, p: &theme::Palette, item: &Item, busy: bool, artifact: Option<&Result<Artifact, String>>) {
         let lang = self.lang;
-        let small = |ui: &mut egui::Ui, label: &str, text: &str| {
-            ui.label(RichText::new(label).color(p.muted).size(11.5).strong());
-            ui.label(RichText::new(text).size(13.0));
-        };
+        let dark = ui.visuals().dark_mode;
         let action = item.sdlc.as_ref().map(|s| s.action.clone()).unwrap_or_default();
-        match item.turn.actor.as_str() {
-            "you" => small(ui, t(lang, "waits"), if action.is_empty() { &item.waiting } else { &action }),
-            "blocked" => small(ui, t(lang, "problem"), item.error.as_deref().unwrap_or(&action)),
-            _ => {}
+        // The question or problem comes first: it is what the human decides on.
+        let (label, ask) = match item.turn.actor.as_str() {
+            "you" => (t(lang, "waits"), if item.waiting.is_empty() { action.clone() } else { item.waiting.clone() }),
+            "blocked" => (t(lang, "problem"), item.error.clone().unwrap_or(action.clone())),
+            _ => ("", String::new()),
+        };
+        if !ask.is_empty() {
+            let (fg, bg) = theme::tone(&item.turn.actor, dark);
+            egui::Frame::new().fill(bg).corner_radius(CornerRadius::same(10)).inner_margin(Margin::symmetric(12, 10)).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label(RichText::new(label).color(fg).size(11.5).strong());
+                ui.label(RichText::new(&ask).size(13.5));
+            });
         }
-        ui.add_space(4.0);
+        // Background and intent come from the work document (intent.md or PLAN.md).
+        if has_document(item) {
+            match artifact {
+                None => self.load_artifact(ctx, item),
+                Some(Err(error)) => { ui.label(RichText::new(error).color(theme::tone("blocked", dark).0).size(12.0)); }
+                Some(Ok(doc)) if doc.sha.is_empty() => { ui.label(RichText::new(t(lang, "doc.loading")).color(p.muted).size(12.0)); }
+                Some(Ok(doc)) => self.document(ui, p, item, doc),
+            }
+        }
+        ui.add_space(2.0);
         if item.turn.actor == "you" && item.turn.kind == "answer" {
             let draft = self.drafts.entry(item.id.clone()).or_default();
             ui.add(egui::TextEdit::singleline(draft).hint_text(t(lang, "reply.hint")).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 7)));
@@ -368,23 +386,13 @@ impl App {
             }
         }
         if item.turn.actor == "you" && !item.turn.gate.is_empty() {
-            match artifact {
-                None => {
-                    if ui.button(t(lang, "approve.open")).clicked() { self.load_artifact(ctx, &item.id); }
-                }
-                Some(Err(error)) => { ui.label(RichText::new(error).color(theme::tone("blocked", ui.visuals().dark_mode).0)); }
-                Some(Ok(doc)) if doc.sha.is_empty() => { ui.label(RichText::new(t(lang, "approve.loading")).color(p.muted)); }
-                Some(Ok(doc)) => {
-                    ui.label(RichText::new(&doc.file).color(p.muted).size(11.0));
-                    egui::Frame::new().fill(p.bg).stroke(Stroke::new(1.0, p.stroke)).corner_radius(CornerRadius::same(8)).inner_margin(Margin::same(10))
-                        .show(ui, |ui| egui::ScrollArea::vertical().id_salt(("doc", &item.id)).max_height(260.0).show(ui, |ui| { ui.set_width(ui.available_width()); markdown(ui, p, &doc.markdown); }));
-                    let note = self.notes.entry(item.id.clone()).or_default();
-                    ui.add(egui::TextEdit::singleline(note).hint_text(t(lang, "approve.note")).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 7)));
-                    if primary(ui, p, t(lang, "approve.button"), !busy).clicked() {
-                        let body = json!({ "id": item.id, "version": item.version, "gate": doc.gate, "sha": doc.sha, "words": note.trim() });
-                        let done = t(lang, "approve.done");
-                        self.act(ctx, &item.id, move |s| client::post(s, "/api/approve", body).map(|_| done.to_string()));
-                    }
+            if let Some(Ok(doc)) = artifact.filter(|a| a.as_ref().is_ok_and(|d| !d.sha.is_empty() && !d.gate.is_empty())) {
+                let note = self.notes.entry(item.id.clone()).or_default();
+                ui.add(egui::TextEdit::singleline(note).hint_text(t(lang, "approve.note")).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 7)));
+                if primary(ui, p, t(lang, "approve.button"), !busy).clicked() {
+                    let body = json!({ "id": item.id, "version": item.version, "gate": doc.gate, "sha": doc.sha, "words": note.trim() });
+                    let done = t(lang, "approve.done");
+                    self.act(ctx, &item.id, move |s| client::post(s, "/api/approve", body).map(|_| done.to_string()));
                 }
             }
         }
@@ -402,36 +410,93 @@ impl App {
                 });
             }
         }
-        ui.horizontal_wrapped(|ui| {
-            if let Some(link) = item.link.as_ref().filter(|l| l.url.starts_with("http")) {
-                if ui.button(t(lang, "open.link")).clicked() { open_url(&link.url); }
-            }
-            if ui.button(t(lang, "open.web")).clicked() {
-                if let Some(session) = self.state.lock().unwrap().session.clone() { open_url(&session.page(Some(&item.id))); }
-            }
-        });
-        let recent: Vec<_> = item.events.iter().rev().take(4).collect();
-        if !recent.is_empty() {
-            ui.add_space(2.0);
-            ui.label(RichText::new(t(lang, "history")).color(p.muted).size(11.5).strong());
-            for event in recent {
-                ui.label(RichText::new(format!("{} · {} · {}", event.at, event.who, event.what)).color(p.muted).size(11.5));
-            }
+        let tickets = tickets(item);
+        if !tickets.is_empty() {
+            ui.horizontal_wrapped(|ui| {
+                for (label, url) in &tickets {
+                    if ui.button(format!("↗ {label}")).on_hover_text(url).clicked() { open_url(url); }
+                }
+            });
         }
         if busy { ui.spinner(); }
     }
 
-    fn load_artifact(&self, ctx: &egui::Context, id: &str) {
+    /// The decision brief: summary, background, intent, open questions and risks; the full text folds below.
+    fn document(&mut self, ui: &mut egui::Ui, p: &theme::Palette, item: &Item, doc: &Artifact) {
+        let lang = self.lang;
+        let sections = sections(&doc.markdown);
+        let brief: Vec<(&str, &str)> = BRIEF.iter()
+            .filter_map(|(heading, key)| sections.iter().find(|(title, _)| title.eq_ignore_ascii_case(heading)).map(|(_, body)| (t(lang, key), body.as_str())))
+            .filter(|(_, body)| !body.trim().is_empty())
+            .collect();
+        if brief.is_empty() {
+            markdown(ui, p, &doc.markdown);
+            return;
+        }
+        for (label, body) in brief {
+            ui.add_space(2.0);
+            ui.label(RichText::new(label).color(p.accent).size(11.5).strong());
+            markdown(ui, p, body);
+        }
+        egui::CollapsingHeader::new(RichText::new(t(lang, "doc.full")).color(p.muted).size(12.0))
+            .id_salt(("full", &item.id))
+            .show(ui, |ui| {
+                ui.label(RichText::new(&doc.file).color(p.muted).size(11.0));
+                egui::ScrollArea::vertical().id_salt(("doc", &item.id)).max_height(320.0).show(ui, |ui| { ui.set_width(ui.available_width()); markdown(ui, p, &doc.markdown); });
+            });
+    }
+
+    fn load_artifact(&self, ctx: &egui::Context, item: &Item) {
         let Some(session) = self.state.lock().unwrap().session.clone() else { return };
-        let (state, ctx, id) = (self.state.clone(), ctx.clone(), id.to_string());
-        state.lock().unwrap().artifacts.insert(id.clone(), Ok(Artifact { gate: String::new(), file: String::new(), markdown: String::new(), sha: String::new() }));
+        let (state, ctx, id, key) = (self.state.clone(), ctx.clone(), item.id.clone(), artifact_key(item));
+        state.lock().unwrap().artifacts.insert(key.clone(), Ok(Artifact { gate: String::new(), file: String::new(), markdown: String::new(), sha: String::new() }));
         std::thread::spawn(move || {
             let result = client::artifact(&session, &id);
-            state.lock().unwrap().artifacts.insert(id, result);
+            state.lock().unwrap().artifacts.insert(key, result);
             ctx.request_repaint();
         });
     }
 }
+
+/// Sections worth reading before a decision, in reading order: intent.md and PLAN.md headings.
+const BRIEF: &[(&str, &str)] = &[
+    ("At a glance", "doc.summary"), ("Summary", "doc.summary"),
+    ("Why this came up", "doc.background"), ("Understanding", "doc.background"),
+    ("What we will do", "doc.intent"), ("AS-IS → TO-BE", "doc.change"),
+    ("Questions for you", "doc.questions"), ("Out of scope and open questions", "doc.questions"),
+    ("Risks", "doc.risks"), ("Side effects", "doc.risks"),
+];
+
+fn sections(markdown: &str) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    for line in markdown.lines() {
+        if let Some(title) = line.strip_prefix("## ") { out.push((title.trim().to_string(), String::new())); }
+        else if let Some((_, body)) = out.last_mut() { body.push_str(line); body.push('\n'); }
+    }
+    out
+}
+
+fn has_document(item: &Item) -> bool {
+    !item.done && item.sdlc.is_some() && item.project.as_deref().is_some_and(|p| !p.is_empty()) && item.error.is_none()
+}
+
+/// The tickets behind an item: its link first, then other ticket URLs in its question or action.
+fn tickets(item: &Item) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    if let Some(link) = item.link.as_ref().filter(|l| l.url.starts_with("http")) { out.push((link.label.clone(), link.url.clone())); }
+    let text = format!("{} {}", item.waiting, item.sdlc.as_ref().map(|s| s.action.as_str()).unwrap_or(""));
+    for word in text.split(|c: char| c.is_whitespace() || "()<>\"'".contains(c)) {
+        let url = word.trim_end_matches(['.', ',', ';', ')']);
+        if (url.starts_with("https://") || url.starts_with("http://")) && url.contains("/browse/") && !out.iter().any(|(_, u)| u == url) {
+            let label = url.rsplit('/').next().unwrap_or(url).to_string();
+            out.push((label, url.to_string()));
+        }
+    }
+    out
+}
+
+/// A document is cached per item version, so an edited intent or plan is fetched again.
+fn artifact_key(item: &Item) -> String { format!("{}:{}", item.id, item.version) }
 
 struct Args { session: PathBuf, kit: PathBuf, node: String, lang: String }
 

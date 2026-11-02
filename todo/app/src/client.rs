@@ -15,12 +15,6 @@ pub struct Session {
 
 impl Session {
     pub fn origin(&self) -> String { format!("http://127.0.0.1:{}", self.port) }
-    pub fn page(&self, id: Option<&str>) -> String {
-        match id {
-            Some(id) => format!("{}/#t={}&id={}", self.origin(), self.token, id),
-            None => format!("{}/#t={}", self.origin(), self.token),
-        }
-    }
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -46,13 +40,6 @@ pub struct Sdlc {
 }
 
 #[derive(Clone, Default, Deserialize)]
-pub struct Event {
-    pub at: String,
-    pub who: String,
-    pub what: String,
-}
-
-#[derive(Clone, Default, Deserialize)]
 pub struct Item {
     pub id: String,
     pub title: String,
@@ -68,8 +55,6 @@ pub struct Item {
     pub error: Option<String>,
     #[serde(default)]
     pub sdlc: Option<Sdlc>,
-    #[serde(default)]
-    pub events: Vec<Event>,
     pub version: String,
     pub turn: Turn,
 }
