@@ -183,6 +183,7 @@ This optional add-on requires Node 18+; the core loop still needs only bash.
 
 ```bash
 cargo build --release --manifest-path ~/sdlc-kit/todo/app/Cargo.toml   # once, for the app (Rust 1.88+)
+SDLC_TODO_LANG=ko bash ~/sdlc-kit/todo/app/install-macos.sh            # macOS: also add it to ~/Applications
 node ~/sdlc-kit/todo/todo.mjs                     # the app (TUI with its web link if the app is not built)
 node ~/sdlc-kit/todo/todo.mjs --ui tui,web        # any of tui, web, app
 node ~/sdlc-kit/todo/todo.mjs web --open          # web page only
@@ -196,7 +197,7 @@ Press `L` in the TUI or use the page's language menu to switch until restart or 
 Statuses say who acts next: your turn (approve intent, approve plan or answer), agent working, answered — not picked up yet, not started, blocked — fix needed, or done; the row where agents stop says so.
 A reply shows "answered — no agent has picked it up yet" until an agent reads it with `next` or `take`; after an sdlc wait the item then waits for you again until sdlc.sh moves on. A worker that waits on you outside sdlc (an approval, a ticket answer) records it with `wait` and drops it with `resume`.
 All surfaces share one server: the first launch writes its port and token to `todo-web.json` beside the to-do file (owner-only), and later launches, the app and `todo.mjs serve` reuse it while it answers.
-The app (`todo/app`, macOS and Windows) sits in the menu bar or tray with a count of items that need you, notifies you when one appears, and shows each decision as what to decide, a one-line summary and why (the full work document folds away), opens the related tickets, and answers, approves and requests fixes through the same web API, so it never writes `todo.md` itself; closing the window keeps it in the tray, and Quit stops the server it started.
+The app (`todo/app`, macOS and Windows) sits in the menu bar or tray with a count of items that need you, notifies you when one appears, and shows each decision as what to decide, a one-line summary and why (the full work document folds away), opens the related tickets, and answers, approves and requests fixes through the same web API, so it never writes `todo.md` itself; closing the window keeps it in the tray, and Quit stops the server it started. On macOS, `todo/app/install-macos.sh [DIR]` builds `sdlc To-do.app` (name: `SDLC_TODO_APP_NAME`) in `~/Applications`; its Info.plist records the kit, node, language and `SDLC_TODO`, because Finder starts apps without a shell `PATH`. Run it again after updating the kit or moving node.
 **Fix by agent** (app and page button, TUI `f`) on a blocked sdlc item records `fix requested`; the next `next` or `take` hands the block to an agent once (exit `0`, `"fix": true`), then it stops the queue again until cleared.
 To start an agent right away, put a command in `todo-agent.json` beside the to-do file, for example `{"fix": ["claude", "-p", "follow {kit}/todo/AGENT.md; take {id} and clear its block"]}`; `{id}`, `{kit}` and `{project}` are filled in and it runs detached in the project.
 To add a language, copy `todo/locales/en.mjs` to `todo/locales/<code>.mjs`, translate `name` and every message, and add its import to `locales` in `todo/i18n.mjs`.
@@ -256,9 +257,9 @@ feature driven through all four phases on a small CLI fixture. CI runs it on
 Linux, macOS and Windows. When `node` is on `PATH`, the selftest also runs the
 to-do suites (`node --test tests/todo*.test.mjs`).
 
-Last observed (2026-10-28, `bash tests/selftest.sh` in CI on ubuntu-latest):
-133 selftest checks passed and the to-do suites reported 183 tests, 183
-passed, 0 failed, 0 skipped. macOS also passed 133 checks; Windows passed 131 and
+Last observed (2026-11-02, `bash tests/selftest.sh` in CI on main, macos-latest):
+133 selftest checks passed and the to-do suites reported 192 tests, 192
+passed, 0 failed, 0 skipped. Linux also passed 133 checks; Windows passed 131 and
 skipped 2 that need POSIX signals or permissions
 ([run 40613802450](https://github.com/cskwork/sdlc-kit/actions/runs/40613802450)).
 The full selftest takes several minutes because it creates many throwaway git
