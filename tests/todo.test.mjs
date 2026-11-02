@@ -888,3 +888,94 @@ test('M: nativePath converts MSYS paths only on Windows and propagates conversio
   const failure = new Error('cygpath unavailable');
   await assert.rejects(nativePath('/tmp/inbox', { platform: 'win32', runner: async () => { throw failure; } }), error => error === failure);
 });
+
+test('--ui picks surfaces and refuses unknown, repeated or conflicting choices', async t => {
+  const { file } = scratch(t);
+  for (const args of [['--ui', 'tray'], ['--ui', 'tui,tui'], ['--ui', 'app', '--no-web'], ['--ui', '']]) {
+    const result = checkCode(await cli(file, args), 2);
+    assert.match(result.stderr, /--ui|--no-web/, args.join(' '));
+  }
+});
+
+test('an unbuilt app fails when chosen and falls back to the TUI by default', async t => {
+  const { root, file } = scratch(t);
+  const env = { SDLC_TODO_APP: join(root, 'missing-app') };
+  const chosen = checkCode(await cli(file, ['--ui', 'app'], { env }), 2);
+  assert.match(chosen.stderr, /not built: cargo build --release --manifest-path .*Cargo\.toml/);
+  const fallback = checkCode(await cli(file, [], { env }), 2);
+  assert.match(fallback.stderr, /opening the TUI instead/);
+  assert.match(fallback.stderr, /terminal is required/);
+});
+
+test('the app starts detached with the session, kit, node and language', { skip: process.platform === 'win32' && 'POSIX shell app stub' }, async t => {
+  const { root, file } = scratch(t);
+  const app = join(root, 'app.sh'), out = join(root, 'args.txt');
+  writeFileSync(app, `#!/bin/sh\nprintf '%s\\n' "$@" > '${out}'\n`, { mode: 0o755 });
+  checkCode(await cli(file, ['--ui', 'app', '--lang', 'ko'], { env: { SDLC_TODO_APP: app } }), 0);
+  for (let i = 0; i < 100 && !existsSync(out); i++) await new Promise(r => setTimeout(r, 50));
+  assert.deepEqual(readFileSync(out, 'utf8').trim().split('\n'),
+    ['--session', join(root, 'todo-web.json'), '--kit', kit + (kit.endsWith('/') ? '' : '/'), '--node', process.execPath, '--lang', 'ko']);
+});
+
+test('serve writes the session once and a second serve reuses the running server', async t => {
+  const { root, file } = scratch(t);
+  const session = join(root, 'todo-web.json');
+  const child = spawn(process.execPath, [entry, 'serve'], { env: { ...process.env, SDLC_TODO: file }, stdio: 'ignore' });
+  t.after(() => child.kill());
+  for (let i = 0; i < 200 && !existsSync(session); i++) await new Promise(r => setTimeout(r, 50));
+  assert.ok(existsSync(session), 'serve wrote the session file');
+  const again = checkCode(await cli(file, ['serve']), 0);
+  assert.match(again.stdout, /already running/);
+  if (process.platform === 'win32') return;
+  const exited = new Promise(r => child.once('exit', r));
+  child.kill('SIGTERM');
+  await exited;
+  assert.equal(existsSync(session), false, 'serve removes its session on SIGTERM');
+});
+
+async function blockedItem(t) {
+  const { root, file } = scratch(t);
+  const dir = project(root);
+  mkdirSync(join(dir, '.sdlc', 'work', 'legacy'));
+  const item = await core.add(file, 'Blocked legacy', { project: dir, slug: 'legacy' });
+  await core.add(file, 'Open second');
+  await core.sync(file, { kit });
+  return { root, file, dir, item: core.load(file).items.find(i => i.id === item.id) };
+}
+
+test('a fix request hands a block to the next agent once, unlike a plain reply', async t => {
+  const { root, file, item } = await blockedItem(t);
+  assert.equal(statusOf(item).actor, 'blocked');
+  const model = core.load(file);
+  const { launch } = await core.requestFix(file, item.id, core.itemVersion(model.items.find(i => i.id === item.id), model), { kit });
+  assert.equal(launch, 'queued', 'no todo-agent.json: the next agent run picks it up');
+  const requested = core.load(file).items.find(i => i.id === item.id);
+  assert.deepEqual(statusOf(requested), { actor: 'agent', kind: 'handoff' });
+  const handed = await next(file, 0);
+  assert.equal(handed.id, item.id);
+  assert.equal(handed.state, 'BLOCKED');
+  assert.equal(handed.fix, true);
+  assert.equal((await next(file, 20)).id, item.id, 'the request is read once; the block stops the queue again');
+  assert.ok(existsSync(join(root, 'todo.md')));
+});
+
+test('a fix request is refused for items that are not blocked', async t => {
+  const { file } = scratch(t);
+  const open = await core.add(file, 'Workable');
+  await assert.rejects(core.requestFix(file, open.id, undefined, { kit }), error => error.status === 409);
+  assert.equal(core.load(file).items[0].events.length, 1, 'nothing recorded');
+});
+
+test('todo-agent.json starts the human-configured fix command with placeholders filled', { skip: process.platform === 'win32' && 'POSIX shell agent stub' }, async t => {
+  const { root, file, dir, item } = await blockedItem(t);
+  const agent = join(root, 'agent.sh'), out = join(root, 'agent-args.txt');
+  writeFileSync(agent, `#!/bin/sh\n{ pwd; printf '%s\\n' "$@"; } > '${out}'\n`, { mode: 0o755 });
+  writeFileSync(join(root, 'todo-agent.json'), JSON.stringify({ fix: [agent, 'take {id}', '{project}', '{kit}'] }));
+  const { launch } = await core.requestFix(file, item.id, undefined, { kit });
+  assert.equal(launch, 'started');
+  for (let i = 0; i < 100 && !existsSync(out); i++) await new Promise(r => setTimeout(r, 50));
+  assert.deepEqual(readFileSync(out, 'utf8').trim().split('\n'), [realpathSync(dir), `take ${item.id}`, dir, kit]);
+  writeFileSync(join(root, 'todo-agent.json'), JSON.stringify({ fix: 'not an array' }));
+  const bad = await core.requestFix(file, item.id, undefined, { kit });
+  assert.match(bad.launch, /^failed: .*fix must be a non-empty array/);
+});

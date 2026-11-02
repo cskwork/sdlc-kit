@@ -1,0 +1,23 @@
+[package]
+name = "sdlc-todo"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+resolver = "3"
+description = "Tray app for the sdlc-kit personal to-do: a badge, notifications, replies, approvals and agent fixes"
+license = "MIT"
+publish = false
+
+[dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+tray-icon = "0.20"
+notify-rust = "4"
+ureq = { version = "2", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

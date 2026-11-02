@@ -7,6 +7,7 @@ import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as core from './core.mjs';
 import { defaultLanguage, isLanguage, languages } from './i18n.mjs';
+import { statusOf } from './status.mjs';
 
 const execute = promisify(execFile);
 const defaultKit = fileURLToPath(new URL('../', import.meta.url));
@@ -92,7 +93,7 @@ function readBody(req) {
     req.on('aborted', () => reject(Object.assign(new Error('request aborted'), { status: 400 })));
   });
 }
-function openBrowser(url) {
+export function openBrowser(url) {
   const [command, args] = process.platform === 'darwin' ? ['/usr/bin/open', [url]] :
     process.platform === 'win32' ? ['rundll32.exe', ['url.dll,FileProtocolHandler', url]] : ['xdg-open', [url]];
   return new Promise((resolve, reject) => {
@@ -102,7 +103,32 @@ function openBrowser(url) {
   });
 }
 
-export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage } = {}) {
+// The session file lets the app and later launches reach a running server; it holds the token, so only the owner may read it.
+const urlOf = session => `http://127.0.0.1:${session.port}/#t=${session.token}`;
+function writeSession(file, session) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, `${JSON.stringify(session)}\n`, { mode: 0o600 });
+  fs.chmodSync(temp, 0o600);
+  fs.renameSync(temp, file);
+}
+function readSession(file) {
+  try {
+    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return Number.isInteger(value?.port) && /^[a-f0-9]{32}$/.test(value.token) ? value : null;
+  } catch { return null; }
+}
+export async function liveSession(file = core.sessionPath()) {
+  const session = readSession(file);
+  if (!session) return null;
+  try {
+    const response = await fetch(`http://127.0.0.1:${session.port}/api/items`, { headers: { 'X-Todo-Token': session.token }, signal: AbortSignal.timeout(2000) });
+    await response.body?.cancel();
+    return response.ok ? { ...session, url: urlOf(session) } : null;
+  } catch { return null; }
+}
+
+export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage, session = '' } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('invalid port');
   if (!isLanguage(lang)) throw new Error(`invalid language: ${lang}`);
   if (!onUrl && !open && !process.stdout.isTTY) throw new Error('web requires a terminal or --open');
@@ -111,7 +137,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   const clients = new Set();
   const payload = () => {
     const model = core.load(file);
-    return { items: model.items.map(item => ({ ...item, version: core.itemVersion(item, model) })), file, lang };
+    return { items: model.items.map(item => ({ ...item, version: core.itemVersion(item, model), turn: statusOf(item) })), file, lang };
   };
   const sendEvent = (res, value, event = '') => res.write(`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(value)}\n\n`);
   const broadcast = () => {
@@ -163,6 +189,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
       }
       const body = await readBody(req);
       if (req.method !== 'POST') { json(405, { error: 'method not allowed' }); return; }
+      let launch;
       if (url.pathname === '/api/items') {
         await core.add(file, text(body.text, 'text'), { by: 'human' });
       } else if (url.pathname === '/api/item') {
@@ -183,6 +210,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
             }, version); break;
           case 'delete': await core.remove(file, id, version); break;
           case 'reply': await core.reply(file, id, text(body.text, 'reply'), version); break;
+          case 'fix': ({ launch } = await core.requestFix(file, id, version, { kit })); break;
           default: fail(400, 'invalid operation');
         }
       } else if (url.pathname === '/api/approve') {
@@ -201,7 +229,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
         }, body.version ?? null);
         await core.sync(file, { kit });
       } else { json(404, { error: 'not found' }); return; }
-      json(200, payload());
+      json(200, launch ? { ...payload(), launch } : payload());
     } catch (error) {
       if (res.headersSent) { res.end(); return; }
       if (error.status === 403) { res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Forbidden\n'); }
@@ -222,6 +250,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
     if (!closing) {
       stopWatch();
       clearInterval(keepalive);
+      if (session && readSession(session)?.token === token) fs.rmSync(session, { force: true });
       for (const res of clients) res.end();
       clients.clear();
       closing = new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
@@ -229,8 +258,9 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
     }
     return closing;
   };
-  const url = `http://127.0.0.1:${actualPort}/#t=${token}`;
+  const url = urlOf({ port: actualPort, token });
   try {
+    if (session) writeSession(session, { port: actualPort, token, pid: process.pid });
     if (onUrl) await onUrl(url);
     if (open) await openBrowser(url);
     else if (!onUrl) process.stdout.write(`${url}\n`);
