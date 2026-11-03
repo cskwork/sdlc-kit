@@ -13,7 +13,7 @@ Agents outside sdlc (for example an automated factory) put human decisions on th
 - **Web `/api/artifact`:** an open item with a brief returns `{ gate: '', file, markdown, sha }` from that file (404 when missing, 409 when not absolute), without needing a project or slug. An sdlc item at an approval gate keeps serving its gated intent/PLAN so approval still works; sdlc items without a brief are unchanged.
 - **App and page:** an open item with a brief shows it as a work document, like an sdlc item. Approval stays gate-only.
 - **App brief in three blocks:** for any item with a document the app now shows Background, then Why, then one question box that holds the call (Your call or Questions for you), the gist (What changes) and the agent's waiting line. The separate "Your call" and "In one line" lists are gone because they repeated the question box; the full document still folds below.
-- **`todo/AGENT.md`:** how to attach a brief and which At a glance labels to use.
+- **Docs:** the CLI usage and README describe `brief`; `todo/AGENT.md` stays within its 600-word budget.
 
 ## Validation
 
