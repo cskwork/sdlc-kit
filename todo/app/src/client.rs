@@ -55,6 +55,8 @@ pub struct Item {
     pub error: Option<String>,
     #[serde(default)]
     pub sdlc: Option<Sdlc>,
+    #[serde(default)]
+    pub brief: String,
     pub version: String,
     pub turn: Turn,
 }

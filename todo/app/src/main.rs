@@ -350,7 +350,6 @@ impl App {
         let lang = self.lang;
         let dark = ui.visuals().dark_mode;
         let action = item.sdlc.as_ref().map(|s| s.action.clone()).unwrap_or_default();
-        // The question or problem comes first: it is what the human decides on.
         let (label, ask) = match item.turn.actor.as_str() {
             // A gate's sdlc action is a command for agents; say what it asks in words.
             "you" if !item.turn.gate.is_empty() && item.waiting.is_empty() => (t(lang, "waits"), t(lang, if item.turn.gate == "plan" { "ask.plan" } else { "ask.intent" }).to_string()),
@@ -358,23 +357,31 @@ impl App {
             "blocked" => (t(lang, "problem"), item.error.clone().unwrap_or(action.clone())),
             _ => ("", String::new()),
         };
-        if !ask.is_empty() {
+        // The brief comes from the work document (intent.md or PLAN.md) or the item's brief file.
+        let doc = if !has_document(item) { None } else {
+            match artifact {
+                None => { self.load_artifact(ctx, item); None }
+                Some(Err(error)) => { ui.label(RichText::new(error).color(theme::tone("blocked", dark).0).size(12.0)); None }
+                Some(Ok(doc)) if doc.sha.is_empty() => { ui.label(RichText::new(t(lang, "doc.loading")).color(p.muted).size(12.0)); None }
+                Some(Ok(doc)) => Some(doc),
+            }
+        };
+        let [decide, summary, background, why] = doc.map(glance).unwrap_or_default();
+        // Situation and reason first, then one box with the call, its gist and the agent's question.
+        for (key, lines) in [("doc.background", &background), ("doc.why", &why)] { bullets(ui, p, t(lang, key), lines); }
+        let mut asked: Vec<String> = decide.into_iter().chain(summary).collect();
+        if !ask.is_empty() { asked.push(clip(&ask, 160)); }
+        if !label.is_empty() && !asked.is_empty() {
             let (fg, bg) = theme::tone(&item.turn.actor, dark);
             egui::Frame::new().fill(bg).corner_radius(CornerRadius::same(10)).inner_margin(Margin::symmetric(12, 10)).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.label(RichText::new(label).color(fg).size(11.5).strong());
-                ui.label(RichText::new(clip(&ask, 160)).size(13.5)).on_hover_text(&ask);
+                for line in &asked { ui.label(RichText::new(line).size(13.5)).on_hover_text(&ask); }
             });
+        } else {
+            bullets(ui, p, t(lang, "doc.summary"), &asked);
         }
-        // Background and intent come from the work document (intent.md or PLAN.md).
-        if has_document(item) {
-            match artifact {
-                None => self.load_artifact(ctx, item),
-                Some(Err(error)) => { ui.label(RichText::new(error).color(theme::tone("blocked", dark).0).size(12.0)); }
-                Some(Ok(doc)) if doc.sha.is_empty() => { ui.label(RichText::new(t(lang, "doc.loading")).color(p.muted).size(12.0)); }
-                Some(Ok(doc)) => self.document(ui, p, item, doc),
-            }
-        }
+        if let Some(doc) = doc { self.document(ui, p, item, doc); }
         ui.add_space(2.0);
         if item.turn.actor == "you" && item.turn.kind == "answer" {
             let draft = self.drafts.entry(item.id.clone()).or_default();
@@ -423,31 +430,9 @@ impl App {
         if busy { ui.spinner(); }
     }
 
-    /// The decision brief: what to decide, the gist and why, a few short lines each; the rest folds away.
+    /// The whole work document, folded away under the brief.
     fn document(&mut self, ui: &mut egui::Ui, p: &theme::Palette, item: &Item, doc: &Artifact) {
-        let lang = self.lang;
-        let sections = sections(&doc.markdown);
-        let body = |names: &[&str]| sections.iter().find(|(title, _)| names.iter().any(|n| title.eq_ignore_ascii_case(n))).map(|(_, b)| b.as_str()).unwrap_or("");
-        // At a glance carries the four lines by label; older documents fall back to their sections.
-        let glance = body(&["At a glance"]);
-        let field = |label: &str| labeled(glance, label);
-        let or = |line: Option<String>, names: &[&str], limit: usize| line.map(|l| vec![l]).unwrap_or_else(|| points(body(names), limit));
-        let questions = points(body(&["Questions for you", "Out of scope and open questions"]), 3);
-        let decide = field("Your call").map(|l| vec![l]).filter(|_| questions.is_empty()).unwrap_or(questions);
-        let brief = [
-            ("doc.questions", decide),
-            ("doc.summary", or(field("What changes"), &["Summary"], 1)),
-            ("doc.background", or(field("Background"), &["Understanding"], 1)),
-            ("doc.why", or(field("Why"), &["Why this came up"], 1)),
-        ];
-        for (key, lines) in brief.iter().filter(|(_, lines)| !lines.is_empty()) {
-            ui.add_space(2.0);
-            ui.label(RichText::new(t(lang, key)).color(p.accent).size(11.5).strong());
-            for line in lines {
-                ui.horizontal_top(|ui| { ui.label(RichText::new("•").color(p.accent)); ui.add(egui::Label::new(RichText::new(line).size(13.0)).wrap()); });
-            }
-        }
-        egui::CollapsingHeader::new(RichText::new(t(lang, "doc.full")).color(p.muted).size(12.0))
+        egui::CollapsingHeader::new(RichText::new(t(self.lang, "doc.full")).color(p.muted).size(12.0))
             .id_salt(("full", &item.id))
             .show(ui, |ui| {
                 ui.label(RichText::new(&doc.file).color(p.muted).size(11.0));
@@ -464,6 +449,28 @@ impl App {
             state.lock().unwrap().artifacts.insert(key, result);
             ctx.request_repaint();
         });
+    }
+}
+
+/// The decision brief as [call, gist, background, why], a few short lines each.
+/// At a glance carries the four lines by label; older documents fall back to their sections.
+fn glance(doc: &Artifact) -> [Vec<String>; 4] {
+    let sections = sections(&doc.markdown);
+    let body = |names: &[&str]| sections.iter().find(|(title, _)| names.iter().any(|n| title.eq_ignore_ascii_case(n))).map(|(_, b)| b.as_str()).unwrap_or("");
+    let glance = body(&["At a glance"]);
+    let field = |label: &str| labeled(glance, label);
+    let or = |line: Option<String>, names: &[&str], limit: usize| line.map(|l| vec![l]).unwrap_or_else(|| points(body(names), limit));
+    let questions = points(body(&["Questions for you", "Out of scope and open questions"]), 3);
+    let decide = field("Your call").map(|l| vec![l]).filter(|_| questions.is_empty()).unwrap_or(questions);
+    [decide, or(field("What changes"), &["Summary"], 1), or(field("Background"), &["Understanding"], 1), or(field("Why"), &["Why this came up"], 1)]
+}
+
+fn bullets(ui: &mut egui::Ui, p: &theme::Palette, title: &str, lines: &[String]) {
+    if lines.is_empty() { return; }
+    ui.add_space(2.0);
+    ui.label(RichText::new(title).color(p.accent).size(11.5).strong());
+    for line in lines {
+        ui.horizontal_top(|ui| { ui.label(RichText::new("•").color(p.accent)); ui.add(egui::Label::new(RichText::new(line).size(13.0)).wrap()); });
     }
 }
 
@@ -506,7 +513,7 @@ fn clip(text: &str, max: usize) -> String {
 }
 
 fn has_document(item: &Item) -> bool {
-    !item.done && item.sdlc.is_some() && item.project.as_deref().is_some_and(|p| !p.is_empty()) && item.error.is_none()
+    !item.done && (!item.brief.is_empty() || item.sdlc.is_some() && item.project.as_deref().is_some_and(|p| !p.is_empty()) && item.error.is_none())
 }
 
 /// The tickets behind an item: its link first, then other ticket URLs in its question or action.
