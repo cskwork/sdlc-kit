@@ -2,7 +2,7 @@
 
 Work the first Open item in its project; stop there whenever it needs the human.
 Follow `<kit>/SKILL.md` and its phase files for all sdlc work.
-Use Node 18+ for the to-do commands; replace `<kit>` with the kit's absolute path.
+Use Node 18+; `<kit>` is the kit's absolute path.
 Prefix the commands below with `node <kit>/todo/todo.mjs` unless they name `sdlc.sh`.
 
 ## Select
@@ -29,6 +29,7 @@ If the item has a project, `cd` there.
 In that project, if `.sdlc/` is absent, run `bash <kit>/sdlc.sh init` and configure it per SKILL.md.
 If no project is set and the work needs a repository, run `wait <id> "which project?"` and stop.
 Record the repositories you change with `repos <id> <a,b>`.
+To ask outside sdlc, fill `<kit>/todo/brief.md`, attach it with `brief`, offer `choices --pick`.
 
 For a change or fix without a slug, run `bash <kit>/sdlc.sh new <slug>`, then `start <id> --slug <slug>`.
 For an existing slug, resume through `bash <kit>/sdlc.sh next <slug>`.
@@ -37,12 +38,11 @@ It is idempotent per project and slug; keep the returned id.
 Follow the sdlc loop, its gates and authority rules.
 After each phase, run `phase <id> <phase>` to record the current phase.
 When sdlc needs the human for a gate approval or an intent Questions for you item, report it and stop; `next` syncs that wait from sdlc.sh (exit 10).
-Use `wait` only for questions sdlc.sh does not track, such as which project or a question outside an sdlc artifact.
+Use `wait` only for questions sdlc.sh does not track (which project, or a question outside an sdlc artifact).
 When your wait ends without a human reply, run `resume <id> ["note"]`.
 After `bash <kit>/sdlc.sh close ...` succeeds, run `done <id> "<result>"`.
 
-For explanations or research, answer directly and run `done <id> "<result>"`.
-After completing an item, run `next --json` again and route by its exit code.
+For explanations or research, answer directly, run `done <id> "<result>"`, then `next --json` again.
 
 ## Record chat decisions
 
