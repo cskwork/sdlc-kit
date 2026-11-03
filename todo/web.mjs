@@ -154,6 +154,10 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
     catch (error) { for (const res of clients) sendEvent(res, { error: error.message }, 'error'); }
   };
   await core.sync(file, { kit });
+  // Reads share one sync: each runs sdlc.sh status per item, so a burst of artifact requests
+  // (one per open card) would otherwise queue many multi-second syncs and time the app out.
+  let syncing = null;
+  const synced = () => (syncing ??= core.sync(file, { kit }).finally(() => { syncing = null; }));
   let actualPort;
   const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
@@ -183,11 +187,12 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
           // Liveness only: /api/items syncs every sdlc item and can take seconds on a long list.
           json(200, { ok: true });
         } else if (url.pathname === '/api/items') {
-          await core.sync(file, { kit });
+          await synced();
           json(200, payload());
         } else if (url.pathname === '/api/artifact') {
-          await core.sync(file, { kit });
-          const item = itemFor(file, url.searchParams.get('id'));
+          // A plain item's brief is only a file read; sync only when an sdlc document is needed.
+          let item = itemFor(file, url.searchParams.get('id'));
+          if (!item.brief || item.sdlc) { await synced(); item = itemFor(file, url.searchParams.get('id')); }
           json(200, item.brief && !gateIn(item) ? briefDocument(item) : await artifact(item, documentGate(item), kit, statusRunner));
         } else if (url.pathname === '/events') {
           const initial = payload();

@@ -15,6 +15,7 @@ Agents outside sdlc (for example an automated factory) put human decisions on th
 - **App brief in three blocks:** for any item with a document the app now shows Background, then Why, then one question box that holds the call (Your call or Questions for you), the gist (What changes) and the agent's waiting line. The separate "Your call" and "In one line" lists are gone because they repeated the question box; the full document still folds below.
 - **Phase stepper:** each card shows every sdlc phase (intent › plan › build › evidence › deliver › done) under its status, past phases ticked, the current one filled, then "Now X · next Y". A brief can name its ticket's phase with an At a glance `Phase:` line.
 - **Ticket beside Send:** when the human can answer, the item's ticket links sit next to the Send button instead of below the form.
+- **Shared sync for reads:** `/api/items` and `/api/artifact` share one in-flight sync. Each artifact request used to run its own full sync, so opening many cards at once queued syncs past the app's 30-second timeout.
 - **Liveness:** `/api/live` answers without syncing. The app and `serve` used `/api/items` with a 2-second limit, so a list with many sdlc items (each synced through `sdlc.sh status`) looked dead: the app kept starting new servers and never connected.
 - **Docs:** the CLI usage and README describe `brief`; `todo/AGENT.md` stays within its 600-word budget.
 
