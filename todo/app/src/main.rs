@@ -300,9 +300,30 @@ impl eframe::App for App {
                         ui.add_space(40.0);
                         ui.vertical_centered(|ui| ui.label(RichText::new(t(lang, if self.tab == Tab::Focus { "empty.focus" } else { "empty" })).color(p.muted)));
                     }
-                    for item in shown {
-                        self.card(ui, ctx, &p, dark, item, busy.contains(&item.id), artifacts.get(&artifact_key(item)));
-                        ui.add_space(8.0);
+                    // Items that need you for the same ticket sit together under its name, at the first one's place.
+                    let mut grouped: HashSet<&str> = HashSet::new();
+                    for item in &shown {
+                        let ticket = item.link.as_ref().filter(|l| needs_you(item) && !l.url.is_empty()).map(|l| (l.label.as_str(), l.url.as_str()));
+                        let members: Vec<&Item> = match ticket {
+                            Some((_, url)) => shown.iter().copied().filter(|i| needs_you(i) && i.link.as_ref().is_some_and(|l| l.url == url)).collect(),
+                            None => vec![*item],
+                        };
+                        if members.len() < 2 {
+                            self.card(ui, ctx, &p, dark, item, busy.contains(&item.id), artifacts.get(&artifact_key(item)));
+                            ui.add_space(8.0);
+                            continue;
+                        }
+                        let (label, url) = ticket.unwrap();
+                        if !grouped.insert(url) { continue; }
+                        ui.label(RichText::new(label).color(p.muted).size(13.0).strong());
+                        ui.add_space(4.0);
+                        for member in members {
+                            ui.horizontal_top(|ui| {
+                                ui.add_space(12.0);
+                                ui.vertical(|ui| self.card(ui, ctx, &p, dark, member, busy.contains(&member.id), artifacts.get(&artifact_key(member))));
+                            });
+                            ui.add_space(8.0);
+                        }
                     }
                 });
                 if let Some((text, error, _)) = toast {
@@ -393,6 +414,24 @@ impl App {
         bullets(ui, p, t(lang, "doc.why"), &or_missing(&why));
         if let Some(doc) = doc { self.document(ui, p, item, doc); }
         ui.add_space(2.0);
+        // One button per offered answer; a click sends that label as an ordinary reply, the recommended one first.
+        if !item.done && !item.choices.is_empty() {
+            let mut order: Vec<(usize, &String)> = item.choices.iter().enumerate().collect();
+            order.sort_by_key(|(i, _)| item.pick != Some(i + 1));
+            ui.horizontal_wrapped(|ui| {
+                for (i, label) in order {
+                    let clicked = if item.pick == Some(i + 1) {
+                        primary(ui, p, &format!("{label} · {}", t(lang, "choices.recommended")), !busy).clicked()
+                    } else {
+                        ui.add_enabled(!busy, egui::Button::new(RichText::new(label).strong()).corner_radius(CornerRadius::same(8)).min_size(egui::vec2(0.0, 30.0))).clicked()
+                    };
+                    if clicked {
+                        let (id, version, text, sent) = (item.id.clone(), item.version.clone(), label.clone(), t(lang, "reply.sent"));
+                        self.act(ctx, &id.clone(), move |s| client::post(s, "/api/item", json!({ "id": id, "version": version, "op": "reply", "text": text })).map(|_| sent.to_string()));
+                    }
+                }
+            });
+        }
         if item.turn.actor == "you" && item.turn.kind == "answer" {
             let draft = self.drafts.entry(item.id.clone()).or_default();
             let field = ui.add(egui::TextEdit::singleline(draft).hint_text(t(lang, "reply.hint")).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 7)));

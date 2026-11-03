@@ -10,6 +10,7 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
     let (en, ko) = match key {
         "title" => ("To-do", "할 일"),
         "repos" => ("Repos:", "저장소:"),
+        "choices.recommended" => ("Recommended", "권장"),
         "doc.none" => ("Not in the document yet", "문서에 아직 없어요"),
         "phase.intent" => ("Intent", "의도"),
         "phase.plan" => ("Plan", "계획"),

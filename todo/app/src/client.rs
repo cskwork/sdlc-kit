@@ -59,6 +59,10 @@ pub struct Item {
     pub brief: String,
     #[serde(default)]
     pub repos: Vec<String>,
+    #[serde(default)]
+    pub choices: Vec<String>,
+    #[serde(default)]
+    pub pick: Option<usize>,
     pub version: String,
     pub turn: Turn,
 }

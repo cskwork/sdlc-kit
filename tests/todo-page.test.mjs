@@ -289,6 +289,36 @@ test('B1: a reply draft keeps the version it was written for when a duplicate re
   assert.equal(body.text, 'Answer intended for A');
 });
 
+test('choices: an open item offers one button per label, the pick first; a click posts the label as a reply', async () => {
+  const p = page('#t=test-token', { fetch: async url => url === '/api/items' ? new Promise(() => {}) : { ok: true, text: async () => '{}' } });
+  vm.runInContext(`
+    items = [{ id: 'abcdef', title: '[결정 D35] A20-1462 · q', version: 'shown-A', done: false, status: 'waiting', waiting: '1) a · 2) b',
+      choices: ['원래 있던 실패로 보고 진행', '심사 시험부터 고친 뒤 진행', '보류'], pick: 2, events: [], notes: [] }];
+    openDetail('abcdef');
+  `, p.context);
+  const box = p.nodes.get('reply-choices');
+  assert.equal(box.hidden, false);
+  assert.deepEqual(box.children.map(b => b.textContent), ['심사 시험부터 고친 뒤 진행', '원래 있던 실패로 보고 진행', '보류']);
+  assert.equal(box.children[0].className, 'primary choice');
+  assert.equal(box.children[0].children[0].textContent, 'Recommended');
+  await box.children[1].listeners.click();
+  const body = JSON.parse(p.requests.find(r => r.url === '/api/item').options.body);
+  assert.deepEqual(body, { id: 'abcdef', version: 'shown-A', op: 'reply', text: '원래 있던 실패로 보고 진행' });
+  vm.runInContext(`items = [{ ...items[0], done: true, version: 'done-B' }]; renderDetail();`, p.context);
+  assert.equal(box.hidden, true, 'a done item keeps its choices as history but shows no buttons');
+});
+
+test('choices: open items that need you and share a ticket link list together under its heading', () => {
+  const p = page();
+  const order = vm.runInContext(`
+    const link = { label: 'A20-1462', url: 'https://jira/browse/A20-1462' };
+    const ask = (id, extra = {}) => ({ id, title: id, done: false, status: 'waiting', waiting: 'q', events: [], notes: [], ...extra });
+    apply({ items: [ask('d35', { link }), ask('other'), ask('busy', { link, status: 'workable' }), ask('d36', { link })] });
+    document.getElementById('open').children.map(li => li._head ? 'head:' + li.textContent : li.dataset.id);
+  `, p.context);
+  assert.deepEqual(order, ['head:A20-1462', 'd35', 'd36', 'other', 'busy']);
+});
+
 test('B1: approval sends the version of the item whose artifact was shown', async () => {
   const p = page('#t=test-token');
   vm.runInContext(`
