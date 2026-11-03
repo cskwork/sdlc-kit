@@ -122,7 +122,7 @@ function parse(source) {
     if (match) {
       const checked = match[1].toLowerCase() === 'x';
       item = { id: '', title: match[2].replace(/^~~(.*)~~$/, '$1'), done: section === 'done' || checked,
-        project: '', link: null, sdlc: null, waiting: '', brief: '', events: [], notes: [] };
+        project: '', link: null, sdlc: null, waiting: '', brief: '', repos: [], events: [], notes: [] };
       if (checked && section === 'open') item.checkedOpen = true;
       model.items.push(item);
       continue;
@@ -138,6 +138,7 @@ function parse(source) {
       item.sdlc = { slug, phase, state: sep < 0 ? stateAction : stateAction.slice(0, sep), action: sep < 0 ? '' : stateAction.slice(sep + 3) };
     } else if ((field = text.match(/^  - waiting: (.*)$/))) item.waiting = field[1];
     else if ((field = text.match(/^  - brief: (.*)$/))) item.brief = field[1];
+    else if ((field = text.match(/^  - repos: (.*)$/))) item.repos = repoList(field[1], { strict: false });
     else if ((field = text.match(/^  - (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) ([^:]+): (.*)$/))) item.events.push({ at: field[1], who: field[2], what: field[3] });
     else item.notes.push(text);
   }
@@ -158,6 +159,7 @@ function renderItem(item) {
   }
   if (item.waiting) lines.push(`  - waiting: ${item.waiting}`);
   if (item.brief) lines.push(`  - brief: ${item.brief}`);
+  if (item.repos?.length) lines.push(`  - repos: ${item.repos.join(', ')}`);
   for (const e of item.events) lines.push(`  - ${e.at} ${e.who}: ${e.what}`);
   lines.push(...item.notes);
   return lines.join('\n');
@@ -332,6 +334,14 @@ export function findItem(model, idOrSlug) {
   if (!matches.length) fail(`item not found: ${idOrSlug}`, 1);
   return matches[0];
 }
+// The repositories the work changes, shown on every view (e.g. "aidt-lms-api, aidt-viewer-api").
+// A hand-edited file keeps loading: parsing drops a bad name, only the command refuses one.
+const repoName = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/;
+export function repoList(value, { strict = true } = {}) {
+  const names = [...new Set(String(value ?? '').split(/[\s,]+/).filter(Boolean))];
+  if (strict && names.some(name => !repoName.test(name))) fail(`invalid repository name: ${value}`);
+  return names.filter(name => repoName.test(name));
+}
 // A brief is a markdown file a human reads before deciding; only an absolute path is trusted.
 function briefPath(value) {
   const brief = line(value);
@@ -352,7 +362,7 @@ export async function add(file, text, options = {}) {
     const by = line(options.by || 'agent');
     if (!/^[^:\r\n]+$/.test(by)) fail('invalid event author');
     const item = { id: '', title, done: false, project, link: linkValue(options.link ?? parsed.link),
-      sdlc: slug ? { slug, phase: 'intent', state: '', action: '' } : null, waiting: '', brief, events: [], notes: [] };
+      sdlc: slug ? { slug, phase: 'intent', state: '', action: '' } : null, waiting: '', brief, repos: [], events: [], notes: [] };
     model.items.splice(model.items.findIndex(i => i.done) < 0 ? model.items.length : model.items.findIndex(i => i.done), 0, item);
     event(item, by, 'added');
     identify(model);
@@ -425,6 +435,10 @@ export const resume = (file, id, words = '') => update(file, id, item => {
 export const answer = (file, id, words) => update(file, id, item => { item.waiting = ''; event(item, 'agent', `chat answer — ${line(words)}`); });
 export const note = (file, id, words) => update(file, id, item => event(item, 'agent', line(words)));
 export const brief = (file, id, value) => { const brief = briefPath(value); return update(file, id, item => { item.brief = brief; event(item, 'agent', brief ? `brief ${brief}` : 'brief cleared'); }); };
+export const repos = (file, id, value) => { const names = repoList(value); return update(file, id, item => {
+  if (JSON.stringify(item.repos || []) === JSON.stringify(names)) return;
+  item.repos = names; event(item, 'agent', names.length ? `repos ${names.join(', ')}` : 'repos cleared');
+}); };
 export const start = (file, id, slug, phase = 'intent') => update(file, id, item => { item.sdlc = { slug: line(slug), phase: line(phase), state: '', action: '' }; event(item, 'agent', `started ${item.sdlc.slug}`); });
 export const phase = (file, id, value) => update(file, id, item => { if (!item.sdlc) fail('item has no slug'); item.sdlc.phase = line(value); event(item, 'agent', `phase ${item.sdlc.phase}`); });
 export const approved = (file, id, gate, words) => update(file, id, item => event(item, 'human', `approved ${line(gate)} — "${line(words)}"`));
