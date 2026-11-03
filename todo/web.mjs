@@ -131,7 +131,7 @@ export async function liveSession(file = core.sessionPath()) {
   const session = readSession(file);
   if (!session) return null;
   try {
-    const response = await fetch(`http://127.0.0.1:${session.port}/api/items`, { headers: { 'X-Todo-Token': session.token }, signal: AbortSignal.timeout(2000) });
+    const response = await fetch(`http://127.0.0.1:${session.port}/api/live`, { headers: { 'X-Todo-Token': session.token }, signal: AbortSignal.timeout(2000) });
     await response.body?.cancel();
     return response.ok ? { ...session, url: urlOf(session) } : null;
   } catch { return null; }
@@ -179,6 +179,9 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
           const content = fs.readFileSync(path.join(here, name));
           res.writeHead(200, { 'Content-Type': type });
           res.end(content);
+        } else if (url.pathname === '/api/live') {
+          // Liveness only: /api/items syncs every sdlc item and can take seconds on a long list.
+          json(200, { ok: true });
         } else if (url.pathname === '/api/items') {
           await core.sync(file, { kit });
           json(200, payload());

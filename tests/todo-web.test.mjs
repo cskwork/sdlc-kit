@@ -128,8 +128,10 @@ test('S9: web token, Host, Origin, JSON and body-size boundaries reject hostile 
   const ctx = await web(t);
   const before = items(await request(ctx, '/api/items'), ctx.file);
   assert.deepEqual(before, []);
+  assert.deepEqual((await request(ctx, '/api/live')).json, { ok: true });
   for (const [label, pathname, options] of [
     ['missing token', '/api/items', { token: null }],
+    ['live missing token', '/api/live', { token: null }],
     ['bad token', '/api/items', { token: '0'.repeat(32) }],
     ['evil Host', '/api/items', { headers: { Host: 'evil.test' } }],
     ['evil Origin', '/api/items', { method: 'POST', body: { text: 'forged' }, headers: { Origin: 'http://evil.test' } }],
