@@ -323,12 +323,9 @@ impl App {
         let id = item.id.clone();
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                pill(ui, status_label(lang, item), &item.turn.actor, dark);
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if let Some(sdlc) = &item.sdlc { if !sdlc.phase.is_empty() { ui.label(RichText::new(&sdlc.phase).color(p.muted).size(11.5)); } }
-                });
-            });
+            pill(ui, status_label(lang, item), &item.turn.actor, dark);
+            // Where the work stands in the sdlc loop: every phase, the current one highlighted, then what comes next.
+            if let Some(phase) = phase_of(item, artifact) { ui.add_space(4.0); stepper(ui, p, lang, &phase); }
             ui.add_space(2.0);
             let header = ui.add(egui::Label::new(RichText::new(&item.title).size(14.5).strong()).sense(Sense::click()))
                 .on_hover_cursor(egui::CursorIcon::PointingHand);
@@ -350,7 +347,6 @@ impl App {
         let lang = self.lang;
         let dark = ui.visuals().dark_mode;
         let action = item.sdlc.as_ref().map(|s| s.action.clone()).unwrap_or_default();
-        // The question or problem comes first: it is what the human decides on.
         let (label, ask) = match item.turn.actor.as_str() {
             // A gate's sdlc action is a command for agents; say what it asks in words.
             "you" if !item.turn.gate.is_empty() && item.waiting.is_empty() => (t(lang, "waits"), t(lang, if item.turn.gate == "plan" { "ask.plan" } else { "ask.intent" }).to_string()),
@@ -358,30 +354,55 @@ impl App {
             "blocked" => (t(lang, "problem"), item.error.clone().unwrap_or(action.clone())),
             _ => ("", String::new()),
         };
-        if !ask.is_empty() {
+        // The brief comes from the work document (intent.md or PLAN.md) or the item's brief file.
+        let doc = if !has_document(item) { None } else {
+            match artifact {
+                None => { self.load_artifact(ctx, item); None }
+                Some(Err(error)) => { ui.label(RichText::new(error).color(theme::tone("blocked", dark).0).size(12.0)); None }
+                Some(Ok(doc)) if doc.sha.is_empty() => { ui.label(RichText::new(t(lang, "doc.loading")).color(p.muted).size(12.0)); None }
+                Some(Ok(doc)) => Some(doc),
+            }
+        };
+        let has_doc = doc.is_some();
+        let [decide, summary, background, why, pick] = doc.map(glance).unwrap_or_default();
+        // Situation (AS-IS), then one box with the question, what the agent will do (TO-BE), its pick and
+        // the reply line, then why. With a document all three always show; a missing part says so.
+        let missing = vec![t(lang, "doc.none").to_string()];
+        let or_missing = |lines: &Vec<String>| if lines.is_empty() && has_doc { missing.clone() } else { lines.clone() };
+        bullets(ui, p, t(lang, "doc.background"), &or_missing(&background));
+        let mut asked: Vec<String> = Vec::new();
+        // The document's question and the agent's waiting line are often the same words; show each once.
+        let key = |text: &str| text.split_whitespace().collect::<String>().chars().take(40).collect::<String>();
+        for line in decide.into_iter().chain(summary).chain(pick).chain((!ask.is_empty()).then(|| clip(&ask, 160))) {
+            if !asked.iter().any(|seen| key(seen) == key(&line)) { asked.push(line); }
+        }
+        if !label.is_empty() && !asked.is_empty() {
             let (fg, bg) = theme::tone(&item.turn.actor, dark);
             egui::Frame::new().fill(bg).corner_radius(CornerRadius::same(10)).inner_margin(Margin::symmetric(12, 10)).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.label(RichText::new(label).color(fg).size(11.5).strong());
-                ui.label(RichText::new(clip(&ask, 160)).size(13.5)).on_hover_text(&ask);
+                for line in &asked { ui.label(RichText::new(line).size(13.5)).on_hover_text(&ask); }
             });
+        } else {
+            bullets(ui, p, t(lang, "doc.summary"), &asked);
         }
-        // Background and intent come from the work document (intent.md or PLAN.md).
-        if has_document(item) {
-            match artifact {
-                None => self.load_artifact(ctx, item),
-                Some(Err(error)) => { ui.label(RichText::new(error).color(theme::tone("blocked", dark).0).size(12.0)); }
-                Some(Ok(doc)) if doc.sha.is_empty() => { ui.label(RichText::new(t(lang, "doc.loading")).color(p.muted).size(12.0)); }
-                Some(Ok(doc)) => self.document(ui, p, item, doc),
-            }
-        }
+        bullets(ui, p, t(lang, "doc.why"), &or_missing(&why));
+        if let Some(doc) = doc { self.document(ui, p, item, doc); }
         ui.add_space(2.0);
         if item.turn.actor == "you" && item.turn.kind == "answer" {
             let draft = self.drafts.entry(item.id.clone()).or_default();
-            ui.add(egui::TextEdit::singleline(draft).hint_text(t(lang, "reply.hint")).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 7)));
+            let field = ui.add(egui::TextEdit::singleline(draft).hint_text(t(lang, "reply.hint")).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 7)));
+            // Enter in the field sends, like the button; a single-line field loses focus on Enter.
+            let entered = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             ui.label(RichText::new(t(lang, "reply.help")).color(p.muted).size(11.5));
             let text = draft.trim().to_string();
-            if primary(ui, p, t(lang, "reply.send"), !busy && !text.is_empty()).clicked() {
+            // The ticket sits beside the send button: the human checks it before answering.
+            let send = ui.horizontal_wrapped(|ui| {
+                let send = primary(ui, p, t(lang, "reply.send"), !busy && !text.is_empty()).clicked();
+                ticket_buttons(ui, &tickets(item));
+                send
+            }).inner || (entered && !busy && !text.is_empty());
+            if send {
                 let (id, version, sent) = (item.id.clone(), item.version.clone(), t(lang, "reply.sent"));
                 self.drafts.remove(&item.id);
                 self.act(ctx, &id.clone(), move |s| client::post(s, "/api/item", json!({ "id": id, "version": version, "op": "reply", "text": text })).map(|_| sent.to_string()));
@@ -412,42 +433,15 @@ impl App {
                 });
             }
         }
-        let tickets = tickets(item);
-        if !tickets.is_empty() {
-            ui.horizontal_wrapped(|ui| {
-                for (label, url) in &tickets {
-                    if ui.button(format!("↗ {label}")).on_hover_text(url).clicked() { open_url(url); }
-                }
-            });
+        if !(item.turn.actor == "you" && item.turn.kind == "answer") {
+            ui.horizontal_wrapped(|ui| ticket_buttons(ui, &tickets(item)));
         }
         if busy { ui.spinner(); }
     }
 
-    /// The decision brief: what to decide, the gist and why, a few short lines each; the rest folds away.
+    /// The whole work document, folded away under the brief.
     fn document(&mut self, ui: &mut egui::Ui, p: &theme::Palette, item: &Item, doc: &Artifact) {
-        let lang = self.lang;
-        let sections = sections(&doc.markdown);
-        let body = |names: &[&str]| sections.iter().find(|(title, _)| names.iter().any(|n| title.eq_ignore_ascii_case(n))).map(|(_, b)| b.as_str()).unwrap_or("");
-        // At a glance carries the four lines by label; older documents fall back to their sections.
-        let glance = body(&["At a glance"]);
-        let field = |label: &str| labeled(glance, label);
-        let or = |line: Option<String>, names: &[&str], limit: usize| line.map(|l| vec![l]).unwrap_or_else(|| points(body(names), limit));
-        let questions = points(body(&["Questions for you", "Out of scope and open questions"]), 3);
-        let decide = field("Your call").map(|l| vec![l]).filter(|_| questions.is_empty()).unwrap_or(questions);
-        let brief = [
-            ("doc.questions", decide),
-            ("doc.summary", or(field("What changes"), &["Summary"], 1)),
-            ("doc.background", or(field("Background"), &["Understanding"], 1)),
-            ("doc.why", or(field("Why"), &["Why this came up"], 1)),
-        ];
-        for (key, lines) in brief.iter().filter(|(_, lines)| !lines.is_empty()) {
-            ui.add_space(2.0);
-            ui.label(RichText::new(t(lang, key)).color(p.accent).size(11.5).strong());
-            for line in lines {
-                ui.horizontal_top(|ui| { ui.label(RichText::new("•").color(p.accent)); ui.add(egui::Label::new(RichText::new(line).size(13.0)).wrap()); });
-            }
-        }
-        egui::CollapsingHeader::new(RichText::new(t(lang, "doc.full")).color(p.muted).size(12.0))
+        egui::CollapsingHeader::new(RichText::new(t(self.lang, "doc.full")).color(p.muted).size(12.0))
             .id_salt(("full", &item.id))
             .show(ui, |ui| {
                 ui.label(RichText::new(&doc.file).color(p.muted).size(11.0));
@@ -464,6 +458,76 @@ impl App {
             state.lock().unwrap().artifacts.insert(key, result);
             ctx.request_repaint();
         });
+    }
+}
+
+/// The decision brief as [call, gist, background, why], a few short lines each.
+/// At a glance carries the four lines by label; older documents fall back to their sections.
+fn glance(doc: &Artifact) -> [Vec<String>; 5] {
+    let sections = sections(&doc.markdown);
+    let body = |names: &[&str]| sections.iter().find(|(title, _)| names.iter().any(|n| title.eq_ignore_ascii_case(n))).map(|(_, b)| b.as_str()).unwrap_or("");
+    let glance = body(&["At a glance"]);
+    let field = |label: &str| labeled(glance, label);
+    let or = |line: Option<String>, names: &[&str], limit: usize| line.map(|l| vec![l]).unwrap_or_else(|| points(body(names), limit));
+    let questions = points(body(&["Questions for you", "Out of scope and open questions"]), 3);
+    let decide = field("Your call").map(|l| vec![l]).filter(|_| questions.is_empty()).unwrap_or(questions);
+    let pick = field("AI pick").map(|l| vec![l]).unwrap_or_default();
+    [decide, or(field("What changes"), &["Summary"], 1), or(field("Background"), &["Understanding"], 1), or(field("Why"), &["Why this came up"], 1), pick]
+}
+
+const PHASES: [&str; 6] = ["intent", "plan", "build", "evidence", "deliver", "done"];
+
+/// The sdlc phase of an item, or of the ticket a brief is about (its At a glance `Phase:` line).
+fn phase_of(item: &Item, artifact: Option<&Result<Artifact, String>>) -> Option<String> {
+    let own = item.sdlc.as_ref().map(|s| s.phase.clone()).filter(|p| !p.is_empty());
+    own.or_else(|| {
+        let doc = artifact?.as_ref().ok()?;
+        let sections = sections(&doc.markdown);
+        let glance = sections.iter().find(|(title, _)| title.eq_ignore_ascii_case("At a glance"))?;
+        labeled(&glance.1, "Phase")
+    }).map(|p| p.trim().to_lowercase())
+}
+
+fn stepper(ui: &mut egui::Ui, p: &theme::Palette, lang: Lang, phase: &str) {
+    let Some(now) = PHASES.iter().position(|name| *name == phase) else {
+        ui.label(RichText::new(t(lang, if phase == "legacy" { "phase.legacy" } else { "phase.now" })).color(p.muted).size(11.5));
+        return;
+    };
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        for (i, name) in PHASES.iter().enumerate() {
+            let label = t(lang, &format!("phase.{name}"));
+            if i == now {
+                egui::Frame::new().fill(p.accent).corner_radius(CornerRadius::same(10)).inner_margin(Margin::symmetric(9, 3))
+                    .show(ui, |ui| ui.label(RichText::new(label).color(p.on_accent).size(12.0).strong()));
+            } else if i < now {
+                egui::Frame::new().fill(p.accent.gamma_multiply(0.14)).corner_radius(CornerRadius::same(10)).inner_margin(Margin::symmetric(8, 3))
+                    .show(ui, |ui| ui.label(RichText::new(format!("✓ {label}")).color(p.accent).size(11.5)));
+            } else {
+                egui::Frame::new().stroke(Stroke::new(1.0, p.stroke)).corner_radius(CornerRadius::same(10)).inner_margin(Margin::symmetric(8, 3))
+                    .show(ui, |ui| ui.label(RichText::new(label).color(p.muted).size(11.5)));
+            }
+            if i + 1 < PHASES.len() { ui.label(RichText::new("›").color(if i < now { p.accent } else { p.muted }).size(12.0)); }
+        }
+    });
+    if let Some(next) = PHASES.get(now + 1) {
+        ui.label(RichText::new(format!("{} {} · {} {}", t(lang, "phase.now"), t(lang, &format!("phase.{}", PHASES[now])), t(lang, "phase.next"), t(lang, &format!("phase.{next}"))))
+            .color(p.muted).size(11.5));
+    }
+}
+
+fn ticket_buttons(ui: &mut egui::Ui, tickets: &[(String, String)]) {
+    for (label, url) in tickets {
+        if ui.button(format!("↗ {label}")).on_hover_text(url).clicked() { open_url(url); }
+    }
+}
+
+fn bullets(ui: &mut egui::Ui, p: &theme::Palette, title: &str, lines: &[String]) {
+    if lines.is_empty() { return; }
+    ui.add_space(2.0);
+    ui.label(RichText::new(title).color(p.accent).size(11.5).strong());
+    for line in lines {
+        ui.horizontal_top(|ui| { ui.label(RichText::new("•").color(p.accent)); ui.add(egui::Label::new(RichText::new(line).size(13.0)).wrap()); });
     }
 }
 
@@ -506,7 +570,7 @@ fn clip(text: &str, max: usize) -> String {
 }
 
 fn has_document(item: &Item) -> bool {
-    !item.done && item.sdlc.is_some() && item.project.as_deref().is_some_and(|p| !p.is_empty()) && item.error.is_none()
+    !item.done && (!item.brief.is_empty() || item.sdlc.is_some() && item.project.as_deref().is_some_and(|p| !p.is_empty()) && item.error.is_none())
 }
 
 /// The tickets behind an item: its link first, then other ticket URLs in its question or action.
@@ -559,6 +623,13 @@ fn args() -> Result<Args, String> {
 }
 
 fn main() -> Result<(), String> {
+    // Without a sender, mac-notification-sys asks AppleScript for application "use_default" before the
+    // first notification, and macOS answers with a "Where is use_default?" chooser. Name the sender up front.
+    #[cfg(target_os = "macos")]
+    {
+        let bundled = std::env::current_exe().is_ok_and(|exe| exe.to_string_lossy().contains(".app/Contents/MacOS/"));
+        let _ = notify_rust::set_application(if bundled { "dev.sdlc-kit.todo" } else { "com.apple.Terminal" });
+    }
     let args = args()?;
     let lang = Lang::parse(&args.lang);
     let launcher = Launcher { session_file: args.session, kit: args.kit, node: args.node, lang: args.lang };

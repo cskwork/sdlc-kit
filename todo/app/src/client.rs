@@ -55,6 +55,8 @@ pub struct Item {
     pub error: Option<String>,
     #[serde(default)]
     pub sdlc: Option<Sdlc>,
+    #[serde(default)]
+    pub brief: String,
     pub version: String,
     pub turn: Turn,
 }
@@ -97,7 +99,7 @@ pub fn read_session(file: &PathBuf) -> Option<Session> {
 pub fn live(file: &PathBuf) -> Option<Session> {
     let session = read_session(file)?;
     let response = agent(Duration::from_secs(2))
-        .get(&format!("{}/api/items", session.origin()))
+        .get(&format!("{}/api/live", session.origin()))
         .set("X-Todo-Token", &session.token)
         .call()
         .ok()?;
