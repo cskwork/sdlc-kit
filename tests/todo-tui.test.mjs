@@ -546,3 +546,13 @@ test('language: TUI renders the configured language, fits Korean and L cycles ev
   assert.equal(reduce({ ...fixture() }, 'L').state.lang, languages[1], 'an unset language starts from the default');
   assert.match(render({ ...fixture(), view: 'help' }, { width: 100, height: 40 }).join('\n'), /L +Next language/);
 });
+
+test('choices: number keys send an offered answer as a reply; the list shows them with the recommended one', () => {
+  const item = { id: 'abcdef', title: 'Decide', done: false, status: 'waiting', waiting: 'q', version: 'v1', events: [], notes: [],
+    choices: ['proceed', 'fix first', 'hold'], pick: 1 };
+  const state = { items: [item], selected: 0, view: 'list', lang: 'en' };
+  assert.deepEqual(reduce(state, '2').effects, [{ type: 'reply', id: 'abcdef', item, text: 'fix first' }]);
+  assert.deepEqual(reduce(state, '4').effects, [], 'a key beyond the choices does nothing');
+  assert.deepEqual(reduce({ ...state, items: [{ ...item, done: true }], showDone: true }, '1').effects, [], 'a done item offers no answers');
+  assert.match(render(state, { width: 100, height: 12 }).join('\n'), /Press a number to answer: 1 proceed \(Recommended\) · 2 fix first · 3 hold/);
+});
