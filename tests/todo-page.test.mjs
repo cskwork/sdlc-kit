@@ -182,6 +182,24 @@ for (const gate of ['', 'intent']) {
   });
 }
 
+test('Details opens the brief of a plain item as a read-only document', async () => {
+  const p = page('#t=test-token', {
+    source: source.replace("await import('./markdown.js')", '({ renderMarkdown: text => text })'),
+    fetch: async url => url === '/api/items' ? new Promise(() => {}) : {
+      ok: true, text: async () => JSON.stringify({ gate: '', file: '/briefs/vendor.md', markdown: '# Brief', sha: 'a'.repeat(64) })
+    }
+  });
+  vm.runInContext(`
+    items = [{ id: 'abcdef', title: 'Choose a vendor', status: 'waiting', waiting: 'which vendor?', brief: '/briefs/vendor.md', events: [], notes: [], project: '', sdlc: null }];
+    openDetail('abcdef');
+  `, p.context);
+  for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.ok(p.requests.some(r => r.url.startsWith('/api/artifact')), 'a brief is fetched without an sdlc slug');
+  assert.equal(p.nodes.get('artifact-box').hidden, false);
+  assert.equal(p.nodes.get('artifact-file').textContent, '/briefs/vendor.md');
+  assert.equal(p.nodes.get('decide').hidden, true, 'a brief never offers approval');
+});
+
 test('Details text size steps by 10% between 80% and 160%', () => {
   const p = page('#t=test-token');
   const set = {};

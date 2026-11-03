@@ -979,3 +979,33 @@ test('todo-agent.json starts the human-configured fix command with placeholders 
   const bad = await core.requestFix(file, item.id, undefined, { kit });
   assert.match(bad.launch, /^failed: .*fix must be a non-empty array/);
 });
+
+test('brief: an item carries a markdown brief that round-trips and reaches the JSON summaries', async t => {
+  const { root, file } = scratch(t);
+  const canonical = '# To-do\n\n## Open\n\n- [ ] Decide\n  - waiting: pick one\n  - brief: /tmp/brief.md\n  - 2026-10-26 09:00 agent: added\n\n## Done\n\n';
+  writeFileSync(file, canonical);
+  assert.equal(core.load(file).items[0].brief, '/tmp/brief.md');
+  assert.equal(core.serialize(core.load(file)), canonical);
+  writeFileSync(file, '# To-do\n\n## Open\n\n- [ ] Plain\n\n## Done\n\n');
+  assert.equal(core.load(file).items[0].brief, '');
+  rmSync(file);
+  const first = join(root, 'first.md'), second = join(root, 'second.md');
+  const id = checkCode(await cli(file, ['add', 'Choose a vendor', '--brief', first]), 0).stdout.trim();
+  assert.ok(readFileSync(file, 'utf8').includes(`  - brief: ${first}\n`));
+  checkCode(await cli(file, ['wait', id, 'which vendor?']), 0);
+  let listed = JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout)[0];
+  assert.equal(listed.brief, first);
+  checkCode(await cli(file, ['brief', id, second]), 0);
+  assert.equal(JSON.parse(checkCode(await cli(file, ['next', '--json']), 10).stdout).brief, second);
+  assert.equal(JSON.parse(checkCode(await cli(file, ['take', id, '--json']), 10).stdout).brief, second);
+  assert.ok(readFileSync(file, 'utf8').includes(`agent: brief ${second}`));
+  checkCode(await cli(file, ['brief', id, 'relative/brief.md']), 2);
+  checkCode(await cli(file, ['add', 'Other', '--brief', 'brief.md']), 2);
+  checkCode(await cli(file, ['brief', id]), 2);
+  checkCode(await cli(file, ['brief', id, '']), 0);
+  listed = JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout);
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].brief, '');
+  assert.ok(!readFileSync(file, 'utf8').includes('  - brief: '));
+  assert.ok(readFileSync(file, 'utf8').includes('agent: brief cleared'));
+});

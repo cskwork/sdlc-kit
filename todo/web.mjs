@@ -69,6 +69,15 @@ async function artifact(item, gate, kit, statusRunner) {
   const bytes = fs.readFileSync(file);
   return { gate, file, markdown: bytes.toString('utf8'), sha: createHash('sha256').update(bytes).digest('hex') };
 }
+// A brief is any open item's own document; an sdlc approval gate keeps its approvable artifact.
+function briefDocument(item) {
+  if (item.done) fail(409, 'item has no work document');
+  if (!path.isAbsolute(item.brief)) fail(409, 'brief must be an absolute path');
+  let bytes;
+  try { bytes = fs.readFileSync(item.brief); }
+  catch (error) { fail(error.code === 'ENOENT' ? 404 : 409, `brief not readable: ${item.brief}`); }
+  return { gate: '', file: item.brief, markdown: bytes.toString('utf8'), sha: createHash('sha256').update(bytes).digest('hex') };
+}
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0, tooLarge = false;
@@ -176,7 +185,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
         } else if (url.pathname === '/api/artifact') {
           await core.sync(file, { kit });
           const item = itemFor(file, url.searchParams.get('id'));
-          json(200, await artifact(item, documentGate(item), kit, statusRunner));
+          json(200, item.brief && !gateIn(item) ? briefDocument(item) : await artifact(item, documentGate(item), kit, statusRunner));
         } else if (url.pathname === '/events') {
           const initial = payload();
           res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', Connection: 'keep-alive' });

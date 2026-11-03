@@ -37,6 +37,7 @@ Follow the sdlc loop, its gates and authority rules.
 After each phase, run `phase <id> <phase>` to record the current phase.
 When sdlc needs the human for a gate approval or an intent Questions for you item, report it and stop; `next` syncs that wait from sdlc.sh (exit 10).
 Use `wait` only for questions sdlc.sh does not track, such as which project or a question outside an sdlc artifact.
+To attach a markdown brief a human reads before deciding, run `brief <id> <absolute .md path>` (or `add ... --brief PATH`); use the At a glance labels `**Your call:**`, `**What changes:**`, `**Background:**`, `**Why:**`, and `brief <id> ""` clears it.
 When your wait ends without a human reply, run `resume <id> ["note"]`.
 After `bash <kit>/sdlc.sh close ...` succeeds, run `done <id> "<result>"`.
 
