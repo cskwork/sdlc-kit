@@ -122,7 +122,7 @@ function parse(source) {
     if (match) {
       const checked = match[1].toLowerCase() === 'x';
       item = { id: '', title: match[2].replace(/^~~(.*)~~$/, '$1'), done: section === 'done' || checked,
-        project: '', link: null, sdlc: null, waiting: '', events: [], notes: [] };
+        project: '', link: null, sdlc: null, waiting: '', brief: '', events: [], notes: [] };
       if (checked && section === 'open') item.checkedOpen = true;
       model.items.push(item);
       continue;
@@ -137,6 +137,7 @@ function parse(source) {
       const sep = stateAction.indexOf(' — ');
       item.sdlc = { slug, phase, state: sep < 0 ? stateAction : stateAction.slice(0, sep), action: sep < 0 ? '' : stateAction.slice(sep + 3) };
     } else if ((field = text.match(/^  - waiting: (.*)$/))) item.waiting = field[1];
+    else if ((field = text.match(/^  - brief: (.*)$/))) item.brief = field[1];
     else if ((field = text.match(/^  - (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) ([^:]+): (.*)$/))) item.events.push({ at: field[1], who: field[2], what: field[3] });
     else item.notes.push(text);
   }
@@ -156,6 +157,7 @@ function renderItem(item) {
     lines.push(`  - sdlc: ${s.slug}${s.phase ? ` · ${s.phase}` : ''}${s.state ? ` · ${s.state}${s.action ? ` — ${s.action}` : ''}` : ''}`);
   }
   if (item.waiting) lines.push(`  - waiting: ${item.waiting}`);
+  if (item.brief) lines.push(`  - brief: ${item.brief}`);
   for (const e of item.events) lines.push(`  - ${e.at} ${e.who}: ${e.what}`);
   lines.push(...item.notes);
   return lines.join('\n');
@@ -330,8 +332,15 @@ export function findItem(model, idOrSlug) {
   if (!matches.length) fail(`item not found: ${idOrSlug}`, 1);
   return matches[0];
 }
+// A brief is a markdown file a human reads before deciding; only an absolute path is trusted.
+function briefPath(value) {
+  const brief = line(value);
+  if (brief && !path.isAbsolute(brief)) fail('brief must be an absolute path');
+  return brief;
+}
 export async function add(file, text, options = {}) {
   const parsed = parseText(text);
+  const brief = briefPath(options.brief);
   const project = normalizeProject(options.project ?? parsed.project), slug = line(options.slug || '');
   return mutate(file, model => {
     if (slug) {
@@ -343,7 +352,7 @@ export async function add(file, text, options = {}) {
     const by = line(options.by || 'agent');
     if (!/^[^:\r\n]+$/.test(by)) fail('invalid event author');
     const item = { id: '', title, done: false, project, link: linkValue(options.link ?? parsed.link),
-      sdlc: slug ? { slug, phase: 'intent', state: '', action: '' } : null, waiting: '', events: [], notes: [] };
+      sdlc: slug ? { slug, phase: 'intent', state: '', action: '' } : null, waiting: '', brief, events: [], notes: [] };
     model.items.splice(model.items.findIndex(i => i.done) < 0 ? model.items.length : model.items.findIndex(i => i.done), 0, item);
     event(item, by, 'added');
     identify(model);
@@ -415,6 +424,7 @@ export const resume = (file, id, words = '') => update(file, id, item => {
 });
 export const answer = (file, id, words) => update(file, id, item => { item.waiting = ''; event(item, 'agent', `chat answer — ${line(words)}`); });
 export const note = (file, id, words) => update(file, id, item => event(item, 'agent', line(words)));
+export const brief = (file, id, value) => { const brief = briefPath(value); return update(file, id, item => { item.brief = brief; event(item, 'agent', brief ? `brief ${brief}` : 'brief cleared'); }); };
 export const start = (file, id, slug, phase = 'intent') => update(file, id, item => { item.sdlc = { slug: line(slug), phase: line(phase), state: '', action: '' }; event(item, 'agent', `started ${item.sdlc.slug}`); });
 export const phase = (file, id, value) => update(file, id, item => { if (!item.sdlc) fail('item has no slug'); item.sdlc.phase = line(value); event(item, 'agent', `phase ${item.sdlc.phase}`); });
 export const approved = (file, id, gate, words) => update(file, id, item => event(item, 'human', `approved ${line(gate)} — "${line(words)}"`));

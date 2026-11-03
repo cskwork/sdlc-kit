@@ -487,8 +487,8 @@ function openDetail(id, from, focus = true) {
     $('artifact-box').hidden = $('decide').hidden = true;
     updateCount();
     renderDetail();
-    // Every open sdlc item shows its work document; only an approval gate adds the decision form.
-    if (!item.done && item.sdlc) loadArtifact();
+    // Every open sdlc item or item with a brief shows its document; only an approval gate adds the decision form.
+    if (!item.done && (item.sdlc || item.brief)) loadArtifact();
   }
   opener = from || document.activeElement;
   if (!dialog.open) { if (isWide) showPane(); else dialog.showModal(); }

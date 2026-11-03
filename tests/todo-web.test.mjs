@@ -128,8 +128,10 @@ test('S9: web token, Host, Origin, JSON and body-size boundaries reject hostile 
   const ctx = await web(t);
   const before = items(await request(ctx, '/api/items'), ctx.file);
   assert.deepEqual(before, []);
+  assert.deepEqual((await request(ctx, '/api/live')).json, { ok: true });
   for (const [label, pathname, options] of [
     ['missing token', '/api/items', { token: null }],
+    ['live missing token', '/api/live', { token: null }],
     ['bad token', '/api/items', { token: '0'.repeat(32) }],
     ['evil Host', '/api/items', { headers: { Host: 'evil.test' } }],
     ['evil Origin', '/api/items', { method: 'POST', body: { text: 'forged' }, headers: { Origin: 'http://evil.test' } }],
@@ -741,4 +743,30 @@ test('web fix records the request on a block and reports whether an agent starte
   const item = items(response, ctx.file).find(i => i.id === blocked.id);
   assert.deepEqual(item.turn, { actor: 'agent', kind: 'handoff' });
   assert.equal(item.events.at(-1).what, 'fix requested');
+});
+
+test('brief: a plain item serves its brief as an ungated document; a missing or relative brief fails; a gate keeps its artifact', async t => {
+  const ctx = await web(t);
+  const brief = join(ctx.root, 'brief.md');
+  const markdown = '# Brief\n## At a glance\n- **Your call:** pick a vendor\n';
+  writeFileSync(brief, markdown);
+  const item = await core.add(ctx.file, 'Choose a vendor', { brief });
+  const listed = items(await request(ctx, '/api/items'), ctx.file).find(i => i.id === item.id);
+  assert.equal(listed.brief, brief);
+  const shown = await request(ctx, `/api/artifact?id=${item.id}`);
+  assert.equal(shown.status, 200, shown.text);
+  assert.deepEqual(shown.json, { gate: '', file: brief, markdown, sha: createHash('sha256').update(markdown).digest('hex') });
+  const approve = await post(ctx, '/api/approve', { id: item.id, gate: 'intent', sha: shown.json.sha });
+  assert.equal(approve.status, 409, 'a brief never opens a gate');
+  rmSync(brief);
+  assert.equal((await request(ctx, `/api/artifact?id=${item.id}`)).status, 404);
+  writeFileSync(ctx.file, readFileSync(ctx.file, 'utf8').replace(`  - brief: ${brief}`, '  - brief: relative.md'));
+  assert.equal((await request(ctx, `/api/artifact?id=${item.id}`)).status, 409);
+  const dir = project(ctx.root);
+  feature(dir, 'gated-brief');
+  writeFileSync(brief, markdown);
+  const gated = await core.add(ctx.file, 'Gated', { project: dir, slug: 'gated-brief', brief });
+  const gate = await request(ctx, `/api/artifact?id=${gated.id}`);
+  assert.equal(gate.json.gate, 'intent', gate.text);
+  assert.equal(realpathSync(gate.json.file), realpathSync(join(dir, '.sdlc', 'work', 'gated-brief', 'intent.md')));
 });
