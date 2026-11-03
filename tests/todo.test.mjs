@@ -161,6 +161,39 @@ test('repos: CLI records the changed repositories once, JSON shows them, a bad h
   assert.doesNotMatch(readFileSync(file, 'utf8'), /^  - repos:/m);
 });
 
+test('choices: CLI stores one-click answers and a pick, adds one event per change, clears, refuses bad input', async t => {
+  const { file } = scratch(t);
+  const id = checkCode(await cli(file, ['add', '[결정 D35] A20-1462 · how to proceed', '--by', 'factory']), 0).stdout.trim();
+  const untouched = readFileSync(file, 'utf8');
+  assert.equal(core.serialize(core.load(file)), untouched, 'a file without choices round-trips byte for byte');
+  checkCode(await cli(file, ['choices', id, ' 원래 있던 실패로 보고 진행 | 심사 시험부터 고친 뒤 진행 |보류 ', '--pick', '1']), 0);
+  checkCode(await cli(file, ['choices', id, '원래 있던 실패로 보고 진행|심사 시험부터 고친 뒤 진행|보류', '--pick', '1']), 0);
+  let text = readFileSync(file, 'utf8');
+  assert.match(text, /^  - choices: 원래 있던 실패로 보고 진행 \| 심사 시험부터 고친 뒤 진행 \| 보류\n  - pick: 1$/m);
+  assert.equal(text.split('agent: choices ').length - 1, 1, 'the same list adds no second event');
+  assert.equal(core.serialize(core.load(file)), text, 'a file with choices round-trips byte for byte');
+  for (const command of [['list', '--json'], ['take', id, '--json']]) {
+    const json = JSON.parse(checkCode(await cli(file, command), 0).stdout);
+    const summary = Array.isArray(json) ? json[0] : json;
+    assert.deepEqual(summary.choices, ['원래 있던 실패로 보고 진행', '심사 시험부터 고친 뒤 진행', '보류']);
+    assert.equal(summary.pick, 1);
+  }
+  for (const args of [['a||b'], ['a | b', '--pick', '3'], ['a | b', '--pick', '0'], ['1|2|3|4|5|6|7'], ['--pick', '1'], ['a\nb']]) {
+    checkCode(await cli(file, ['choices', id, ...args]), 2);
+  }
+  assert.equal(readFileSync(file, 'utf8'), text, 'refused input changes nothing');
+  checkCode(await cli(file, ['choices', id, 'a | b']), 0);
+  assert.deepEqual([core.load(file).items[0].choices, core.load(file).items[0].pick], [['a', 'b'], null]);
+  writeFileSync(file, readFileSync(file, 'utf8').replace('  - choices: a | b', '  - choices: a |  | b\n  - pick: 9'));
+  assert.deepEqual([core.load(file).items[0].choices, core.load(file).items[0].pick], [['a', 'b'], null], 'a bad hand edit still loads');
+  checkCode(await cli(file, ['choices', id]), 0);
+  text = readFileSync(file, 'utf8');
+  assert.doesNotMatch(text, /^  - (choices|pick):/m);
+  assert.match(text, /agent: choices cleared$/m);
+  const listed = JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout);
+  assert.deepEqual([listed[0].choices, listed[0].pick], [[], null]);
+});
+
 test('S5: next stops at the first wait, exposes a human reply, and returns 30 when empty', async t => {
   const { file } = scratch(t);
   const a = await core.add(file, 'A');
