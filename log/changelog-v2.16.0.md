@@ -16,6 +16,7 @@ Agents outside sdlc (for example an automated factory) put human decisions on th
 - **Phase stepper:** each card shows every sdlc phase (intent › plan › build › evidence › deliver › done) under its status, past phases ticked, the current one filled, then "Now X · next Y". A brief can name its ticket's phase with an At a glance `Phase:` line.
 - **Ticket beside Send:** when the human can answer, the item's ticket links sit next to the Send button instead of below the form.
 - **Shared sync for reads:** `/api/items` and `/api/artifact` share one in-flight sync. Each artifact request used to run its own full sync, so opening many cards at once queued syncs past the app's 30-second timeout.
+- **Order: situation, question, why.** The question box holds the call, what the agent will do (What changes), an optional At a glance `AI pick:` line and the reply line; Why comes after it.
 - **Always three blocks:** with a document, Background and Why always show; a missing part reads "Not in the document yet" instead of disappearing.
 - **No "Where is use_default?" prompt:** the app names its notification sender (`dev.sdlc-kit.todo` inside the bundle) before notifying; mac-notification-sys otherwise asked AppleScript for an application called `use_default` and macOS opened a chooser.
 - **Liveness:** `/api/live` answers without syncing. The app and `serve` used `/api/items` with a 2-second limit, so a list with many sdlc items (each synced through `sdlc.sh status`) looked dead: the app kept starting new servers and never connected.
