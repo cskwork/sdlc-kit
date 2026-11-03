@@ -335,6 +335,10 @@ impl App {
             }
             if let Some(link) = &item.link { meta.push(link.label.clone()); }
             if !meta.is_empty() { ui.label(RichText::new(meta.join(" · ")).color(p.muted).size(12.0)); }
+            // Where the change lands, on every card whether open or folded.
+            if !item.repos.is_empty() {
+                ui.label(RichText::new(format!("{} {}", t(lang, "repos"), item.repos.join(", "))).color(p.accent).size(12.0));
+            }
             if header.clicked() {
                 let set = if needs_you(item) { &mut self.closed } else { &mut self.open };
                 if !set.remove(&id) { set.insert(id.clone()); }
