@@ -366,8 +366,12 @@ impl App {
         let [decide, summary, background, why] = doc.map(glance).unwrap_or_default();
         // Situation and reason first, then one box with the call, its gist and the agent's question.
         for (key, lines) in [("doc.background", &background), ("doc.why", &why)] { bullets(ui, p, t(lang, key), lines); }
-        let mut asked: Vec<String> = decide.into_iter().chain(summary).collect();
-        if !ask.is_empty() { asked.push(clip(&ask, 160)); }
+        let mut asked: Vec<String> = Vec::new();
+        // The document's question and the agent's waiting line are often the same words; show each once.
+        let key = |text: &str| text.split_whitespace().collect::<String>().chars().take(40).collect::<String>();
+        for line in decide.into_iter().chain(summary).chain((!ask.is_empty()).then(|| clip(&ask, 160))) {
+            if !asked.iter().any(|seen| key(seen) == key(&line)) { asked.push(line); }
+        }
         if !label.is_empty() && !asked.is_empty() {
             let (fg, bg) = theme::tone(&item.turn.actor, dark);
             egui::Frame::new().fill(bg).corner_radius(CornerRadius::same(10)).inner_margin(Margin::symmetric(12, 10)).show(ui, |ui| {
