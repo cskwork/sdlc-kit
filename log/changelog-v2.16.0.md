@@ -13,6 +13,7 @@ Agents outside sdlc (for example an automated factory) put human decisions on th
 - **Web `/api/artifact`:** an open item with a brief returns `{ gate: '', file, markdown, sha }` from that file (404 when missing, 409 when not absolute), without needing a project or slug. An sdlc item at an approval gate keeps serving its gated intent/PLAN so approval still works; sdlc items without a brief are unchanged.
 - **App and page:** an open item with a brief shows it as a work document, like an sdlc item. Approval stays gate-only.
 - **App brief in three blocks:** for any item with a document the app now shows Background, then Why, then one question box that holds the call (Your call or Questions for you), the gist (What changes) and the agent's waiting line. The separate "Your call" and "In one line" lists are gone because they repeated the question box; the full document still folds below.
+- **Ticket beside Send:** when the human can answer, the item's ticket links sit next to the Send button instead of below the form.
 - **Liveness:** `/api/live` answers without syncing. The app and `serve` used `/api/items` with a 2-second limit, so a list with many sdlc items (each synced through `sdlc.sh status`) looked dead: the app kept starting new servers and never connected.
 - **Docs:** the CLI usage and README describe `brief`; `todo/AGENT.md` stays within its 600-word budget.
 
