@@ -323,12 +323,9 @@ impl App {
         let id = item.id.clone();
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                pill(ui, status_label(lang, item), &item.turn.actor, dark);
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if let Some(sdlc) = &item.sdlc { if !sdlc.phase.is_empty() { ui.label(RichText::new(&sdlc.phase).color(p.muted).size(11.5)); } }
-                });
-            });
+            pill(ui, status_label(lang, item), &item.turn.actor, dark);
+            // Where the work stands in the sdlc loop: every phase, the current one highlighted, then what comes next.
+            if let Some(phase) = phase_of(item, artifact) { ui.add_space(4.0); stepper(ui, p, lang, &phase); }
             ui.add_space(2.0);
             let header = ui.add(egui::Label::new(RichText::new(&item.title).size(14.5).strong()).sense(Sense::click()))
                 .on_hover_cursor(egui::CursorIcon::PointingHand);
@@ -464,6 +461,47 @@ fn glance(doc: &Artifact) -> [Vec<String>; 4] {
     let questions = points(body(&["Questions for you", "Out of scope and open questions"]), 3);
     let decide = field("Your call").map(|l| vec![l]).filter(|_| questions.is_empty()).unwrap_or(questions);
     [decide, or(field("What changes"), &["Summary"], 1), or(field("Background"), &["Understanding"], 1), or(field("Why"), &["Why this came up"], 1)]
+}
+
+const PHASES: [&str; 6] = ["intent", "plan", "build", "evidence", "deliver", "done"];
+
+/// The sdlc phase of an item, or of the ticket a brief is about (its At a glance `Phase:` line).
+fn phase_of(item: &Item, artifact: Option<&Result<Artifact, String>>) -> Option<String> {
+    let own = item.sdlc.as_ref().map(|s| s.phase.clone()).filter(|p| !p.is_empty());
+    own.or_else(|| {
+        let doc = artifact?.as_ref().ok()?;
+        let sections = sections(&doc.markdown);
+        let glance = sections.iter().find(|(title, _)| title.eq_ignore_ascii_case("At a glance"))?;
+        labeled(&glance.1, "Phase")
+    }).map(|p| p.trim().to_lowercase())
+}
+
+fn stepper(ui: &mut egui::Ui, p: &theme::Palette, lang: Lang, phase: &str) {
+    let Some(now) = PHASES.iter().position(|name| *name == phase) else {
+        ui.label(RichText::new(t(lang, if phase == "legacy" { "phase.legacy" } else { "phase.now" })).color(p.muted).size(11.5));
+        return;
+    };
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        for (i, name) in PHASES.iter().enumerate() {
+            let label = t(lang, &format!("phase.{name}"));
+            if i == now {
+                egui::Frame::new().fill(p.accent).corner_radius(CornerRadius::same(10)).inner_margin(Margin::symmetric(9, 3))
+                    .show(ui, |ui| ui.label(RichText::new(label).color(p.on_accent).size(12.0).strong()));
+            } else if i < now {
+                egui::Frame::new().fill(p.accent.gamma_multiply(0.14)).corner_radius(CornerRadius::same(10)).inner_margin(Margin::symmetric(8, 3))
+                    .show(ui, |ui| ui.label(RichText::new(format!("✓ {label}")).color(p.accent).size(11.5)));
+            } else {
+                egui::Frame::new().stroke(Stroke::new(1.0, p.stroke)).corner_radius(CornerRadius::same(10)).inner_margin(Margin::symmetric(8, 3))
+                    .show(ui, |ui| ui.label(RichText::new(label).color(p.muted).size(11.5)));
+            }
+            if i + 1 < PHASES.len() { ui.label(RichText::new("›").color(if i < now { p.accent } else { p.muted }).size(12.0)); }
+        }
+    });
+    if let Some(next) = PHASES.get(now + 1) {
+        ui.label(RichText::new(format!("{} {} · {} {}", t(lang, "phase.now"), t(lang, &format!("phase.{}", PHASES[now])), t(lang, "phase.next"), t(lang, &format!("phase.{next}"))))
+            .color(p.muted).size(11.5));
+    }
 }
 
 fn ticket_buttons(ui: &mut egui::Ui, tickets: &[(String, String)]) {

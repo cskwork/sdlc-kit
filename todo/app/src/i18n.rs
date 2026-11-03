@@ -9,6 +9,15 @@ impl Lang {
 pub fn t(lang: Lang, key: &str) -> &'static str {
     let (en, ko) = match key {
         "title" => ("To-do", "할 일"),
+        "phase.intent" => ("Intent", "의도"),
+        "phase.plan" => ("Plan", "계획"),
+        "phase.build" => ("Build", "구현"),
+        "phase.evidence" => ("Evidence", "검증"),
+        "phase.deliver" => ("Deliver", "반영"),
+        "phase.done" => ("Done", "완료"),
+        "phase.legacy" => ("Legacy", "구버전"),
+        "phase.now" => ("Now", "지금"),
+        "phase.next" => ("next", "다음"),
         "you" => ("Your turn", "내 차례"),
         "agent" => ("Agent", "에이전트"),
         "blocked" => ("Blocked", "막힘"),
