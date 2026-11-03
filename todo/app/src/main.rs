@@ -364,17 +364,16 @@ impl App {
             }
         };
         let has_doc = doc.is_some();
-        let [decide, summary, background, why] = doc.map(glance).unwrap_or_default();
-        // Situation and reason first, then one box with the call, its gist and the agent's question.
-        // With a document all three always show; a missing part says so instead of disappearing.
+        let [decide, summary, background, why, pick] = doc.map(glance).unwrap_or_default();
+        // Situation (AS-IS), then one box with the question, what the agent will do (TO-BE), its pick and
+        // the reply line, then why. With a document all three always show; a missing part says so.
         let missing = vec![t(lang, "doc.none").to_string()];
-        for (key, lines) in [("doc.background", &background), ("doc.why", &why)] {
-            bullets(ui, p, t(lang, key), if lines.is_empty() && has_doc { &missing } else { lines });
-        }
+        let or_missing = |lines: &Vec<String>| if lines.is_empty() && has_doc { missing.clone() } else { lines.clone() };
+        bullets(ui, p, t(lang, "doc.background"), &or_missing(&background));
         let mut asked: Vec<String> = Vec::new();
         // The document's question and the agent's waiting line are often the same words; show each once.
         let key = |text: &str| text.split_whitespace().collect::<String>().chars().take(40).collect::<String>();
-        for line in decide.into_iter().chain(summary).chain((!ask.is_empty()).then(|| clip(&ask, 160))) {
+        for line in decide.into_iter().chain(summary).chain(pick).chain((!ask.is_empty()).then(|| clip(&ask, 160))) {
             if !asked.iter().any(|seen| key(seen) == key(&line)) { asked.push(line); }
         }
         if !label.is_empty() && !asked.is_empty() {
@@ -387,6 +386,7 @@ impl App {
         } else {
             bullets(ui, p, t(lang, "doc.summary"), &asked);
         }
+        bullets(ui, p, t(lang, "doc.why"), &or_missing(&why));
         if let Some(doc) = doc { self.document(ui, p, item, doc); }
         ui.add_space(2.0);
         if item.turn.actor == "you" && item.turn.kind == "answer" {
@@ -461,7 +461,7 @@ impl App {
 
 /// The decision brief as [call, gist, background, why], a few short lines each.
 /// At a glance carries the four lines by label; older documents fall back to their sections.
-fn glance(doc: &Artifact) -> [Vec<String>; 4] {
+fn glance(doc: &Artifact) -> [Vec<String>; 5] {
     let sections = sections(&doc.markdown);
     let body = |names: &[&str]| sections.iter().find(|(title, _)| names.iter().any(|n| title.eq_ignore_ascii_case(n))).map(|(_, b)| b.as_str()).unwrap_or("");
     let glance = body(&["At a glance"]);
@@ -469,7 +469,8 @@ fn glance(doc: &Artifact) -> [Vec<String>; 4] {
     let or = |line: Option<String>, names: &[&str], limit: usize| line.map(|l| vec![l]).unwrap_or_else(|| points(body(names), limit));
     let questions = points(body(&["Questions for you", "Out of scope and open questions"]), 3);
     let decide = field("Your call").map(|l| vec![l]).filter(|_| questions.is_empty()).unwrap_or(questions);
-    [decide, or(field("What changes"), &["Summary"], 1), or(field("Background"), &["Understanding"], 1), or(field("Why"), &["Why this came up"], 1)]
+    let pick = field("AI pick").map(|l| vec![l]).unwrap_or_default();
+    [decide, or(field("What changes"), &["Summary"], 1), or(field("Background"), &["Understanding"], 1), or(field("Why"), &["Why this came up"], 1), pick]
 }
 
 const PHASES: [&str; 6] = ["intent", "plan", "build", "evidence", "deliver", "done"];
