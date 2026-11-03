@@ -363,9 +363,14 @@ impl App {
                 Some(Ok(doc)) => Some(doc),
             }
         };
+        let has_doc = doc.is_some();
         let [decide, summary, background, why] = doc.map(glance).unwrap_or_default();
         // Situation and reason first, then one box with the call, its gist and the agent's question.
-        for (key, lines) in [("doc.background", &background), ("doc.why", &why)] { bullets(ui, p, t(lang, key), lines); }
+        // With a document all three always show; a missing part says so instead of disappearing.
+        let missing = vec![t(lang, "doc.none").to_string()];
+        for (key, lines) in [("doc.background", &background), ("doc.why", &why)] {
+            bullets(ui, p, t(lang, key), if lines.is_empty() && has_doc { &missing } else { lines });
+        }
         let mut asked: Vec<String> = Vec::new();
         // The document's question and the agent's waiting line are often the same words; show each once.
         let key = |text: &str| text.split_whitespace().collect::<String>().chars().take(40).collect::<String>();
@@ -615,6 +620,13 @@ fn args() -> Result<Args, String> {
 }
 
 fn main() -> Result<(), String> {
+    // Without a sender, mac-notification-sys asks AppleScript for application "use_default" before the
+    // first notification, and macOS answers with a "Where is use_default?" chooser. Name the sender up front.
+    #[cfg(target_os = "macos")]
+    {
+        let bundled = std::env::current_exe().is_ok_and(|exe| exe.to_string_lossy().contains(".app/Contents/MacOS/"));
+        let _ = notify_rust::set_application(if bundled { "dev.sdlc-kit.todo" } else { "com.apple.Terminal" });
+    }
     let args = args()?;
     let lang = Lang::parse(&args.lang);
     let launcher = Launcher { session_file: args.session, kit: args.kit, node: args.node, lang: args.lang };
