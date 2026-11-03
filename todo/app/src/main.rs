@@ -391,7 +391,9 @@ impl App {
         ui.add_space(2.0);
         if item.turn.actor == "you" && item.turn.kind == "answer" {
             let draft = self.drafts.entry(item.id.clone()).or_default();
-            ui.add(egui::TextEdit::singleline(draft).hint_text(t(lang, "reply.hint")).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 7)));
+            let field = ui.add(egui::TextEdit::singleline(draft).hint_text(t(lang, "reply.hint")).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 7)));
+            // Enter in the field sends, like the button; a single-line field loses focus on Enter.
+            let entered = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             ui.label(RichText::new(t(lang, "reply.help")).color(p.muted).size(11.5));
             let text = draft.trim().to_string();
             // The ticket sits beside the send button: the human checks it before answering.
@@ -399,7 +401,7 @@ impl App {
                 let send = primary(ui, p, t(lang, "reply.send"), !busy && !text.is_empty()).clicked();
                 ticket_buttons(ui, &tickets(item));
                 send
-            }).inner;
+            }).inner || (entered && !busy && !text.is_empty());
             if send {
                 let (id, version, sent) = (item.id.clone(), item.version.clone(), t(lang, "reply.sent"));
                 self.drafts.remove(&item.id);

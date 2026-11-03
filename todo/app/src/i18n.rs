@@ -53,7 +53,7 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
         "reply.hint" => ("Your answer, in one line", "한 줄로 답해 주세요"),
         "reply.send" => ("Send answer", "답변 보내기"),
         "reply.sent" => ("Answer sent", "답변 보냄"),
-        "reply.help" => ("An answer helps the agent; it is not an approval.", "답변은 에이전트가 참고할 뿐, 승인으로 치지 않아요."),
+        "reply.help" => ("Enter sends. An answer helps the agent; it is not an approval.", "Enter로 보내요. 답변은 에이전트가 참고할 뿐, 승인으로 치지 않아요."),
         "approve.note" => ("Note (optional)", "메모 (선택)"),
         "approve.button" => ("Approve this version", "이 버전 승인"),
         "approve.done" => ("Approved", "승인함"),
