@@ -388,7 +388,13 @@ impl App {
             ui.add(egui::TextEdit::singleline(draft).hint_text(t(lang, "reply.hint")).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 7)));
             ui.label(RichText::new(t(lang, "reply.help")).color(p.muted).size(11.5));
             let text = draft.trim().to_string();
-            if primary(ui, p, t(lang, "reply.send"), !busy && !text.is_empty()).clicked() {
+            // The ticket sits beside the send button: the human checks it before answering.
+            let send = ui.horizontal_wrapped(|ui| {
+                let send = primary(ui, p, t(lang, "reply.send"), !busy && !text.is_empty()).clicked();
+                ticket_buttons(ui, &tickets(item));
+                send
+            }).inner;
+            if send {
                 let (id, version, sent) = (item.id.clone(), item.version.clone(), t(lang, "reply.sent"));
                 self.drafts.remove(&item.id);
                 self.act(ctx, &id.clone(), move |s| client::post(s, "/api/item", json!({ "id": id, "version": version, "op": "reply", "text": text })).map(|_| sent.to_string()));
@@ -419,13 +425,8 @@ impl App {
                 });
             }
         }
-        let tickets = tickets(item);
-        if !tickets.is_empty() {
-            ui.horizontal_wrapped(|ui| {
-                for (label, url) in &tickets {
-                    if ui.button(format!("↗ {label}")).on_hover_text(url).clicked() { open_url(url); }
-                }
-            });
+        if !(item.turn.actor == "you" && item.turn.kind == "answer") {
+            ui.horizontal_wrapped(|ui| ticket_buttons(ui, &tickets(item)));
         }
         if busy { ui.spinner(); }
     }
@@ -463,6 +464,12 @@ fn glance(doc: &Artifact) -> [Vec<String>; 4] {
     let questions = points(body(&["Questions for you", "Out of scope and open questions"]), 3);
     let decide = field("Your call").map(|l| vec![l]).filter(|_| questions.is_empty()).unwrap_or(questions);
     [decide, or(field("What changes"), &["Summary"], 1), or(field("Background"), &["Understanding"], 1), or(field("Why"), &["Why this came up"], 1)]
+}
+
+fn ticket_buttons(ui: &mut egui::Ui, tickets: &[(String, String)]) {
+    for (label, url) in tickets {
+        if ui.button(format!("↗ {label}")).on_hover_text(url).clicked() { open_url(url); }
+    }
 }
 
 fn bullets(ui: &mut egui::Ui, p: &theme::Palette, title: &str, lines: &[String]) {
