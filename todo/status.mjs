@@ -22,3 +22,18 @@ export function countsOf(items) {
   for (const item of items) counts[statusOf(item).actor]++;
   return counts;
 }
+// Open items that need the human and share one ticket link show together under that ticket, at the
+// first one's place and in item order: [{ item }] or [{ ticket: { label, url }, items }].
+export function ticketGroups(items) {
+  const needs = item => !item.done && ['you', 'blocked'].includes(statusOf(item).actor) && !!item.link?.url;
+  const count = new Map();
+  for (const item of items) if (needs(item)) count.set(item.link.url, (count.get(item.link.url) || 0) + 1);
+  const entries = [], seen = new Set();
+  for (const item of items) {
+    if (!needs(item) || count.get(item.link.url) < 2) { entries.push({ item }); continue; }
+    if (seen.has(item.link.url)) continue;
+    seen.add(item.link.url);
+    entries.push({ ticket: item.link, items: items.filter(other => needs(other) && other.link.url === item.link.url) });
+  }
+  return entries;
+}

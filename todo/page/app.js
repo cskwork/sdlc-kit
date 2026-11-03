@@ -1,6 +1,6 @@
 // To-do page. Rows are patched by id so drafts, focus and scroll survive live updates.
 import { defaultLanguage, isLanguage, languages, locales, phaseLabel, translator } from './i18n.mjs';
-import { countsOf, queueOf, statusOf } from './status.mjs';
+import { countsOf, queueOf, statusOf, ticketGroups } from './status.mjs';
 const $ = id => document.getElementById(id);
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -262,17 +262,35 @@ function restoreFocus(info) {
   const node = target && (target.querySelector(`[data-role="${info.role}"]`) || target.querySelector('[data-role="check"]'));
   (node || $('add-text')).focus({ preventScroll: true });
 }
-function patchList(list, wanted) {
-  const want = wanted.map(item => {
-    let li = rows.get(item.id);
-    if (li && li.parentElement !== list) { li.remove(); rows.delete(item.id); li = null; }
-    if (!li) { li = buildRow(item); rows.set(item.id, li); }
-    updateRow(li, item);
-    return li;
-  });
+// A ticket heading over the items that need you and share its link (see ticketGroups).
+const heads = new Map(); // link url -> li
+function headRow(ticket) {
+  let li = heads.get(ticket.url);
+  if (!li) {
+    li = el('li', 'ticket-head');
+    li.setAttribute('role', 'heading');
+    li.setAttribute('aria-level', '3');
+    li._head = ticket.url;
+    heads.set(ticket.url, li);
+  }
+  if (li.textContent !== ticket.label) li.textContent = ticket.label;
+  return li;
+}
+function patchList(list, wanted, groups = false) {
+  const entries = groups ? ticketGroups(wanted) : wanted.map(item => ({ item }));
+  const want = entries.flatMap(entry => entry.ticket ? [headRow(entry.ticket), ...entry.items.map(item => rowFor(list, item, true))] : [rowFor(list, entry.item, false)]);
   const keep = new Set(want);
-  for (const li of [...list.children]) if (!keep.has(li)) { rows.delete(li.dataset.id); li.remove(); }
+  for (const li of [...list.children]) if (!keep.has(li)) { if (li._head) heads.delete(li._head); else rows.delete(li.dataset.id); li.remove(); }
   want.forEach((li, i) => { if (list.children[i] !== li) list.insertBefore(li, list.children[i] || null); });
+}
+
+function rowFor(list, item, grouped) {
+  let li = rows.get(item.id);
+  if (li && li.parentElement !== list) { li.remove(); rows.delete(item.id); li = null; }
+  if (!li) { li = buildRow(item); rows.set(item.id, li); }
+  updateRow(li, item);
+  li.classList.toggle('in-ticket', grouped);
+  return li;
 }
 
 function apply(data) {
@@ -285,7 +303,7 @@ function apply(data) {
 
   const focus = focusInfo(), active = document.activeElement, x = scrollX, y = scrollY;
   const selection = active?.matches('input.edit') ? [active.selectionStart, active.selectionEnd] : null;
-  patchList($('open'), open);
+  patchList($('open'), open, true);
   patchList($('done'), done);
   if (active && active !== document.body && active.isConnected && active.getClientRects().length) {
     active.focus({ preventScroll: true });
@@ -590,6 +608,7 @@ function renderDetail() {
   }
   if (item.sdlc) field(dl, t('field.work'), `${item.sdlc.slug}${item.sdlc.phase ? ` · ${phaseLabel(t, item.sdlc.phase)}` : ''}`);
   $('reply-box').hidden = item.done;
+  renderChoices(item);
   const history = $('history');
   history.replaceChildren(...item.events.map(e => {
     const li = el('li');
@@ -599,6 +618,38 @@ function renderDetail() {
   if (!item.events.length) history.append(el('li', 'hint', t('history.empty')));
   $('notes-box').hidden = !item.notes.length;
   $('notes').textContent = item.notes.map(n => n.trim()).join('\n');
+}
+// One button per offered answer; a click sends the label as an ordinary reply. The recommended one comes first.
+function renderChoices(item) {
+  const box = $('reply-choices'), labels = item.done ? [] : item.choices || [];
+  const order = labels.map((label, i) => ({ label, recommended: item.pick === i + 1 }))
+    .sort((a, b) => b.recommended - a.recommended);
+  box.replaceChildren(...order.map(({ label, recommended }) => {
+    const b = el('button', recommended ? 'primary choice' : 'secondary choice', label);
+    b.type = 'button';
+    if (recommended) b.append(el('span', 'choice-tag', t('choices.recommended')));
+    b.addEventListener('click', async () => {
+      for (const other of box.children) other.disabled = true;
+      try { await sendReply(item.id, item.version, label); } catch { /* shown in the reply box */ }
+      for (const other of box.children) other.disabled = false;
+    });
+    return b;
+  }));
+  box.hidden = !order.length;
+}
+async function sendReply(id, version, text, sent) {
+  const error = $('reply-error');
+  error.hidden = true;
+  try {
+    const data = await api('/api/item', { id, version, op: 'reply', text });
+    sent?.();
+    if (data.items) apply(data);
+    announce(t('announce.replied'));
+    return data;
+  } catch (failure) {
+    if (detailId === id) { show(error, sourceOf(failure)); error.hidden = false; }
+    throw failure;
+  }
 }
 async function loadArtifact() {
   const id = detailId, version = items.find(item => item.id === id)?.version, request = ++artifactRequest;
@@ -709,16 +760,12 @@ $('reply-form').addEventListener('submit', async event => {
   if (!text) { show(error, { key: 'reply.empty' }); error.hidden = false; $('reply-text').focus(); return; }
   const id = detailId, draft = draftFor(id);
   try {
-    const data = await api('/api/item', { id, version: draft.replyVersion, op: 'reply', text });
-    draft.reply = '';
-    if (detailId === id) $('reply-text').value = '';
-    if (data.items) apply(data);
-    announce(t('announce.replied'));
-  } catch (failure) {
-    if (detailId !== id) return;
-    show(error, sourceOf(failure));
-    error.hidden = false;
-    $('reply-text').focus();
+    await sendReply(id, draft.replyVersion, text, () => {
+      draft.reply = '';
+      if (detailId === id) $('reply-text').value = '';
+    });
+  } catch {
+    if (detailId === id) $('reply-text').focus();
   }
 });
 $('detail-close').addEventListener('click', () => dialog.close());
