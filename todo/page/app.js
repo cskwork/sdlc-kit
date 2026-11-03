@@ -221,7 +221,7 @@ function updateRow(li, item) {
   li.dataset.tone = toneOf(status);
   const queued = queue.queued.has(item.id) ? queue.stop.status === 'blocked' ? 'row.queuedFix' : 'row.queued' : '';
   // Rebuild the small info line only when it changed, so a focused link keeps focus.
-  const sig = JSON.stringify([lang, status.kind, queued, item.project, item.link, item.sdlc?.phase, item.error, item.sdlc?.action, item.done]);
+  const sig = JSON.stringify([lang, status.kind, queued, item.project, item.repos, item.link, item.sdlc?.phase, item.error, item.sdlc?.action, item.done]);
   if (sig === r.sig) return;
   r.sig = sig;
   const parts = [];
@@ -231,6 +231,7 @@ function updateRow(li, item) {
     if (queued) parts.push(chip(t(queued), 'chip queued'));
   }
   if (item.project) { const c = chip(basename(item.project)); c.title = item.project; parts.push(c); }
+  if (item.repos?.length) { const c = chip(item.repos.join(', '), 'chip repos'); c.title = t('field.repos'); parts.push(c); }
   if (item.link && /^https?:\/\//i.test(item.link.url)) {
     const a = el('a', 'chip link', item.link.label);
     a.href = item.link.url;
@@ -581,6 +582,7 @@ function renderDetail() {
   if (actor === 'blocked') field(dl, t('field.problem'), item.error || item.sdlc?.action || t('field.unknown'));
   if (actor === 'blocked' && !item.error) field(dl, t('field.next'), fixButton(item));
   field(dl, t('field.project'), item.project);
+  if (item.repos?.length) field(dl, t('field.repos'), item.repos.join(', '));
   if (item.link && /^https?:\/\//i.test(item.link.url)) {
     const a = el('a', '', item.link.label);
     a.href = item.link.url; a.target = '_blank'; a.rel = 'noopener noreferrer';

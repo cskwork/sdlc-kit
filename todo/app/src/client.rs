@@ -57,6 +57,8 @@ pub struct Item {
     pub sdlc: Option<Sdlc>,
     #[serde(default)]
     pub brief: String,
+    #[serde(default)]
+    pub repos: Vec<String>,
     pub version: String,
     pub turn: Turn,
 }

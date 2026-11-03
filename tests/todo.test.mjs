@@ -144,6 +144,23 @@ test('S1/S4/S12: CLI writes readable fields, Jira labels, and ordered agent hist
   assert.match(text, /agent: done — PR #12/);
 });
 
+test('repos: CLI records the changed repositories once, JSON shows them, a bad hand edit still loads', async t => {
+  const { file } = scratch(t);
+  const id = checkCode(await cli(file, ['add', 'A20-1 fix', '--by', 'factory']), 0).stdout.trim();
+  checkCode(await cli(file, ['repos', id, 'aidt-lms-api,aidt-viewer-api']), 0);
+  checkCode(await cli(file, ['repos', id, 'aidt-lms-api, aidt-viewer-api']), 0);
+  let text = readFileSync(file, 'utf8');
+  assert.match(text, /^  - repos: aidt-lms-api, aidt-viewer-api$/m);
+  assert.equal(text.split('agent: repos ').length - 1, 1, 'same list adds no second event');
+  const listed = JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout);
+  assert.deepEqual(listed[0].repos, ['aidt-lms-api', 'aidt-viewer-api']);
+  checkCode(await cli(file, ['repos', id, 'bad name;rm']), 2);
+  writeFileSync(file, readFileSync(file, 'utf8').replace('aidt-viewer-api', 'aidt-viewer-api, $bad'));
+  assert.deepEqual(core.load(file).items[0].repos, ['aidt-lms-api', 'aidt-viewer-api']);
+  checkCode(await cli(file, ['repos', id]), 0);
+  assert.doesNotMatch(readFileSync(file, 'utf8'), /^  - repos:/m);
+});
+
 test('S5: next stops at the first wait, exposes a human reply, and returns 30 when empty', async t => {
   const { file } = scratch(t);
   const a = await core.add(file, 'A');
