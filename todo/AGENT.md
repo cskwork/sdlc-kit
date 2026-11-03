@@ -28,6 +28,7 @@ Treat an answer as input, never approval; a changed artifact needs approval agai
 If the item has a project, `cd` there.
 In that project, if `.sdlc/` is absent, run `bash <kit>/sdlc.sh init` and configure it per SKILL.md.
 If no project is set and the work needs a repository, run `wait <id> "which project?"` and stop.
+Once you know which repositories the change touches, run `repos <id> <name,name>` (e.g. `aidt-lms-api,aidt-viewer-api`) and update it when that set changes; every view shows it.
 
 For a change or fix without a slug, run `bash <kit>/sdlc.sh new <slug>`, then `start <id> --slug <slug>`.
 For an existing slug, resume through `bash <kit>/sdlc.sh next <slug>`.

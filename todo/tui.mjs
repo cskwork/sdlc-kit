@@ -58,6 +58,7 @@ const webText = (state, t) => state.webUrl || (state.webError ? t('tui.webOffBec
 function detailLines(item, t) {
   const [glyph, , label] = status(item, t);
   return [item.title, `${glyph} ${label} · ${item.id}`, t('tui.field.project', { value: item.project || '—' }),
+    t('tui.field.repos', { value: item.repos?.length ? item.repos.join(', ') : '—' }),
     t('tui.field.link', { value: item.link?.url || '—' }), t('tui.field.sdlc', { value: item.sdlc?.slug || '—' }),
     t('tui.field.phase', { phase: item.sdlc?.phase ? phaseLabel(t, item.sdlc.phase) : '—', state: item.sdlc?.state || '—' }),
     t('tui.field.action', { value: item.error || item.sdlc?.action || '—' }),
@@ -112,7 +113,7 @@ export function render(state, { width = 80, height = 24, color = false } = {}) {
       if (active) selectionRow = rows.length;
       const [glyph, code, label] = status(current, t), prefix = `${active ? '›' : ' '} ${glyph} `;
       const project = clean(current.project || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop();
-      const meta = clean(current.done ? doneTime(current) : [project, current.link?.label ||
+      const meta = clean(current.done ? doneTime(current) : [project, current.repos?.join(', '), current.link?.label ||
         (current.link?.url ? core.linkLabel(current.link.url) : ''), current.sdlc?.phase && phaseLabel(t, current.sdlc.phase)].filter(Boolean).join(' · '));
       const showMeta = meta && width >= 72 && widthOf(meta) <= Math.floor(width / 3);
       const title = clip(current.title, width - widthOf(prefix) - (showMeta ? widthOf(meta) + 2 : 0));
