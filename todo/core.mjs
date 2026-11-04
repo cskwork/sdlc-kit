@@ -280,6 +280,8 @@ async function reclaim(lock, observed) {
     removeLock(lock, observed, true, `${marker}.moved`);
   } finally { unlink(marker); }
 }
+// Windows refuses to open a lock file another process is still deleting (EPERM): the lock is busy, not broken.
+const pendingDelete = error => process.platform === 'win32' && error.code === 'EPERM';
 export async function mutate(file, fn, onSaved) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const lock = `${file}.lock`, deadline = Date.now() + 2000;
@@ -289,13 +291,13 @@ export async function mutate(file, fn, onSaved) {
       await waitMarkers(lock, 'reclaim');
       try { fd = fs.openSync(lock, 'wx'); }
       catch (error) {
-        if (error.code !== 'EEXIST') throw error;
+        if (error.code !== 'EEXIST' && !pendingDelete(error)) throw error;
         try {
           const observed = fs.readFileSync(lock, 'utf8');
           if (Date.now() - fs.statSync(lock).mtimeMs > 10000) {
             await reclaim(lock, observed); continue;
           }
-        } catch (e) { if (e.code === 'ENOENT') continue; throw e; }
+        } catch (e) { if (e.code === 'ENOENT') continue; if (!pendingDelete(e)) throw e; }
         if (Date.now() >= deadline) throw new Error(`timed out waiting for lock: ${lock}`);
         await pause(20);
       }
