@@ -109,7 +109,7 @@ function whatWaits(item) {
   return item.waiting || (status.gate ? t(`next.${status.kind}`) : item.sdlc?.action || t(`next.${status.kind}`));
 }
 // Colour tone of a status pill, row bar and check ring: amber you, blue agent, grey not started or not picked up.
-const tones = { you: 'wait', agent: 'busy', blocked: 'blocked', done: 'ok' };
+const tones = { you: 'wait', agent: 'busy', others: 'open', blocked: 'blocked', done: 'ok' };
 const toneOf = status => ['new', 'handoff'].includes(status.kind) ? 'open' : tones[status.actor];
 const pill = item => { const status = statusOf(item); return chip(t(`status.${status.kind}`), `badge ${toneOf(status)}`); };
 function doneAt(item) {
@@ -221,13 +221,14 @@ function updateRow(li, item) {
   li.dataset.tone = toneOf(status);
   const queued = queue.queued.has(item.id) ? queue.stop.status === 'blocked' ? 'row.queuedFix' : 'row.queued' : '';
   // Rebuild the small info line only when it changed, so a focused link keeps focus.
-  const sig = JSON.stringify([lang, status.kind, queued, item.project, item.repos, item.link, item.sdlc?.phase, item.error, item.sdlc?.action, item.done]);
+  const sig = JSON.stringify([lang, status.kind, queued, item.project, item.repos, item.link, item.sdlc?.phase, item.error, item.sdlc?.action, item.others, item.done]);
   if (sig === r.sig) return;
   r.sig = sig;
   const parts = [];
   if (!item.done) {
     parts.push(pill(item));
     if (status.actor === 'blocked') parts.push(chip(item.error || item.sdlc?.action || t('row.unknownError'), 'row-error'));
+    if (status.actor === 'others') parts.push(chip(item.others, 'chip others'));
     if (queued) parts.push(chip(t(queued), 'chip queued'));
   }
   if (item.project) { const c = chip(basename(item.project)); c.title = item.project; parts.push(c); }
@@ -597,6 +598,7 @@ function renderDetail() {
   const actor = statusOf(item).actor;
   field(dl, t('field.status'), pill(item));
   if (actor === 'you') field(dl, t('field.next'), whatWaits(item));
+  if (actor === 'others') field(dl, t('field.others'), item.others);
   if (actor === 'blocked') field(dl, t('field.problem'), item.error || item.sdlc?.action || t('field.unknown'));
   if (actor === 'blocked' && !item.error) field(dl, t('field.next'), fixButton(item));
   field(dl, t('field.project'), item.project);

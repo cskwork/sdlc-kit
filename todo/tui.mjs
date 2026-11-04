@@ -53,7 +53,7 @@ const textOf = state => translator(state.lang || defaultLanguage);
 // What the human is asked to do: the explicit wait, else the sdlc action, else the generic step.
 const waitText = (item, t) => item.waiting || item.sdlc?.action || t(`next.${statusOf(item).kind}`);
 const doneTime = item => [...(item.events || [])].reverse().find(e => /^(done|DONE)(?:$| —)/.test(e.what))?.at || '';
-const looks = { done: ['✓', '2;33'], blocked: ['✕', '31'], you: ['●', '33'], agent: ['◐', '36'], handoff: ['◌', '36'], new: ['○', ''] };
+const looks = { done: ['✓', '2;33'], blocked: ['✕', '31'], you: ['●', '33'], agent: ['◐', '36'], others: ['◇', '2'], handoff: ['◌', '36'], new: ['○', ''] };
 function status(item, t) {
   const { actor, kind } = statusOf(item);
   return [...looks[['new', 'handoff'].includes(kind) ? kind : actor], t(`status.${kind}`)];
