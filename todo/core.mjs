@@ -51,6 +51,11 @@ const lastIndex = (item, match) => item.events.reduce((last, event, i) => match(
 // Only an explicit fix request hands a block to an agent; a plain reply leaves it stopped.
 export const fixRequest = 'fix requested';
 const fixPending = item => lastIndex(item, event => event.who === 'human' && event.what === fixRequest) > lastIndex(item, isRead);
+// What the item last waited for, kept after a reply clears the wait so an agent can tell an answer changed nothing.
+export function asked(item) {
+  const last = item.events[lastIndex(item, isWait)];
+  return last ? last.what.replace(/^(waiting|NEEDS-HUMAN) — /, '') : '';
+}
 export function replies(item) {
   const lastWait = lastIndex(item, isWait);
   return item.events.filter((event, i) => i > lastWait && isAnswer(event));

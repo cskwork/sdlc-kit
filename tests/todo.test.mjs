@@ -216,6 +216,8 @@ test('others: waiting on someone else leaves Needs you, next passes it by, a rep
   await core.reply(file, a.id, '기획에 다시 물어봐');
   item = core.load(file).items[0];
   assert.deepEqual([item.others, item.status, statusOf(item).kind], ['', 'workable', 'handoff'], 'a reply hands it back to an agent');
+  const taken = JSON.parse(checkCode(await cli(file, ['take', a.id, '--json']), 0).stdout);
+  assert.deepEqual([taken.waiting, taken.asked], ['', 'which endpoint?'], 'asked keeps the last wait after a reply');
   await core.others(file, a.id, 'QA 회신 대기');
   await core.wait(file, a.id, 'VPN을 dev로 바꿔 주세요');
   item = core.load(file).items[0];
