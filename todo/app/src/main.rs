@@ -57,6 +57,7 @@ fn status_label(lang: Lang, item: &Item) -> &'static str {
         "agent" => t(lang, "status.agent"),
         "handoff" => t(lang, "status.handoff"),
         "blocked" => t(lang, "status.blocked"),
+        "others" => t(lang, "status.others"),
         "done" => t(lang, "status.done"),
         _ => t(lang, "status.new"),
     }
@@ -267,7 +268,7 @@ impl eframe::App for App {
                 ui.add_space(4.0);
                 let count = |actor: &str| model.items.iter().filter(|i| i.turn.actor == actor).count();
                 ui.horizontal(|ui| {
-                    for (actor, key) in [("you", "you"), ("agent", "agent"), ("blocked", "blocked"), ("done", "done")] {
+                    for (actor, key) in [("you", "you"), ("agent", "agent"), ("others", "others"), ("blocked", "blocked"), ("done", "done")] {
                         pill(ui, &format!("{} {}", t(lang, key), count(actor)), actor, dark);
                     }
                 });
@@ -289,7 +290,8 @@ impl eframe::App for App {
 
                 let shown: Vec<&Item> = model.items.iter().filter(|i| match self.tab {
                     Tab::Focus => needs_you(i),
-                    Tab::Agent => !i.done && i.turn.actor == "agent",
+                    // Items waiting on someone else are in progress, not yours.
+                    Tab::Agent => !i.done && matches!(i.turn.actor.as_str(), "agent" | "others"),
                     Tab::All => !i.done,
                     Tab::Done => i.done,
                 }).collect();
@@ -377,6 +379,7 @@ impl App {
             "you" if !item.turn.gate.is_empty() && item.waiting.is_empty() => (t(lang, "waits"), t(lang, if item.turn.gate == "plan" { "ask.plan" } else { "ask.intent" }).to_string()),
             "you" => (t(lang, "waits"), if item.waiting.is_empty() { action.clone() } else { item.waiting.clone() }),
             "blocked" => (t(lang, "problem"), item.error.clone().unwrap_or(action.clone())),
+            "others" => (t(lang, "waits.others"), item.others.clone()),
             _ => ("", String::new()),
         };
         // The brief comes from the work document (intent.md or PLAN.md) or the item's brief file.

@@ -141,6 +141,7 @@ label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.35
 a.chip { display: inline-block; min-height: 44px; min-width: 44px; line-height: 44px; }
 .row-error { color: var(--bad); overflow-wrap: anywhere; flex-basis: 100%; }
 .chip.repos { color: var(--accent); font-weight: 600; }
+.chip.others { color: var(--muted); overflow-wrap: anywhere; }
 /* One-click answers sit above the reply box; the recommended one is first and filled. */
 .choices { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
 .choices[hidden] { display: none; }

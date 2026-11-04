@@ -65,7 +65,9 @@ function derive(item) {
   if (isRelativeProject(item.project)) item.error = relativeProjectError;
   else delete item.error;
   item.status = item.done ? 'done' : item.error || item.sdlc?.state === 'BLOCKED' ? 'blocked' :
-    ((item.waiting || item.sdlc?.state === 'NEEDS-HUMAN') && !replies(item).length) ? 'waiting' : 'workable';
+    ((item.waiting || item.sdlc?.state === 'NEEDS-HUMAN') && !replies(item).length) ? 'waiting' :
+    // Waiting on someone else (a planner, QA): neither the human nor an agent can act until they answer.
+    item.others && !unread(item).length ? 'others' : 'workable';
   item.unread = unread(item).length;
   item.fixRequested = item.status === 'blocked' && !item.error && fixPending(item);
   return item;
@@ -122,7 +124,7 @@ function parse(source) {
     if (match) {
       const checked = match[1].toLowerCase() === 'x';
       item = { id: '', title: match[2].replace(/^~~(.*)~~$/, '$1'), done: section === 'done' || checked,
-        project: '', link: null, sdlc: null, waiting: '', brief: '', repos: [], choices: [], pick: null, events: [], notes: [] };
+        project: '', link: null, sdlc: null, waiting: '', others: '', brief: '', repos: [], choices: [], pick: null, events: [], notes: [] };
       if (checked && section === 'open') item.checkedOpen = true;
       model.items.push(item);
       continue;
@@ -137,6 +139,7 @@ function parse(source) {
       const sep = stateAction.indexOf(' — ');
       item.sdlc = { slug, phase, state: sep < 0 ? stateAction : stateAction.slice(0, sep), action: sep < 0 ? '' : stateAction.slice(sep + 3) };
     } else if ((field = text.match(/^  - waiting: (.*)$/))) item.waiting = field[1];
+    else if ((field = text.match(/^  - others: (.*)$/))) item.others = field[1];
     else if ((field = text.match(/^  - brief: (.*)$/))) item.brief = field[1];
     else if ((field = text.match(/^  - repos: (.*)$/))) item.repos = repoList(field[1], { strict: false });
     else if ((field = text.match(/^  - choices: (.*)$/))) { item.choices = choiceList(field[1], { strict: false }); item.pick = null; }
@@ -160,6 +163,7 @@ function renderItem(item) {
     lines.push(`  - sdlc: ${s.slug}${s.phase ? ` · ${s.phase}` : ''}${s.state ? ` · ${s.state}${s.action ? ` — ${s.action}` : ''}` : ''}`);
   }
   if (item.waiting) lines.push(`  - waiting: ${item.waiting}`);
+  if (item.others) lines.push(`  - others: ${item.others}`);
   if (item.brief) lines.push(`  - brief: ${item.brief}`);
   if (item.repos?.length) lines.push(`  - repos: ${item.repos.join(', ')}`);
   if (item.choices?.length) lines.push(`  - choices: ${item.choices.join(' | ')}`);
@@ -181,6 +185,7 @@ function event(item, who, what) { item.events.push({ at: stamp(), who, what }); 
 function finish(model, item, who, what) {
   item.done = true;
   item.waiting = '';
+  item.others = '';
   event(item, who, what);
   model.items.splice(model.items.indexOf(item), 1);
   const firstDone = model.items.findIndex(i => i.done);
@@ -415,7 +420,7 @@ export const move = (file, id, delta, version) => update(file, id, (item, model)
 }, version);
 export const remove = (file, id, version) => update(file, id, (item, model) => { model.items.splice(model.items.indexOf(item), 1); }, version);
 export const done = (file, id, words = '', by = 'agent', version) => update(file, id, (item, model) => finish(model, item, by, `done${words ? ` — ${line(words)}` : ''}`), version);
-export const reply = (file, id, words, version) => update(file, id, item => { item.waiting = ''; event(item, 'human', `reply — ${line(words)}`); }, version);
+export const reply = (file, id, words, version) => update(file, id, item => { item.waiting = ''; item.others = ''; event(item, 'human', `reply — ${line(words)}`); }, version);
 // The kit never runs a model: a fix request is recorded for the next agent run, and the
 // human's own todo-agent.json may name a command that starts one now ({id} {kit} {project}).
 function agentCommand(file, name, values) {
@@ -447,11 +452,21 @@ export async function requestFix(file, id, version, { kit = defaultKit } = {}) {
   const cwd = item.project && path.isAbsolute(item.project) && fs.existsSync(item.project) ? item.project : os.homedir();
   return { item, launch: await launch(argv, cwd) };
 }
-export const wait = (file, id, words) => update(file, id, item => { item.waiting = line(words); if (!item.waiting) fail('wait text required'); event(item, 'agent', `waiting — ${item.waiting}`); });
+export const wait = (file, id, words) => update(file, id, item => { item.waiting = line(words); if (!item.waiting) fail('wait text required'); item.others = ''; event(item, 'agent', `waiting — ${item.waiting}`); });
+// Someone other than the human must answer first (a planner, QA). It leaves "Needs you" and agents pass it by;
+// a reply from the human or a wait clears it. No text clears it too.
+export const others = (file, id, words = '') => update(file, id, item => {
+  const text = line(words);
+  if (text === item.others) return;
+  item.others = text;
+  if (text) item.waiting = '';
+  event(item, 'agent', text ? `waiting on others — ${text}` : 'others cleared');
+});
 // An agent drops its own wait once it no longer waits; a missing wait is a no-op.
 export const resume = (file, id, words = '') => update(file, id, item => {
-  if (!item.waiting) return;
+  if (!item.waiting && !item.others) return;
   item.waiting = '';
+  item.others = '';
   event(item, 'agent', `resumed${line(words) ? ` — ${line(words)}` : ''}`);
 });
 export const answer = (file, id, words) => update(file, id, item => { item.waiting = ''; event(item, 'agent', `chat answer — ${line(words)}`); });
@@ -520,7 +535,7 @@ async function synced(file, kit, fn) {
 }
 export const sync = (file, { kit = defaultKit } = {}) => synced(file, kit, model => model);
 function handOut(item) {
-  const result = { code: item.fixRequested ? 0 : { workable: 0, waiting: 10, blocked: 20 }[item.status], item: { ...item, events: [...item.events], replies: replies(item) } };
+  const result = { code: item.fixRequested ? 0 : { workable: 0, waiting: 10, others: 15, blocked: 20 }[item.status], item: { ...item, events: [...item.events], replies: replies(item) } };
   if (item.error) result.item.sdlc = { ...item.sdlc, state: 'BLOCKED', action: item.error };
   // A reply lets the agent read a gate answer once; only sdlc.sh can open the gate.
   if (result.code === 0 && item.sdlc?.state === 'NEEDS-HUMAN' && result.item.replies.length) event(item, 'sdlc', `NEEDS-HUMAN — ${item.sdlc.action}`);
@@ -528,7 +543,8 @@ function handOut(item) {
   return result;
 }
 export const next = (file, { kit = defaultKit } = {}) => synced(file, kit, model => {
-  const item = model.items.find(i => !i.done);
+  // An item waiting on someone else is passed by: nobody here can act on it.
+  const item = model.items.find(i => !i.done && i.status !== 'others');
   return item ? handOut(item) : { code: 30, item: null };
 });
 // A worker that owns one item (not the top-down queue) reads its replies the same way.
