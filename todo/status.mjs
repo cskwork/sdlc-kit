@@ -5,6 +5,8 @@ export function statusOf(item) {
   // A block the human asked an agent to fix waits for that agent, like an unread reply.
   if (item.status === 'blocked') return item.fixRequested ? { actor: 'agent', kind: 'handoff' } : { actor: 'blocked', kind: 'blocked' };
   if (item.status === 'waiting') { const gate = gateOf(item); return { actor: 'you', kind: gate ? `approve-${gate}` : 'answer', gate }; }
+  // Someone else (a planner, QA) answers first; it is neither your turn nor an agent's.
+  if (item.status === 'others') return { actor: 'others', kind: 'others' };
   // A reply stays unread until an agent takes it with next or take; nobody is working on it yet.
   if (item.unread) return { actor: 'agent', kind: 'handoff' };
   return { actor: 'agent', kind: item.sdlc ? 'agent' : 'new' };
@@ -18,7 +20,7 @@ export function queueOf(items) {
   return { stop: open[stop], queued: new Set(behind.map(item => item.id)) };
 }
 export function countsOf(items) {
-  const counts = { you: 0, agent: 0, blocked: 0, done: 0 };
+  const counts = { you: 0, agent: 0, others: 0, blocked: 0, done: 0 };
   for (const item of items) counts[statusOf(item).actor]++;
   return counts;
 }
