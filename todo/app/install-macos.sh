@@ -15,8 +15,9 @@ app="$dir/$name.app"
 cargo build --release --manifest-path "$here/Cargo.toml"
 xml() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' <<<"$1"; }
 env_entry() { printf '    <key>%s</key><string>%s</string>\n' "$1" "$(xml "$2")"; }
-mkdir -p "$app/Contents/MacOS"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$here/target/release/sdlc-todo" "$app/Contents/MacOS/sdlc-todo"
+cp "$here/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
 {
   cat <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -25,6 +26,7 @@ cp "$here/target/release/sdlc-todo" "$app/Contents/MacOS/sdlc-todo"
 <dict>
   <key>CFBundleExecutable</key><string>sdlc-todo</string>
   <key>CFBundleIdentifier</key><string>dev.sdlc-kit.todo</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleName</key><string>$(xml "$name")</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$(cat "$kit/VERSION")</string>
@@ -38,6 +40,7 @@ PLIST
   [ -z "${SDLC_TODO:-}" ] || env_entry SDLC_TODO "$SDLC_TODO"
   printf '  </dict>\n</dict>\n</plist>\n'
 } > "$app/Contents/Info.plist"
-# LaunchServices caches Info.plist; re-register so a changed environment takes effect.
+# LaunchServices and Finder cache Info.plist and the icon; touch and re-register so changes take effect.
+touch "$app"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app" 2>/dev/null || true
 echo "$app"
