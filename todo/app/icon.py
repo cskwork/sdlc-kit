@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Draws AppIcon.icns: the tray glyph (a rounded check box) in white on an accent tile.
+"""Draws the app icon: the tray glyph (a rounded check box) in white on an accent tile.
 
-Run on macOS with Pillow: python3 todo/app/icon.py. install-macos.sh copies the result.
+Run on macOS with Pillow: python3 todo/app/icon.py. It writes AppIcon.icns, which install-macos.sh
+copies into the bundle, and AppIcon.png, which the app sets as its window and Dock icon at runtime
+(without it eframe shows its own default icon over the bundle's).
 """
 import pathlib
 import subprocess
@@ -43,6 +45,7 @@ def master(size=1024):
 
 def main():
     art = master()
+    art.resize((256, 256), Image.Resampling.LANCZOS).save(HERE / "AppIcon.png")
     with tempfile.TemporaryDirectory() as tmp:
         iconset = pathlib.Path(tmp, "AppIcon.iconset")
         iconset.mkdir()
@@ -50,7 +53,7 @@ def main():
             for factor, suffix in ((1, ""), (2, "@2x")):
                 art.resize((base * factor,) * 2, Image.Resampling.LANCZOS).save(iconset / f"icon_{base}x{base}{suffix}.png")
         subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(HERE / "AppIcon.icns")], check=True)
-    print(HERE / "AppIcon.icns")
+    print(HERE / "AppIcon.icns", HERE / "AppIcon.png")
 
 
 if __name__ == "__main__":
