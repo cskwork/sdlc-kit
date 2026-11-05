@@ -69,6 +69,7 @@ function detailLines(item, t) {
     t('tui.field.next', { value: waiting(item) ? waitText(item, t) : '—' }),
     ...(waiting(item) ? [t('tui.decideInBrowser')] : []),
     ...(choicesOf(item).length ? [choiceText(item, t)] : []),
+    ...(!item.done && item.run ? [t('tui.field.run', { value: item.run })] : []),
     ...(item.done ? [t('tui.field.done', { value: doneTime(item) || '—' })] : []), '', t('tui.history'),
     ...(item.events || []).map(e => `${e.at} ${e.who}: ${e.what}`), '', t('tui.notes'), ...(item.notes || [])];
 }

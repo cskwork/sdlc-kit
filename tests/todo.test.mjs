@@ -161,6 +161,31 @@ test('repos: CLI records the changed repositories once, JSON shows them, a bad h
   assert.doesNotMatch(readFileSync(file, 'utf8'), /^  - repos:/m);
 });
 
+test('run: CLI stores the command the human runs, lists it, adds one event per change; a reply, resume or no text clears it', async t => {
+  const { file } = scratch(t);
+  const id = checkCode(await cli(file, ['add', '[공장 알림] AIDT Jira 라인', '--by', 'factory']), 0).stdout.trim();
+  checkCode(await cli(file, ['wait', id, 'Switch VPN to audit']), 0);
+  checkCode(await cli(file, ['run', id, '두 줄\n명령']), 2);
+  checkCode(await cli(file, ['run', id, "open -a Terminal '/x/audit.command'"]), 0);
+  checkCode(await cli(file, ['run', id, "open -a Terminal '/x/audit.command'"]), 0);
+  let text = readFileSync(file, 'utf8');
+  assert.match(text, /^  - run: open -a Terminal '\/x\/audit.command'$/m);
+  assert.equal(text.split('agent: run — ').length - 1, 1, 'the same command adds no second event');
+  assert.equal(core.serialize(core.load(file)), text, 'a file with a command round-trips byte for byte');
+  assert.equal(JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout)[0].run, "open -a Terminal '/x/audit.command'");
+  await core.reply(file, id, '조치했어요');
+  assert.doesNotMatch(readFileSync(file, 'utf8'), /^  - run:/m, 'the human reply clears it');
+  checkCode(await cli(file, ['wait', id, 'again']), 0);
+  checkCode(await cli(file, ['run', id, 'echo ok']), 0);
+  checkCode(await cli(file, ['resume', id]), 0);
+  assert.doesNotMatch(readFileSync(file, 'utf8'), /^  - run:/m, 'resume clears it');
+  checkCode(await cli(file, ['run', id, 'echo ok']), 0);
+  checkCode(await cli(file, ['run', id]), 0);
+  text = readFileSync(file, 'utf8');
+  assert.doesNotMatch(text, /^  - run:/m);
+  assert.match(text, /agent: run cleared$/m);
+});
+
 test('suggest: CLI stores the recommended answer, lists it, adds one event per change; a reply or no text clears it', async t => {
   const { file } = scratch(t);
   const id = checkCode(await cli(file, ['add', 'A20-1438 secure file url', '--by', 'factory']), 0).stdout.trim();

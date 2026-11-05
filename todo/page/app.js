@@ -607,6 +607,7 @@ function renderDetail() {
   field(dl, t('field.status'), pill(item));
   if (actor === 'you') field(dl, t('field.next'), whatWaits(item));
   if (actor === 'others') field(dl, t('field.others'), item.others);
+  if (!item.done && item.run) field(dl, t('field.run'), el('code', '', item.run));
   if (actor === 'blocked') field(dl, t('field.problem'), item.error || item.sdlc?.action || t('field.unknown'));
   if (actor === 'blocked' && !item.error) field(dl, t('field.next'), fixButton(item));
   field(dl, t('field.project'), item.project);
