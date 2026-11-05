@@ -67,6 +67,8 @@ pub struct Item {
     pub pick: Option<usize>,
     #[serde(default)]
     pub suggest: String,
+    #[serde(default)]
+    pub run: String,
     pub version: String,
     pub turn: Turn,
 }

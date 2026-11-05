@@ -71,6 +71,25 @@ fn open_url(url: &str) {
     let _ = std::process::Command::new(program).args(args).spawn();
 }
 
+/// Opens Terminal with `command` typed at the prompt but not run, so the human reads it and presses Enter.
+/// A throwaway ZDOTDIR loads the human's ~/.zshrc, then `print -z` puts the command in the line editor; nothing is
+/// typed into the terminal, so nothing can run early. Returns false where that is not possible (not macOS, no zsh).
+fn open_terminal(command: &str) -> bool {
+    if !cfg!(target_os = "macos") || !std::path::Path::new("/bin/zsh").exists() { return false; }
+    let quote = |text: &str| format!("'{}'", text.replace('\'', "'\\''"));
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or_default();
+    let dir = std::env::temp_dir().join(format!("sdlc-run-{}-{stamp}", std::process::id()));
+    let dir_text = dir.to_string_lossy().to_string();
+    let rc = format!("ZDOTDIR=$HOME\n[[ -f $HOME/.zshrc ]] && source $HOME/.zshrc\ncommand rm -rf -- {}\nprint -rz -- {}\n", quote(&dir_text), quote(command));
+    // Terminal's session restore would write under the throwaway directory; this shell needs none.
+    let launcher = format!("#!/bin/zsh\nSHELL_SESSIONS_DISABLE=1 ZDOTDIR={} exec /bin/zsh -i\n", quote(&dir_text));
+    let script = dir.join("run.command");
+    let written = std::fs::create_dir_all(&dir).is_ok() && std::fs::write(dir.join(".zshrc"), rc).is_ok() && std::fs::write(&script, launcher).is_ok();
+    #[cfg(unix)]
+    let written = written && { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).is_ok() };
+    written && std::process::Command::new("open").args(["-a", "Terminal"]).arg(&script).spawn().is_ok()
+}
+
 fn quit(state: &State) -> ! {
     if let Ok(mut shared) = state.lock() {
         if let Some(mut child) = shared.child.take() { let _ = child.kill(); }
@@ -427,6 +446,17 @@ impl App {
         bullets(ui, p, t(lang, "doc.why"), &or_missing(&why));
         if let Some(doc) = doc { self.document(ui, p, item, doc); }
         ui.add_space(2.0);
+        // A command the human runs (e.g. a VPN login asking for an OTP): one click opens a terminal with it typed.
+        if !item.done && !item.run.is_empty() {
+            ui.label(RichText::new(&item.run).monospace().color(p.muted).size(11.5));
+            ui.horizontal_wrapped(|ui| {
+                if primary(ui, p, &format!("⌘ {}", t(lang, "run.button")), true).clicked() && !open_terminal(&item.run) {
+                    ctx.copy_text(item.run.clone());
+                    self.state.lock().unwrap().toast = Some((t(lang, "run.copied").to_string(), false, Instant::now()));
+                }
+                ui.label(RichText::new(t(lang, "run.help")).color(p.muted).size(11.5));
+            });
+        }
         // One button per offered answer; a click sends that label as an ordinary reply, the recommended one first.
         if !item.done && !item.choices.is_empty() {
             let mut order: Vec<(usize, &String)> = item.choices.iter().enumerate().collect();
