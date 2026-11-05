@@ -161,6 +161,31 @@ test('repos: CLI records the changed repositories once, JSON shows them, a bad h
   assert.doesNotMatch(readFileSync(file, 'utf8'), /^  - repos:/m);
 });
 
+test('suggest: CLI stores the recommended answer, lists it, adds one event per change; a reply or no text clears it', async t => {
+  const { file } = scratch(t);
+  const id = checkCode(await cli(file, ['add', 'A20-1438 secure file url', '--by', 'factory']), 0).stdout.trim();
+  checkCode(await cli(file, ['wait', id, 'LCMS 미리보기 인증을 어떻게 할까요?']), 0);
+  checkCode(await cli(file, ['suggest', id, '두 줄\n답']), 2);
+  checkCode(await cli(file, ['suggest', id, ' 미리보기는 지금처럼 두고 HLS는 뺀다 ']), 0);
+  checkCode(await cli(file, ['suggest', id, '미리보기는 지금처럼 두고 HLS는 뺀다']), 0);
+  let text = readFileSync(file, 'utf8');
+  assert.match(text, /^  - suggest: 미리보기는 지금처럼 두고 HLS는 뺀다$/m);
+  assert.equal(text.split('agent: suggest — ').length - 1, 1, 'the same suggestion adds no second event');
+  assert.equal(core.serialize(core.load(file)), text, 'a file with a suggestion round-trips byte for byte');
+  for (const [command, code] of [[['list', '--json'], 0], [['take', id, '--json'], 10]]) {
+    const json = JSON.parse(checkCode(await cli(file, command), code).stdout);
+    assert.equal((Array.isArray(json) ? json[0] : json).suggest, '미리보기는 지금처럼 두고 HLS는 뺀다');
+  }
+  await core.reply(file, id, '네');
+  assert.doesNotMatch(readFileSync(file, 'utf8'), /^  - suggest:/m, 'the human reply clears it');
+  checkCode(await cli(file, ['suggest', id, '다시 권장']), 0);
+  checkCode(await cli(file, ['suggest', id]), 0);
+  text = readFileSync(file, 'utf8');
+  assert.doesNotMatch(text, /^  - suggest:/m);
+  assert.match(text, /agent: suggest cleared$/m);
+  assert.equal(JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout)[0].suggest, '');
+});
+
 test('choices: CLI stores one-click answers and a pick, adds one event per change, clears, refuses bad input', async t => {
   const { file } = scratch(t);
   const id = checkCode(await cli(file, ['add', '[결정 D35] A20-1462 · how to proceed', '--by', 'factory']), 0).stdout.trim();
