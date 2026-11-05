@@ -17,6 +17,7 @@ const usage = `Usage: node ${path.join(kit, 'todo', 'todo.mjs')} <command>
   brief <id> <absolute .md path> (attach a markdown brief for the human; "" clears it)
   repos <id> [name,name] (repositories the work changes, shown on every view; empty clears)
   choices <id> ["label | label | ..."] [--pick N] (up to 6 one-click answers, N marks the recommended one; no labels clears)
+  run <id> ["command"] (a command the human runs; the app opens a terminal with it typed, not run; a reply or no text clears it)
   suggest <id> ["answer"] (the one-line reply you recommend, pre-filled in the human's reply field; a reply or no text clears it)
   done <id> ["result"] | web [--port N] [--open] [--lang L] | serve [--lang L] | help
   No command: the app (--ui tui,web,app picks any of them; --no-web for the TUI alone, --lang L).
@@ -27,7 +28,7 @@ const bad = message => { throw Object.assign(new Error(`${message}\n${usage}`), 
 const schemas = {
   add: { project: true, link: true, slug: true, by: true, brief: true },
   next: { json: false }, take: { json: false }, list: { json: false }, sync: {},
-  start: { slug: true, phase: true }, phase: {}, wait: {}, others: {}, resume: {}, answer: {}, note: {}, brief: {}, repos: {}, choices: { pick: true }, suggest: {}, done: {},
+  start: { slug: true, phase: true }, phase: {}, wait: {}, others: {}, resume: {}, answer: {}, note: {}, brief: {}, repos: {}, choices: { pick: true }, suggest: {}, run: {}, done: {},
   web: { port: true, open: false, lang: true }, serve: { lang: true }, help: {}, '': { 'no-web': false, lang: true, ui: true }
 };
 function argumentsFor(argv) {
@@ -49,7 +50,7 @@ function argumentsFor(argv) {
 function summary(item) {
   return { id: item.id, title: item.title, project: item.project, link: item.link,
     slug: item.sdlc?.slug || null, phase: item.sdlc?.phase || null, state: item.sdlc?.state || null,
-    action: item.sdlc?.action || '', waiting: item.waiting, asked: core.asked(item), others: item.others || '', brief: item.brief || '', repos: item.repos || [], choices: item.choices || [], pick: item.pick ?? null, suggest: item.suggest || '', replies: item.replies || core.replies(item), unread: item.unread || 0, fix: !!item.fixRequested, status: item.status };
+    action: item.sdlc?.action || '', waiting: item.waiting, asked: core.asked(item), others: item.others || '', brief: item.brief || '', repos: item.repos || [], choices: item.choices || [], pick: item.pick ?? null, suggest: item.suggest || '', run: item.run || '', replies: item.replies || core.replies(item), unread: item.unread || 0, fix: !!item.fixRequested, status: item.status };
 }
 const uiNames = ['tui', 'web', 'app'];
 const appPath = () => process.env.SDLC_TODO_APP || path.join(kit, 'todo', 'app', 'target', 'release', process.platform === 'win32' ? 'sdlc-todo.exe' : 'sdlc-todo');
@@ -167,6 +168,7 @@ async function main() {
     case 'done': arity(1, 2); await core.done(file, ...args); return;
     case 'others': arity(1, 2); await core.others(file, args[0], args[1] || ''); return;
     case 'suggest': arity(1, 2); await core.suggest(file, args[0], args[1] || ''); return;
+    case 'run': arity(1, 2); await core.run(file, args[0], args[1] || ''); return;
     case 'resume': arity(1, 2); await core.resume(file, ...args); return;
   }
 }
