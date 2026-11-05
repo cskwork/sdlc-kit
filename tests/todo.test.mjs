@@ -1082,6 +1082,15 @@ test('a fix request hands a block to the next agent once, unlike a plain reply',
   assert.ok(existsSync(join(root, 'todo.md')));
 });
 
+test('an agent wait for the human outranks an sdlc BLOCKED; a reply hands the block back', async t => {
+  const { file, item } = await blockedItem(t);
+  await core.wait(file, item.id, '이 티켓은 A20-1455에 합칠까요?');
+  assert.equal(core.load(file).items.find(i => i.id === item.id).status, 'waiting');
+  assert.equal((await next(file, 10)).id, item.id, 'the question stops the queue as Needs you');
+  await core.reply(file, item.id, '합친다');
+  assert.equal(core.load(file).items.find(i => i.id === item.id).status, 'blocked', 'the wait is gone; the block shows again');
+});
+
 test('a fix request is refused for items that are not blocked', async t => {
   const { file } = scratch(t);
   const open = await core.add(file, 'Workable');
