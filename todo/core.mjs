@@ -70,7 +70,8 @@ function derive(item) {
   if (isRelativeProject(item.project)) item.error = relativeProjectError;
   else delete item.error;
   item.status = item.done ? 'done' : item.error || item.sdlc?.state === 'BLOCKED' ? 'blocked' :
-    ((item.waiting || item.sdlc?.state === 'NEEDS-HUMAN') && !replies(item).length) ? 'waiting' :
+    // An agent's "someone else answers first" outranks an sdlc NEEDS-HUMAN it has already seen; its own wait does not.
+    ((item.waiting || item.sdlc?.state === 'NEEDS-HUMAN' && !item.others) && !replies(item).length) ? 'waiting' :
     // Waiting on someone else (a planner, QA): neither the human nor an agent can act until they answer.
     item.others && !unread(item).length ? 'others' : 'workable';
   item.unread = unread(item).length;
