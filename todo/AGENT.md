@@ -29,12 +29,12 @@ If the item has a project, `cd` there.
 In that project, if `.sdlc/` is absent, run `bash <kit>/sdlc.sh init` and configure it per SKILL.md.
 If no project is set and the work needs a repository, run `wait <id> "which project?"` and stop.
 Record the repositories you change with `repos <id> <a,b>`.
-To ask outside sdlc, fill `<kit>/todo/brief.md`, attach it with `brief`, offer `choices --pick`.
+To ask outside sdlc, fill `<kit>/todo/brief.md`, attach it with `brief`, offer `choices --pick` or `suggest`.
 
 For a change or fix without a slug, run `bash <kit>/sdlc.sh new <slug>`, then `start <id> --slug <slug>`.
 For an existing slug, resume through `bash <kit>/sdlc.sh next <slug>`.
 For every slug, new or resumed, including work begun in chat, run `add --slug <slug> --project <path>`.
-It is idempotent per project and slug; keep the returned id.
+Per project and slug it is idempotent; keep the id.
 Follow the sdlc loop, its gates and authority rules.
 After each phase, run `phase <id> <phase>` to record the current phase.
 When sdlc needs the human for a gate approval or an intent Questions for you item, report it and stop; `next` syncs that wait from sdlc.sh (exit 10).

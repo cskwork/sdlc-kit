@@ -547,6 +547,13 @@ test('language: TUI renders the configured language, fits Korean and L cycles ev
   assert.match(render({ ...fixture(), view: 'help' }, { width: 100, height: 40 }).join('\n'), /L +Next language/);
 });
 
+test('suggest: r starts the reply line with the suggested answer, cursor at its end', () => {
+  const item = { id: 'abcdef', title: 'Decide', done: false, status: 'waiting', waiting: 'q', version: 'v1', events: [], notes: [], suggest: 'HLS는 뺀다' };
+  const input = reduce({ items: [item], selected: 0, view: 'list', lang: 'en' }, 'r').state.input;
+  assert.deepEqual([input.kind, input.text, input.cursor], ['reply', 'HLS는 뺀다', 7]);
+  assert.equal(reduce({ items: [{ ...item, suggest: '' }], selected: 0, view: 'list', lang: 'en' }, 'r').state.input.text, '');
+});
+
 test('choices: number keys send an offered answer as a reply; the list shows them with the recommended one', () => {
   const item = { id: 'abcdef', title: 'Decide', done: false, status: 'waiting', waiting: 'q', version: 'v1', events: [], notes: [],
     choices: ['proceed', 'fix first', 'hold'], pick: 1 };

@@ -218,7 +218,8 @@ export function reduce(state, key) {
   else if (item) {
     if (key === 'Enter') { next.view = 'details'; next.detailOffset = 0; }
     else if (key === 'e') next.input = { kind: 'edit', id: item.id, item, text: item.title, cursor: chars(item.title).length };
-    else if (key === 'r' && waiting(item)) next.input = { kind: 'reply', id: item.id, item, text: '', cursor: 0 };
+    // The agent's suggested answer starts the line; Ctrl+U clears it.
+    else if (key === 'r' && waiting(item)) next.input = { kind: 'reply', id: item.id, item, text: item.suggest || '', cursor: chars(item.suggest || '').length };
     else if (/^[1-6]$/.test(key) && choicesOf(item)[key - 1]) effect('reply', { id: item.id, item, text: choicesOf(item)[key - 1] });
     else if (key === 'f' && fixable(item)) effect('fix', { id: item.id, item });
     else if (key === 'x' || key === ' ') effect('done', { id: item.id, item, done: !item.done });
@@ -320,7 +321,7 @@ export async function runTui({ file, kit, web, lang = defaultLanguage }) {
         result = await change(item => { item.title = effect.text; humanEvent(item, 'edited'); });
         remember('edit'); message(t('tui.edited')); break;
       case 'reply':
-        await change(item => { item.waiting = ''; humanEvent(item, `reply — ${effect.text}`); });
+        await change(item => { item.waiting = ''; item.suggest = ''; humanEvent(item, `reply — ${effect.text}`); });
         message(t('tui.replied')); break;
       case 'fix': {
         const { launch } = await core.requestFix(file, effect.id, effect.item.version, { kit });
