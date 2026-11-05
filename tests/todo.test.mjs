@@ -219,6 +219,16 @@ test('choices: CLI stores one-click answers and a pick, adds one event per chang
   assert.deepEqual([listed[0].choices, listed[0].pick], [[], null]);
 });
 
+test('others: an agent waiting on someone else outranks an sdlc NEEDS-HUMAN; its own wait and a reply still win', t => {
+  const { file } = scratch(t);
+  const status = text => { writeFileSync(file, text); return core.load(file).items[0].status; };
+  const block = extra => `## Open\n\n- [ ] A20-1449 chat authz\n  - sdlc: ws-chat · deliver · NEEDS-HUMAN — authorize deploy\n${extra}`;
+  assert.equal(status(block('')), 'waiting', 'sdlc alone asks the human');
+  assert.equal(status(block('  - others: 기획·QA 회신 대기\n')), 'others');
+  assert.equal(status(block('  - waiting: 어느 쪽?\n  - others: 기획·QA 회신 대기\n')), 'waiting', 'an explicit wait still asks the human');
+  assert.equal(status(block('  - others: 기획·QA 회신 대기\n  - 2026-11-05 10:00 human: reply — 진행\n')), 'workable', 'an unread reply goes to an agent');
+});
+
 test('others: waiting on someone else leaves Needs you, next passes it by, a reply or wait clears it', async t => {
   const { file } = scratch(t);
   const a = await core.add(file, 'A20-1 QA answers first');
