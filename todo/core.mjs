@@ -69,7 +69,8 @@ function derive(item) {
   // A file edit has no trustworthy cwd, even before a slug is attached.
   if (isRelativeProject(item.project)) item.error = relativeProjectError;
   else delete item.error;
-  item.status = item.done ? 'done' : item.error || item.sdlc?.state === 'BLOCKED' ? 'blocked' :
+  // An agent's own wait for the human outranks an sdlc BLOCKED it has already seen (e.g. a legacy slug); a call error does not.
+  item.status = item.done ? 'done' : item.error || item.sdlc?.state === 'BLOCKED' && !(item.waiting && !replies(item).length) ? 'blocked' :
     // An agent's "someone else answers first" outranks an sdlc NEEDS-HUMAN it has already seen; its own wait does not.
     ((item.waiting || item.sdlc?.state === 'NEEDS-HUMAN' && !item.others) && !replies(item).length) ? 'waiting' :
     // Waiting on someone else (a planner, QA): neither the human nor an agent can act until they answer.
