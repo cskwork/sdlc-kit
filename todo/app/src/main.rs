@@ -721,8 +721,10 @@ fn main() -> Result<(), String> {
     let args = args()?;
     let lang = Lang::parse(&args.lang);
     let launcher = Launcher { session_file: args.session, kit: args.kit, node: args.node, lang: args.lang };
+    // Without an icon eframe sets its own default as the window and Dock icon, over the bundle's.
+    let icon = eframe::icon_data::from_png_bytes(include_bytes!("../AppIcon.png")).expect("valid app icon");
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_title(t(lang, "title")).with_inner_size([440.0, 680.0]).with_min_inner_size([360.0, 420.0]),
+        viewport: egui::ViewportBuilder::default().with_title(t(lang, "title")).with_icon(icon).with_inner_size([440.0, 680.0]).with_min_inner_size([360.0, 420.0]),
         ..Default::default()
     };
     eframe::run_native("sdlc-todo", options, Box::new(move |cc| Ok(Box::new(App::new(cc, launcher, lang))))).map_err(|e| e.to_string())
