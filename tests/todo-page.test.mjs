@@ -289,6 +289,26 @@ test('B1: a reply draft keeps the version it was written for when a duplicate re
   assert.equal(body.text, 'Answer intended for A');
 });
 
+test('suggest: the reply field starts with the suggested answer; an edit stays, a new suggestion replaces an unedited one', async () => {
+  const p = page('#t=test-token', { fetch: async url => url === '/api/items' ? new Promise(() => {}) : { ok: true, text: async () => '{}' } });
+  vm.runInContext(`
+    items = [{ id: 'abcdef', title: 'A20-1438', version: 'shown-A', done: false, status: 'waiting', waiting: 'q', suggest: 'HLS는 뺀다', events: [], notes: [] }];
+    openDetail('abcdef');
+  `, p.context);
+  const field = p.nodes.get('reply-text');
+  assert.equal(field.value, 'HLS는 뺀다');
+  vm.runInContext(`items = [{ ...items[0], version: 'shown-B', suggest: 'HLS도 넣는다' }]; renderDetail();`, p.context);
+  assert.equal(field.value, 'HLS도 넣는다', 'an unedited suggestion follows the agent');
+  await p.nodes.get('reply-form').listeners.submit({ preventDefault() {} });
+  const body = JSON.parse(p.requests.find(r => r.url === '/api/item').options.body);
+  assert.deepEqual([body.text, body.version], ['HLS도 넣는다', 'shown-B'], 'sending as-is answers with the suggestion');
+  vm.runInContext(`items = [{ ...items[0], version: 'shown-C', suggest: '세 번째' }]; renderDetail();`, p.context);
+  field.value = '내 답';
+  p.nodes.get('reply-text').listeners.input();
+  vm.runInContext(`items = [{ ...items[0], version: 'shown-D', suggest: '네 번째' }]; renderDetail();`, p.context);
+  assert.equal(field.value, '내 답', 'an edit is never overwritten');
+});
+
 test('choices: an open item offers one button per label, the pick first; a click posts the label as a reply', async () => {
   const p = page('#t=test-token', { fetch: async url => url === '/api/items' ? new Promise(() => {}) : { ok: true, text: async () => '{}' } });
   vm.runInContext(`

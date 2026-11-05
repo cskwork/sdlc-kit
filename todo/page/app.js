@@ -490,7 +490,15 @@ let isWide = wideQuery.matches, quietClose = false;
 // detailId is what the dialog shows ('' when closed); selectedId is the row chosen for the pane.
 let detailId = '', selectedId = '', opener = null, artifact = null, artifactRequest = 0, detailVersion = '';
 
-function draftFor(id) { if (!drafts.has(id)) drafts.set(id, { reply: '', words: '' }); return drafts.get(id); }
+function draftFor(id) { if (!drafts.has(id)) drafts.set(id, { reply: '', words: '', seed: '' }); return drafts.get(id); }
+// The agent's suggested answer fills the reply field until the person edits it; a new suggestion replaces an unedited one.
+function seedReply(item) {
+  const d = draftFor(item.id), suggest = item.done ? '' : item.suggest || '';
+  if (d.reply !== d.seed || d.seed === suggest) return;
+  d.reply = d.seed = suggest;
+  d.replyVersion = item.version;
+  if (detailId === item.id) $('reply-text').value = suggest;
+}
 function openDetail(id, from, focus = true) {
   const item = items.find(i => i.id === id);
   if (!item) return;
@@ -610,6 +618,7 @@ function renderDetail() {
   }
   if (item.sdlc) field(dl, t('field.work'), `${item.sdlc.slug}${item.sdlc.phase ? ` · ${phaseLabel(t, item.sdlc.phase)}` : ''}`);
   $('reply-box').hidden = item.done;
+  seedReply(item);
   renderChoices(item);
   const history = $('history');
   history.replaceChildren(...item.events.map(e => {
@@ -763,7 +772,7 @@ $('reply-form').addEventListener('submit', async event => {
   const id = detailId, draft = draftFor(id);
   try {
     await sendReply(id, draft.replyVersion, text, () => {
-      draft.reply = '';
+      draft.reply = draft.seed = '';
       if (detailId === id) $('reply-text').value = '';
     });
   } catch {
