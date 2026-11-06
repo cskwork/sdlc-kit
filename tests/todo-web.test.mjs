@@ -770,3 +770,19 @@ test('brief: a plain item serves its brief as an ungated document; a missing or 
   assert.equal(gate.json.gate, 'intent', gate.text);
   assert.equal(realpathSync(gate.json.file), realpathSync(join(dir, '.sdlc', 'work', 'gated-brief', 'intent.md')));
 });
+
+test('artifact syncs only the requested item, not every open sdlc item', async t => {
+  // A full sync ran sdlc.sh status for each open item (~10 s for 35) and the app timed out reading the response.
+  const ctx = await web(t);
+  const dir = project(ctx.root);
+  const slug = 'web-only-this';
+  feature(dir, slug);
+  const item = await core.add(ctx.file, 'Shown item', { project: dir, slug });
+  const other = await core.add(ctx.file, 'Other item', { project: dir, slug: 'missing-feature' });
+  const shown = await request(ctx, `/api/artifact?id=${item.id}`);
+  assert.equal(shown.status, 200, shown.text);
+  assert.equal(shown.json.gate, 'intent');
+  const model = core.load(ctx.file);
+  assert.equal(model.items.find(i => i.id === item.id).sdlc.state, 'NEEDS-HUMAN', 'the shown item is synced');
+  assert.equal(model.items.find(i => i.id === other.id).sdlc.state, '', 'another item keeps its last state (no status call)');
+});
