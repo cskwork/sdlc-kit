@@ -520,10 +520,12 @@ export const run = (file, id, words = '') => update(file, id, item => {
 export const start = (file, id, slug, phase = 'intent') => update(file, id, item => { item.sdlc = { slug: line(slug), phase: line(phase), state: '', action: '' }; event(item, 'agent', `started ${item.sdlc.slug}`); });
 export const phase = (file, id, value) => update(file, id, item => { if (!item.sdlc) fail('item has no slug'); item.sdlc.phase = line(value); event(item, 'agent', `phase ${item.sdlc.phase}`); });
 export const approved = (file, id, gate, words) => update(file, id, item => event(item, 'human', `approved ${line(gate)} — "${line(words)}"`));
-async function readStatuses(file, kit) {
+// `only` limits the status calls to one item id; the rest keep their last synced state.
+const inScope = (item, only) => !item.done && item.project && item.sdlc && (!only || item.id === only);
+async function readStatuses(file, kit, only) {
   const statuses = [];
   for (const item of load(file).items) {
-    if (item.done || !item.project || !item.sdlc) continue;
+    if (!inScope(item, only)) continue;
     const previous = item.sdlc;
     let current;
     try {
@@ -538,9 +540,9 @@ async function readStatuses(file, kit) {
   return statuses;
 }
 const syncChanged = Symbol('inbox changed during status');
-function syncModel(model, statuses) {
+function syncModel(model, statuses, only) {
   // Status calls run unlocked; retry if any current slug lacks the same preimage.
-  if (model.items.some(item => !item.done && item.project && item.sdlc &&
+  if (model.items.some(item => inScope(item, only) &&
       !statuses.some(status => status.id === item.id && status.project === item.project &&
         JSON.stringify(status.previous) === JSON.stringify(item.sdlc)))) throw syncChanged;
   for (const { id, project, previous, current } of statuses) {
@@ -557,14 +559,14 @@ function syncModel(model, statuses) {
   }
   return identify(model);
 }
-async function synced(file, kit, fn) {
+async function synced(file, kit, fn, only) {
   for (;;) {
-    const statuses = await readStatuses(file, kit);
-    try { return await mutate(file, model => { syncModel(model, statuses); return fn(model); }); }
+    const statuses = await readStatuses(file, kit, only);
+    try { return await mutate(file, model => { syncModel(model, statuses, only); return fn(model); }); }
     catch (error) { if (error !== syncChanged) throw error; }
   }
 }
-export const sync = (file, { kit = defaultKit } = {}) => synced(file, kit, model => model);
+export const sync = (file, { kit = defaultKit, only = '' } = {}) => synced(file, kit, model => model, only);
 function handOut(item) {
   const result = { code: item.fixRequested ? 0 : { workable: 0, waiting: 10, others: 15, blocked: 20 }[item.status], item: { ...item, events: [...item.events], replies: replies(item) } };
   if (item.error) result.item.sdlc = { ...item.sdlc, state: 'BLOCKED', action: item.error };
