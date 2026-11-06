@@ -190,9 +190,10 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
           await synced();
           json(200, payload());
         } else if (url.pathname === '/api/artifact') {
-          // A plain item's brief is only a file read; sync only when an sdlc document is needed.
+          // A plain item's brief is only a file read. An sdlc document needs only this item's status:
+          // a full sync runs sdlc.sh status per open item (~10 s for 35) and the app timed out.
           let item = itemFor(file, url.searchParams.get('id'));
-          if (!item.brief || item.sdlc) { await synced(); item = itemFor(file, url.searchParams.get('id')); }
+          if (!item.brief || item.sdlc) { await core.sync(file, { kit, only: item.id }); item = itemFor(file, url.searchParams.get('id')); }
           json(200, item.brief && !gateIn(item) ? briefDocument(item) : await artifact(item, documentGate(item), kit, statusRunner));
         } else if (url.pathname === '/events') {
           const initial = payload();
