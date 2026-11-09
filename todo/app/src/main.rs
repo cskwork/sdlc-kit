@@ -308,7 +308,9 @@ impl eframe::App for App {
                     });
                 ui.add_space(10.0);
 
-                let shown: Vec<&Item> = model.items.iter().filter(|i| match self.tab {
+                // Pinned items (settings) sit above every open tab, outside the tab's own list and counts.
+                let pinned: Vec<&Item> = if self.tab == Tab::Done { Vec::new() } else { model.items.iter().filter(|i| i.pin && !i.done).collect() };
+                let shown: Vec<&Item> = model.items.iter().filter(|i| !(i.pin && !i.done)).filter(|i| match self.tab {
                     Tab::Focus => needs_you(i),
                     // Items waiting on someone else are in progress, not yours.
                     Tab::Agent => !i.done && matches!(i.turn.actor.as_str(), "agent" | "others"),
@@ -318,6 +320,10 @@ impl eframe::App for App {
                 let toast_height = if toast.is_some() { 44.0 } else { 0.0 };
                 egui::ScrollArea::vertical().max_height(ui.available_height() - toast_height).auto_shrink([false, false]).show(ui, |ui| {
                     ui.add_space(1.0);
+                    for item in &pinned {
+                        self.pinned(ui, ctx, &p, item, busy.contains(&item.id));
+                        ui.add_space(8.0);
+                    }
                     if shown.is_empty() && conn == Conn::Live {
                         ui.add_space(40.0);
                         ui.vertical_centered(|ui| ui.label(RichText::new(t(lang, if self.tab == Tab::Focus { "empty.focus" } else { "empty" })).color(p.muted)));
@@ -390,6 +396,38 @@ impl App {
         });
     }
 
+    /// A pinned item is one line: its title, then its choices (e.g. a setting's on/off), the current pick highlighted.
+    fn pinned(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, p: &theme::Palette, item: &Item, busy: bool) {
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(&item.title).size(14.0).strong());
+                ui.add_space(8.0);
+                self.choice_buttons(ui, ctx, p, item, busy, false);
+            });
+        });
+    }
+
+    /// One button per offered answer; a click sends that label as an ordinary reply. Decisions put the
+    /// recommended one first; a pinned setting keeps its order and marks the current pick.
+    fn choice_buttons(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, p: &theme::Palette, item: &Item, busy: bool, recommend: bool) {
+        let lang = self.lang;
+        let mut order: Vec<(usize, &String)> = item.choices.iter().enumerate().collect();
+        if recommend { order.sort_by_key(|(i, _)| item.pick != Some(i + 1)); }
+        for (i, label) in order {
+            let clicked = if item.pick == Some(i + 1) {
+                let text = if recommend { format!("{label} · {}", t(lang, "choices.recommended")) } else { format!("✓ {label}") };
+                primary(ui, p, &text, !busy).clicked()
+            } else {
+                ui.add_enabled(!busy, egui::Button::new(RichText::new(label).strong()).corner_radius(CornerRadius::same(8)).min_size(egui::vec2(0.0, 30.0))).clicked()
+            };
+            if clicked {
+                let (id, version, text, sent) = (item.id.clone(), item.version.clone(), label.clone(), t(lang, "reply.sent"));
+                self.act(ctx, &id.clone(), move |s| client::post(s, "/api/item", json!({ "id": id, "version": version, "op": "reply", "text": text })).map(|_| sent.to_string()));
+            }
+        }
+    }
+
     fn details(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, p: &theme::Palette, item: &Item, busy: bool, artifact: Option<&Result<Artifact, String>>) {
         let lang = self.lang;
         let dark = ui.visuals().dark_mode;
@@ -457,23 +495,8 @@ impl App {
                 ui.label(RichText::new(t(lang, "run.help")).color(p.muted).size(11.5));
             });
         }
-        // One button per offered answer; a click sends that label as an ordinary reply, the recommended one first.
         if !item.done && !item.choices.is_empty() {
-            let mut order: Vec<(usize, &String)> = item.choices.iter().enumerate().collect();
-            order.sort_by_key(|(i, _)| item.pick != Some(i + 1));
-            ui.horizontal_wrapped(|ui| {
-                for (i, label) in order {
-                    let clicked = if item.pick == Some(i + 1) {
-                        primary(ui, p, &format!("{label} · {}", t(lang, "choices.recommended")), !busy).clicked()
-                    } else {
-                        ui.add_enabled(!busy, egui::Button::new(RichText::new(label).strong()).corner_radius(CornerRadius::same(8)).min_size(egui::vec2(0.0, 30.0))).clicked()
-                    };
-                    if clicked {
-                        let (id, version, text, sent) = (item.id.clone(), item.version.clone(), label.clone(), t(lang, "reply.sent"));
-                        self.act(ctx, &id.clone(), move |s| client::post(s, "/api/item", json!({ "id": id, "version": version, "op": "reply", "text": text })).map(|_| sent.to_string()));
-                    }
-                }
-            });
+            ui.horizontal_wrapped(|ui| self.choice_buttons(ui, ctx, p, item, busy, true));
         }
         if item.turn.actor == "you" && item.turn.kind == "answer" {
             // The agent's suggested answer fills the field until the human edits it; a new suggestion replaces an unedited one.

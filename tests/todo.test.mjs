@@ -186,6 +186,27 @@ test('run: CLI stores the command the human runs, lists it, adds one event per c
   assert.match(text, /agent: run cleared$/m);
 });
 
+test('pin: CLI keeps a setting at the top of the app, lists it, survives replies and round-trips; off clears it', async t => {
+  const { file } = scratch(t);
+  const id = checkCode(await cli(file, ['add', '[공장 설정] 판정 에이전트(judge): 켜짐', '--by', 'factory']), 0).stdout.trim();
+  checkCode(await cli(file, ['choices', id, '켜기 | 끄기', '--pick', '1']), 0);
+  checkCode(await cli(file, ['pin', id, 'maybe']), 2);
+  checkCode(await cli(file, ['pin', id]), 0);
+  checkCode(await cli(file, ['pin', id, 'on']), 0);
+  let text = readFileSync(file, 'utf8');
+  assert.match(text, /^  - pin: yes$/m);
+  assert.equal(text.split('agent: pinned').length - 1, 1, 'pinning twice adds no second event');
+  assert.equal(core.serialize(core.load(file)), text, 'a pinned item round-trips byte for byte');
+  assert.equal(JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout)[0].pin, true);
+  await core.reply(file, id, '끄기');
+  assert.match(readFileSync(file, 'utf8'), /^  - pin: yes$/m, 'a reply to its choices keeps it pinned');
+  checkCode(await cli(file, ['pin', id, 'off']), 0);
+  text = readFileSync(file, 'utf8');
+  assert.doesNotMatch(text, /^  - pin:/m);
+  assert.match(text, /agent: unpinned$/m);
+  assert.equal(JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout)[0].pin, false);
+});
+
 test('suggest: CLI stores the recommended answer, lists it, adds one event per change; a reply or no text clears it', async t => {
   const { file } = scratch(t);
   const id = checkCode(await cli(file, ['add', 'A20-1438 secure file url', '--by', 'factory']), 0).stdout.trim();
