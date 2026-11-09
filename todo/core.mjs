@@ -522,21 +522,27 @@ export const phase = (file, id, value) => update(file, id, item => { if (!item.s
 export const approved = (file, id, gate, words) => update(file, id, item => event(item, 'human', `approved ${line(gate)} — "${line(words)}"`));
 // `only` limits the status calls to one item id; the rest keep their last synced state.
 const inScope = (item, only) => !item.done && item.project && item.sdlc && (!only || item.id === only);
-async function readStatuses(file, kit, only) {
-  const statuses = [];
-  for (const item of load(file).items) {
-    if (!inScope(item, only)) continue;
-    const previous = item.sdlc;
-    let current;
-    try {
-      const { stdout } = await execute('bash', [path.join(kit, 'sdlc.sh'), 'status', previous.slug, '--json'], { cwd: await nativePath(projectPath(item.project)) });
-      current = JSON.parse(stdout).features.find(f => f.slug === previous.slug);
-      if (!current || !current.state) throw new Error(`feature not found: ${previous.slug}`);
-    } catch (error) {
-      current = { ...previous, state: 'BLOCKED', action: line((error.stderr || error.message).replace(/[\r\n]+/g, ' ')) };
-    }
-    statuses.push({ id: item.id, project: item.project, previous, current });
+// sdlc.sh status is read-only, so items are read a few at a time; one at a time took about 7 s for 37 items
+// and over 60 s while other syncs ran at the same time.
+const STATUS_READERS = 6;
+async function readStatus(item, kit) {
+  const previous = item.sdlc;
+  let current;
+  try {
+    const { stdout } = await execute('bash', [path.join(kit, 'sdlc.sh'), 'status', previous.slug, '--json'], { cwd: await nativePath(projectPath(item.project)) });
+    current = JSON.parse(stdout).features.find(f => f.slug === previous.slug);
+    if (!current || !current.state) throw new Error(`feature not found: ${previous.slug}`);
+  } catch (error) {
+    current = { ...previous, state: 'BLOCKED', action: line((error.stderr || error.message).replace(/[\r\n]+/g, ' ')) };
   }
+  return { id: item.id, project: item.project, previous, current };
+}
+async function readStatuses(file, kit, only) {
+  const items = load(file).items.filter(item => inScope(item, only));
+  const statuses = new Array(items.length);
+  let next = 0;
+  const reader = async () => { while (next < items.length) { const i = next++; statuses[i] = await readStatus(items[i], kit); } };
+  await Promise.all(Array.from({ length: Math.min(STATUS_READERS, items.length) }, reader));
   return statuses;
 }
 const syncChanged = Symbol('inbox changed during status');
