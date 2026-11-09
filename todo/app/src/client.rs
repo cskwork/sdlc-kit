@@ -69,6 +69,9 @@ pub struct Item {
     pub suggest: String,
     #[serde(default)]
     pub run: String,
+    /// Kept at the top of every tab (a setting switched with its choices); never counted as needing you.
+    #[serde(default)]
+    pub pin: bool,
     pub version: String,
     pub turn: Turn,
 }

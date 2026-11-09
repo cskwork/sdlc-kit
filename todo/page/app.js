@@ -299,7 +299,8 @@ function apply(data) {
   const before = new Map(items.map(i => [i.id, i]));
   items = Array.isArray(data.items) ? data.items : [];
   file = data.file || file;
-  const open = items.filter(i => !i.done), done = items.filter(i => i.done);
+  // Pinned items (settings) stay on top, as in the app.
+  const open = items.filter(i => !i.done).sort((a, b) => Number(!!b.pin) - Number(!!a.pin)), done = items.filter(i => i.done);
   queue = queueOf(items);
 
   const focus = focusInfo(), active = document.activeElement, x = scrollX, y = scrollY;
