@@ -77,10 +77,10 @@ load_state() {
       case "$key" in seq) seq=$val;; entry) entry=$val;; fails) fails=$val;; returns_plan) rp=$val;; returns_build) rb=$val;; lastfail) lastfail=$val;; intent) intent=$val;; plan) plan=$val;; review) review=$val;; route) route=$val;; score) score=$val;; closed) closed=$val;; planned) planned=$val;; scored) scored=$val;; rounds) rounds=$val;; withdrawn) withdrawn=$val;; heads) heads=$val;; planbody) planbody=$val;; esac
     done < "$F/.state"
   fi
-  read -r ish iwho iseq its inote <<< "$intent"
-  read -r psh pish pwho pseq pts pnote <<< "$plan"
-  read -r verdict ventry vseq vsha vnote <<< "$review"
-  read -r dest rid rentry rseq reason <<< "$route"
+  read -r ish iwho iseq its inote < <(printf '%s\n' "$intent")
+  read -r psh pish pwho pseq pts pnote < <(printf '%s\n' "$plan")
+  read -r verdict ventry vseq vsha vnote < <(printf '%s\n' "$review")
+  read -r dest rid rentry rseq reason < <(printf '%s\n' "$route")
 }
 save_state() {
   tmp=$(mktemp "$F/.state.XXXXXX") || die 'cannot create state file'
@@ -161,7 +161,7 @@ read_evidence() {
   done < <(parse evidence "$F/evidence.md")
   eid=$(printf '%s' "$identity" | sha); target=$etarget; case "$target" in local|pr|deploy) :;; *) target=$itarget;; esac
 }
-problems() { [ -z "$1" ] || { while IFS= read -r p; do [ -z "$p" ] || err "$p"; done <<< "$1"; return 1; }; }
+problems() { [ -z "$1" ] || { while IFS= read -r p; do [ -z "$p" ] || err "$p"; done < <(printf '%s\n' "$1"); return 1; }; }
 gate_intent() {
   greason=; ihash=
   if [ -z "$intent" ]; then greason='intent not approved'
@@ -295,7 +295,7 @@ validate_evidence() {
 review_heads() {
   root_repo
   if [ -n "$bound" ]; then
-    read -r -a list <<< "${bound//,/ }"
+    read -r -a list < <(printf '%s\n' "${bound//,/ }")
     [ "${#list[@]}" -gt 0 ] || die "$boundby '$bound' lists no repository: name one, or leave it empty to bind every repository"
     proot=$(cd "$ROOT" && pwd -P)
     for path in "${list[@]}"; do
@@ -503,7 +503,7 @@ case "$command" in
         # The build's review PASS carries over when nothing it judged moved: every HEAD it bound is unchanged
         # and so is PLAN.md outside Scenarios, as when only a scenario or its procedure is retried.
         # A plan gap check that passed may add a round; any later round that is not PASS stops the carry.
-        body=$(plan_body); carry=; read -r _ newbad _ <<< "$(verdicts "$rounds")"
+        body=$(plan_body); carry=; read -r _ newbad _ < <(printf '%s\n' "$(verdicts "$rounds")")
         if [ "$verdict" = pass ] && [ "${newbad:-0}" = 0 ] && [ "$ventry" = "$entry" ] && [ "$planbody" = "$body" ] && [ "$pish" = "$ihash" ] && heads_unchanged; then
           case "$vnote" in 'carried: '*) carry=$vnote;; *) carry="carried: $vnote";; esac
         fi
@@ -511,7 +511,7 @@ case "$command" in
         if [ -n "$carry" ]; then review="pass $entry $seq $vsha $carry"; else review=; heads=; fi
         left=; for id in $withdrawn; do case " $scenarios " in *" $id "*) :;; *) left="${left}${left:+ }$id";; esac; done; withdrawn=$left
         # Rounds already in review.md (the plan gap check) cannot pass the build.
-        read -r rounds _ <<< "$(verdicts)"
+        read -r rounds _ < <(printf '%s\n' "$(verdicts)")
       fi
       save_state; printf '%s approved. Run sdlc.sh next %s.\n' "$which" "$slug"
       [ -z "${carry:-}" ] || printf 'review PASS carried: the reviewed HEADs and PLAN.md outside Scenarios are unchanged. Phase 4: run QA, fill evidence.md, score.\n'
@@ -530,7 +530,7 @@ case "$command" in
     [ -z "$uncommitted$rrepos" ] || [ "$2" = pass ] || die '--uncommitted binds a PASS, as --repos does: review <slug> fail note' 2
     note=$(one_line "$3"); [ -n "$note" ] || die 'review note required' 2
     gate_plan || die "$greason"
-    read -r nrounds _ actual_verdict <<< "$(verdicts)"
+    read -r nrounds _ actual_verdict < <(printf '%s\n' "$(verdicts)")
     [ -n "$actual_verdict" ] || die 'review.md has no VERDICT line'
     [ "$nrounds" -gt "$rounds" ] || die 'review.md has no new round since the last review or plan approval: the reviewer appends one'
     [ "$actual_verdict" = "$(printf '%s' "$2" | tr '[:lower:]' '[:upper:]')" ] || die "review.md's last VERDICT is $actual_verdict"

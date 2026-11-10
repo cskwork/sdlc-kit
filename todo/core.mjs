@@ -240,6 +240,10 @@ function removeLock(lock, observed, staleOnly, moved) {
 // Unique per-process markers coordinate the short reclaim/commit sections.
 // They are never reused: dead-process cleanup cannot remove a successor's marker.
 const unlink = file => { try { fs.unlinkSync(file); } catch (error) { if (error.code !== 'ENOENT') throw error; } };
+// A marker is an empty directory: every write makes and removes two, and on some machines deleting a file
+// takes seconds while rmdir does not. A marker left by an older kit is a file: rmdir fails on it (the code
+// differs by platform) and unlink removes it, or reports why neither could.
+const unmark = marker => { try { fs.rmdirSync(marker); } catch { unlink(marker); } };
 function markers(lock, kind) {
   const prefix = `${path.basename(lock)}.${kind}-`, active = [];
   for (const name of fs.readdirSync(path.dirname(lock))) {
@@ -250,14 +254,14 @@ function markers(lock, kind) {
       if (error.code !== 'ESRCH') { if (error.code === 'EPERM') { active.push(marker); continue; } throw error; }
       const moved = `${marker}.moved`;
       try { fs.linkSync(moved, lock); } catch (e) { if (!['ENOENT', 'EEXIST'].includes(e.code)) throw e; }
-      unlink(moved); unlink(marker);
+      unlink(moved); unmark(marker);
     }
   }
   return active;
 }
 function mark(lock, kind) {
   const marker = `${lock}.${kind}-${process.pid}-${randomUUID()}`;
-  fs.writeFileSync(marker, '', { flag: 'wx' });
+  fs.mkdirSync(marker);
   return marker;
 }
 async function waitMarkers(lock, kind) {
@@ -280,7 +284,7 @@ async function committing(lock, owner, fn, required = true) {
       if (markers(lock, 'reclaim').length) continue;
       if (!ownsLock(lock, owner)) { if (required) throw lockLost; return; }
       return await fn();
-    } finally { unlink(marker); }
+    } finally { unmark(marker); }
   }
 }
 async function reclaim(lock, observed) {
@@ -288,7 +292,7 @@ async function reclaim(lock, observed) {
   try {
     await waitMarkers(lock, 'commit');
     removeLock(lock, observed, true, `${marker}.moved`);
-  } finally { unlink(marker); }
+  } finally { unmark(marker); }
 }
 // Windows refuses to open a lock file another process is still deleting (EPERM): the lock is busy, not broken.
 const pendingDelete = error => process.platform === 'win32' && error.code === 'EPERM';
