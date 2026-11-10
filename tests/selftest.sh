@@ -1247,6 +1247,10 @@ done
 assert_file "$SDLC"
 [ "$(wc -l < "$SDLC")" -le 600 ] || fail 'sdlc.sh exceeds 600 lines'
 ok 'all prompts <= 6000 words; sdlc.sh <= 600 lines'
+# bash 3.2 (macOS /bin/bash) writes each here-string to a temp file and deletes it; where file deletion is slow
+# that costs seconds each, and `status` ran eight of them. Feed read from `< <(printf ...)` instead.
+if grep -n '<<<' "$SDLC"; then fail 'sdlc.sh uses a here-string'; fi
+ok 'sdlc.sh uses no here-string'
 awk 'NR==1 && $0!="---" {exit 1} NR>1 && $0=="---" {exit !(name && description)} /^name: sdlc-kit$/ {name=1} /^description: .+/ {description=1}' SKILL.md || fail 'invalid SKILL frontmatter'
 paths=$(awk '{line=$0; while (match(line,/`(phases|roles|templates)\/[^`]+`/)) {print substr(line,RSTART+1,RLENGTH-2); line=substr(line,RSTART+RLENGTH)}}' SKILL.md phases/*.md roles/*.md)
 while IFS= read -r path; do [ -e "$path" ] || fail "missing linked path $path"; done <<DOC

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, utimesSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, statSync, utimesSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -970,6 +970,17 @@ test('B1: dead-process markers restore moved locks and are removed without stran
   await core.add(file, 'Recovered');
   assert.deepEqual(core.load(file).items.map(i => i.title), ['Original', 'Recovered']);
   assert.deepEqual(readdirSync(root).filter(name => name.startsWith('todo.md.lock')), [], 'dead markers and moved locks are cleaned up');
+});
+
+test('lock markers are directories: a write deletes no marker file', async t => {
+  const { root, file } = scratch(t);
+  await core.add(file, 'Original');
+  let kinds;
+  await core.mutate(file, () => {}, () => {
+    kinds = readdirSync(root).filter(name => name.includes('.lock.commit-')).map(name => statSync(join(root, name)).isDirectory());
+  });
+  assert.deepEqual(kinds, [true], 'the commit marker held during the save is a directory');
+  assert.deepEqual(readdirSync(root).filter(name => name.startsWith('todo.md.lock')), [], 'no marker or lock is left');
 });
 
 test('B1: even an old commit marker belonging to a live process prevents reclamation', async t => {
