@@ -7,7 +7,7 @@ die() { err "$1"; exit "${2:-1}"; }
 usage() {
   cat <<'USAGE'
 Usage: sdlc.sh init [--memory path] | new slug | status [slug] [--json]
-       sdlc.sh next slug | check intent|plan slug
+       sdlc.sh next slug | check intent|plan|ship slug
        sdlc.sh approve intent|plan slug --human words|--agent review [--sha hex]
        sdlc.sh review slug pass|fail [--uncommitted] [--repos "path ..."] note
        sdlc.sh score slug
@@ -159,7 +159,7 @@ read_evidence() {
       T) etarget=$a;; A) eauth=$a;; K) checked=$a;; U) output=$a;;
     esac
   done < <(parse evidence "$F/evidence.md")
-  eid=$(printf '%s' "$identity" | sha)
+  eid=$(printf '%s' "$identity" | sha); target=$etarget; case "$target" in local|pr|deploy) :;; *) target=$itarget;; esac
 }
 problems() { [ -z "$1" ] || { while IFS= read -r p; do [ -z "$p" ] || err "$p"; done <<< "$1"; return 1; }; }
 gate_intent() {
@@ -184,6 +184,9 @@ gate_plan() {
   elif [ ! -f "$F/PLAN.md" ] || [ "$psh" != "$(sha < "$F/PLAN.md")" ]; then greason='PLAN.md changed after approval'; fi
   [ -z "$greason" ]
 }
+# What close shipped needs before a delivery: a current deliver route, the checkout QA verified, and authority.
+gate_ship() { greason=; if [ -n "$closed" ] || [ "$F" != "$STORE/work/$slug" ] || [ ! -f "$F/.state" ]; then greason='feature is closed, archived or legacy'; elif [ ! -f "$F/evidence.md" ]; then greason="no evidence yet: run QA, fill evidence.md, sdlc.sh score $slug"; else read_intent; read_plan; read_evidence
+  if { [ "$dest" = build ] && [ "$entry" -eq "$((rentry+1))" ] && [ "$ventry" != "$entry" ]; } || { route_current && [ "$dest" != deliver ]; }; then greason="route is $dest ($reason): sdlc.sh next $slug"; elif ! route_current; then greason="evidence not scored: sdlc.sh score $slug"; elif ! gate_plan; then greason="plan gate closed: $greason"; elif ! out=$(validate_evidence 2>&1); then greason=$(joined "${out//sdlc: /}"); elif ! out=$(validate_commits 2>&1); then greason="code changed after QA: $(joined "${out//sdlc: /}"); run QA at HEAD, then sdlc.sh score $slug"; elif ! delivery_authority "$target"; then greason="target not authorized: $dreason"; fi; fi; [ -z "$greason" ]; }
 pending_plan() { [ "$dest" = plan ] && [ "${rseq:-0}" -gt "${pseq:-0}" ]; }
 route_current() { [ "$rid" = "$eid" ] && [ "$rentry" = "$entry" ]; }
 authorized() { local v re='^yes([^a-z0-9_]|$)'; v=$(one_line "$1" | tr '[:upper:]' '[:lower:]'); [[ $v =~ $re ]]; }
@@ -244,10 +247,10 @@ derive() {
         elif [ -n "$eproblems" ]; then phase=evidence; action=$(joined "$eproblems")
         elif ! route_current; then phase=evidence; qa_action
         elif [ "$dest" = deliver ]; then
-          # Before Shipping is filled, the delivery goes to intent.md's Ship to.
-          phase=deliver; target=$etarget; case "$target" in local|pr|deploy) :;; *) target=$itarget;; esac
+          # Before Shipping is filled, the delivery goes to intent.md's Ship to (target, set by read_evidence).
+          phase=deliver
           if ! delivery_authority "$target"; then STATE=NEEDS-HUMAN; action=$dreason
-          else action="ship, fill Shipping, sdlc.sh close $slug shipped"; fi
+          else action="ship, fill Shipping, sdlc.sh close $slug shipped; before shipping: sdlc.sh check ship $slug"; fi
         else phase=evidence; qa_action; fi
       fi
     fi
@@ -468,12 +471,10 @@ case "$command" in
     [ "$asjson" -eq 0 ] || printf ']}\n';;
   next) [ "$#" -eq 1 ] || die 'next <slug>' 2; feature "$1"; derive; printf '%s %s: %s\n' "$STATE" "$phase" "$action"; exit "$exitcode";;
   check|approve)
-    if [ "$command" = check ]; then [ "$#" -eq 2 ] || die 'check intent|plan <slug>' 2
-    else { [ "$#" -eq 4 ] || { [ "$#" -eq 6 ] && [ "$5" = --sha ] && [[ $6 =~ ^[0-9a-fA-F]{64}$ ]]; }; } || die 'approve intent|plan <slug> --human|--agent note [--sha hex]' 2; fi
-    which=$1; case "$which" in intent|plan) :;; *) die 'gate must be intent or plan' 2;; esac
-    feature "$2"
-    if [ "$command" = check ]; then
-      if "gate_$which"; then printf 'GATE OPEN\n'; else printf 'GATE CLOSED: %s\n' "$greason"; exit 1; fi
+    if [ "$command" = check ]; then [ "$#" -eq 2 ] || die 'check intent|plan|ship <slug>' 2; case "$1" in intent|plan|ship) :;; *) die 'gate must be intent, plan or ship' 2;; esac
+    else { [ "$#" -eq 4 ] || { [ "$#" -eq 6 ] && [ "$5" = --sha ] && [[ $6 =~ ^[0-9a-fA-F]{64}$ ]]; }; } || die 'approve intent|plan <slug> --human|--agent note [--sha hex]' 2; case "$1" in intent|plan) :;; *) die 'gate must be intent or plan' 2;; esac; fi
+    which=$1; feature "$2"
+    if [ "$command" = check ]; then if "gate_$which"; then printf 'GATE OPEN\n'; else printf 'GATE CLOSED: %s\n' "$greason"; exit 1; fi
     else
       mutable; [ -f "$F/.state" ] || die 'legacy feature cannot be approved'
       case "$3" in --human) who=human;; --agent) who=agent;; *) die 'choose --human or --agent' 2;; esac

@@ -9,9 +9,7 @@ Dispatch QA (`roles/qa.md`) with intent.md, PLAN.md, `refs/`, config.md and
 the reviewed commit. QA runs the checks and every scenario, saves raw output
 and scripts in `logs/`, adds scenarios for anything new it finds, and fills
 `evidence.md` (`templates/evidence.md`): one row per scenario — PASS, FAIL
-with a cause (`plan` or `code`), or BLOCKED with what is missing. Scenarios
-are never dropped: `sdlc.sh next` lists every ID the table needs, earlier
-QA-added ones included.
+with a cause (`plan` or `code`), or BLOCKED with what is missing.
 
 ## Score
 
@@ -36,6 +34,11 @@ unchanged, the approval keeps the review PASS: go straight to QA.
 
 ## Ship
 
+Deliver (push, merge, release, deploy) only once `sdlc.sh check ship <slug>`
+prints `GATE OPEN`; a review PASS is not that. Delivery the human orders
+earlier is unverified: record
+`Shipped before evidence: <sha> — "<their words>"` in Shipping and the
+report; the slug stays open until `score` routes deliver.
 Ship the verified commit by the project's rules and intent.md's Ship to:
 `local` needs nothing more; `pr` and `deploy` need the human's words, in
 intent.md or, for a later or different target, in evidence.md's Shipping as

@@ -159,8 +159,10 @@ vendors e2e's agent guide (Apache-2.0, pinned) so it works offline;
 - **Proof, not claims.** No environment means BLOCKED, never PASS. A bug fix
   needs a test that failed before the fix; a test for new behavior is seen
   failing once without it.
-- **Shipped means what was verified.** `close` refuses a shipped tree that
-  differs from the verified commit.
+- **Shipped means what was verified.** Before any push, merge or deploy,
+  `sdlc.sh check ship <slug>` prints `GATE OPEN` only on a current deliver
+  route, at the commit QA verified, with authority for the target. `close`
+  refuses a shipped tree that differs from the verified commit.
 
 Build follows the [ponytail](https://github.com/DietrichGebert/ponytail) approach — the
 smallest complete change — with the rules written into the phase file, so no

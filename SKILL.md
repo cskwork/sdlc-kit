@@ -37,12 +37,12 @@ finds `.git`.
 
 1. **Read the phase file completely before acting**, and a role file before
    dispatching that role.
-2. **Gates.** Phases 2 and 3 start only when `sdlc.sh check` prints `GATE
-   OPEN`; anything else means stop and say what needs approval. Only
-   `sdlc.sh approve` records an approval. A gate in `human_gates`, or a plan
-   with a risk flag, needs the human's explicit words ("approve", "looks
-   right") — never silence, "continue" or your own judgement. Editing an
-   approved file closes its gate and the gates after it.
+2. **Gates.** Phases 2 and 3, and delivery (`check ship`), start only when
+   `sdlc.sh check` prints `GATE OPEN`; anything else means stop and say what
+   needs approval. Only `sdlc.sh approve` records an approval. A gate in
+   `human_gates`, or a plan with a risk flag, needs the human's explicit
+   words ("approve", "looks right") — never silence, "continue" or your own
+   judgement. Editing an approved file closes its gate and the gates after it.
 3. **Authority is not a gate.** Whatever the gates say, these need the
    human's prior words: data loss or destructive backfill, schema or data
    migration, a public API or contract change (refusing input that callers
