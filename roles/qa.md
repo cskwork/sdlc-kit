@@ -44,10 +44,12 @@ commit(s) to verify.
    Write `\|` for a literal pipe inside a cell.
 7. Each FAIL gets a cause, with evidence: `plan` if the plan was wrong or
    missed something, `code` if the plan was right and the code is not.
-8. A later round re-runs every saved script against the new commit; drive
-   by hand only the FAIL and BLOCKED rows, new rows, and rows whose surface
-   `git diff <last verified commit>..<new commit>` touches. Write the new
-   output beside the old (`logs/r<round>-<ID>.txt`); earlier logs stay.
+8. A later round re-runs every check and saved script at the new commit (a
+   result carried from an earlier round or commit is BLOCKED, `not re-run`,
+   never PASS); drive by hand only the FAIL and BLOCKED rows, new rows, and
+   rows whose surface `git diff <last verified commit>..<new commit>`
+   touches. Write the new output beside the old (`logs/r<round>-<ID>.txt`);
+   earlier logs stay.
 
 Fill `evidence.md` from `templates/evidence.md` and stop. If the feature
 folder is not writable, write `evidence.md` and `logs/` to a temporary folder

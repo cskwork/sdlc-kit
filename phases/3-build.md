@@ -59,11 +59,7 @@ when the root holds many). `score` and `close` compare only repositories named
 on evidence `Commit` lines; each Commit must be that HEAD. For an uncommitted
 review, `sdlc.sh review <slug> pass --uncommitted "<one line>"` also binds the
 working tree of each repository with uncommitted changes (non-ignored files,
-tracked or not, excluding the store and untracked repositories nested inside
-it; if git cannot read it, the PASS binds HEAD alone and says so). Each Commit
-must then be or descend from the reviewed HEAD, hold the reviewed tree inside
-its Commit path, and change nothing outside that path the reviewed tree lacks;
-uncommitted changes outside every Commit path do not count. Reverting or
+tracked or not); the PASS output says what a Commit must then hold. Reverting or
 stashing the change, amending or rebasing the reviewed HEAD, or changing code
 after a PASS needs a new round; rewording a commit made on top does not.
 Recording hashes those files into the object store (not the index): ignore

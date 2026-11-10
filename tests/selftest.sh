@@ -1133,17 +1133,63 @@ regression_sha() {
   cmp "$F/.state" "$TMP/sha-state.before" || fail 'malformed hash approval changed state'
   ok 'approve rejects missing, malformed and extra hash arguments with usage exit 2'
 }
+# The ship gate opens only when close shipped would accept the delivery that is about to happen.
+regression_ship() {
+  repo regression-ship
+  ready ship-local 1
+  expect 1 check ship "$SLUG"; contains 'GATE CLOSED: no evidence yet'
+  ok 'ship gate: closed with no evidence'
+  evidence
+  expect 1 check ship "$SLUG"; contains 'GATE CLOSED: evidence not scored'
+  ok 'ship gate: closed when evidence is not scored'
+  evidence S1:FAIL:code; route build
+  expect 1 check ship "$SLUG"; contains 'GATE CLOSED: route is build'
+  reviewed "$SLUG" pass fixed; evidence; route deliver
+  expect 0 next "$SLUG"; contains "before shipping: sdlc.sh check ship $SLUG"
+  ok 'ship gate: next names the ship gate on a deliver route'
+  expect 0 check ship "$SLUG"; contains 'GATE OPEN'
+  ok 'ship gate: open on a current deliver route to a local target'
+  printf 'QA output\n' > "$F/logs/S2.txt"; printf '| S2 | PASS | | row added after scoring | logs/S2.txt |\n' >> "$E"
+  expect 1 check ship "$SLUG"; contains 'GATE CLOSED: evidence not scored'
+  evidence; route deliver
+  printf 'dirty after QA\n' >> README
+  expect 1 check ship "$SLUG"; contains 'GATE CLOSED: code changed after QA'; contains 'README'
+  git checkout -- README
+  printf 'after QA\n' >> README; git commit -qam 'change after scoring'
+  expect 1 check ship "$SLUG"; contains 'GATE CLOSED: code changed after QA: HEAD differs from Commit'
+  ok 'ship gate: closed when the evidence, the tree or HEAD changed after scoring'
+  SHA=$(git rev-parse HEAD)
+  ready ship-plan 1; evidence S1:FAIL:plan; route plan
+  expect 1 check ship "$SLUG"; contains 'GATE CLOSED: route is plan'
+  ready ship-human 1; evidence S1:BLOCKED:; route human
+  expect 1 check ship "$SLUG"; contains 'GATE CLOSED: route is human'
+  ok 'ship gate: closed on a build, plan or human route'
+  ready ship-remote 1; evidence; delivery pr; route deliver
+  expect 1 check ship "$SLUG"; contains 'GATE CLOSED: target not authorized: authorize pr'
+  evidence; delivery deploy; route deliver
+  expect 1 check ship "$SLUG"; contains 'GATE CLOSED: target not authorized: authorize deploy'
+  ok 'ship gate: closed when a pr or deploy target is not authorized'
+  evidence; delivery deploy "$SHA" 'Yes — deploy approved'; route deliver
+  expect 0 check ship "$SLUG"; contains 'GATE OPEN'
+  ok 'ship gate: open on a current deliver route to an authorized deploy target'
+  SLUG=ship-local; F=$PWD/.sdlc/work/$SLUG; expect 0 close "$SLUG" dropped 'ship gate case done'
+  expect 1 check ship "$SLUG"; contains 'GATE CLOSED: feature is closed'
+  expect 2 check bogus "$SLUG"; contains 'gate must be intent, plan or ship'
+  expect 2 approve ship "$SLUG" --agent reviewed; contains 'gate must be intent or plan'
+  expect 0 help; contains 'check intent|plan|ship slug'
+  ok 'ship gate: closed for a closed feature; approve has no ship gate; help names it'
+}
 run_regressions() {
   case "$1" in
     stop) regression_stop;; scenarios) regression_scenarios;; delivery) regression_delivery;; review) regression_review;; other) regression_other;;
     init) regression_init;; ultra) regression_ultra;; round2-[abcde]) regression_round2 "${1#round2-}";; round3) regression_round3;;
     repos) regression_repos;; cells) regression_cells;; paths) regression_paths;; uncommitted) regression_uncommitted;;
     nested) regression_nested;; interrupt) regression_interrupt;; scoped) regression_scoped;; fingerprint) regression_fingerprint;; optin) regression_optin;;
-    reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;; labels) regression_labels;; sha) regression_sha;;
+    reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;; labels) regression_labels;; sha) regression_sha;; ship) regression_ship;;
     all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init; regression_ultra
       for round2 in a b c d e; do regression_round2 "$round2"; done; regression_round3
       regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint; regression_optin
-      regression_reposflag; regression_carry; regression_target; regression_clarity; regression_labels; regression_sha;;
+      regression_reposflag; regression_carry; regression_target; regression_clarity; regression_labels; regression_sha; regression_ship;;
     *) fail "unknown regression group: $1";;
   esac
 }
