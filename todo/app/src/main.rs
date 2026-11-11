@@ -535,11 +535,18 @@ impl App {
                 let [left, right] = pages else { return };
                 left.spacing_mut().item_spacing.x = spacing;
                 right.spacing_mut().item_spacing.x = spacing;
-                heading(left, p, dark, lang, item);
-                self.details(left, ctx, p, item, busy, artifact, Part::Read);
-                right.label(RichText::new(t(lang, "page.answer")).color(p.muted).size(12.0));
-                right.add_space(4.0);
-                self.details(right, ctx, p, item, busy, artifact, Part::Act);
+                // Columns are justified, which stretches every wrapped line edge to edge (letter by letter before a long
+                // token); a page reads ragged-right like the single page, and its widgets keep the single page's widths.
+                let page = Layout::top_down(Align::LEFT);
+                left.with_layout(page, |left| {
+                    heading(left, p, dark, lang, item);
+                    self.details(left, ctx, p, item, busy, artifact, Part::Read);
+                });
+                right.with_layout(page, |right| {
+                    right.label(RichText::new(t(lang, "page.answer")).color(p.muted).size(12.0));
+                    right.add_space(4.0);
+                    self.details(right, ctx, p, item, busy, artifact, Part::Act);
+                });
             });
             // The fold between the two pages.
             let rect = ui.min_rect();
