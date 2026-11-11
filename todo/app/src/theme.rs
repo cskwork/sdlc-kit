@@ -1,5 +1,6 @@
-//! Look and feel: system fonts with Hangul, a quiet light/dark palette, rounded cards, and tray icons.
+//! Look and feel: a built-in Hangul font, paper tones in light and dark like a book's page, cards, and tray icons.
 use eframe::egui::{self, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Margin, Stroke, TextStyle, Theme};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Clone, Copy)]
@@ -16,11 +17,11 @@ pub struct Palette {
 
 pub fn palette(dark: bool) -> Palette {
     if dark {
-        Palette { bg: hex(0x111113), card: hex(0x1b1b1f), card_hover: hex(0x222227), stroke: hex(0x2c2c33),
-            text: hex(0xededf0), muted: hex(0x9a9aa6), accent: hex(0x8b8aff), on_accent: hex(0x0f0f14) }
+        Palette { bg: hex(0x161412), card: hex(0x1f1c19), card_hover: hex(0x27231f), stroke: hex(0x36312b),
+            text: hex(0xebe5da), muted: hex(0xa39a8d), accent: hex(0x9a99ff), on_accent: hex(0x12100e) }
     } else {
-        Palette { bg: hex(0xf6f6f8), card: hex(0xffffff), card_hover: hex(0xfafafc), stroke: hex(0xe5e5ea),
-            text: hex(0x1c1c1f), muted: hex(0x6b6b76), accent: hex(0x5e5ce6), on_accent: hex(0xffffff) }
+        Palette { bg: hex(0xf1ede4), card: hex(0xfcfaf5), card_hover: hex(0xf6f2e9), stroke: hex(0xe3dccd),
+            text: hex(0x26221e), muted: hex(0x756c61), accent: hex(0x5553d4), on_accent: hex(0xffffff) }
     }
 }
 
@@ -54,9 +55,48 @@ fn system_fonts() -> Vec<(&'static str, Vec<u8>)> {
     candidates.iter().filter_map(|path| std::fs::read(path).ok().map(|bytes| (*path, bytes))).collect()
 }
 
-pub fn install(ctx: &egui::Context) {
+/// The default text font, built in so every machine reads the same: Pretendard Regular (SIL OFL 1.1,
+/// licence beside the file). System fonts follow it for glyphs it lacks.
+const BUILT_IN: &[u8] = include_bytes!("../fonts/Pretendard-Regular.otf");
+
+/// Other readable fonts with Hangul the human can pick when installed, by file name without spaces, dashes or case.
+const KNOWN_FONTS: [(&str, &str); 11] = [
+    ("applesdgothicneo", "Apple SD Gothic Neo"), ("malgun", "Malgun Gothic"), ("notosanscjk", "Noto Sans CJK"),
+    ("notosanskr", "Noto Sans KR"), ("nanumgothic", "NanumGothic"), ("nanumsquare", "NanumSquare"),
+    ("spoqahansansneo", "Spoqa Han Sans Neo"), ("suit", "SUIT"),
+    ("applegothic", "AppleGothic"), ("applemyungjo", "AppleMyungjo"), ("nanummyeongjo", "NanumMyeongjo"),
+];
+
+/// The known fonts found on this machine, as (name, file): the regular face of each.
+pub fn fonts() -> Vec<(String, String)> {
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
+    let dirs: Vec<PathBuf> = if cfg!(target_os = "macos") {
+        vec!["/System/Library/Fonts".into(), "/System/Library/Fonts/Supplemental".into(), "/Library/Fonts".into(), home.join("Library/Fonts")]
+    } else if cfg!(windows) {
+        vec!["C:\\Windows\\Fonts".into(), home.join("AppData\\Local\\Microsoft\\Windows\\Fonts")]
+    } else {
+        vec!["/usr/share/fonts/opentype/noto".into(), "/usr/share/fonts/noto-cjk".into(), "/usr/share/fonts/google-noto-cjk".into(),
+             "/usr/share/fonts/truetype/nanum".into(), home.join(".local/share/fonts"), home.join(".fonts")]
+    };
+    let mut files: Vec<PathBuf> = dirs.iter().filter_map(|dir| std::fs::read_dir(dir).ok()).flatten().filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|path| path.extension().and_then(|e| e.to_str()).is_some_and(|e| ["ttf", "otf", "ttc"].contains(&e.to_lowercase().as_str())))
+        .collect();
+    files.sort();
+    let stem = |path: &PathBuf| path.file_stem().map(|s| s.to_string_lossy().to_lowercase().replace([' ', '-', '_'], "")).unwrap_or_default();
+    KNOWN_FONTS.iter().filter_map(|(key, name)| {
+        let file = files.iter().find(|path| { let stem = stem(path); stem == *key || stem == format!("{key}regular") || stem == format!("{key}variable") })?;
+        Some((name.to_string(), file.to_string_lossy().to_string()))
+    }).collect()
+}
+
+/// Sets fonts and the look. `font` is a file from `fonts()` that leads the text, or empty for the built-in one.
+pub fn install(ctx: &egui::Context, font: &str) {
     let mut fonts = FontDefinitions::default();
-    for (index, (path, bytes)) in system_fonts().into_iter().enumerate() {
+    // epaint panics on font data it cannot parse, and this path comes from the settings file: a truncated
+    // or replaced file would crash every launch, so it is checked first and skipped for the built-in one.
+    let chosen = (!font.is_empty()).then(|| std::fs::read(font).ok().map(|bytes| (font, bytes))).flatten()
+        .filter(|(_, bytes)| ttf_parser::Face::parse(bytes, 0).is_ok());
+    for (index, (path, bytes)) in chosen.into_iter().chain([("Pretendard", BUILT_IN.to_vec())]).chain(system_fonts()).enumerate() {
         fonts.font_data.insert(path.to_string(), Arc::new(FontData::from_owned(bytes)));
         for family in [FontFamily::Proportional, FontFamily::Monospace] {
             let list = fonts.families.entry(family.clone()).or_default();
@@ -109,6 +149,15 @@ pub fn card(p: &Palette) -> egui::Frame {
         .corner_radius(CornerRadius::same(12))
         .inner_margin(Margin::symmetric(14, 12))
 }
+
+/// A decision's page: paper with wide margins, lifted a little off the desk.
+pub fn page(p: &Palette) -> egui::Frame {
+    card(p).corner_radius(CornerRadius::same(8)).inner_margin(Margin::symmetric(26, 22))
+        .shadow(egui::Shadow { offset: [0, 3], blur: 14, spread: 0, color: Color32::from_black_alpha(22) })
+}
+
+/// A list row: the card look, tighter, for one line that opens on demand.
+pub fn row(p: &Palette) -> egui::Frame { card(p).corner_radius(CornerRadius::same(10)).inner_margin(Margin::symmetric(12, 8)) }
 
 /// A 32×32 tray glyph: a rounded check box, with a dot when something needs the human.
 pub fn tray_icon(alert: bool, template: bool) -> tray_icon::Icon {
