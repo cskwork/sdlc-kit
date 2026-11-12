@@ -490,7 +490,7 @@ const dialog = $('detail');
 const wideQuery = matchMedia('(min-width: 1100px)');
 let isWide = wideQuery.matches, quietClose = false;
 // detailId is what the dialog shows ('' when closed); selectedId is the row chosen for the pane.
-let detailId = '', selectedId = '', opener = null, artifact = null, artifactRequest = 0, detailVersion = '';
+let detailId = '', selectedId = '', opener = null, artifact = null, artifactRequest = 0, detailVersion = '', detailPill = null;
 
 function draftFor(id) { if (!drafts.has(id)) drafts.set(id, { reply: '', words: '', seed: '' }); return drafts.get(id); }
 // The agent's suggested answer fills the reply field until the person edits it; a new suggestion replaces an unedited one.
@@ -591,8 +591,9 @@ function field(dl, name, value) {
 }
 function renderDetail() {
   const item = items.find(i => i.id === detailId);
-  const version = JSON.stringify(item);
-  if (version === detailVersion) return;
+  // A heartbeat only moves working.beat: refresh the status words in place, so Details keeps focus.
+  const version = item ? JSON.stringify({ ...item, working: item.working && { what: item.working.what, since: item.working.since } }) : '';
+  if (version === detailVersion) { if (item && detailPill) detailPill.textContent = statusLabel(t, item); return; }
   detailVersion = version;
   $('detail-gone').hidden = !!item;
   for (const form of [$('approve-form'), $('reply-form')]) for (const c of form.elements) c.disabled = !item;
@@ -606,7 +607,8 @@ function renderDetail() {
   const dl = $('detail-fields');
   dl.replaceChildren();
   const actor = statusOf(item).actor;
-  field(dl, t('field.status'), pill(item));
+  detailPill = pill(item);
+  field(dl, t('field.status'), detailPill);
   if (actor === 'you') field(dl, t('field.next'), whatWaits(item));
   if (actor === 'others') field(dl, t('field.others'), item.others);
   if (!item.done && item.run) field(dl, t('field.run'), el('code', '', item.run));

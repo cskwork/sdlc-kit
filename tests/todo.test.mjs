@@ -305,6 +305,36 @@ test('working: CLI marks, refreshes and clears an item beside todo.md; statusOf 
   assert.equal(listed.find(item => item.id === b.id).working, null, 'an expired heartbeat is no marker');
 });
 
+test('working: a marker follows its item when start --slug or a retitle changes the id; a future beat is not live', async t => {
+  const { root, file } = scratch(t);
+  const where = join(root, 'todo-working.json');
+  const old = checkCode(await cli(file, ['add', 'Build it']), 0).stdout.trim();
+  checkCode(await cli(file, ['working', old, 'build']), 0);
+  const mark = JSON.parse(readFileSync(where, 'utf8'))[old];
+  checkCode(await cli(file, ['start', old, '--slug', 'foo-bar']), 0);
+  let [item] = JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout);
+  assert.notEqual(item.id, old, 'a slug changes the id');
+  assert.deepEqual(item.working, mark, 'the marker moved with the item');
+  assert.deepEqual(Object.keys(JSON.parse(readFileSync(where, 'utf8'))), [item.id], 'no orphan under the old id');
+  checkCode(await cli(file, ['working', 'foo-bar']), 0);
+  const refreshed = JSON.parse(readFileSync(where, 'utf8'))[item.id];
+  assert.deepEqual([refreshed.what, refreshed.since], ['build', mark.since], 'the slug refreshes the same marker');
+  // An outside caller of core.update (the factory retitles this way) is covered too.
+  const plain = await core.add(file, 'Plain title');
+  await core.working(file, plain.id, 'QA');
+  await core.update(file, plain.id, current => { current.title = 'Renamed title'; });
+  const renamed = core.load(file).items.find(other => other.title === 'Renamed title');
+  assert.equal(core.withWorking([renamed], file)[0].working?.what, 'QA');
+  assert.equal(core.readWorking(file)[plain.id], undefined);
+  // A beat far in the future (a wrong clock, a hand edit) never expires, so it does not count.
+  const future = new Date(Date.now() + 60000).toISOString();
+  writeFileSync(where, JSON.stringify({ [item.id]: { what: 'x', since: future, beat: future } }));
+  assert.equal(core.withWorking(core.load(file).items, file).find(other => other.id === item.id).working, null);
+  const soon = new Date(Date.now() + 2000).toISOString();
+  writeFileSync(where, JSON.stringify({ [item.id]: { what: 'x', since: soon, beat: soon } }));
+  assert.equal(core.readWorking(file)[item.id]?.what, 'x', 'a few seconds of clock skew still counts');
+});
+
 test('others: an agent waiting on someone else outranks an sdlc NEEDS-HUMAN; its own wait and a reply still win', t => {
   const { file } = scratch(t);
   const status = text => { writeFileSync(file, text); return core.load(file).items[0].status; };
