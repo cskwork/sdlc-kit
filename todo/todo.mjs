@@ -20,6 +20,7 @@ const usage = `Usage: node ${path.join(kit, 'todo', 'todo.mjs')} <command>
   pin <id> [on|off] (keep at the top of every app tab, e.g. a setting switched with choices; not counted as needing you)
   run <id> ["command"] (a command the human runs; the app opens a terminal with it typed, not run; a reply or no text clears it)
   suggest <id> ["answer"] (the one-line reply you recommend, pre-filled in the human's reply field; a reply or no text clears it)
+  working <id> ["what"] | working <id> --off (an agent works on it now: call on start, again at least every 60 s, --off when done; a mark not refreshed for 3 min expires)
   done <id> ["result"] | web [--port N] [--open] [--lang L] | serve [--lang L] | help
   No command: the app (--ui tui,web,app picks any of them; --no-web for the TUI alone, --lang L).
   Without a built app it opens the TUI with its web link; build it with: cargo build --release --manifest-path ${path.join(kit, 'todo', 'app', 'Cargo.toml')}
@@ -29,7 +30,7 @@ const bad = message => { throw Object.assign(new Error(`${message}\n${usage}`), 
 const schemas = {
   add: { project: true, link: true, slug: true, by: true, brief: true },
   next: { json: false }, take: { json: false }, list: { json: false }, sync: {},
-  start: { slug: true, phase: true }, phase: {}, wait: {}, others: {}, resume: {}, answer: {}, note: {}, brief: {}, repos: {}, choices: { pick: true }, suggest: {}, run: {}, pin: {}, done: {},
+  start: { slug: true, phase: true }, phase: {}, wait: {}, others: {}, resume: {}, answer: {}, note: {}, brief: {}, repos: {}, choices: { pick: true }, suggest: {}, run: {}, pin: {}, working: { off: false }, done: {},
   web: { port: true, open: false, lang: true }, serve: { lang: true }, help: {}, '': { 'no-web': false, lang: true, ui: true }
 };
 function argumentsFor(argv) {
@@ -48,10 +49,10 @@ function argumentsFor(argv) {
   }
   return { command, flags, args };
 }
-function summary(item) {
+function summary(item, live = core.readWorking(file)) {
   return { id: item.id, title: item.title, project: item.project, link: item.link,
     slug: item.sdlc?.slug || null, phase: item.sdlc?.phase || null, state: item.sdlc?.state || null,
-    action: item.sdlc?.action || '', waiting: item.waiting, asked: core.asked(item), others: item.others || '', brief: item.brief || '', repos: item.repos || [], choices: item.choices || [], pick: item.pick ?? null, suggest: item.suggest || '', run: item.run || '', pin: !!item.pin, replies: item.replies || core.replies(item), unread: item.unread || 0, fix: !!item.fixRequested, status: item.status };
+    action: item.sdlc?.action || '', waiting: item.waiting, asked: core.asked(item), others: item.others || '', brief: item.brief || '', repos: item.repos || [], choices: item.choices || [], pick: item.pick ?? null, suggest: item.suggest || '', run: item.run || '', pin: !!item.pin, replies: item.replies || core.replies(item), unread: item.unread || 0, fix: !!item.fixRequested, status: item.status, working: !item.done && live[item.id] || null };
 }
 const uiNames = ['tui', 'web', 'app'];
 const appPath = () => process.env.SDLC_TODO_APP || path.join(kit, 'todo', 'app', 'target', 'release', process.platform === 'win32' ? 'sdlc-todo.exe' : 'sdlc-todo');
@@ -143,7 +144,8 @@ async function main() {
     case 'list': {
       arity(0);
       const model = await core.sync(file, { kit });
-      if (flags.json) console.log(JSON.stringify(model.items.map(summary)));
+      const live = core.readWorking(file);
+      if (flags.json) console.log(JSON.stringify(model.items.map(item => summary(item, live))));
       else for (const item of model.items) console.log(`${item.id} [${item.status}] ${item.title}`);
       return;
     }
@@ -171,6 +173,9 @@ async function main() {
     case 'suggest': arity(1, 2); await core.suggest(file, args[0], args[1] || ''); return;
     case 'run': arity(1, 2); await core.run(file, args[0], args[1] || ''); return;
     case 'pin': arity(1, 2); await core.pin(file, args[0], args[1] || 'on'); return;
+    case 'working':
+      arity(1, flags.off ? 1 : 2);
+      await core.working(file, args[0], args[1], { off: !!flags.off }); return;
     case 'resume': arity(1, 2); await core.resume(file, ...args); return;
   }
 }

@@ -214,10 +214,11 @@ function normalize(model) {
   identify(model);
 }
 const lockLost = Symbol('lock ownership lost');
-async function atomicWrite(file, text, owns = () => true) {
+async function atomicWrite(file, text, owns = () => true, mode) {
   const temp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${randomUUID()}.tmp`);
   try {
-    fs.writeFileSync(temp, text, 'utf8');
+    fs.writeFileSync(temp, text, { encoding: 'utf8', mode });
+    if (mode !== undefined) fs.chmodSync(temp, mode);
     for (let attempt = 0; ; attempt++) {
       try { if (!owns()) throw lockLost; fs.renameSync(temp, file); break; }
       catch (error) { if (!['EPERM', 'EBUSY'].includes(error.code) || attempt >= 5) throw error; await pause(20 * (attempt + 1)); }
@@ -330,6 +331,7 @@ export async function mutate(file, fn, onSaved) {
       if (!owns()) throw lockLost;
       const model = load(file);
       normalize(model);
+      const before = new Map(model.items.map(item => [item, item.id]));
       const result = await fn(model);
       if (heartbeatError) throw heartbeatError;
       return await committing(lock, owner, async () => {
@@ -344,6 +346,7 @@ export async function mutate(file, fn, onSaved) {
           model.items = model.items.filter(item => !overflow.includes(item));
         }
         await atomicWrite(file, serialize(model), owns);
+        await followIds(file, before, model);
         // Observe the persisted postimage before releasing the original mutation lock.
         onSaved?.(model, result);
         return result;
@@ -611,4 +614,73 @@ export function watch(file, onChange) {
   const listener = (current, previous) => { if (current.mtimeMs !== previous.mtimeMs || current.ctimeMs !== previous.ctimeMs || current.ino !== previous.ino || current.size !== previous.size) onChange(); };
   fs.watchFile(file, { interval: 250 }, listener);
   return () => fs.unwatchFile(file, listener);
+}
+
+// Which items an agent works on right now: todo-working.json beside todo.md, { id: { what, since, beat } } in ISO
+// times. A heartbeat refreshes `beat` every minute; writing todo.md that often would fill its history, contend
+// for its lock and reload every view. A marker counts only while its beat is younger than the TTL, so the
+// marker of a worker that died vanishes by itself.
+export const WORKING_TTL_MS = 180000;
+export const workingPath = (file = todoPath()) => path.join(path.dirname(file), 'todo-working.json');
+// SDLC_TODO_WORKING_TTL (seconds) shortens the TTL, for tests.
+export const workingTtl = () => Number(process.env.SDLC_TODO_WORKING_TTL) > 0 ? Number(process.env.SDLC_TODO_WORKING_TTL) * 1000 : WORKING_TTL_MS;
+// A beat more than 5 s ahead (a wrong clock or a hand edit) is not live: it would otherwise never expire.
+const liveMark = (mark, now, ttl) => !!mark && typeof mark === 'object' && typeof mark.since === 'string' &&
+  typeof mark.beat === 'string' && now - Date.parse(mark.beat) < ttl && Date.parse(mark.beat) <= now + 5000;
+// Live markers only; a missing or unreadable file is no marker.
+export function readWorking(file = todoPath(), now = Date.now()) {
+  let marks;
+  try { marks = JSON.parse(fs.readFileSync(workingPath(file), 'utf8')); } catch { return {}; }
+  if (!marks || typeof marks !== 'object' || Array.isArray(marks)) return {};
+  const ttl = workingTtl();
+  return Object.fromEntries(Object.entries(marks).filter(([, mark]) => liveMark(mark, now, ttl))
+    .map(([id, mark]) => [id, { what: typeof mark.what === 'string' ? mark.what : '', since: mark.since, beat: mark.beat }]));
+}
+// Items as every view shows them: `working` is the live marker of an open item, else null.
+export function withWorking(items, file = todoPath(), now = Date.now()) {
+  const live = readWorking(file, now);
+  return items.map(item => ({ ...item, working: !item.done && live[item.id] || null }));
+}
+// An id follows the slug or title: a mutation that changes it (start --slug, a retitle, a renumbered duplicate)
+// moves the item's live marker to the new id, so the work shown does not vanish and the next beat finds it.
+async function followIds(file, before, model) {
+  const moved = model.items.filter(item => before.has(item) && before.get(item) !== item.id);
+  if (!moved.length) return;
+  const marks = readWorking(file);
+  // A new id is this item's alone now: a marker already under it belonged to an item that left it.
+  if (!moved.some(item => marks[before.get(item)] || marks[item.id])) return;
+  const carried = moved.map(item => [item.id, marks[before.get(item)]]);
+  for (const item of moved) delete marks[before.get(item)];
+  for (const [id, mark] of carried) if (mark) marks[id] = mark; else delete marks[id];
+  await atomicWrite(workingPath(file), `${JSON.stringify(marks)}
+`, () => true, 0o600);
+}
+// Mark or refresh (`what` undefined keeps the label), or clear with off. No sync and no todo.md write: a heartbeat
+// calls it every minute. Two writers at once can lose one update; the next beat restores it.
+export async function working(file, id, what, { off = false, now = new Date() } = {}) {
+  const item = findItem(load(file), id);
+  if (item.done && !off) fail(`item is done: ${id}`, 1);
+  const label = what === undefined ? undefined : line(what);
+  if (label?.length > 80) fail('working text must be 80 characters or fewer');
+  const marks = readWorking(file, now.getTime()), previous = marks[item.id];
+  if (off) delete marks[item.id];
+  else marks[item.id] = { what: label ?? previous?.what ?? '', since: previous?.since ?? now.toISOString(), beat: now.toISOString() };
+  await atomicWrite(workingPath(file), `${JSON.stringify(marks)}\n`, () => true, 0o600);
+  return marks[item.id] || null;
+}
+// Calls onChange when a marker is written and when the oldest live one expires, so a marker nobody refreshes
+// leaves every view within the TTL without any write.
+export function watchWorking(file, onChange) {
+  let timer;
+  const arm = () => {
+    clearTimeout(timer);
+    const beats = Object.values(readWorking(file)).map(mark => Date.parse(mark.beat));
+    if (!beats.length) return;
+    // setTimeout fires at once for a delay over 2^31-1 ms; a TTL override that long must not spin.
+    timer = setTimeout(() => { onChange(); arm(); }, Math.min(Math.max(0, Math.min(...beats) + workingTtl() - Date.now()) + 50, 2 ** 31 - 1));
+    timer.unref?.();
+  };
+  const stop = watch(workingPath(file), () => { onChange(); arm(); });
+  arm();
+  return () => { clearTimeout(timer); stop(); };
 }

@@ -103,7 +103,35 @@ fn settle(focus: Option<&str>, at: usize, queue: &[&str]) -> Option<usize> {
     Some(focus.and_then(|id| queue.iter().position(|q| *q == id)).unwrap_or(at.min(queue.len() - 1)))
 }
 
-fn status_label(lang: Lang, item: &Item) -> &'static str {
+/// The tint of an item: its actor's, or its own while an agent works on it right now.
+fn tint(item: &Item) -> &str { if item.turn.kind == "working" { "working" } else { &item.turn.actor } }
+
+/// Seconds since the Unix epoch of an ISO time such as `2026-11-12T03:04:05.678Z` (UTC, as the server writes it).
+fn iso_seconds(iso: &str) -> Option<i64> {
+    let number = |range: std::ops::Range<usize>| iso.get(range)?.parse::<i64>().ok();
+    let (y, m, d) = (number(0..4)?, number(5..7)?, number(8..10)?);
+    let (h, min, s) = (number(11..13)?, number(14..16)?, number(17..19)?);
+    // Days from the civil date (Howard Hinnant's algorithm).
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let days = era * 146097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719468;
+    Some(days * 86400 + h * 3600 + min * 60 + s)
+}
+
+/// "Working now · 12 min · build": how long an agent has worked on it and on what.
+fn working_label(lang: Lang, since: &str, what: &str, now: i64) -> String {
+    let minutes = iso_seconds(since).map(|since| (now - since) / 60).unwrap_or(0);
+    let elapsed = if minutes >= 1 { format!("{minutes}{}", t(lang, "working.minutes")) } else { t(lang, "working.justNow").to_string() };
+    [t(lang, "status.working"), &elapsed, what].iter().filter(|part| !part.is_empty()).copied().collect::<Vec<_>>().join(" · ")
+}
+
+fn status_label(lang: Lang, item: &Item) -> String {
+    if let ("working", Some(working)) = (item.turn.kind.as_str(), &item.working) {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+        return working_label(lang, &working.since, &working.what, now);
+    }
     match item.turn.kind.as_str() {
         "approve-intent" => t(lang, "status.approve-intent"),
         "approve-plan" => t(lang, "status.approve-plan"),
@@ -114,7 +142,7 @@ fn status_label(lang: Lang, item: &Item) -> &'static str {
         "others" => t(lang, "status.others"),
         "done" => t(lang, "status.done"),
         _ => t(lang, "status.new"),
-    }
+    }.to_string()
 }
 
 fn open_url(url: &str) {
@@ -284,8 +312,19 @@ fn build_tray(lang: Lang) -> Result<TrayIcon, String> {
 fn pill(ui: &mut egui::Ui, text: &str, actor: &str, dark: bool) {
     let (fg, bg) = theme::tone(actor, dark);
     egui::Frame::new().fill(bg).corner_radius(CornerRadius::same(255)).inner_margin(Margin::symmetric(9, 3))
-        .show(ui, |ui| ui.label(RichText::new(text).color(fg).size(11.5).strong()));
+        .show(ui, |ui| ui.horizontal(|ui| {
+            // Work in progress right now carries a pulsing dot, so it never reads as only an agent's turn.
+            if actor == "working" {
+                ui.spacing_mut().item_spacing.x = 5.0;
+                let (rect, _) = ui.allocate_exact_size(egui::vec2(7.0, 7.0), Sense::hover());
+                ui.painter().circle_filled(rect.center(), 3.5, fg.gamma_multiply(pulse(ui)));
+            }
+            ui.label(RichText::new(text).color(fg).size(11.5).strong());
+        }));
 }
+
+/// The working dot's strength: full and faint by turns, a beat a second (the app repaints once a second while any item works).
+fn pulse(ui: &egui::Ui) -> f32 { if (ui.input(|i| i.time) as i64) % 2 == 0 { 1.0 } else { 0.35 } }
 
 fn primary(ui: &mut egui::Ui, p: &theme::Palette, text: &str, enabled: bool) -> egui::Response {
     ui.add_enabled(enabled, egui::Button::new(RichText::new(text).color(p.on_accent).strong())
@@ -324,6 +363,8 @@ impl eframe::App for App {
         let attention = model.items.iter().filter(|i| needs_you(i)).count();
         self.update_tray(attention);
         if toast.is_some() { ctx.request_repaint_after(Duration::from_millis(500)); }
+        // The working dots pulse and their minutes count up; nothing repaints on a timer while no agent works.
+        if model.items.iter().any(|i| !i.done && i.turn.kind == "working") { ctx.request_repaint_after(Duration::from_secs(1)); }
         // The keyboard zoom (Cmd/Ctrl with + and -) is kept like the settings card's.
         let zoom = ctx.zoom_factor().clamp(prefs::ZOOM.0, prefs::ZOOM.1);
         // The keys have no limit of their own; hold the real zoom to the range the saved one keeps.
@@ -363,6 +404,9 @@ impl eframe::App for App {
                         ui.label(RichText::new(reason).color(theme::tone("blocked", dark).0).size(12.0));
                     }
                     ui.add_space(6.0);
+                    // Whether any agent is actually working, before the tabs: an agent's turn alone is not work.
+                    if working_strip(ui, &p, lang, dark, &model.items) { self.tab = Tab::Agent; }
+                    ui.add_space(8.0);
                     let queue = decision_queue(&model.items);
                     // Items waiting on someone else are in progress, not yours.
                     let in_progress = |i: &Item| !i.done && !i.pin && matches!(i.turn.actor.as_str(), "agent" | "others");
@@ -385,12 +429,14 @@ impl eframe::App for App {
 
                     // Pinned items (settings) sit above every open tab, outside the tab's own list and counts.
                     let pinned: Vec<&Item> = if self.tab == Tab::Done { Vec::new() } else { model.items.iter().filter(|i| i.pin && !i.done).collect() };
-                    let listed: Vec<&Item> = model.items.iter().filter(|i| !(i.pin && !i.done)).filter(|i| match self.tab {
+                    let mut listed: Vec<&Item> = model.items.iter().filter(|i| !(i.pin && !i.done)).filter(|i| match self.tab {
                         Tab::Focus => false,
                         Tab::Agent => in_progress(i),
                         Tab::All => !i.done,
                         Tab::Done => i.done,
                     }).collect();
+                    // Work happening now leads the list; the rest keep their order.
+                    listed.sort_by_key(|i| i.turn.kind != "working");
                     let toast_height = if toast.is_some() { 44.0 } else { 0.0 };
                     // The decision on screen: the same one while it waits, else whatever now sits at its place.
                     // Arrow keys turn the page unless a field is being typed in.
@@ -559,7 +605,7 @@ impl App {
             egui::CollapsingHeader::new(RichText::new(title).color(p.muted).size(12.5)).id_salt("queue").show(ui, |ui| {
                 for (i, other) in queue.iter().enumerate().filter(|(i, _)| *i != at) {
                     let color = theme::tone(if must_decide(other) { &other.turn.actor } else { "" }, dark).0;
-                    if line(ui, p, color, other, status_label(lang, other)) { go = i; }
+                    if line(ui, p, color, other, &status_label(lang, other)) { go = i; }
                 }
             });
         }
@@ -573,11 +619,11 @@ impl App {
         let mut clicked = false;
         theme::row(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            clicked = line(ui, p, theme::tone(&item.turn.actor, dark).0, item, status_label(lang, item));
+            clicked = line(ui, p, theme::tone(tint(item), dark).0, item, &status_label(lang, item));
             if self.open.contains(&item.id) && !needs_you(item) {
                 ui.add_space(2.0);
                 ui.horizontal_wrapped(|ui| {
-                    pill(ui, status_label(lang, item), &item.turn.actor, dark);
+                    pill(ui, &status_label(lang, item), tint(item), dark);
                     ui.label(RichText::new(meta_of(item)).color(p.muted).size(12.0));
                 });
                 self.details(ui, ctx, p, item, busy, artifact, Part::Both);
@@ -887,7 +933,7 @@ fn heading(ui: &mut egui::Ui, p: &theme::Palette, dark: bool, lang: Lang, item: 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| match item.turn.kind.as_str() {
             "answer" if must_decide(item) => pill(ui, t(lang, "decide.yours"), "you", dark),
             "answer" => pill(ui, t(lang, "decide.suggested"), "", dark),
-            _ => pill(ui, status_label(lang, item), &item.turn.actor, dark),
+            _ => pill(ui, &status_label(lang, item), tint(item), dark),
         });
     });
     ui.add(egui::Label::new(RichText::new(&item.title).size(19.0).strong().line_height(Some(27.0))).wrap());
@@ -904,12 +950,39 @@ fn meta_of(item: &Item) -> String {
     meta.join(" · ")
 }
 
+/// One line above the tabs saying whether an agent is working right now: a pulsing pill with the count and the first
+/// item's label, or a muted "none". Returns true when clicked (the caller opens the in-progress tab).
+fn working_strip(ui: &mut egui::Ui, p: &theme::Palette, lang: Lang, dark: bool, items: &[Item]) -> bool {
+    let working: Vec<&Item> = items.iter().filter(|i| !i.done && i.turn.kind == "working").collect();
+    let row = ui.horizontal(|ui| {
+        match working.first() {
+            None => {
+                let (rect, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), Sense::hover());
+                ui.painter().circle_stroke(rect.center(), 3.5, Stroke::new(1.2, p.muted));
+                ui.label(RichText::new(t(lang, "working.none")).color(p.muted).size(12.5));
+            }
+            Some(first) => {
+                pill(ui, &format!("{}{}", working.len(), t(lang, "working.count")), "working", dark);
+                ui.add(egui::Label::new(RichText::new(format!("{} — {}", first.title, status_label(lang, first)))
+                    .color(p.muted).size(12.5)).truncate().selectable(false));
+            }
+        }
+    }).response;
+    !working.is_empty() && ui.interact(row.rect, egui::Id::new("working-strip"), Sense::click())
+        .on_hover_cursor(egui::CursorIcon::PointingHand).clicked()
+}
+
 /// One line for an item: a dot in its actor's colour and the title, cut to fit; the hint shows on hover.
 /// Returns true when the line is clicked.
 fn line(ui: &mut egui::Ui, p: &theme::Palette, color: Color32, item: &Item, hint: &str) -> bool {
     let row = ui.horizontal(|ui| {
         let (rect, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), Sense::hover());
         ui.painter().circle_filled(rect.center(), 4.0, color);
+        if item.turn.kind == "working" {
+            ui.painter().circle_stroke(rect.center(), 6.0, Stroke::new(1.5, color.gamma_multiply(pulse(ui) - 0.3)));
+            // Shown on the line itself, not only on hover: how long and on what the agent has been working.
+            pill(ui, hint, "working", ui.visuals().dark_mode);
+        }
         ui.add(egui::Label::new(RichText::new(&item.title).color(p.text).size(13.5)).truncate().selectable(false));
     }).response;
     // The whole width answers the click, not only the text.
@@ -1114,6 +1187,18 @@ mod tests {
         assert_eq!(untag("Planned (TO-BE): narrow it.".into()), "narrow it.");
         // Only a short lead is a tag; the words inside a sentence stay.
         assert_eq!(untag("Today the key opens every file (AS-IS): too wide.".into()), "Today the key opens every file (AS-IS): too wide.");
+    }
+
+    #[test]
+    fn working_shows_minutes_and_what_from_the_iso_start() {
+        assert_eq!(iso_seconds("1970-01-02T00:00:01.000Z"), Some(86401));
+        assert_eq!(iso_seconds("2026-11-12T03:04:05.678Z"), Some(1794452645));
+        let since = "2026-11-12T03:00:00.000Z";
+        let start = iso_seconds(since).unwrap();
+        assert_eq!(working_label(Lang::Ko, since, "build", start + 12 * 60 + 30), "지금 작업 중 · 12분째 · build");
+        assert_eq!(working_label(Lang::En, since, "", start + 20), "Working now · just started");
+        assert_eq!(tint(&item("w", "agent", "working")), "working");
+        assert_eq!(tint(&item("a", "agent", "agent")), "agent");
     }
 
     #[test]

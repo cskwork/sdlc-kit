@@ -39,6 +39,14 @@ pub struct Sdlc {
     pub action: String,
 }
 
+/// An agent's live `working` marker: what it does, since when and its last heartbeat (ISO times).
+#[derive(Clone, Default, Deserialize)]
+pub struct Working {
+    #[serde(default)]
+    pub what: String,
+    pub since: String,
+}
+
 #[derive(Clone, Default, Deserialize)]
 pub struct Item {
     pub id: String,
@@ -72,6 +80,9 @@ pub struct Item {
     /// Kept at the top of every tab (a setting switched with its choices); never counted as needing you.
     #[serde(default)]
     pub pin: bool,
+    /// Set while an agent works on it right now; the server drops it once the heartbeat expires.
+    #[serde(default)]
+    pub working: Option<Working>,
     pub version: String,
     pub turn: Turn,
 }

@@ -1,6 +1,6 @@
 // To-do page. Rows are patched by id so drafts, focus and scroll survive live updates.
 import { defaultLanguage, isLanguage, languages, locales, phaseLabel, translator } from './i18n.mjs';
-import { countsOf, queueOf, statusOf, ticketGroups } from './status.mjs';
+import { countsOf, queueOf, statusLabel, statusOf, ticketGroups } from './status.mjs';
 const $ = id => document.getElementById(id);
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -108,10 +108,11 @@ function whatWaits(item) {
   const status = statusOf(item);
   return item.waiting || (status.gate ? t(`next.${status.kind}`) : item.sdlc?.action || t(`next.${status.kind}`));
 }
-// Colour tone of a status pill, row bar and check ring: amber you, blue agent, grey not started or not picked up.
+// Colour tone of a status pill, row bar and check ring: amber you, blue agent's turn, green with a pulsing dot
+// while an agent works on it now, grey not started or not picked up.
 const tones = { you: 'wait', agent: 'busy', others: 'open', blocked: 'blocked', done: 'ok' };
-const toneOf = status => ['new', 'handoff'].includes(status.kind) ? 'open' : tones[status.actor];
-const pill = item => { const status = statusOf(item); return chip(t(`status.${status.kind}`), `badge ${toneOf(status)}`); };
+const toneOf = status => status.kind === 'working' ? 'working' : ['new', 'handoff'].includes(status.kind) ? 'open' : tones[status.actor];
+const pill = item => { const status = statusOf(item); return chip(statusLabel(t, item), `badge ${toneOf(status)}`); };
 function doneAt(item) {
   const last = [...item.events].reverse().find(e => /^(done|DONE)\b/.test(e.what));
   return last ? last.at : '';
@@ -221,7 +222,7 @@ function updateRow(li, item) {
   li.dataset.tone = toneOf(status);
   const queued = queue.queued.has(item.id) ? queue.stop.status === 'blocked' ? 'row.queuedFix' : 'row.queued' : '';
   // Rebuild the small info line only when it changed, so a focused link keeps focus.
-  const sig = JSON.stringify([lang, status.kind, queued, item.project, item.repos, item.link, item.sdlc?.phase, item.error, item.sdlc?.action, item.others, item.done]);
+  const sig = JSON.stringify([lang, statusLabel(t, item), queued, item.project, item.repos, item.link, item.sdlc?.phase, item.error, item.sdlc?.action, item.others, item.done]);
   if (sig === r.sig) return;
   r.sig = sig;
   const parts = [];
@@ -489,7 +490,7 @@ const dialog = $('detail');
 const wideQuery = matchMedia('(min-width: 1100px)');
 let isWide = wideQuery.matches, quietClose = false;
 // detailId is what the dialog shows ('' when closed); selectedId is the row chosen for the pane.
-let detailId = '', selectedId = '', opener = null, artifact = null, artifactRequest = 0, detailVersion = '';
+let detailId = '', selectedId = '', opener = null, artifact = null, artifactRequest = 0, detailVersion = '', detailPill = null;
 
 function draftFor(id) { if (!drafts.has(id)) drafts.set(id, { reply: '', words: '', seed: '' }); return drafts.get(id); }
 // The agent's suggested answer fills the reply field until the person edits it; a new suggestion replaces an unedited one.
@@ -590,8 +591,9 @@ function field(dl, name, value) {
 }
 function renderDetail() {
   const item = items.find(i => i.id === detailId);
-  const version = JSON.stringify(item);
-  if (version === detailVersion) return;
+  // A heartbeat only moves working.beat: refresh the status words in place, so Details keeps focus.
+  const version = item ? JSON.stringify({ ...item, working: item.working && { what: item.working.what, since: item.working.since } }) : '';
+  if (version === detailVersion) { if (item && detailPill) detailPill.textContent = statusLabel(t, item); return; }
   detailVersion = version;
   $('detail-gone').hidden = !!item;
   for (const form of [$('approve-form'), $('reply-form')]) for (const c of form.elements) c.disabled = !item;
@@ -605,7 +607,8 @@ function renderDetail() {
   const dl = $('detail-fields');
   dl.replaceChildren();
   const actor = statusOf(item).actor;
-  field(dl, t('field.status'), pill(item));
+  detailPill = pill(item);
+  field(dl, t('field.status'), detailPill);
   if (actor === 'you') field(dl, t('field.next'), whatWaits(item));
   if (actor === 'others') field(dl, t('field.others'), item.others);
   if (!item.done && item.run) field(dl, t('field.run'), el('code', '', item.run));

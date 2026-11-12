@@ -30,6 +30,8 @@ pub fn tone(actor: &str, dark: bool) -> (Color32, Color32) {
     let (fg, bg_light, bg_dark) = match actor {
         "you" => (0xd97706, 0xfef3c7, 0x3a2a0c),
         "agent" => (0x2f6fed, 0xdde8ff, 0x16233f),
+        // An agent working on it right now, apart from an agent's turn nobody holds.
+        "working" => (0x0a7a52, 0xe3f6ee, 0x123227),
         "blocked" => (0xdc2626, 0xfee2e2, 0x3d1616),
         _ => (0x6b7280, 0xececf0, 0x26262b),
     };
