@@ -2,7 +2,7 @@ import { emitKeypressEvents } from 'node:readline';
 import { spawn } from 'node:child_process';
 import * as core from './core.mjs';
 import { defaultLanguage, locales, nextLanguage, phaseLabel, translator } from './i18n.mjs';
-import { countsOf, queueOf, statusOf } from './status.mjs';
+import { countsOf, queueOf, statusLabel, statusOf } from './status.mjs';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 const chars = text => [...segmenter.segment(String(text))].map(part => part.segment);
@@ -53,10 +53,11 @@ const textOf = state => translator(state.lang || defaultLanguage);
 // What the human is asked to do: the explicit wait, else the sdlc action, else the generic step.
 const waitText = (item, t) => item.waiting || item.sdlc?.action || t(`next.${statusOf(item).kind}`);
 const doneTime = item => [...(item.events || [])].reverse().find(e => /^(done|DONE)(?:$| —)/.test(e.what))?.at || '';
-const looks = { done: ['✓', '2;33'], blocked: ['✕', '31'], you: ['●', '33'], agent: ['◐', '36'], others: ['◇', '2'], handoff: ['◌', '36'], new: ['○', ''] };
+// An agent working right now gets its own bold green mark; an agent's turn with nobody on it stays ◐.
+const looks = { done: ['✓', '2;33'], blocked: ['✕', '31'], you: ['●', '33'], agent: ['◐', '36'], others: ['◇', '2'], handoff: ['◌', '36'], new: ['○', ''], working: ['◉', '1;32'] };
 function status(item, t) {
   const { actor, kind } = statusOf(item);
-  return [...looks[['new', 'handoff'].includes(kind) ? kind : actor], t(`status.${kind}`)];
+  return [...looks[['new', 'handoff', 'working'].includes(kind) ? kind : actor], statusLabel(t, item)];
 }
 const webText = (state, t) => state.webUrl || (state.webError ? t('tui.webOffBecause', { reason: state.webError }) : t('tui.webOff'));
 function detailLines(item, t) {
@@ -126,6 +127,7 @@ export function render(state, { width = 80, height = 24, color = false } = {}) {
       let row = paint(`${active ? '›' : ' '} `, active ? '33' : '') + paint(`${glyph} ${title}`, current.done ? '2;33;9' : code);
       if (showMeta) row += ' '.repeat(Math.max(2, width - widthOf(prefix + title) - widthOf(meta))) + paint(meta, '2');
       rows.push(row);
+      if (statusOf(current).kind === 'working') rows.push(paint(clip(`    ${label}`, width), code));
       if (current === stop) rows.push(paint(clip(`    ${t(`stop.${statusOf(current).actor}`)}`, width), code));
       if (waiting(current)) rows.push(paint(clip(`    ${waitText(current, t)} · ${t('tui.decideInBrowser')}`, width), '2'));
       if (choicesOf(current).length) rows.push(paint(clip(`    ${choiceText(current, t)}`, width), '2'));
@@ -262,7 +264,7 @@ export async function runTui({ file, kit, web, lang = defaultLanguage }) {
   if (!input.isTTY || !output.isTTY || !input.setRawMode) throw new Error('A terminal is required for the TUI');
   const readItems = () => {
     const model = core.load(file);
-    return model.items.map(item => ({ ...item, version: core.itemVersion(item, model) }));
+    return core.withWorking(model.items, file).map((item, i) => ({ ...item, version: core.itemVersion(model.items[i], model) }));
   };
   let state = { items: readItems(), file, selected: 0, view: 'list', lang };
   const t = (key, vars) => textOf(state)(key, vars);
@@ -407,7 +409,8 @@ export async function runTui({ file, kit, web, lang = defaultLanguage }) {
     if (stopped) { if (failure) throw failure; return; }
     state.items = readItems(); ready = true;
     emitKeypressEvents(input); input.on('keypress', keypress); input.resume();
-    stopWatch = core.watch(file, refresh); draw();
+    const stopFile = core.watch(file, refresh), stopWorking = core.watchWorking(file, refresh);
+    stopWatch = () => { stopFile(); stopWorking(); }; draw();
     if (typeof web === 'string') { state.webUrl = web; draw(); }
     else if (web) webStart = import('./web.mjs').then(({ startWeb }) => startWeb({ file, kit, port: 0, open: false, lang,
       onUrl: url => { state.webUrl = url; draw(); } }))

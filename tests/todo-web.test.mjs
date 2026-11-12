@@ -237,6 +237,29 @@ function eventStream(ctx, t) {
   };
 }
 
+test('working: SSE shows a marker at once and drops it when its heartbeat expires, with no further write', async t => {
+  const ttl = process.env.SDLC_TODO_WORKING_TTL;
+  process.env.SDLC_TODO_WORKING_TTL = '1';
+  t.after(() => { if (ttl === undefined) delete process.env.SDLC_TODO_WORKING_TTL; else process.env.SDLC_TODO_WORKING_TTL = ttl; });
+  const ctx = await web(t);
+  const { id } = await core.add(ctx.file, 'Build it');
+  const waitFor = eventStream(ctx, t);
+  await waitFor(value => value.items?.some(item => item.id === id));
+  const marked = waitFor(value => value.items?.some(item => item.id === id && item.working?.what === 'build'));
+  await core.working(ctx.file, id, 'build');
+  assert.deepEqual((await marked).items.find(item => item.id === id).turn, { actor: 'agent', kind: 'working' });
+  const before = readFileSync(core.workingPath(ctx.file), 'utf8');
+  // Frames are matched in order: the first one after the mark that no longer carries it.
+  let seen = false;
+  const expired = await waitFor(value => {
+    const item = value.items?.find(other => other.id === id);
+    if (item?.working) seen = true;
+    return seen && item?.working === null;
+  }, 3000);
+  assert.deepEqual(expired.items.find(item => item.id === id).turn, { actor: 'agent', kind: 'new' });
+  assert.equal(readFileSync(core.workingPath(ctx.file), 'utf8'), before, 'expiry needs no write');
+});
+
 test('S3: SSE observes an external core write within one second without reloading', async t => {
   const ctx = await web(t);
   await core.add(ctx.file, 'Initial');

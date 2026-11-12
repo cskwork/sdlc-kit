@@ -7,10 +7,10 @@ Prefix the commands below with `node <kit>/todo/todo.mjs` unless they name `sdlc
 
 ## Select
 
-Run `node <kit>/todo/todo.mjs next --json` and capture its exit code.
+Run `next --json`; use its exit code.
 
 - `0`: work the returned item.
-- `10`: stop and tell the human what the item waits for; let them decide in the TUI, web page or chat.
+- `10`: stop and tell the human what the item waits for; they decide in the app or chat.
 - `20`: stop and report the returned error text.
 - `30`: stop; nothing remains to do.
 
@@ -25,6 +25,7 @@ Use the returned `id` for mutations; a shared slug is ambiguous.
 Read `replies` from `next --json` and fold the human's answers into the artifact.
 Treat an answer as input, never approval; a changed artifact needs approval again.
 
+While working an item, run `working <id> "<step>"` at least every 60 s; `working <id> --off` when you stop.
 If the item has a project, `cd` there.
 In that project, if `.sdlc/` is absent, run `bash <kit>/sdlc.sh init` and configure it per SKILL.md.
 If no project is set and the work needs a repository, run `wait <id> "which project?"` and stop.
@@ -59,9 +60,9 @@ Leave web approvals to the human; only sdlc.sh records gate approval.
 
 ## Schedule the host
 
-Let the host run the model proactively; the kit never runs a model.
-Use one worker per list; there is no multi-agent lease.
+The host runs the model, never the kit.
+Use one worker per list.
 
 - Claude Code: `/loop 15m follow <kit>/todo/AGENT.md`.
 - cron/launchd: schedule `claude -p "follow <kit>/todo/AGENT.md"` or `codex exec "follow <kit>/todo/AGENT.md"`.
-- Paseo: schedule an agent with the prompt `follow <kit>/todo/AGENT.md`.
+- Paseo: schedule the prompt `follow <kit>/todo/AGENT.md`.

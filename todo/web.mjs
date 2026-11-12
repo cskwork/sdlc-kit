@@ -146,7 +146,8 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   const clients = new Set();
   const payload = () => {
     const model = core.load(file);
-    return { items: model.items.map(item => ({ ...item, version: core.itemVersion(item, model), turn: statusOf(item) })), file, lang };
+    // The version hashes the item as loaded; the working marker is not part of it.
+    return { items: core.withWorking(model.items, file).map((item, i) => ({ ...item, version: core.itemVersion(model.items[i], model), turn: statusOf(item) })), file, lang };
   };
   const sendEvent = (res, value, event = '') => res.write(`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(value)}\n\n`);
   const broadcast = () => {
@@ -260,13 +261,13 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   });
   actualPort = server.address().port;
   // Watching only loads the file: sync writes it, so syncing in the watcher would loop.
-  const stopWatch = core.watch(file, broadcast);
+  const stopWatch = core.watch(file, broadcast), stopWorking = core.watchWorking(file, broadcast);
   const keepalive = setInterval(() => { for (const res of clients) res.write(': keepalive\n\n'); }, 15000);
   keepalive.unref();
   let closing;
   const close = () => {
     if (!closing) {
-      stopWatch();
+      stopWatch(); stopWorking();
       clearInterval(keepalive);
       if (session && readSession(session)?.token === token) fs.rmSync(session, { force: true });
       for (const res of clients) res.end();

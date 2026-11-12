@@ -485,7 +485,7 @@ test('language: the page follows the server language, switches at runtime and ke
   assert.match(texts('aaaaaa'), /Approve plan/);
   assert.match(line('aaaaaa'), /Agents stop here until you decide/);
   assert.match(line('aaaaaa'), /Approve…/);
-  assert.match(texts('bbbbbb'), /Agent working/);
+  assert.match(texts('bbbbbb'), /Agent's turn/);
   assert.match(texts('bbbbbb'), /Queued behind your decision/);
   assert.equal(p.nodes.get('detail-fields').children[0].textContent, 'Status', 'open Details re-renders');
   assert.equal(p.nodes.get('live-text').textContent, 'Connecting');

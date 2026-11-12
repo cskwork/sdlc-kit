@@ -1,6 +1,6 @@
 // To-do page. Rows are patched by id so drafts, focus and scroll survive live updates.
 import { defaultLanguage, isLanguage, languages, locales, phaseLabel, translator } from './i18n.mjs';
-import { countsOf, queueOf, statusOf, ticketGroups } from './status.mjs';
+import { countsOf, queueOf, statusLabel, statusOf, ticketGroups } from './status.mjs';
 const $ = id => document.getElementById(id);
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -108,10 +108,11 @@ function whatWaits(item) {
   const status = statusOf(item);
   return item.waiting || (status.gate ? t(`next.${status.kind}`) : item.sdlc?.action || t(`next.${status.kind}`));
 }
-// Colour tone of a status pill, row bar and check ring: amber you, blue agent, grey not started or not picked up.
+// Colour tone of a status pill, row bar and check ring: amber you, blue agent's turn, green with a pulsing dot
+// while an agent works on it now, grey not started or not picked up.
 const tones = { you: 'wait', agent: 'busy', others: 'open', blocked: 'blocked', done: 'ok' };
-const toneOf = status => ['new', 'handoff'].includes(status.kind) ? 'open' : tones[status.actor];
-const pill = item => { const status = statusOf(item); return chip(t(`status.${status.kind}`), `badge ${toneOf(status)}`); };
+const toneOf = status => status.kind === 'working' ? 'working' : ['new', 'handoff'].includes(status.kind) ? 'open' : tones[status.actor];
+const pill = item => { const status = statusOf(item); return chip(statusLabel(t, item), `badge ${toneOf(status)}`); };
 function doneAt(item) {
   const last = [...item.events].reverse().find(e => /^(done|DONE)\b/.test(e.what));
   return last ? last.at : '';
@@ -221,7 +222,7 @@ function updateRow(li, item) {
   li.dataset.tone = toneOf(status);
   const queued = queue.queued.has(item.id) ? queue.stop.status === 'blocked' ? 'row.queuedFix' : 'row.queued' : '';
   // Rebuild the small info line only when it changed, so a focused link keeps focus.
-  const sig = JSON.stringify([lang, status.kind, queued, item.project, item.repos, item.link, item.sdlc?.phase, item.error, item.sdlc?.action, item.others, item.done]);
+  const sig = JSON.stringify([lang, statusLabel(t, item), queued, item.project, item.repos, item.link, item.sdlc?.phase, item.error, item.sdlc?.action, item.others, item.done]);
   if (sig === r.sig) return;
   r.sig = sig;
   const parts = [];

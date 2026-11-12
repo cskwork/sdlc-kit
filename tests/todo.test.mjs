@@ -265,6 +265,46 @@ test('choices: CLI stores one-click answers and a pick, adds one event per chang
   assert.deepEqual([listed[0].choices, listed[0].pick], [[], null]);
 });
 
+test('working: CLI marks, refreshes and clears an item beside todo.md; statusOf shows it unless a human turn wins; it expires', async t => {
+  const { root, file } = scratch(t);
+  const a = await core.add(file, 'A20-1 build');
+  const b = await core.add(file, 'B');
+  const todo = readFileSync(file, 'utf8');
+  checkCode(await cli(file, ['working', a.id, 'build']), 0);
+  const where = join(root, 'todo-working.json');
+  assert.equal(core.workingPath(file), where);
+  if (process.platform !== 'win32') assert.equal(statSync(where).mode & 0o777, 0o600, 'only the owner reads the markers');
+  const first = JSON.parse(readFileSync(where, 'utf8'))[a.id];
+  assert.equal(first.what, 'build');
+  assert.equal(readFileSync(file, 'utf8'), todo, 'todo.md is not written');
+  let listed = JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout);
+  assert.deepEqual(listed.find(item => item.id === a.id).working, first);
+  assert.equal(listed.find(item => item.id === b.id).working, null);
+  await new Promise(resolveWait => setTimeout(resolveWait, 20));
+  checkCode(await cli(file, ['working', a.id]), 0);
+  const second = JSON.parse(readFileSync(where, 'utf8'))[a.id];
+  assert.deepEqual([second.what, second.since], ['build', first.since], 'a refresh keeps the label and the start');
+  assert.ok(second.beat > first.beat, 'a refresh moves the heartbeat');
+  const [item] = core.withWorking(core.load(file).items, file);
+  assert.deepEqual(statusOf(item), { actor: 'agent', kind: 'working' });
+  assert.equal(statusOf({ ...item, status: 'waiting' }).actor, 'you', 'a human turn wins over a heartbeat');
+  assert.equal(statusOf({ ...item, done: true }).kind, 'done');
+  checkCode(await cli(file, ['working', 'nope', 'x']), 1);
+  checkCode(await cli(file, ['working', a.id, 'x', '--off']), 2);
+  checkCode(await cli(file, ['working', a.id, '--off']), 0);
+  assert.deepEqual(JSON.parse(readFileSync(where, 'utf8')), {});
+  // A marker whose heartbeat is older than the TTL is ignored everywhere and pruned on the next write.
+  writeFileSync(where, JSON.stringify({ [a.id]: { what: 'old', since: '2026-01-01T00:00:00.000Z', beat: '2026-01-01T00:00:00.000Z' } }));
+  assert.equal(core.withWorking(core.load(file).items, file)[0].working, null);
+  checkCode(await cli(file, ['working', b.id, 'QA']), 0);
+  const marks = JSON.parse(readFileSync(where, 'utf8'));
+  assert.deepEqual(Object.keys(marks), [b.id]);
+  assert.notEqual(marks[b.id].since, '2026-01-01T00:00:00.000Z');
+  await new Promise(resolveWait => setTimeout(resolveWait, 100));
+  listed = JSON.parse(checkCode(await cli(file, ['list', '--json'], { env: { SDLC_TODO_WORKING_TTL: '0.05' } }), 0).stdout);
+  assert.equal(listed.find(item => item.id === b.id).working, null, 'an expired heartbeat is no marker');
+});
+
 test('others: an agent waiting on someone else outranks an sdlc NEEDS-HUMAN; its own wait and a reply still win', t => {
   const { file } = scratch(t);
   const status = text => { writeFileSync(file, text); return core.load(file).items[0].status; };
