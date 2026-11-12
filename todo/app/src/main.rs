@@ -404,6 +404,9 @@ impl eframe::App for App {
                         ui.label(RichText::new(reason).color(theme::tone("blocked", dark).0).size(12.0));
                     }
                     ui.add_space(6.0);
+                    // Whether any agent is actually working, before the tabs: an agent's turn alone is not work.
+                    if working_strip(ui, &p, lang, dark, &model.items) { self.tab = Tab::Agent; }
+                    ui.add_space(8.0);
                     let queue = decision_queue(&model.items);
                     // Items waiting on someone else are in progress, not yours.
                     let in_progress = |i: &Item| !i.done && !i.pin && matches!(i.turn.actor.as_str(), "agent" | "others");
@@ -426,12 +429,14 @@ impl eframe::App for App {
 
                     // Pinned items (settings) sit above every open tab, outside the tab's own list and counts.
                     let pinned: Vec<&Item> = if self.tab == Tab::Done { Vec::new() } else { model.items.iter().filter(|i| i.pin && !i.done).collect() };
-                    let listed: Vec<&Item> = model.items.iter().filter(|i| !(i.pin && !i.done)).filter(|i| match self.tab {
+                    let mut listed: Vec<&Item> = model.items.iter().filter(|i| !(i.pin && !i.done)).filter(|i| match self.tab {
                         Tab::Focus => false,
                         Tab::Agent => in_progress(i),
                         Tab::All => !i.done,
                         Tab::Done => i.done,
                     }).collect();
+                    // Work happening now leads the list; the rest keep their order.
+                    listed.sort_by_key(|i| i.turn.kind != "working");
                     let toast_height = if toast.is_some() { 44.0 } else { 0.0 };
                     // The decision on screen: the same one while it waits, else whatever now sits at its place.
                     // Arrow keys turn the page unless a field is being typed in.
@@ -945,13 +950,39 @@ fn meta_of(item: &Item) -> String {
     meta.join(" · ")
 }
 
+/// One line above the tabs saying whether an agent is working right now: a pulsing pill with the count and the first
+/// item's label, or a muted "none". Returns true when clicked (the caller opens the in-progress tab).
+fn working_strip(ui: &mut egui::Ui, p: &theme::Palette, lang: Lang, dark: bool, items: &[Item]) -> bool {
+    let working: Vec<&Item> = items.iter().filter(|i| !i.done && i.turn.kind == "working").collect();
+    let row = ui.horizontal(|ui| {
+        match working.first() {
+            None => {
+                let (rect, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), Sense::hover());
+                ui.painter().circle_stroke(rect.center(), 3.5, Stroke::new(1.2, p.muted));
+                ui.label(RichText::new(t(lang, "working.none")).color(p.muted).size(12.5));
+            }
+            Some(first) => {
+                pill(ui, &format!("{}{}", working.len(), t(lang, "working.count")), "working", dark);
+                ui.add(egui::Label::new(RichText::new(format!("{} — {}", first.title, status_label(lang, first)))
+                    .color(p.muted).size(12.5)).truncate().selectable(false));
+            }
+        }
+    }).response;
+    !working.is_empty() && ui.interact(row.rect, egui::Id::new("working-strip"), Sense::click())
+        .on_hover_cursor(egui::CursorIcon::PointingHand).clicked()
+}
+
 /// One line for an item: a dot in its actor's colour and the title, cut to fit; the hint shows on hover.
 /// Returns true when the line is clicked.
 fn line(ui: &mut egui::Ui, p: &theme::Palette, color: Color32, item: &Item, hint: &str) -> bool {
     let row = ui.horizontal(|ui| {
         let (rect, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), Sense::hover());
         ui.painter().circle_filled(rect.center(), 4.0, color);
-        if item.turn.kind == "working" { ui.painter().circle_stroke(rect.center(), 6.0, Stroke::new(1.5, color.gamma_multiply(pulse(ui) - 0.3))); }
+        if item.turn.kind == "working" {
+            ui.painter().circle_stroke(rect.center(), 6.0, Stroke::new(1.5, color.gamma_multiply(pulse(ui) - 0.3)));
+            // Shown on the line itself, not only on hover: how long and on what the agent has been working.
+            pill(ui, hint, "working", ui.visuals().dark_mode);
+        }
         ui.add(egui::Label::new(RichText::new(&item.title).color(p.text).size(13.5)).truncate().selectable(false));
     }).response;
     // The whole width answers the click, not only the text.

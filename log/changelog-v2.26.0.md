@@ -12,6 +12,7 @@ Every open item whose next step was an agent's read "Agent working" (`status.age
 - **"Agent working" is now "Agent's turn"** / "에이전트 차례": an open item an agent should take next but nobody has marked.
 - **Item JSON** (`list --json`, `next`/`take --json`, `/api/items`, `/events`) carries `working: { what, since, beat }` or `null` (null when the item is done or the mark expired).
 - **Every surface tells it apart:** the app gives it its own green tint, a halo around the row dot and a pulsing dot in its pill, repainting once a second only while an item is working; the web page shows a green pill with a CSS-pulsing dot and a green row bar; the TUI marks it `◉` in bold green with a "Working now · 12 min · build" line under the row (legend updated).
+- **The app says it above the tabs:** a line under the title reads "N건 지금 작업 중 — <first item> — 지금 작업 중 · 6분째 · build" (click opens 진행 중), or a muted "지금 작업 중인 에이전트 없음". Working rows lead their tab and carry the label pill on the row itself, not only on hover. The empty Needs-you text no longer claims agents keep working.
 - **Expiry without a write:** the server and the TUI watch `todo-working.json` and also arm a timer for the oldest live mark's expiry (`core.watchWorking`), so a mark nobody refreshes leaves every view within the TTL (plus 50 ms), with no file change.
 - **Agents:** `todo/AGENT.md` asks to run `working <id> "<step>"` at least every 60 s while working an item and `working <id> --off` when they stop; README and CLI help describe the command.
 
