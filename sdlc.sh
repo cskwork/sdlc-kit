@@ -11,7 +11,7 @@ Usage: sdlc.sh init [--memory path] | new slug | status [slug] [--json]
        sdlc.sh approve intent|plan slug --human words|--agent review [--sha hex]
        sdlc.sh review slug pass|fail [--uncommitted] [--repos "path ..."] note
        sdlc.sh score slug
-       sdlc.sh close slug shipped|dropped reason | memory index | dream [--check] | help | --version
+       sdlc.sh close slug shipped|dropped reason | memory index | dream [--check|--done] | help | --version
 USAGE
 }
 sha() {

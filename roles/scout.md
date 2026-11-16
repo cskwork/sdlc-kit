@@ -6,7 +6,8 @@ under `refs/`. Change nothing else.
 Inputs: the question, intent.md, the project root, memory's `INDEX.md`,
 and config.md.
 
-- Read `INDEX.md` and only the pages you need; cite what they answer.
+- Read `INDEX.md` and only the pages it names, else grep memory and any
+  `transcripts:` hits; cite what they answer.
   Re-check, or mark assumed, a cited code fact with no commit or
   whose file changed since (its repository's `git log`).
 - Trace from the entry the question names to the end: every caller in every

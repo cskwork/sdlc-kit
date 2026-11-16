@@ -107,17 +107,38 @@ $EDITOR .sdlc/config.md                          # build, test, lint, run, e2e, 
 끝난 기능은 `.sdlc/archive/`로 옮겨지고, `logs/` 아래 다시 만들 수 있는 캐시
 (`gradle-home`, `node_modules`, `build` 등, config.md `prune:`)는 지웁니다.
 검증된 사실은 `memory` 폴더로 옮깁니다. 코드에서 싸게 알 수 없는, 다시 쓸 사실·규칙·함정만
-둡니다. `INDEX.md`는 페이지마다 한 줄이고(`sdlc.sh memory index`가 다시 만들고 `close`가
-갱신), scout는 색인부터 읽고 필요한 페이지만 엽니다. `close <slug> shipped`에는
-evidence.md Shipping의 `Memory:` 줄(고친 페이지, 또는 `none — <이유>`)이 필요합니다.
-그 안의 `glossary.md`가 프로젝트 용어집입니다. Intent는 요청의 용어를 여기에 대조하고,
-Evidence는 기능에서 확정한 용어를 여기에 더합니다. `sdlc.sh dream --check`는 마지막
-정리 뒤 기능 3개가 닫혔거나(shipped·dropped 모두), 하나 이상 닫힌 채 14일이 지나면 10으로 끝나고
-(닫힌 것이 없으면 하지 않음, 예: `due: 3/3 closes since <시각>`), `sdlc.sh dream`은 새 에이전트에게
-줄 지시(`roles/dreamer.md`)를 출력합니다. 그 에이전트는 memory를 HEAD 코드와 대조해
-낡은 내용을 고치거나 지우고, 중복을 합치고, 닫힌 기능에서 쓸 사실을 거두고, 크기 예산을 지킵니다. config.md에 선택해 넣을 키와 기본값:
-`memory_top_kb: 64`, `memory_total_kb: 256`(색인 경고), `dream_every: 3`,
-`dream_max_days: 14`, `prune: gradle-home .gradle node_modules build .m2 target`(비우면
+둡니다. 사실 한 줄은 근거와 날짜로 끝납니다(`[verified: <경로> @ <sha> | as-of: <날짜>]`,
+`[source: <slug 또는 대화 기록> | as-of: <날짜>]`, `[unconfirmed]`). 에이전트는 close 때만이
+아니라, 그런 것을 검증하거나 함정에 빠진 그 순간에 페이지를 씁니다. `INDEX.md` 맨 위의
+`## Core`는 사람이 관리하는 칸으로, 모든 에이전트에게 필요한 규칙 몇 개만 한 줄과 링크로
+둡니다(25줄, `memory_core_kb` 이하). 그 아래는 페이지마다 한 줄인 생성 목록입니다(`sdlc.sh memory
+index`가 다시 만들고 `close`가 갱신). 색인은 없는 파일을 가리키는 링크, `MOVED TO` 껍데기 페이지,
+근거 표시 없는 페이지, `memory_page_kb`를 넘는 페이지, `## Current picture` 없이 8,000바이트를
+넘는 페이지도 셉니다. 에이전트는 색인부터 읽고 그 색인이 가리키는 페이지만 열며, 항목이 없으면
+memory를 grep합니다. `close <slug> shipped`에는 evidence.md Shipping의 `Memory:` 줄(고친 페이지,
+또는 `none — <이유>`)이 필요합니다. 그 안의 `glossary.md`가 프로젝트 용어집입니다. Intent는
+요청의 용어를 여기에 대조하고, Evidence는 기능에서 확정한 용어를 여기에 더합니다.
+
+`sdlc.sh dream --check`는 마지막 정리 뒤 기능 3개가 닫혔거나(shipped·dropped 모두), 하나 이상
+닫힌 채 14일이 지나면 10으로 끝나고(닫힌 것이 없으면 하지 않음, 예: `due: 3/3 closes since <시각>`),
+`sdlc.sh dream`은 새 에이전트에게 줄 지시(`roles/dreamer.md`)를 출력할 뿐 아무것도 기록하지
+않습니다. 그 에이전트는 memory를 HEAD 코드와, 세션에서 일어난 일은 그 기능의 대화 기록과 `logs/`와
+대조해 낡은 내용을 고치거나(대체됨·충돌 표시) 지우고, 중복을 합치고, 여러 세션에서 되풀이된 실수를
+규칙으로 만들고, `## Core` 규칙을 올리고 내리고, 닫힌 기능에서 쓸 사실을 거두고, 크기 예산을
+지킵니다. 마지막 단계 `sdlc.sh dream --done [--through <시각>] [--note <메모>]`가 `.dream-state`에
+기록합니다(지시문이 `--through` 시각을 알려 주므로 그 뒤에 닫힌 기능은 다음 정리 대상으로 남음).
+dreamer가 `.dream-log.md`를 쓰지 않았으면 한 줄을 더합니다. 일정 실행기가 dreamer를 띄우지
+못해도 정리 차례를 잃지 않습니다.
+
+대화 기록(transcript)은 dream이 메모를 대조하는 세션 원본입니다. `transcripts:`에 셸 명령을 두면
+프로젝트 루트에서 `{slug}`와 `{since}`(마지막 정리 UTC 시각)를 바꿔 실행하고, 그 기능의 대화
+기록·로그 경로나 `경로:줄` 위치를 출력하게 합니다. 예: `transcripts: grep -rln {slug} ~/agent-sessions`.
+지시문에는 기능마다 `transcripts_max`개까지 `경로` 또는 `경로:줄`만 실리고(본문은 싣지 않음),
+dreamer는 파일 전체를 읽지 않고 grep합니다.
+
+config.md에 선택해 넣을 키와 기본값: `transcripts:`(비우면 없음), `transcripts_max: 20`,
+`memory_core_kb: 2`, `memory_page_kb: 16`, `memory_top_kb: 64`, `memory_total_kb: 256`(색인 경고),
+`dream_every: 3`, `dream_max_days: 14`, `prune: gradle-home .gradle node_modules build .m2 target`(비우면
 지우지 않음), `archive_warn_mb: 50`.
 
 ## 설정
@@ -185,7 +206,7 @@ TUI와 웹 페이지는 영어나 한국어로 표시합니다. `--lang ko`(TUI 
 TUI에서는 `L`, 웹 페이지에서는 언어 메뉴로 바꾸며 다시 시작하거나 새로 고칠 때까지 유지됩니다.
 상태는 다음에 누가 움직일지 보여 줍니다. 내 차례(범위 승인·계획 승인·답변), 지금 작업 중(에이전트가 3분 안에 `working`으로 표시한 항목, 몇 분째·무슨 일인지 함께 보임), 에이전트 차례(아직 아무도 잡지 않음), 답변 전달됨 — 에이전트 수신 전, 시작 전, 막힘 — 조치 필요, 완료이며, 에이전트가 멈추는 행에는 그 사실을 적습니다.
 항목에는 마크다운 브리프를 붙일 수 있습니다(`brief <id> <절대 경로>` 또는 `add --brief PATH`, `  - brief: <경로>`로 저장). 앱과 페이지는 이를 sdlc 작업 문서처럼(At a glance, Questions for you, 전체 문서는 접음) 보여 주며 승인 버튼은 없습니다. 브리프는 앱이 읽는 하나뿐인 형식인 `todo/brief.md`(Your call, What changes, AI pick, Phase, Background, Why)로 쓰고, 채울 수 없는 줄은 뺍니다.
-항목에는 변경이 들어간 저장소도 적을 수 있습니다(`repos <id> aidt-lms-api,aidt-viewer-api`, `  - repos: aidt-lms-api, aidt-viewer-api`로 저장, 이름 없이 실행하면 지움). 앱 카드, 페이지 목록·상세, TUI 목록·상세에 항상 보입니다.
+항목에는 변경이 들어간 저장소도 적을 수 있습니다(`repos <id> web-api,admin-api`, `  - repos: web-api, admin-api`로 저장, 이름 없이 실행하면 지움). 앱 카드, 페이지 목록·상세, TUI 목록·상세에 항상 보입니다.
 결정에는 한 번에 고르는 답을 붙일 수 있습니다(`choices <id> "진행 | 먼저 고침 | 보류" [--pick N]`, `  - choices: 진행 | 먼저 고침 | 보류`와 `  - pick: N`으로 저장, 최대 6개, 답 없이 실행하면 지움). 열린 항목이면 앱 카드, 페이지 상세(답변 칸 위), TUI(숫자 키)에 답마다 버튼이 생기고, 누르면 그 답 글자 그대로 보통 답변으로 보냅니다. `--pick`으로 고른 답은 맨 앞에 "권장"으로 표시합니다. 같은 티켓 링크를 가진, 내가 볼 열린 항목은 앱과 페이지에서 그 티켓 아래에 모아 보입니다.
 
 에이전트는 권장 답을 미리 채워 둘 수도 있습니다(`suggest <id> "답"`, `  - suggest: 답`으로 저장, 내 답변이나 빈 값이 지움). 앱 카드, 페이지 답변 칸, TUI 답변 줄(`r`)이 그 글자로 시작하므로 그대로 보내면 한 번에 끝납니다. 고친 답은 덮어쓰지 않고, 새 권장 답은 고치지 않은 칸만 바꿉니다. 앱 카드의 '에이전트가 묻고 있어요' 칸에는 요약의 Your call과 AI pick만 보이고(요약에 질문이 없을 때만 대기 문구), What changes는 그 아래 흐린 한 줄로 보입니다.

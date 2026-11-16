@@ -127,18 +127,46 @@ always says what comes next.
 Closed features move to `.sdlc/archive/`, with reproducible caches under
 `logs/` (`gradle-home`, `node_modules`, `build`, … — config.md `prune:`)
 removed. Verified facts move to the `memory` folder: what the project taught
-us that the code cannot tell cheaply. Its `INDEX.md` lists one line per page
-(`sdlc.sh memory index` rebuilds it; `close` refreshes it), and scouts read
-the index first, then only the pages they need. `close <slug> shipped` needs a
-`Memory:` line in evidence.md's Shipping: the pages updated, or
-`none — <why>`. Its `glossary.md` holds the project's terms: Intent matches
-each request's terms against it, and Evidence adds the terms a feature settled.
+us that the code cannot tell cheaply, each fact line ending in its basis and
+date (`[verified: <path> @ <sha> | as-of: <date>]`, `[source: <slug or
+transcript> | as-of: <date>]` or `[unconfirmed]`). Agents write a page when
+they verify such a thing or hit a trap, not only at close. Its `INDEX.md`
+starts with a hand-kept `## Core` — the few rules every agent needs, one line
+and a link each, at most 25 lines and `memory_core_kb` — above a generated
+list of one line per page (`sdlc.sh memory index` rebuilds it; `close`
+refreshes it). The index also lints: links to missing files, `MOVED TO`
+stubs, pages without a basis tag, pages over `memory_page_kb`, and pages over
+8,000 bytes without a `## Current picture`. Agents read the index first, then
+only the pages it names, and grep memory when it has no entry.
+`close <slug> shipped` needs a `Memory:` line in evidence.md's Shipping: the
+pages updated, or `none — <why>`. Its `glossary.md` holds the project's terms:
+Intent matches each request's terms against it, and Evidence adds the terms a
+feature settled.
+
 `sdlc.sh dream --check` exits 10 once 3 slugs closed (shipped or dropped)
 since the last dream, or 14 days passed with at least one close — never with
-none — and prints the count, e.g. `due: 3/3 closes since <time>`; `sdlc.sh dream` then prints a brief (`roles/dreamer.md`) for a
-fresh agent that verifies memory against the code at HEAD, fixes or deletes
-stale notes, merges duplicates, harvests the closed slugs and keeps memory
-within its budget. Optional config.md keys, with their defaults:
+none — and prints the count, e.g. `due: 3/3 closes since <time>`.
+`sdlc.sh dream` then prints a brief (`roles/dreamer.md`) for a fresh agent,
+recording nothing: it verifies memory against the code at HEAD and, for what
+happened in a session, against the slug's transcripts and `logs/`; fixes,
+supersedes or deletes stale notes; merges duplicates; turns mistakes repeated
+across sessions into rules; promotes and demotes `## Core` rules; harvests the
+closed slugs and keeps memory within budget. Its last step,
+`sdlc.sh dream --done [--through <time>] [--note <text>]`, records the run in
+`.dream-state` (the brief names the `--through` time, so slugs closed after
+the brief stay due) and adds a `.dream-log.md` line if the dreamer wrote none.
+A scheduler that fails to start the dreamer loses nothing.
+
+Transcripts are the session record dreaming checks notes against. Set
+`transcripts:` to a shell command, run in the project root with `{slug}` and
+`{since}` (the last dream's UTC time) replaced, that prints the paths or
+`path:line` hits of that slug's session transcripts or logs, for example
+`transcripts: grep -rln {slug} ~/agent-sessions`. The brief lists at most
+`transcripts_max` hits per slug, as `path` or `path:line` only — no transcript
+text — and the dreamer greps them rather than reading whole files.
+
+Optional config.md keys, with their defaults: `transcripts:` (empty: none),
+`transcripts_max: 20`, `memory_core_kb: 2`, `memory_page_kb: 16`,
 `memory_top_kb: 64` and `memory_total_kb: 256` (index warnings),
 `dream_every: 3` and `dream_max_days: 14`,
 `prune: gradle-home .gradle node_modules build .m2 target` (empty prunes
@@ -213,7 +241,7 @@ The TUI and web page show English or Korean: pass `--lang ko` (TUI or `web`) or 
 Press `L` in the TUI or use the page's language menu to switch until restart or reload.
 Statuses say who acts next: your turn (approve intent, approve plan or answer), working now (an agent marked it with `working` within the last 3 minutes; it shows how long and on what), agent's turn (nobody is on it yet), answered — not picked up yet, not started, blocked — fix needed, or done; the row where agents stop says so.
 An item may carry a markdown brief (`brief <id> <absolute path>` or `add --brief PATH`, stored as `  - brief: <path>`); the app and page show it like an sdlc work document (At a glance, Questions for you, full text folded) without approval. Write it from `todo/brief.md`, the one format the app reads (Your call, What changes, AI pick, Phase, Background, Why); leave out a line you cannot fill.
-An item may also name the repositories its change touches (`repos <id> aidt-lms-api,aidt-viewer-api`, stored as `  - repos: aidt-lms-api, aidt-viewer-api`; no name clears it). The app card, the page row and detail, and the TUI row and detail always show them.
+An item may also name the repositories its change touches (`repos <id> web-api,admin-api`, stored as `  - repos: web-api, admin-api`; no name clears it). The app card, the page row and detail, and the TUI row and detail always show them.
 A decision can offer one-click answers (`choices <id> "proceed | fix first | hold" [--pick N]`, stored as `  - choices: proceed | fix first | hold` and `  - pick: N`; up to 6 labels, no labels clears them). On an open item the app card, the page detail (above the reply box) and the TUI (number keys) show one button per label; a click sends that exact label as an ordinary reply, and the picked one comes first, marked Recommended. Open items that need you and share a ticket link sit together under that ticket in the app and page.
 
 An agent can also prefill the answer it recommends (`suggest <id> "answer"`, stored as `  - suggest: answer`; a human reply or no text clears it). The app card, the page reply box and the TUI reply line (`r`) start with that text, so sending it as-is takes one press; an edit is never overwritten, and a new suggestion replaces only an unedited one. On the app card the "agent is asking" box shows only the brief's Your call and AI pick (the waiting line only when the brief asks nothing), with What changes as one muted line below it.

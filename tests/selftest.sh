@@ -1198,6 +1198,30 @@ regression_memory() {
   cp "$M/INDEX.md" "$TMP/index1"; expect 0 memory index; cmp -s "$TMP/index1" "$M/INDEX.md" || fail 'memory index is not stable'
   expect 2 memory list; contains 'memory index'
   ok 'memory index: one line per page grouped by folder, summary, verified marks, missing summary flagged, hand lines kept, stable'
+  grep -q '^## Core$' "$M/INDEX.md" && [ "$(grep -n '^## Core$' "$M/INDEX.md" | cut -d: -f1)" -lt "$(grep -n '^<!-- sdlc:index start' "$M/INDEX.md" | cut -d: -f1)" ] || fail "Core stub not added above the block: $(cat "$M/INDEX.md")"
+  replace '/^## Core$/ {print; print "- Round half up, never to even [DOMAIN.md](DOMAIN.md)"; next} {print}' "$M/INDEX.md"
+  expect 0 memory index; contains 'Core 1 lines'
+  grep -q '^- Round half up, never to even' "$M/INDEX.md" && [ "$(grep -c '^## Core$' "$M/INDEX.md")" -eq 1 ] || fail "memory index dropped or duplicated Core: $(cat "$M/INDEX.md")"
+  case "$OUTPUT" in *'memory Core is'*) fail "Core within budget warned: $OUTPUT";; esac
+  for i in $(seq 1 25); do printf -- '- rule %s [DOMAIN.md](DOMAIN.md)\n' "$i"; done > "$TMP/core"
+  awk 'FNR==NR {r=r $0 "\n"; next} /^## Core$/ {print; printf "%s", r; next} {print}' "$TMP/core" "$M/INDEX.md" > "$TMP/rewrite"; mv "$TMP/rewrite" "$M/INDEX.md"
+  expect 0 memory index; contains 'memory Core is 26 lines'; contains 'over 25 lines or memory_core_kb 2'
+  replace '!/^- rule [0-9]/ {print}' "$M/INDEX.md"
+  printf 'memory_core_kb: 0\n' >> .sdlc/config.md
+  expect 0 memory index; contains 'memory Core is 1 lines'
+  replace '!/^memory_core_kb:/ {print}' .sdlc/config.md
+  ok 'memory index: keeps the hand-kept ## Core above the block (stub added once), warns over 25 lines or memory_core_kb'
+  printf '# Billing old\nMOVED TO [DOMAIN.md](../DOMAIN.md)\n' > "$M/areas/old.md"
+  printf '# Links\n- see [rules](DOMAIN.md), [old](areas/old.md), [web](https://example.invalid/x) and [gone](areas/gone.md#top) [source: s1 | as-of: 2026-11-16]\n' > "$M/links.md"
+  printf '# Big\n- [unconfirmed] filler\n' > "$M/big.md"; head -c 9000 /dev/zero | tr '\0' 'x' >> "$M/big.md"
+  printf 'memory_page_kb: 8\n' >> .sdlc/config.md
+  expect 0 memory index
+  contains 'Lint: 1 dangling links, 1 MOVED TO stubs, 1 pages without a basis tag, 1 over memory_page_kb 8, 1 over 8000 bytes without ## Current picture.'
+  contains 'memory link points at no file: links.md -> areas/gone.md'; contains 'memory page is a MOVED TO stub: areas/old.md'
+  contains 'memory page without a basis tag: areas/no title.md'
+  grep -q '^- \[links.md\](<links.md>) — Links · unverified, source 1 · 1 KB$' "$M/INDEX.md" && grep -q 'areas/old.md.* · moved · ' "$M/INDEX.md" || fail "lint index lines: $(cat "$M/INDEX.md")"
+  rm "$M/areas/old.md" "$M/links.md" "$M/big.md"; replace '!/^memory_page_kb:/ {print}' .sdlc/config.md
+  ok 'memory index lint: dangling links (anchors and URLs skipped), MOVED TO stubs, pages without a basis tag, pages over memory_page_kb and over 8000 bytes without a Current picture'
 
   ready mem-ship 1; evidence; route deliver
   cat >> "$E" <<DOC
@@ -1256,13 +1280,24 @@ DOC
   expect 10 dream --check; contains 'due: 1/3 closes since the start, never dreamed'
   ready dream-b 1; expect 0 close "$SLUG" dropped 'not needed'
   expect 0 dream
-  contains 'Role: Dreamer'; contains 'Memory folder:'; contains '/.sdlc/memory'; contains 'Code at HEAD:'; contains "@ $(git rev-parse --short HEAD)"
+  contains 'Role: Dreamer'; contains 'Memory folder:'; contains '/.sdlc/memory'; contains 'Code at HEAD:'; contains "@ $(git rev-parse --short HEAD)"$'\n'
   contains 'Slugs closed since:'; contains 'dream-a (shipped'; contains 'Memory: none — selftest fixture'; contains '.sdlc/archive/dream-a/evidence.md'
-  contains 'dream-b (dropped'; contains 'memory_top_kb 64'; contains '.dream-log.md'
-  grep -q '^slugs: dream-a dream-b$' .sdlc/memory/.dream-state && grep -q '^last_epoch: [0-9][0-9]*$' .sdlc/memory/.dream-state || fail "dream state: $(cat .sdlc/memory/.dream-state)"
-  last=$(awk -F': ' '$1=="last"{print $2}' .sdlc/memory/.dream-state)
-  expect 0 dream --check; contains "not due: 0/3 closes since $last"
+  contains 'dream-b (dropped'; contains 'memory_top_kb 64'; contains 'memory_core_kb 2'; contains '- Lint: 0 dangling links'; contains '.dream-log.md'
+  contains 'Transcripts: none (config.md transcripts: is empty)'; contains '/.sdlc/archive/dream-a/logs — 1 files: S1.txt'
+  cursor=$(printf '%s\n' "$OUTPUT" | sed -n 's/.*dream --done --through \([^`]*\)`.*/\1/p')
+  [ -n "$cursor" ] && [ ! -e .sdlc/memory/.dream-state ] || fail "dream recorded a run before --done, or named no cursor: $OUTPUT"
+  expect 0 dream; expect 10 dream --check; contains 'due: 2/3 closes since the start, never dreamed'
+  ok 'dream: the brief records nothing; two briefs without --done leave the dream due'
+  mkdir -p .sdlc/archive/late; printf 'closed: dropped 2998-01-01T00:00:00Z later\n' > .sdlc/archive/late/.state
+  expect 2 dream --done --through yesterday; contains 'ISO UTC time'
+  expect 0 dream --done --through "$cursor" --note 'selftest run'; contains "Dream recorded through $cursor: dream-a dream-b."
+  grep -q "^last: $cursor$" .sdlc/memory/.dream-state && grep -q '^slugs: dream-a dream-b$' .sdlc/memory/.dream-state && grep -q '^last_epoch: [0-9][0-9]*$' .sdlc/memory/.dream-state || fail "dream state: $(cat .sdlc/memory/.dream-state)"
+  grep -q 'dream done (recorded by sdlc.sh, no report from the dreamer): slugs dream-a dream-b; selftest run' .sdlc/memory/.dream-log.md || fail "dream log: $(cat .sdlc/memory/.dream-log.md)"
+  expect 0 dream --check; contains "not due: 1/3 closes since $cursor"
+  rm -r .sdlc/archive/late
+  expect 0 dream --check; contains "not due: 0/3 closes since $cursor"
   expect 0 dream; contains 'Slugs closed since: none'
+  ok 'dream --done records the slugs through the brief cursor (a later close stays due) and logs a line when the dreamer wrote none'
   replace '/^last_epoch:/ {$0="last_epoch: 1000"} {print}' .sdlc/memory/.dream-state
   expect 0 dream --check; contains 'not due: 0/3'
   for s in f1 f2 f3; do mkdir -p ".sdlc/archive/$s"; printf 'closed: dropped 2999-01-01T00:00:00Z later\n' > ".sdlc/archive/$s/.state"; done
@@ -1273,8 +1308,24 @@ DOC
   expect 0 dream --check; contains 'not due: 1/3'
   printf 'dream_every: 1\n' >> .sdlc/config.md
   expect 10 dream --check; contains 'due: 1/1 closes'
-  expect 2 dream --now; contains 'dream [--check]'
-  ok 'dream: --check is due after dream_every closes (shipped or dropped), or dream_max_days with at least one close, never with none; the brief lists memory, HEAD, closed slugs and their evidence, and records the run'
+  expect 2 dream --now; contains 'dream [--check | --done'
+  expect 2 dream --done --bogus; contains 'dream [--check | --done'
+  repo regression-transcripts
+  mkdir -p sessions; printf 'one\nabout tx-a here: SECRET-TEXT\n' > sessions/a.log; printf 'tx-a again\nand tx-a\n' > sessions/b.log
+  ready tx-a 1; expect 0 close "$SLUG" dropped 'not needed'
+  expect 0 dream; contains 'Transcripts: none (config.md transcripts: is empty)'
+  case "$OUTPUT" in *'    - Transcripts:'*) fail "transcript hits listed with no transcripts: command: $OUTPUT";; esac
+  printf 'transcripts: grep -n {slug} sessions/*.log; echo "since {since}" >&2\ntranscripts_max: 2\n' >> .sdlc/config.md
+  expect 0 dream
+  contains '- Transcripts: `grep -n {slug} sessions/*.log; echo "since {since}" >&2`'; contains 'Transcripts: 3 hits, first 2'
+  contains '      - sessions/a.log:2'$'\n''      - sessions/b.log:1'$'\n'
+  case "$OUTPUT" in *SECRET-TEXT*|*sessions/b.log:2*) fail "dream pasted transcript text or exceeded transcripts_max: $OUTPUT";; esac
+  replace '!/^transcripts_max:/ {print}' .sdlc/config.md
+  expect 0 dream; contains 'Transcripts: 3 hits'$'\n'; contains 'sessions/b.log:2'
+  replace '/^transcripts:/ {$0="transcripts: grep -n {slug} sessions/none.log"} {print}' .sdlc/config.md
+  expect 0 dream; contains 'Transcripts: none found (command exited 2)'
+  ok 'dream lists transcript hits from config.md transcripts: with {slug}, as path:line only, capped by transcripts_max; none without the key'
+  ok 'dream: --check is due after dream_every closes (shipped or dropped), or dream_max_days with at least one close, never with none; the brief lists memory, HEAD, closed slugs and their evidence'
 
   repo regression-lock
   ready lock-race 1

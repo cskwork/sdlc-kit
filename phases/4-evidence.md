@@ -51,7 +51,7 @@ go in Shipping's `Policy:` line. Then:
   cheaply — a verified fact, rule or trap from `refs/` — once, in its owning
   page; terms in `glossary.md` (`# Glossary` first).
   A code fact ends `[verified: <file from the project root> @ <shipped short
-  sha>]`, re-checked there if the file changed, else `[unconfirmed]`. Name
+  sha> | as-of: <date>]`, re-checked there if the file changed, else `[unconfirmed]`. Name
   the pages in Shipping's `Memory:` line, or `none — <why>`;
 - add the saved scripts (`logs/scripts/`) worth keeping to the project's
   `e2e` suite, or name them as a follow-up in Shipping;

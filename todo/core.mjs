@@ -447,7 +447,7 @@ export function findItem(model, idOrSlug) {
   if (!matches.length) fail(`item not found: ${idOrSlug}`, 1);
   return matches[0];
 }
-// The repositories the work changes, shown on every view (e.g. "aidt-lms-api, aidt-viewer-api").
+// The repositories the work changes, shown on every view (e.g. "web-api, admin-api").
 // A hand-edited file keeps loading: parsing drops a bad name, only the command refuses one.
 const repoName = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/;
 export function repoList(value, { strict = true } = {}) {

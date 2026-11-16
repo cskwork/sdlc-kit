@@ -16,9 +16,8 @@ governs phase order, gates and proof.
 | 3 | Build | `phases/3-build.md` | code, `review.md`, `logs/` | review PASS |
 | 4 | Evidence | `phases/4-evidence.md` | `evidence.md`, `logs/` | `sdlc.sh score` routes |
 
-`sdlc.sh next <slug>` names the next step and why. Run `sdlc.sh` (in this
-kit's folder) from anywhere inside the project; it finds `.sdlc/` the way git
-finds `.git`.
+`sdlc.sh next <slug>` names the next step and why. Run this kit's
+`sdlc.sh` from anywhere inside the project.
 
 ## Route a request
 
@@ -76,14 +75,15 @@ finds `.git`.
 ## Config and records
 
 `.sdlc/config.md` holds every project value; `templates/config.md` documents
-each key, the `knowledge:` alias and `review --repos`.
-Default `human_gates`: `intent`.
-Records are working
-knowledge, not source: `init` keeps `.sdlc/` out of git through
-`.git/info/exclude`, changing no tracked file. Closed features move
-to `.sdlc/archive/<slug>/`. Agents read memory's `INDEX.md` first;
-Evidence adds what was verified. The default `.sdlc/memory` stays on this machine; point
-`memory:` at a tracked folder to share it.
+each key. `init` keeps `.sdlc/` out of git via `.git/info/exclude`. Closed
+features move to `.sdlc/archive/`.
+
+Memory keeps what the next feature would reuse and cannot look up cheaply:
+verified facts, traps with their fix, rules with how they were verified.
+Read its `INDEX.md` and only the pages it names, else grep it; no hit:
+answer "Not in memory" and what to look up. When you verify one or hit a
+trap, update its page then — merge, never rewrite it whole — ending the
+line `[verified: <path> @ <sha> | as-of: <date>]` or `[unconfirmed]`.
 
 ## Automation
 
