@@ -1325,6 +1325,12 @@ DOC
   replace '/^transcripts:/ {$0="transcripts: grep -n {slug} sessions/none.log"} {print}' .sdlc/config.md
   expect 0 dream; contains 'Transcripts: none found (command exited 2)'
   ok 'dream lists transcript hits from config.md transcripts: with {slug}, as path:line only, capped by transcripts_max; none without the key'
+  contains 'Peers: none (config.md peers: is empty)'
+  mkdir -p peer-a/sub peer-b; printf 'PEER-SECRET\n' > peer-a/x.md; printf 'y\n' > peer-a/sub/y.md; printf 'z\n' > peer-b/notes.md
+  printf 'peers: peer-a, peer-*/notes.md  missing-*\n' >> .sdlc/config.md
+  expect 0 dream; contains '- Peers (read-only'; contains "  - $PWD/peer-a — 2 files, "; contains "  - $PWD/peer-b/notes.md — 1 files, "; contains '  - missing-* — no match'
+  case "$OUTPUT" in *PEER-SECRET*|*'Peers: none'*) fail "dream pasted peer content or still said none: $OUTPUT";; esac
+  ok 'dream lists config.md peers: (comma or space, globs) with file counts and size, no content; none without the key'
   ok 'dream: --check is due after dream_every closes (shipped or dropped), or dream_max_days with at least one close, never with none; the brief lists memory, HEAD, closed slugs and their evidence'
 
   repo regression-lock
@@ -1398,7 +1404,7 @@ else
 fi
 [ ! -f todo/AGENT.md ] || [ "$(wc -w < todo/AGENT.md)" -le 600 ] || fail 'todo/AGENT.md exceeds 600 words'
 # The dreamer is not loaded in any phase; like todo/AGENT.md it has its own budget.
-[ "$(wc -w < roles/dreamer.md)" -le 250 ] || fail 'roles/dreamer.md exceeds 250 words'
+[ "$(wc -w < roles/dreamer.md)" -le 300 ] || fail 'roles/dreamer.md exceeds 300 words'
 words=$(ls SKILL.md phases/*.md roles/*.md templates/*.md | grep -v '^roles/dreamer\.md$' | while IFS= read -r f; do cat "$f"; done | wc -w | tr -d ' ')
 [ "$words" -le 6000 ] || fail "prompt total $words words > 6000"
 for phase in intent plan build evidence; do

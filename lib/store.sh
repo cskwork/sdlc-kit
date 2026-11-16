@@ -186,6 +186,26 @@ transcript_hits() {
    END{c="none found";if(n)c=n " hits";if(n>max)c=c ", first " max;if(rc>1)c=c " (command exited " rc ")";print "    - Transcripts: " c
     for(i=1;i<=n&&i<=max;i++)print "      - " hit[i]}'
 }
+# config.md peers: other memory stores the dreamer greps but never edits. Space- or comma-separated paths,
+# ~ and globs allowed, relative ones from the project root. Lists each match with its file count and size,
+# never its content.
+peer_list() {
+  local raw p m n kb hits
+  raw=$(raw_setting peers); raw=${raw//,/ }
+  [ -n "${raw//[[:space:]]/}" ] || { printf -- '- Peers: none (config.md peers: is empty)\n'; return 0; }
+  printf -- '- Peers (read-only: grep them for the facts you touch, never edit them):\n'
+  ( cd "$ROOT" || exit 0; set -f
+    for p in $raw; do
+      [ "${p#\~}" = "$p" ] || p=$HOME${p#\~}
+      set +f; shopt -s nullglob; hits=($p); shopt -u nullglob; set -f
+      [ "${#hits[@]}" -gt 0 ] || { printf '  - %s — no match\n' "$p"; continue; }
+      for m in "${hits[@]}"; do
+        case $m in /*) ;; *) m=$ROOT/$m;; esac
+        n=$(find "$m" -type f 2>/dev/null | awk 'END{print NR}'); kb=$(du -sk "$m" 2>/dev/null | awk '{print $1+0}')
+        printf '  - %s — %s files, %s KB\n' "$m" "$n" "${kb:-0}"
+      done
+    done )
+}
 # The files under archived slug folder $1's logs/, relative, at most $2 named.
 slug_logs() {
   [ -d "$1/logs" ] || { printf '    - Logs: none\n'; return 0; }
@@ -207,6 +227,7 @@ dream() {
   printf -- '- Code at HEAD: %s\n' "${head:+$top @ $head}$( [ -n "$head" ] || printf 'no commit at the project root: verify against the files as they are')"
   if [ -n "$transcripts" ]; then printf -- '- Transcripts: `%s` — hits per slug below; grep them, never read whole files\n' "$transcripts"
   else printf -- '- Transcripts: none (config.md transcripts: is empty); check sessions against each slug'"'"'s logs/ only\n'; fi
+  peer_list
   printf -- '- Last dream: %s\n- Slugs closed since:%s\n' "${last:-never}" "$(closed_since "$last" | awk 'END{if(!NR)print " none"}')"
   while IFS=$'\t' read -r slug result ts; do
     s=$STORE/archive/$slug

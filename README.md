@@ -165,7 +165,18 @@ Transcripts are the session record dreaming checks notes against. Set
 `transcripts_max` hits per slug, as `path` or `path:line` only — no transcript
 text — and the dreamer greps them rather than reading whole files.
 
-Optional config.md keys, with their defaults: `transcripts:` (empty: none),
+Each kind of knowledge has one home: the memory folder holds project
+knowledge; other memory stores you run (an assistant's personal memory, a
+notes system) keep their own kind, such as preferences or raw history. List
+them in `peers:` (space- or comma-separated paths, `~` and globs allowed,
+relative to the project root). The brief lists each with its file count and
+size, never its content; the dreamer greps them for the facts it touches,
+never edits them, and reports each duplicate or contradiction as
+`peer: <peer file> duplicates|contradicts <memory page> — propose: keep in
+<page>, remove from peer` for a person to act on. Nothing is moved in bulk.
+
+Optional config.md keys, with their defaults: `transcripts:` and `peers:`
+(empty: none),
 `transcripts_max: 20`, `memory_core_kb: 2`, `memory_page_kb: 16`,
 `memory_top_kb: 64` and `memory_total_kb: 256` (index warnings),
 `dream_every: 3` and `dream_max_days: 14`,

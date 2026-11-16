@@ -136,7 +136,14 @@ dreamer가 `.dream-log.md`를 쓰지 않았으면 한 줄을 더합니다. 일�
 지시문에는 기능마다 `transcripts_max`개까지 `경로` 또는 `경로:줄`만 실리고(본문은 싣지 않음),
 dreamer는 파일 전체를 읽지 않고 grep합니다.
 
-config.md에 선택해 넣을 키와 기본값: `transcripts:`(비우면 없음), `transcripts_max: 20`,
+지식은 종류마다 집이 하나입니다. 프로젝트 지식은 memory 폴더가 집이고, 따로 쓰는 다른 메모 저장소
+(비서의 개인 메모, 다른 노트 시스템)는 사용자 선호·피드백이나 원본 기록처럼 제 종류만 둡니다. 그런
+저장소를 `peers:`에 적습니다(공백이나 쉼표로 구분, `~`와 glob 허용, 상대 경로는 프로젝트 루트 기준).
+지시문에는 저장소마다 파일 수와 크기만 실리고(본문은 싣지 않음), dreamer는 손대는 사실을 그곳에서
+grep하되 고치지 않으며, 중복이나 모순은 `peer: <peer 파일> duplicates|contradicts <memory 페이지> —
+propose: keep in <페이지>, remove from peer` 줄로 보고해 사람이 처리하게 합니다. 한꺼번에 옮기지 않습니다.
+
+config.md에 선택해 넣을 키와 기본값: `transcripts:`·`peers:`(비우면 없음), `transcripts_max: 20`,
 `memory_core_kb: 2`, `memory_page_kb: 16`, `memory_top_kb: 64`, `memory_total_kb: 256`(색인 경고),
 `dream_every: 3`, `dream_max_days: 14`, `prune: gradle-home .gradle node_modules build .m2 target`(비우면
 지우지 않음), `archive_warn_mb: 50`.
