@@ -1280,3 +1280,204 @@ test('brief template: every At a glance label is one the app reads, so agents an
     assert.ok(app.includes(read), `the app reads ${label}`);
   }
 });
+
+function compactionFixture(file) {
+  const lines = [
+    ['agent', 'added'], ['human', 'approved intent — "keep scope"'],
+    ['agent', 'waiting — old question'], ['agent', 'brief /tmp/old-brief.md'],
+    ['agent', 'suggest — old choice'], ['agent', 'working — old task'],
+    ['sdlc', 'READY — old ready'], ['sdlc', 'NEEDS-HUMAN — old gate'],
+    ['sdlc', 'BLOCKED — old block'], ['sdlc', 'DONE — old completion'],
+    ['agent', 'investigated the current behavior'], ['reviewer', 'waiting — preserve another author'],
+    ['agent', 'waiting — current question'], ['agent', 'brief /tmp/current-brief.md'],
+    ['agent', 'suggest — current choice'], ['agent', 'working — current task'],
+    ['sdlc', 'READY — current ready'], ['sdlc', 'NEEDS-HUMAN — current gate'],
+    ['sdlc', 'BLOCKED — current block'], ['sdlc', 'DONE — current completion'],
+    ['human', 'reply — proceed'], ['agent', 'waiting — post-reply first question'],
+    ['agent', 'waiting — post-reply final question'], ['agent', 'chat answer — explained the choice'],
+    ['agent', 'unknown state — preserve this note'],
+  ];
+  const events = lines.map(([who, what], i) => ({ at: `2026-11-01 09:${String(i).padStart(2, '0')}`, who, what }));
+  const text = '# To-do\n\n## Open\n\n- [ ] Compact repeated state\n' +
+    '  - brief: /tmp/current-brief.md\n  - suggest: current choice\n  - custom field: preserve this line\n' +
+    events.map(e => `  - ${e.at} ${e.who}: ${e.what}\n`).join('') + '\n## Done\n\n';
+  writeFileSync(file, text);
+  // The post-reply waits supersede both earlier waits, but every post-reply event stays.
+  const removed = new Set([2, 3, 4, 5, 6, 7, 8, 9, 12]);
+  return { events, removed, kept: events.filter((_, i) => !removed.has(i)),
+    history: events.filter((_, i) => removed.has(i)).map(e => `  - ${e.at} ${e.who}: ${e.what}\n`).join('') };
+}
+
+test('compact: keeps ordered human, current state, post-reply and non-state events; appends exact removed history once', async t => {
+  const { root, file } = scratch(t);
+  const fixture = compactionFixture(file), before = readFileSync(file);
+  const id = core.load(file).items[0].id, history = join(root, 'todo-history', `${id}.log`);
+  mkdirSync(dirname(history));
+  const prefix = '  - 2026-10-01 08:00 agent: waiting — already archived\n';
+  writeFileSync(history, prefix);
+  const report = await core.compact(file);
+  assert.deepEqual(core.load(file).items[0].events, fixture.kept, 'only superseded state events leave the live item, in original order');
+  assert.equal(readFileSync(history, 'utf8'), prefix + fixture.history, 'the existing history and every removed line survive byte-for-byte');
+  assert.ok(readFileSync(file, 'utf8').includes('  - custom field: preserve this line\n'));
+  assert.equal(report.beforeBytes, before.length);
+  assert.equal(report.afterBytes, readFileSync(file).length);
+  assert.ok(report.afterBytes < report.beforeBytes);
+  const more = core.load(file), item = more.items[0];
+  item.events.push({ at: '2026-11-01 09:25', who: 'agent', what: 'brief /tmp/new-brief.md' },
+    { at: '2026-11-01 09:26', who: 'human', what: 'reply — confirmed again' });
+  writeFileSync(file, core.serialize(more));
+  await core.compact(file);
+  const nextRemoved = [fixture.events[13], fixture.events[21]].map(e => `  - ${e.at} ${e.who}: ${e.what}\n`).join('');
+  assert.equal(readFileSync(history, 'utf8'), prefix + fixture.history + nextRemoved, 'a later compaction appends newly superseded events after the earlier history');
+  const compacted = readFileSync(file), archived = readFileSync(history);
+  const again = await core.compact(file);
+  assert.deepEqual(readFileSync(file), compacted, 'repeating compact leaves the live content unchanged');
+  assert.deepEqual(readFileSync(history), archived, 'repeating compact does not duplicate history');
+  assert.equal(again.beforeBytes, again.afterBytes);
+});
+
+test('compact: ordinary mutations compact state history without discarding the new operation', async t => {
+  const { root, file } = scratch(t), fixture = compactionFixture(file);
+  const id = core.load(file).items[0].id;
+  await core.note(file, id, 'new observation');
+  const item = core.load(file).items[0];
+  assert.deepEqual(item.events.slice(0, -1), fixture.kept);
+  assert.equal(item.events.at(-1).what, 'new observation');
+  assert.equal(readFileSync(join(root, 'todo-history', `${id}.log`), 'utf8'), fixture.history);
+});
+
+test('compact: long alternating gate history preserves app fields, helpers, fix requests and live working markers', async t => {
+  const { root, file } = scratch(t);
+  const variants = ['unread', 'read', 'fix', 'waiting', 'working'];
+  const blocks = variants.map((variant, n) => {
+    const events = [];
+    const add = (who, what) => events.push(`  - 2026-11-01 10:${String(events.length % 60).padStart(2, '0')} ${who}: ${what}`);
+    for (let i = 0; i < 12; i++) {
+      add('sdlc', `NEEDS-HUMAN — approve intent ${i}`); add('agent', `waiting — question ${i}`);
+      add('human', `reply — answer ${i}`); add('agent', 'read replies');
+      add('sdlc', `READY — review ${i}`); add('agent', `brief /tmp/brief-${i}.md`);
+      add('agent', `suggest — choice ${i}`); add('agent', `working — implementation ${i}`);
+    }
+    add('sdlc', 'NEEDS-HUMAN — approve plan --human'); add('agent', 'waiting — final question');
+    add('human', 'reply — final answer'); add('agent', 'chat answer — final explanation');
+    if (variant !== 'unread') add('agent', 'read replies');
+    if (variant === 'fix') { add('sdlc', 'BLOCKED — repair needed'); add('human', core.fixRequest); }
+    if (variant === 'waiting') { add('agent', 'waiting — follow-up first'); add('agent', 'waiting — follow-up final'); }
+    add('agent', 'brief /tmp/final-brief.md'); add('agent', 'suggest — final choice');
+    const state = variant === 'fix' ? 'BLOCKED — repair needed' : variant === 'unread' ? 'NEEDS-HUMAN — approve plan --human' : 'READY';
+    return `- [ ] Preserve ${variant}\n  - project: /tmp/sample-project\n  - sdlc: sample-${n} · plan · ${state}\n` +
+      (variant === 'waiting' ? '  - waiting: follow-up final\n' : '') +
+      '  - brief: /tmp/final-brief.md\n  - repos: sample-api, sample-web\n  - choices: First | Second\n' +
+      '  - pick: 2\n  - suggest: final choice\n  - run: echo inspect\n  - pin: yes\n' + events.join('\n');
+  });
+  writeFileSync(file, `# To-do\n\n## Open\n\n${blocks.join('\n\n')}\n\n## Done\n\n`);
+  const now = Date.now(), workingItem = core.load(file).items.at(-1);
+  const mark = { what: 'verify', since: new Date(now - 1000).toISOString(), beat: new Date(now).toISOString() };
+  const sidecar = join(root, 'todo-working.json');
+  writeFileSync(sidecar, JSON.stringify({ [workingItem.id]: mark }) + '\n');
+  const visible = () => core.withWorking(core.load(file).items, file, now).map(item => {
+    const { events, ...fields } = item;
+    return { fields, asked: core.asked(item), replies: core.replies(item), unread: core.unread(item), status: statusOf(item) };
+  });
+  const before = visible(), sidecarBefore = readFileSync(sidecar), sourceBytes = readFileSync(file).length;
+  assert.equal(before[0].fields.unread, 1);
+  assert.equal(before[0].replies.length, 2);
+  assert.equal(before[1].fields.unread, 0);
+  assert.equal(before[2].fields.fixRequested, true);
+  assert.equal(before[3].status.actor, 'you');
+  assert.equal(before[4].status.kind, 'working');
+  await core.compact(file);
+  assert.deepEqual(visible(), before, 'compaction preserves every app-visible field and helper result');
+  assert.deepEqual(readFileSync(sidecar), sidecarBefore, 'compaction preserves the live working sidecar');
+  assert.ok(readFileSync(file).length < sourceBytes, 'the long fixture actually lost superseded events');
+});
+
+test('compact CLI: dry-run reports exact before/after bytes without creating, rewriting or cleaning any files', async t => {
+  const { root, file } = scratch(t);
+  compactionFixture(file);
+  const stale = join(root, '.todo.md.123.00000000-0000-4000-8000-000000000000.tmp');
+  writeFileSync(stale, 'orphan atomic write\n');
+  const old = new Date(Date.now() - 7200000); utimesSync(stale, old, old);
+  for (const name of ['todo-working.json', 'todo-agent.json', 'todo-web.json', 'todo-archive.md']) writeFileSync(join(root, name), `unchanged ${name}\n`);
+  mkdirSync(join(root, 'todo-history'));
+  writeFileSync(join(root, 'todo-history', 'prior.log'), 'prior history\n');
+  const snapshot = () => {
+    const walk = dir => readdirSync(dir).sort().flatMap(name => {
+      const path = join(dir, name), stat = statSync(path);
+      return [[path.slice(root.length), stat.isDirectory() ? null : readFileSync(path), stat.mtimeMs, stat.ino], ...(stat.isDirectory() ? walk(path) : [])];
+    });
+    const stat = statSync(root);
+    return [['', null, stat.mtimeMs, stat.ino], ...walk(root)];
+  };
+  const before = snapshot(), beforeBytes = readFileSync(file).length;
+  const result = checkCode(await cli(file, ['compact', '--dry-run']), 0);
+  assert.deepEqual(snapshot(), before, 'dry-run does not touch the main file, history, sidecars, stale temps or directory entries');
+  const preview = await core.compact(file, { dryRun: true });
+  assert.equal(preview.beforeBytes, beforeBytes);
+  assert.ok(preview.afterBytes < beforeBytes);
+  assert.match(result.stdout, new RegExp(`${beforeBytes} bytes before, ${preview.afterBytes} bytes after`));
+  const committed = checkCode(await cli(file, ['compact']), 0);
+  assert.match(committed.stdout, new RegExp(`${beforeBytes} bytes before, ${readFileSync(file).length} bytes after`));
+  assert.equal(readFileSync(file).length, preview.afterBytes, 'the preview predicts the actual compacted bytes');
+  assert.ok(existsSync(join(root, 'todo-history', `${core.load(file).items[0].id}.log`)));
+  checkCode(await cli(file, ['compact', 'unexpected']), 2);
+  checkCode(await cli(file, ['compact', '--unknown']), 2);
+});
+
+test('archive rotation: appends overflow without replacing or reading the existing archive', async t => {
+  const { root, file } = scratch(t);
+  await core.add(file, 'Open work');
+  const model = core.load(file), template = model.items[0];
+  model.items.push(...Array.from({ length: 31 }, (_, n) => ({ ...structuredClone(template), title: `Archived ${n}`, done: true })));
+  writeFileSync(file, core.serialize(model));
+  const archive = join(root, 'todo-archive.md'), prefix = '# To-do archive\n\nPrior archive bytes stay exactly here.\n\n';
+  writeFileSync(archive, prefix);
+  const inode = statSync(archive).ino;
+  const fs = (await import('node:fs')).default, originalRead = fs.readFileSync;
+  let reads = 0;
+  fs.readFileSync = function (name, ...args) {
+    if (name === archive) reads++;
+    return originalRead.call(this, name, ...args);
+  };
+  try { await core.mutate(file, () => {}); }
+  finally { fs.readFileSync = originalRead; }
+  assert.equal(reads, 0, 'archive rotation must append overflow without reading the existing archive');
+  assert.equal(statSync(archive).ino, inode, 'append preserves the existing archive inode');
+  const appended = readFileSync(archive, 'utf8');
+  assert.ok(appended.startsWith(prefix), 'append preserves every pre-existing byte');
+  assert.match(appended.slice(prefix.length), /- \[x\] ~~Archived 30~~/);
+  assert.equal(core.load(file).items.filter(item => item.done).length, 30);
+  await core.mutate(file, () => {});
+  assert.equal(readFileSync(archive, 'utf8'), appended, 'a second save does not append the same overflow twice');
+});
+
+test('atomic temp cleanup: only exact target pid/uuid files older than one hour are removed under the mutation lock', async t => {
+  const { root, file } = scratch(t);
+  await core.add(file, 'Keep work');
+  const now = Math.floor(Date.now() / 1000) * 1000, uuid = '00000000-0000-4000-8000-000000000000';
+  const stale = `.todo.md.123.${uuid}.tmp`;
+  const safe = [`.todo.md.124.${uuid}.tmp`, `.todo.md.125.${uuid}.tmp`, `.other.md.123.${uuid}.tmp`,
+    `.todo.md.worker.${uuid}.tmp`, '.todo.md.123.not-a-uuid.tmp', `.todo.md.123.${uuid}.tmp.backup`,
+    `.todo-working.json.123.${uuid}.tmp`, `.todo.md.123.${uuid}.tmp-dir`];
+  for (const name of [stale, ...safe]) writeFileSync(join(root, name), name);
+  for (const name of [stale, ...safe]) {
+    const age = name === safe[0] ? 1000 : name === safe[1] ? 3600000 : 3601000;
+    const time = new Date(now - age); utimesSync(join(root, name), time, time);
+  }
+  const fs = (await import('node:fs')).default, originalUnlink = fs.unlinkSync, originalNow = Date.now;
+  let observedLockedCleanup = false;
+  fs.unlinkSync = function (name, ...args) {
+    if (name === join(root, stale)) {
+      assert.ok(existsSync(file + '.lock'), 'the mutation lock is held before deleting an orphan');
+      assert.ok(readdirSync(root).some(name => name.startsWith('todo.md.lock.commit-')), 'the commit marker protects cleanup');
+      observedLockedCleanup = true;
+    }
+    return originalUnlink.call(this, name, ...args);
+  };
+  Date.now = () => now;
+  try { await core.note(file, core.load(file).items[0].id, 'save triggers cleanup'); }
+  finally { fs.unlinkSync = originalUnlink; Date.now = originalNow; }
+  assert.equal(existsSync(join(root, stale)), false, 'an exact stale atomic temp is removed');
+  assert.equal(observedLockedCleanup, true);
+  for (const name of safe) assert.equal(readFileSync(join(root, name), 'utf8'), name, `${name} is unrelated, recent or exactly at the one-hour boundary`);
+});

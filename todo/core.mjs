@@ -194,6 +194,75 @@ export function serialize(model) {
   const group = done => model.items.filter(item => item.done === done).map(renderItem).join('\n\n');
   return `${model.preamble ?? header}## Open\n\n${group(false)}${group(false) ? '\n\n' : ''}## Done\n\n${group(true)}${group(true) ? '\n' : ''}`;
 }
+// Only known state events may be superseded. Answers, read receipts and arbitrary
+// notes remain history in the inbox; their positions determine who acts next.
+function stateKind(event) {
+  if (event.who === 'agent') {
+    if (event.what.startsWith('waiting — ')) return 'agent:waiting';
+    if (event.what === 'brief cleared' || /^brief (?:\/|[A-Za-z]:[\\/]|\\\\)/.test(event.what)) return 'agent:brief';
+    if (event.what.startsWith('suggest — ') || event.what === 'suggest cleared') return 'agent:suggest';
+    if (event.what.startsWith('working — ') || event.what === 'working cleared') return 'agent:working';
+  }
+  if (event.who === 'sdlc') {
+    const state = event.what.match(/^(READY|NEEDS-HUMAN|BLOCKED|DONE) — /)?.[1];
+    if (state) return `sdlc:${state}`;
+  }
+  return '';
+}
+function compactEvents(model) {
+  const history = [];
+  for (const item of model.items) {
+    const reply = lastIndex(item, event => event.who === 'human' && event.what.startsWith('reply — '));
+    const latest = new Map();
+    item.events.forEach((event, i) => { const kind = stateKind(event); if (kind) latest.set(kind, i); });
+    const removed = [];
+    item.events = item.events.filter((event, i) => {
+      const kind = stateKind(event);
+      if (event.who === 'human' || reply >= 0 && i > reply || !kind || latest.get(kind) === i) return true;
+      removed.push(event); return false;
+    });
+    if (removed.length) history.push({ id: item.id, events: removed });
+    derive(item);
+  }
+  return history;
+}
+function completedOverflow(model) {
+  const overflow = model.items.filter(item => item.done).slice(30);
+  model.items = model.items.filter(item => !overflow.includes(item));
+  return overflow;
+}
+// Append before replacing the inbox: a failed append leaves the source intact.
+// A crash between append and rename can duplicate history on retry, never lose it.
+function append(file, text, heading = '') {
+  const fd = fs.openSync(file, 'a');
+  try { fs.writeFileSync(fd, (fs.fstatSync(fd).size === 0 ? heading : '') + text, 'utf8'); }
+  finally { fs.closeSync(fd); }
+}
+function saveHistory(file, history) {
+  if (!history.length) return;
+  const directory = path.join(path.dirname(file), 'todo-history');
+  fs.mkdirSync(directory, { recursive: true });
+  for (const { id, events } of history) {
+    append(path.join(directory, `${id}.log`), events.map(e => `  - ${e.at} ${e.who}: ${e.what}\n`).join(''));
+  }
+}
+function fileBytes(file) {
+  try { return fs.statSync(file).size; }
+  catch (error) { if (error.code !== 'ENOENT') throw error; return 0; }
+}
+export async function compact(file = todoPath(), { dryRun = false } = {}) {
+  const report = model => {
+    const beforeBytes = fileBytes(file);
+    const history = compactEvents(model), overflow = completedOverflow(model);
+    return { beforeBytes, afterBytes: Buffer.byteLength(serialize(model)),
+      archivedEvents: history.reduce((count, entry) => count + entry.events.length, 0),
+      archivedItems: overflow.length, historyFiles: history.map(entry => `${entry.id}.log`), dryRun };
+  };
+  if (dryRun) { const model = load(file); normalize(model); return report(model); }
+  // Preview on a copy; mutate performs the same compaction and preserves its
+  // preimage for append-before-rename ordering and the existing sidecar handling.
+  return mutate(file, model => report(structuredClone(model)));
+}
 function event(item, who, what) { item.events.push({ at: stamp(), who, what }); derive(item); }
 function finish(model, item, who, what) {
   item.done = true;
@@ -224,6 +293,18 @@ async function atomicWrite(file, text, owns = () => true, mode) {
       catch (error) { if (!['EPERM', 'EBUSY'].includes(error.code) || attempt >= 5) throw error; await pause(20 * (attempt + 1)); }
     }
   } finally { try { fs.unlinkSync(temp); } catch (e) { if (e.code !== 'ENOENT') throw e; } }
+}
+function cleanupTemps(file) {
+  const prefix = `.${path.basename(file)}.`;
+  const suffix = /^\d+\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/;
+  for (const name of fs.readdirSync(path.dirname(file))) {
+    if (!name.startsWith(prefix) || !suffix.test(name.slice(prefix.length))) continue;
+    const temp = path.join(path.dirname(file), name);
+    try {
+      const stat = fs.lstatSync(temp);
+      if (stat.isFile() && Date.now() - stat.mtimeMs > 3600000) fs.unlinkSync(temp);
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
 }
 // Move the observed lock aside atomically; a delayed reclaimer may find a
 // successor there. Restore that successor without clobbering a newer owner.
@@ -329,6 +410,7 @@ export async function mutate(file, fn, onSaved) {
       fs.writeFileSync(fd, owner);
       await waitMarkers(lock, 'reclaim');
       if (!owns()) throw lockLost;
+      await committing(lock, owner, () => cleanupTemps(file));
       const model = load(file);
       normalize(model);
       const before = new Map(model.items.map(item => [item, item.id]));
@@ -336,14 +418,12 @@ export async function mutate(file, fn, onSaved) {
       if (heartbeatError) throw heartbeatError;
       return await committing(lock, owner, async () => {
         normalize(model);
-        const completed = model.items.filter(item => item.done);
-        if (completed.length > 30) {
-          const overflow = completed.slice(30);
+        const history = compactEvents(model);
+        saveHistory(file, history);
+        const overflow = completedOverflow(model);
+        if (overflow.length) {
           const archive = path.join(path.dirname(file), 'todo-archive.md');
-          let previous;
-          try { previous = fs.readFileSync(archive, 'utf8'); } catch (e) { if (e.code !== 'ENOENT') throw e; previous = '# To-do archive\n\n'; }
-          await atomicWrite(archive, previous + overflow.map(renderItem).join('\n\n') + '\n\n', owns);
-          model.items = model.items.filter(item => !overflow.includes(item));
+          append(archive, overflow.map(renderItem).join('\n\n') + '\n\n', '# To-do archive\n\n');
         }
         await atomicWrite(file, serialize(model), owns);
         await followIds(file, before, model);

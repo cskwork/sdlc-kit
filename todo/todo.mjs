@@ -11,6 +11,7 @@ const file = core.todoPath();
 const usage = `Usage: node ${path.join(kit, 'todo', 'todo.mjs')} <command>
   add ["text"] [--project P] [--link URL] [--slug S] [--by NAME] [--brief PATH]
   next [--json] | take <id> [--json] | list [--json] | sync
+  compact [--dry-run] (move superseded state events to history; report before/after bytes)
   start <id> --slug S [--phase P] | phase <id> <phase>
   wait <id> "what" | resume <id> ["note"] | answer <id> "chat words" | note <id> "text"
   others <id> ["who answers"] (waiting on someone else, e.g. QA; leaves Needs you; empty clears)
@@ -30,6 +31,7 @@ const bad = message => { throw Object.assign(new Error(`${message}\n${usage}`), 
 const schemas = {
   add: { project: true, link: true, slug: true, by: true, brief: true },
   next: { json: false }, take: { json: false }, list: { json: false }, sync: {},
+  compact: { 'dry-run': false },
   start: { slug: true, phase: true }, phase: {}, wait: {}, others: {}, resume: {}, answer: {}, note: {}, brief: {}, repos: {}, choices: { pick: true }, suggest: {}, run: {}, pin: {}, working: { off: false }, done: {},
   web: { port: true, open: false, lang: true }, serve: { lang: true }, help: {}, '': { 'no-web': false, lang: true, ui: true }
 };
@@ -141,6 +143,12 @@ async function main() {
       return;
     }
     case 'sync': arity(0); await core.sync(file, { kit }); return;
+    case 'compact': {
+      arity(0);
+      const result = await core.compact(file, { dryRun: !!flags['dry-run'] });
+      console.log(`${flags['dry-run'] ? 'Dry run: ' : ''}${result.beforeBytes} bytes before, ${result.afterBytes} bytes after (${result.beforeBytes - result.afterBytes} bytes saved)`);
+      return;
+    }
     case 'list': {
       arity(0);
       const model = await core.sync(file, { kit });
