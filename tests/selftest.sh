@@ -119,6 +119,7 @@ delivery() {
 - Checked with: git rev-parse HEAD
 - Output: $SHA
 - Authorized: ${3:-no}
+- Memory: none — selftest fixture, nothing reusable
 DOC
 }
 replace() { awk "$1" "$2" > "$TMP/rewrite"; mv "$TMP/rewrite" "$2"; }
@@ -1022,6 +1023,7 @@ shipping() {
 - Checked with: git rev-parse HEAD
 - Output: $SHA
 - **Allowed**: ${3:-no}
+- **Memory**: none — selftest fixture, nothing reusable
 DOC
 }
 labels_intent() {
@@ -1179,17 +1181,130 @@ regression_ship() {
   expect 0 help; contains 'check intent|plan|ship slug'
   ok 'ship gate: closed for a closed feature; approve has no ship gate; help names it'
 }
+regression_memory() {
+  repo regression-memory
+  M=.sdlc/memory
+  mkdir -p "$M/areas" "$M/.private"
+  printf '# Billing rules\n- invoices round half up [verified: src/bill.c @ abcdef1234]\n- [unconfirmed] refunds wait a day\n' > "$M/DOMAIN.md"
+  printf 'just text, no title\n' > "$M/areas/no title.md"
+  printf '# hidden\n' > "$M/.private/skip.md"
+  printf '# Memory index\nhand-written line\n' > "$M/INDEX.md"
+  expect 0 memory index
+  contains 'Indexed 2 pages'; contains '1 without a summary'; contains 'memory page without a summary: areas/no title.md'
+  grep -q '^hand-written line$' "$M/INDEX.md" || fail 'memory index dropped the hand-written lines'
+  grep -q '^- \[DOMAIN.md\](<DOMAIN.md>) — Billing rules · verified 1 @ abcdef1, unconfirmed 1 · 1 KB$' "$M/INDEX.md" || fail "index line for DOMAIN.md: $(cat "$M/INDEX.md")"
+  grep -q '^### areas/$' "$M/INDEX.md" && grep -q 'areas/no title.md.*(no summary' "$M/INDEX.md" || fail 'index groups by folder and flags a page without a summary'
+  ! grep -q 'skip.md' "$M/INDEX.md" || fail 'index listed a page under a dot folder'
+  cp "$M/INDEX.md" "$TMP/index1"; expect 0 memory index; cmp -s "$TMP/index1" "$M/INDEX.md" || fail 'memory index is not stable'
+  expect 2 memory list; contains 'memory index'
+  ok 'memory index: one line per page grouped by folder, summary, verified marks, missing summary flagged, hand lines kept, stable'
+
+  ready mem-ship 1; evidence; route deliver
+  cat >> "$E" <<DOC
+## Shipping
+- Ship to: local
+- Shipped: $SHA
+- Checked with: git rev-parse HEAD
+- Output: $SHA
+DOC
+  expect 0 check ship "$SLUG"; contains 'GATE OPEN'
+  expect 1 close "$SLUG" shipped 'no memory decision'; contains 'evidence.md needs a Memory: line'
+  printf -- '- Memory: none\n' >> "$E"
+  expect 1 close "$SLUG" shipped 'bare none'; contains 'Memory: none needs its reason'
+  replace '/^- Memory:/ {$0="- Memory: areas/missing.md"} {print}' "$E"
+  expect 1 close "$SLUG" shipped 'unknown page'; contains "Memory: 'areas/missing.md' is not a page in the memory folder"
+  replace '/^- Memory:/ {$0="- Memory: DOMAIN.md (rounding rule), areas/no title.md"} {print}' "$E"
+  printf '# Rounding\n' > "$M/areas/rounding.md"
+  expect 0 close "$SLUG" shipped 'pages named'; contains 'Archived'; contains 'Indexed 3 pages'
+  grep -q 'areas/rounding.md' "$M/INDEX.md" || fail 'close did not refresh the memory index'
+  ready mem-none 1; evidence; delivery; route deliver
+  expect 0 close "$SLUG" shipped 'nothing reusable'; contains 'Archived'
+  ok 'close shipped: refused without a Memory line, with a bare none or an unknown page; accepts pages or none with a reason; refreshes the index'
+
+  ready mem-drop 1
+  expect 0 close "$SLUG" dropped 'not needed'; contains 'Archived'
+  ok 'close dropped needs no memory decision'
+
+  ready mem-prune 1; evidence
+  L=$F/logs
+  mkdir -p "$L/run/gradle-home/caches" "$L/web/node_modules/pkg" "$L/app/build/reports" "$L/app/target"
+  head -c 262144 /dev/zero > "$L/run/gradle-home/caches/big.jar"
+  head -c 131072 /dev/zero > "$L/web/node_modules/pkg/index.js"
+  printf '{"tests":1}\n' > "$L/app/build/reports/result.json"
+  printf 'cited\n' > "$L/app/build/cited.txt"; printf '| S9 | PASS | | cited inside a cache | logs/app/build/cited.txt |\n' >> "$E"
+  head -c 2048 /dev/zero > "$L/app/build/shot.png"; head -c 4096 /dev/zero > "$L/app/target/out.class"
+  printf 'evidence\n' > "$L/keep.txt"
+  delivery; route deliver
+  printf 'archive_warn_mb: 0\n' >> .sdlc/config.md
+  expect 0 close "$SLUG" shipped 'pruned'; contains 'Pruned'; contains 'reproducible caches from logs/'; contains "archived $SLUG is still"
+  A=.sdlc/archive/$SLUG/logs
+  [ ! -e "$A/run/gradle-home" ] && [ ! -e "$A/web/node_modules" ] && [ ! -e "$A/app/target" ] || fail "caches left: $(find "$A")"
+  for f in app/build/reports/result.json app/build/cited.txt app/build/shot.png keep.txt S1.txt; do assert_file "$A/$f"; done
+  ok 'close prunes reproducible caches under logs/, keeps evidence (json, screenshots, cited logs), warns over archive_warn_mb'
+  ready mem-prune-cfg 1; mkdir -p "$F/logs/build"; head -c 8192 /dev/zero > "$F/logs/build/x.bin"
+  replace '!/^archive_warn_mb:/ {print}' .sdlc/config.md; printf 'prune:\n' >> .sdlc/config.md
+  expect 0 close "$SLUG" dropped 'nothing pruned'
+  assert_file ".sdlc/archive/$SLUG/logs/build/x.bin"
+  case "$OUTPUT" in *Pruned*) fail "empty prune: still pruned: $OUTPUT";; esac
+  replace '!/^prune:/ {print}' .sdlc/config.md
+  ok 'an empty prune: in config.md turns pruning off'
+
+  repo regression-dream
+  printf '# Page\n' > .sdlc/memory/page.md
+  expect 0 dream --check; contains 'not due: 0/3 closes since the start'
+  ready dream-a 1; evidence; delivery; route deliver; expect 0 close "$SLUG" shipped 'first'
+  expect 10 dream --check; contains 'due: 1/3 closes since the start, never dreamed'
+  ready dream-b 1; expect 0 close "$SLUG" dropped 'not needed'
+  expect 0 dream
+  contains 'Role: Dreamer'; contains 'Memory folder:'; contains '/.sdlc/memory'; contains 'Code at HEAD:'; contains "@ $(git rev-parse --short HEAD)"
+  contains 'Slugs closed since:'; contains 'dream-a (shipped'; contains 'Memory: none — selftest fixture'; contains '.sdlc/archive/dream-a/evidence.md'
+  contains 'dream-b (dropped'; contains 'memory_top_kb 64'; contains '.dream-log.md'
+  grep -q '^slugs: dream-a dream-b$' .sdlc/memory/.dream-state && grep -q '^last_epoch: [0-9][0-9]*$' .sdlc/memory/.dream-state || fail "dream state: $(cat .sdlc/memory/.dream-state)"
+  last=$(awk -F': ' '$1=="last"{print $2}' .sdlc/memory/.dream-state)
+  expect 0 dream --check; contains "not due: 0/3 closes since $last"
+  expect 0 dream; contains 'Slugs closed since: none'
+  replace '/^last_epoch:/ {$0="last_epoch: 1000"} {print}' .sdlc/memory/.dream-state
+  expect 0 dream --check; contains 'not due: 0/3'
+  for s in f1 f2 f3; do mkdir -p ".sdlc/archive/$s"; printf 'closed: dropped 2999-01-01T00:00:00Z later\n' > ".sdlc/archive/$s/.state"; done
+  expect 10 dream --check; contains 'due: 3/3 closes since'
+  rm -r .sdlc/archive/f2 .sdlc/archive/f3
+  expect 10 dream --check; contains 'due: 1/3 closes since'; contains '/14 days'
+  printf 'dream_max_days: 1000000\n' >> .sdlc/config.md
+  expect 0 dream --check; contains 'not due: 1/3'
+  printf 'dream_every: 1\n' >> .sdlc/config.md
+  expect 10 dream --check; contains 'due: 1/1 closes'
+  expect 2 dream --now; contains 'dream [--check]'
+  ok 'dream: --check is due after dream_every closes (shipped or dropped), or dream_max_days with at least one close, never with none; the brief lists memory, HEAD, closed slugs and their evidence, and records the run'
+
+  repo regression-lock
+  ready lock-race 1
+  for i in 1 2 3 4; do printf 'VERDICT: FAIL\n' >> "$F/review.md"; done
+  seq0=$(state seq)
+  for i in 1 2 3 4; do ( rc=0; bash "$SDLC" review "$SLUG" fail "race $i" > "$TMP/race$i" 2>&1 || rc=$?; printf '%s\n' "$rc" > "$TMP/rc$i" ) & done; wait
+  wins=0; for i in 1 2 3 4; do [ "$(cat "$TMP/rc$i")" != 0 ] || wins=$((wins+1)); done
+  [ "$wins" -eq 1 ] && [ "$(state fails)" -eq 1 ] && [ "$(state seq)" -eq "$((seq0+1))" ] || fail "concurrent reviews: $wins succeeded, fails $(state fails), seq $seq0 -> $(state seq): $(cat "$TMP"/race*)"
+  [ ! -e "$F/.state.lock" ] || fail 'lock left behind'
+  ok 'state lock: four concurrent review runs on one round record it once'
+  mkdir "$F/.state.lock"; printf '%s\n' "$$" > "$F/.state.lock/pid"
+  printf 'VERDICT: FAIL\n' >> "$F/review.md"
+  SDLC_LOCK_WAIT=1 expect 1 review "$SLUG" fail 'held lock'; contains 'is locked by another sdlc.sh run'
+  ( exit 0 ) & dead=$!; wait "$dead" || :
+  printf '%s\n' "$dead" > "$F/.state.lock/pid"
+  expect 0 review "$SLUG" fail 'stale lock'; contains 'review FAIL 2/3'
+  [ ! -e "$F/.state.lock" ] || fail 'stale lock left behind'
+  ok 'state lock: a live owner blocks until the wait runs out; a dead owner is reclaimed'
+}
 run_regressions() {
   case "$1" in
     stop) regression_stop;; scenarios) regression_scenarios;; delivery) regression_delivery;; review) regression_review;; other) regression_other;;
     init) regression_init;; ultra) regression_ultra;; round2-[abcde]) regression_round2 "${1#round2-}";; round3) regression_round3;;
     repos) regression_repos;; cells) regression_cells;; paths) regression_paths;; uncommitted) regression_uncommitted;;
     nested) regression_nested;; interrupt) regression_interrupt;; scoped) regression_scoped;; fingerprint) regression_fingerprint;; optin) regression_optin;;
-    reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;; labels) regression_labels;; sha) regression_sha;; ship) regression_ship;;
+    reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;; labels) regression_labels;; sha) regression_sha;; ship) regression_ship;; memory) regression_memory;;
     all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init; regression_ultra
       for round2 in a b c d e; do regression_round2 "$round2"; done; regression_round3
       regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint; regression_optin
-      regression_reposflag; regression_carry; regression_target; regression_clarity; regression_labels; regression_sha; regression_ship;;
+      regression_reposflag; regression_carry; regression_target; regression_clarity; regression_labels; regression_sha; regression_ship; regression_memory;;
     *) fail "unknown regression group: $1";;
   esac
 }
@@ -1231,7 +1346,9 @@ else
   skip 'node is unavailable for to-do tests'
 fi
 [ ! -f todo/AGENT.md ] || [ "$(wc -w < todo/AGENT.md)" -le 600 ] || fail 'todo/AGENT.md exceeds 600 words'
-words=$(cat SKILL.md phases/*.md roles/*.md templates/*.md | wc -w | tr -d ' ')
+# The dreamer is not loaded in any phase; like todo/AGENT.md it has its own budget.
+[ "$(wc -w < roles/dreamer.md)" -le 250 ] || fail 'roles/dreamer.md exceeds 250 words'
+words=$(ls SKILL.md phases/*.md roles/*.md templates/*.md | grep -v '^roles/dreamer\.md$' | while IFS= read -r f; do cat "$f"; done | wc -w | tr -d ' ')
 [ "$words" -le 6000 ] || fail "prompt total $words words > 6000"
 for phase in intent plan build evidence; do
   case "$phase" in

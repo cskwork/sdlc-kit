@@ -5,8 +5,8 @@ risks, at least 90% clear and confirmed before planning.
 
 1. `sdlc.sh new <slug>`. Prefix the slug with the ticket key or the date
    (`abc-123-fix-login`, `261012-fix-login`).
-2. Read the request and its source with its comments and links, and pages
-   in the `memory` folder with the same words.
+2. Read the request and its source with its comments and links, then
+   memory's `INDEX.md` and pages it names for the request.
 3. Fill `intent.md` (`templates/intent.md`) for a skimming reader (rule 8):
    a bold lead-in so the bold alone carries the gist, each warning on the
    line it guards; proof goes to Facts. Each fact appears once; elsewhere

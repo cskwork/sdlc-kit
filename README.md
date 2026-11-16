@@ -124,10 +124,25 @@ always says what comes next.
   logs/         raw output behind every PASS and FAIL; scripts/ re-runs each scenario
 ```
 
-Closed features move to `.sdlc/archive/`. Verified facts move to the
-`memory` folder, which the next feature's scouts read first. Its
-`glossary.md` holds the project's terms: Intent matches each request's terms
-against it, and Evidence adds the terms a feature settled.
+Closed features move to `.sdlc/archive/`, with reproducible caches under
+`logs/` (`gradle-home`, `node_modules`, `build`, … — config.md `prune:`)
+removed. Verified facts move to the `memory` folder: what the project taught
+us that the code cannot tell cheaply. Its `INDEX.md` lists one line per page
+(`sdlc.sh memory index` rebuilds it; `close` refreshes it), and scouts read
+the index first, then only the pages they need. `close <slug> shipped` needs a
+`Memory:` line in evidence.md's Shipping: the pages updated, or
+`none — <why>`. Its `glossary.md` holds the project's terms: Intent matches
+each request's terms against it, and Evidence adds the terms a feature settled.
+`sdlc.sh dream --check` exits 10 once 3 slugs closed (shipped or dropped)
+since the last dream, or 14 days passed with at least one close — never with
+none — and prints the count, e.g. `due: 3/3 closes since <time>`; `sdlc.sh dream` then prints a brief (`roles/dreamer.md`) for a
+fresh agent that verifies memory against the code at HEAD, fixes or deletes
+stale notes, merges duplicates, harvests the closed slugs and keeps memory
+within its budget. Optional config.md keys, with their defaults:
+`memory_top_kb: 64` and `memory_total_kb: 256` (index warnings),
+`dream_every: 3` and `dream_max_days: 14`,
+`prune: gradle-home .gradle node_modules build .m2 target` (empty prunes
+nothing) and `archive_warn_mb: 50`.
 
 ## Config
 

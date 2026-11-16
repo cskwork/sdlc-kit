@@ -6,8 +6,8 @@ enough to find side effects here, before any code. Scouts write
 
 ## 1. Scout
 
-`sdlc.sh check intent <slug>` must print GATE OPEN. Read the `memory`
-folder and phase 1's `refs/` and `logs/` first; do not re-scout a fact
+`sdlc.sh check intent <slug>` must print GATE OPEN. Read memory's
+`INDEX.md` and phase 1's `refs/` and `logs/` first; do not re-scout a fact
 they give with a source.
 Dispatch scouts (`roles/scout.md`) in parallel, one per open question, each
 writing one `refs/` file:

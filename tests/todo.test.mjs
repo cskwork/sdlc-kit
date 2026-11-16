@@ -700,7 +700,7 @@ test('S21: sync finds an archived shipped slug and retains its close note in Don
   sdlc(dir, 'review', 'shipped', 'pass', 'independent review passed');
   const sha = command('git', ['rev-parse', 'HEAD'], dir).trim();
   writeFileSync(join(folder, 'logs', 'S1.txt'), 'observable output\n');
-  writeFileSync(join(folder, 'evidence.md'), `# Evidence\n- Commit: ${sha}\n## Results\n| ID | Result | Cause | Observed | Log |\n|---|---|---|---|---|\n| S1 | PASS | | observable output | logs/S1.txt |\n## Delivery\n- Target: local\n- Delivered: ${sha}\n- Checked with: git rev-parse HEAD\n- Output: ${sha}\n- Authorized: no\n`);
+  writeFileSync(join(folder, 'evidence.md'), `# Evidence\n- Commit: ${sha}\n## Results\n| ID | Result | Cause | Observed | Log |\n|---|---|---|---|---|\n| S1 | PASS | | observable output | logs/S1.txt |\n## Delivery\n- Target: local\n- Delivered: ${sha}\n- Checked with: git rev-parse HEAD\n- Output: ${sha}\n- Authorized: no\n- Memory: none — fixture, nothing reusable\n`);
   sdlc(dir, 'score', 'shipped');
   sdlc(dir, 'close', 'shipped', 'shipped', 'delivered locally');
   await core.sync(file, { kit });

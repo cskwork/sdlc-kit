@@ -18,5 +18,5 @@ qa_session:
 human_gates: intent
 # durable memory: scouts read it first, Evidence adds verified facts to it (older configs call it knowledge:)
 memory: .sdlc/memory
-# repositories a review PASS binds: top folders, separated by spaces or commas, of repositories under the project root (relative, no spaces in a path), "." for the repository holding the root; empty = every repository under the root; review --repos replaces it for one review
+# repositories a review PASS binds: their top folders under the project root, relative, no spaces, separated by spaces or commas ("." = the root's repository); empty = every one under the root; review --repos replaces it once
 repos:

@@ -81,8 +81,8 @@ Default `human_gates`: `intent`.
 Records are working
 knowledge, not source: `init` keeps `.sdlc/` out of git through
 `.git/info/exclude`, changing no tracked file. Closed features move
-to `.sdlc/archive/<slug>/`. Scouts read `memory` first; Evidence adds what
-was verified. The default `.sdlc/memory` stays on this machine; point
+to `.sdlc/archive/<slug>/`. Agents read memory's `INDEX.md` first;
+Evidence adds what was verified. The default `.sdlc/memory` stays on this machine; point
 `memory:` at a tracked folder to share it.
 
 ## Automation

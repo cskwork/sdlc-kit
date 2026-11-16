@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 set -o pipefail
-KIT=$(cd "$(dirname "$0")" && pwd)
+KIT=$(cd "$(dirname "$0")" && pwd); . "$KIT/lib/store.sh"
 err() { printf 'sdlc: %s\n' "$*" >&2; }
 die() { err "$1"; exit "${2:-1}"; }
 usage() {
@@ -11,7 +11,7 @@ Usage: sdlc.sh init [--memory path] | new slug | status [slug] [--json]
        sdlc.sh approve intent|plan slug --human words|--agent review [--sha hex]
        sdlc.sh review slug pass|fail [--uncommitted] [--repos "path ..."] note
        sdlc.sh score slug
-       sdlc.sh close slug shipped|dropped reason | help | --version
+       sdlc.sh close slug shipped|dropped reason | memory index | dream [--check] | help | --version
 USAGE
 }
 sha() {
@@ -66,7 +66,7 @@ find_store() {
 feature() {
   slug=$1; valid_slug "$slug"; F=$STORE/work/$slug
   [ -d "$F" ] || F=$STORE/archive/$slug
-  [ -d "$F" ] || die "feature not found: $slug" 2
+  [ -d "$F" ] || die "feature not found: $slug" 2; [ -z "${LOCKING:-}" ] || [ "$F" != "$STORE/work/$slug" ] || lock_state
   load_state
 }
 load_state() {
@@ -443,8 +443,9 @@ case "$command" in
     fi
     printf 'Initialized .sdlc/. Fill config.md, then sdlc.sh new <slug>.\n'; exit;;
 esac
-find_store
+find_store; case "$command" in approve|review|score|close) LOCKING=1;; esac
 case "$command" in
+  memory|dream) store_command "$command" "$@";;
   new)
     [ "$#" -eq 1 ] || die 'new <slug>' 2; slug=$1; valid_slug "$slug"
     [ ! -e "$STORE/work/$slug" ] && [ ! -e "$STORE/archive/$slug" ] || die "feature already exists: $slug"
@@ -568,8 +569,7 @@ case "$command" in
     [ "$#" -eq 3 ] || die 'close <slug> shipped|dropped reason' 2; feature "$1"; mutable
     note=$(one_line "$3"); [ -n "$note" ] || die 'close reason required' 2
     [ ! -e "$STORE/archive/$slug" ] || die "archive already exists: $slug"
-    case "$2" in
-      dropped) :;;
+    case "$2" in dropped) :;;
       shipped)
         [ -f "$F/.state" ] || die 'legacy feature cannot ship'
         gate_plan || die "$greason"
@@ -591,10 +591,10 @@ case "$command" in
           git -C "$commit_repo" rev-parse --verify -q "$matchsha^{commit}" >/dev/null || die "unknown Shipped commit: $matchsha"
           git -C "$commit_repo" diff --quiet "${commits[i]}" "$matchsha" || die 'Shipped tree differs from verified Commit'
           if [ "$etarget" != local ]; then remote=$(git -C "$commit_repo" branch -r --contains "$matchsha"); [ -n "$remote" ] || die 'Shipped commit is not on any remote'; fi
-        done;;
+        done; memory_decision;;
       *) die 'close result must be shipped or dropped' 2;;
     esac
-    event; closed="$2 $ts $note"; save_state; mkdir -p "$STORE/archive"; mv "$F" "$STORE/archive/$slug"
-    printf 'Archived %s (%s).\n' "$slug" "$2";;
+    prune_logs; event; closed="$2 $ts $note"; save_state; mkdir -p "$STORE/archive"; mv "$F" "$STORE/archive/$slug"
+    printf 'Archived %s (%s).\n' "$slug" "$2"; archived "$STORE/archive/$slug";;
   *) die "unknown command: $command" 2;;
 esac

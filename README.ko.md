@@ -104,10 +104,21 @@ $EDITOR .sdlc/config.md                          # build, test, lint, run, e2e, 
   logs/         모든 PASS·FAIL 뒤의 원본 출력, scripts/는 시나리오별 재실행 스크립트
 ```
 
-끝난 기능은 `.sdlc/archive/`로 옮겨집니다. 검증된 사실은 `memory` 폴더로
-옮기고, 다음 기능의 scout가 그 폴더부터 읽습니다. 그 안의 `glossary.md`가
-프로젝트 용어집입니다. Intent는 요청의 용어를 여기에 대조하고, Evidence는 기능에서
-확정한 용어를 여기에 더합니다.
+끝난 기능은 `.sdlc/archive/`로 옮겨지고, `logs/` 아래 다시 만들 수 있는 캐시
+(`gradle-home`, `node_modules`, `build` 등, config.md `prune:`)는 지웁니다.
+검증된 사실은 `memory` 폴더로 옮깁니다. 코드에서 싸게 알 수 없는, 다시 쓸 사실·규칙·함정만
+둡니다. `INDEX.md`는 페이지마다 한 줄이고(`sdlc.sh memory index`가 다시 만들고 `close`가
+갱신), scout는 색인부터 읽고 필요한 페이지만 엽니다. `close <slug> shipped`에는
+evidence.md Shipping의 `Memory:` 줄(고친 페이지, 또는 `none — <이유>`)이 필요합니다.
+그 안의 `glossary.md`가 프로젝트 용어집입니다. Intent는 요청의 용어를 여기에 대조하고,
+Evidence는 기능에서 확정한 용어를 여기에 더합니다. `sdlc.sh dream --check`는 마지막
+정리 뒤 기능 3개가 닫혔거나(shipped·dropped 모두), 하나 이상 닫힌 채 14일이 지나면 10으로 끝나고
+(닫힌 것이 없으면 하지 않음, 예: `due: 3/3 closes since <시각>`), `sdlc.sh dream`은 새 에이전트에게
+줄 지시(`roles/dreamer.md`)를 출력합니다. 그 에이전트는 memory를 HEAD 코드와 대조해
+낡은 내용을 고치거나 지우고, 중복을 합치고, 닫힌 기능에서 쓸 사실을 거두고, 크기 예산을 지킵니다. config.md에 선택해 넣을 키와 기본값:
+`memory_top_kb: 64`, `memory_total_kb: 256`(색인 경고), `dream_every: 3`,
+`dream_max_days: 14`, `prune: gradle-home .gradle node_modules build .m2 target`(비우면
+지우지 않음), `archive_warn_mb: 50`.
 
 ## 설정
 

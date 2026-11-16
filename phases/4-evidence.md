@@ -47,17 +47,16 @@ evidence.md's Shipping: Ship to, the shipped commit per repository, the
 command that checked it and its deciding output line. A changed policy is
 updated where it is written in the same delivery, or its follow-up and owner
 go in Shipping's `Policy:` line. Then:
-- move verified facts from the refs (and `refs/learnings.md`, if any) into
-  the `memory` folder: one place per fact, updating a page rather than adding a
-  duplicate, and a term settled here into its `glossary.md`; a fact that
-  rests on code ends with its file (path from the project root) and the
-  shipped commit of that file's repository, after re-checking the fact
-  there if the file changed since it was checked:
-  `[verified: <file> @ <short sha>]`;
+- put in `memory` what the next feature would reuse and cannot look up
+  cheaply — a verified fact, rule or trap from `refs/` — once, in its owning
+  page; terms in `glossary.md` (`# Glossary` first).
+  A code fact ends `[verified: <file from the project root> @ <shipped short
+  sha>]`, re-checked there if the file changed, else `[unconfirmed]`. Name
+  the pages in Shipping's `Memory:` line, or `none — <why>`;
 - add the saved scripts (`logs/scripts/`) worth keeping to the project's
   `e2e` suite, or name them as a follow-up in Shipping;
 - `sdlc.sh close <slug> shipped "<one line>"` — refused if the shipped
-  tree differs from the verified one.
+  tree differs from the verified one or `Memory:` is missing.
 
 ## Report
 
