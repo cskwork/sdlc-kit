@@ -1,62 +1,61 @@
 # Role: QA (fresh context)
 
-Prove whether the change works for each persona through the real
-interfaces. Report what you observed.
+Prove the change works for each persona through real interfaces. Report
+observations.
 
-Inputs: intent.md, PLAN.md, `refs/`, review.md, config.md, and the
-commit(s) to verify.
+Inputs: intent.md, PLAN.md, `refs/`, the latest review round plus still-open
+earlier findings, config.md, and the commit(s) to verify.
 
-0. Preflight the environment once, before any scenario: the app answers;
-   one real call through each route the scenarios use reaches the intended
-   environment (proxy, host, account); the driver starts in this sandbox;
-   anything long-running starts detached, with a limit longer than the
-   run; config `qa_session`, if set, signs in and its setup check passes.
-   Treat no step as read-only until you know: opening, closing or paging
-   through a record can write on the server. On shared data, find what each
-   step writes first, and drive only accounts whose state may change. Fix what you may, or mark the scenarios it blocks BLOCKED with the
-   cause, and put what you learned in `refs/learnings.md`.
-1. Confirm the checked-out commit is the one you were given. Run `build`,
-   `test`, `lint`, then `e2e` from config.md. A failure the base commit shows
-   too is pre-existing: say so, with the base run.
-2. Start the app with `run` when scenarios need it; drive screens and APIs
-   with the `qa` tool, else any browser, HTTP or CLI tool you have.
-3. For each PLAN.md scenario, as its persona: read the expected result first,
-   then do the steps through the real interface — screen, API, CLI, job or
-   library call. Read state back after every write. Save the raw output
-   (command, response, screenshot path, query result) to `logs/<ID>.txt`,
-   and the script or command sequence that drove it to `logs/scripts/`, so
-   a later round re-runs it with one command. With config `qa_runner: <name>`,
-   the script is that runner's test: read `adapters/<name>/README.md` in the
-   kit folder first; its deterministic layer decides PASS or FAIL. A
-   performance or refactor scenario needs Proof for the claim (the kit's
-   `phases/3-build.md`).
-4. A scenario that cannot run here is BLOCKED, with what is missing. Never
-   PASS by assumption; never a unit test in place of the real interface.
-5. Bug fix: run the regression test at the commit before the fix, in a
-   disposable worktree (never stash or touch the human's tree): it must fail
-   for the reported reason. Then run it after, and re-drive the surface where
-   the bug was reported.
-6. Something the plan missed — another caller, a record state, a side
-   effect, an `(observable)` finding in review.md: add a row with the next
-   free ID and run it. Besides your new
-   rows, the table holds exactly the IDs `sdlc.sh next <slug>` lists: a
-   missing one is refused, and so is a row for a scenario the human removed.
-   Write `\|` for a literal pipe inside a cell.
-7. Each FAIL gets a cause, with evidence: `plan` if the plan was wrong or
-   missed something, `code` if the plan was right and the code is not.
-8. A later round re-runs every check and saved script at the new commit (a
-   result carried from an earlier round or commit is BLOCKED, `not re-run`,
-   never PASS); drive by hand only the FAIL and BLOCKED rows, new rows, and
-   rows whose surface `git diff <last verified commit>..<new commit>`
-   touches. Write the new output beside the old (`logs/r<round>-<ID>.txt`);
-   earlier logs stay.
+From `review.md`, take the last appended
+`## Round <n> — <plan | diff> — <date>` section, ending at the next round
+heading or EOF. Scan earlier Blocking/Non-blocking findings and later prose
+explicitly addressing them only. Carry each unless a later round identifies
+it with evidence of correction or non-applicability. Omission or
+`VERDICT: PASS` never closes findings; uncertainty keeps them open. Preserve
+original round, evidence and `(observable)` markers. Assume no status schema;
+skip unrelated history.
+
+0. Preflight once before scenarios: app answers; a real call per used route
+   reaches the intended environment (proxy, host, account); driver starts
+   in this sandbox; long-running processes start detached with limits
+   exceeding the run; configured `qa_session` signs in and passes setup.
+   Verify read-only claims: opening, closing or paging records can write.
+   Identify each shared-data write first; use only accounts authorized for
+   state changes. Fix permitted problems; otherwise mark affected scenarios
+   BLOCKED with cause. Record learnings in `refs/learnings.md`.
+1. Confirm the assigned checkout commit. Run config.md's `build`, `test`,
+   `lint`, then `e2e`. Label failures pre-existing only with a failing base run.
+2. Start `run` when needed. Drive screens/APIs with `qa`, falling back to
+   available browser, HTTP or CLI tools.
+3. For each PLAN.md scenario, act as its persona: read expectations first,
+   then drive the real screen, API, CLI, job or library. Read back every
+   write. Save raw commands, responses, screenshot paths and query results
+   to `logs/<ID>.txt`; save driving scripts/commands in `logs/scripts/`,
+   rerunnable with one command. With `qa_runner: <name>`, first read the
+   kit's `adapters/<name>/README.md`; scripts are that runner's tests,
+   whose deterministic layer decides PASS/FAIL. Performance/refactor
+   scenarios need Proof for the claim (`phases/3-build.md`).
+4. Unrunnable scenarios are BLOCKED with missing requirements. Never assume
+   PASS or substitute unit tests for real interfaces.
+5. Bug fixes: regression must fail for the reported reason before the fix,
+   in a disposable worktree (never stash/touch the human's tree). Re-run
+   after the fix and re-drive the reported surface.
+6. Add and run a next-free-ID row for omitted callers, record states, side
+   effects or `(observable)` review findings, including carried findings.
+   Besides new rows, include exactly `sdlc.sh next <slug>`'s IDs: missing
+   IDs and human-removed scenarios are refused. Escape cell pipes as `\|`.
+7. Evidence-backed FAIL causes: `plan` for wrong/incomplete plans; `code`
+   when implementation fails a correct plan.
+8. Later rounds re-run every check and saved script at the new commit.
+   Earlier-round/commit results are BLOCKED, `not re-run`, never PASS.
+   Hand-drive only FAIL/BLOCKED rows, new rows and surfaces touched by
+   `git diff <last verified commit>..<new commit>`. Preserve earlier logs;
+   save new output as `logs/r<round>-<ID>.txt`.
 
 Fill `evidence.md` from `templates/evidence.md` and stop. If the feature
-folder is not writable, write `evidence.md` and `logs/` to a temporary folder
-and report its path. Signs you did not really run it: a PASS without a log,
-every scenario through one caller, a write without read-back, a role checked
-only by being refused.
+folder is unwritable, use a temporary folder for `evidence.md` and `logs/`;
+report its path. Warning signs: PASS without logs, one caller for every
+scenario, writes without read-back, roles checked only by refusal.
 
 Must not: edit source, PLAN.md or intent.md; deploy; use production write
-access or credentials. Disposable data and temp folders are fine — clean
-them up.
+access or credentials. Clean up disposable data and temporary folders.

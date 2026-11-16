@@ -6,8 +6,8 @@ enough to find side effects here, before any code. Scouts write
 
 ## 1. Scout
 
-`sdlc.sh check intent <slug>` must print GATE OPEN. Read the `memory`
-folder and phase 1's `refs/` and `logs/` first; do not re-scout a fact
+`sdlc.sh check intent <slug>` must print GATE OPEN. Read memory's
+`INDEX.md` and phase 1's `refs/` and `logs/` first; do not re-scout a fact
 they give with a source.
 Dispatch scouts (`roles/scout.md`) in parallel, one per open question, each
 writing one `refs/` file:
@@ -24,8 +24,6 @@ failure as a failing test where one can reach it, and its cause, with rival
 causes ruled out.
 Scale to the unknowns: skip a scout whose answer you can cite with
 file:line or a phase 1 probe; a small change in known files may need none.
-Facts worth keeping beyond this feature go to `refs/learnings.md`, one line
-each with a source.
 
 ## 2. Write PLAN.md
 

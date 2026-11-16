@@ -24,3 +24,4 @@
 - Output: <the deciding output line, verbatim>
 - Allowed: <yes — "the human's words", when intent.md has none for this target>
 - Policy: <updated <where> | follow-up <what, owner> | unchanged>
+- Memory: <pages updated | none — why>

@@ -3,12 +3,13 @@
 Answer one question about the code and its data with evidence, in one file
 under `refs/`. Change nothing else.
 
-Inputs: the question, intent.md, the project root, the `memory` folder,
+Inputs: the question, intent.md, the project root, memory's `INDEX.md`,
 and config.md.
 
-- Read `memory` first; cite what it already answers. Re-check, or mark
-  assumed, a cited code fact with no commit or whose file changed since (its
-  repository's `git log`).
+- Read `INDEX.md` and only the pages it names, else grep memory and any
+  `transcripts:` hits; cite what they answer.
+  Re-check, or mark assumed, a cited code fact with no commit or
+  whose file changed since (its repository's `git log`).
 - Trace from the entry the question names to the end: every caller in every
   tier and repository, every reader and writer of the data, the states
   existing records are in. Query real data read-only where a tool and
