@@ -98,7 +98,7 @@ parse() {
   awk -v mode="$1" -v objectives="$objectives" -v scenarios="$scenarios" -v scored="$scored" -v withdrawn="$withdrawn" "$UNCOMMENT"'
   function trim(s){sub(/^[ \t]+/,"",s);sub(/[ \t]+$/,"",s);return s}function problem(s){print "X\034" s}
   function area(id,  k,s){k=tolower(id);gsub(/[^a-z]/,"",k);s=tolower(a[3]);if(k=="area")return;ca++;k=(k=="outcome")?"goal":(k=="scope")?"boundaries":(k=="asis")?"today":(k=="tobe")?"after":(k=="success")?"donewhen":(k=="constraints")?"limits":k;if(k!~/^(goal|boundaries|today|after|donewhen|limits)$/){print "Y\034How sure we are: unknown area " id;cy++;return}if(k in cs){print "Y\034How sure we are: duplicate area " id;cy++;return}cs[k]="open";cn[k]=id;if(s!~/^(clear|assumed|open)$/){print "Y\034" id " (How sure we are): State must be clear, assumed or open";cy++}else if(tolower(a[4])~/^(<.*>|[-—–?.]*|n\/a|tbd)$/){print "Y\034" id " (How sure we are): Based on needs its evidence or reason";cy++}else cs[k]=s}
-  function question(){if(q!=""){l=tolower(trim(q));if(l!="none"&&l!="n/a"&&l!~/^resolved:/&&l!~/— resolved:/&&l!~/-- resolved:/)print "Q\034" q;else if(l~/resolved:/)print "V\034" l;q=""}}
+  function question(){if(q!=""){l=tolower(trim(q));if(l!~/^none([ \t.,;:(]|$)/&&l!="n/a"&&l!~/^resolved:/&&l!~/— resolved:/&&l!~/-- resolved:/)print "Q\034" q;else if(l~/resolved:/)print "V\034" l;q=""}}
   function fields(s, c,j){for(j in a)delete a[j];nfields=1;for(j=1;j<=length(s);j++){c=substr(s,j,1);if(c=="\\"&&substr(s,j+1,1)=="|"){a[nfields]=a[nfields] "|";j++}else if(c=="|")nfields++;else a[nfields]=a[nfields] c}for(j=1;j<=nfields;j++)a[j]=trim(a[j]);cells=nfields-1-(a[nfields]=="");return a[2]}
   {
     if(uncomment())next

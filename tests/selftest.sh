@@ -1472,6 +1472,15 @@ expect 1 approve intent first --agent checked
 expect 2 approve intent first --human ''
 expect 2 approve intent first --human yes --agent yes
 ok 'init/new, duplicate and invalid slugs, default human intent gate'
+for v in 'none (all six areas clear; nothing open)' 'None — every area was settled' 'None.'; do
+  V=$v replace ' /^- none/ {$0="- " ENVIRON["V"]} {print}' "$F/intent.md"
+  expect 10 next first; case "$OUTPUT" in *"$v"*) fail "none with a reason read as an open question: $v";; esac
+  V=$v replace ' $0=="- " ENVIRON["V"] {$0="- none"} {print}' "$F/intent.md"
+done
+replace ' /^- none$/ {$0="- Which output format?"} {print}' "$F/intent.md"
+expect 10 next first; contains 'Which output format?'
+replace ' /^- Which output format\?$/ {$0="- none"} {print}' "$F/intent.md"
+ok 'a blocking question of none with a reason is answered; a real question stays open'
 replace ' /- none/ {$0="- not resolved: x"} {print}' "$F/intent.md"
 expect 1 approve intent first --human approved
 expect 10 next first
