@@ -33,8 +33,8 @@ skip unrelated history.
    to `logs/<ID>.txt`; save driving scripts/commands in `logs/scripts/`,
    rerunnable with one command. With `qa_runner: <name>`, first read the
    kit's `adapters/<name>/README.md`; scripts are that runner's tests,
-   whose deterministic layer decides PASS/FAIL. Performance/refactor
-   scenarios need Proof for the claim (`phases/3-build.md`).
+   whose deterministic layer decides PASS/FAIL. Performance, refactor and
+   changed-query scenarios need Proof for the claim (`phases/3-build.md`).
 4. Unrunnable scenarios are BLOCKED with missing requirements. Never assume
    PASS or substitute unit tests for real interfaces.
 5. Bug fixes: regression must fail for the reported reason before the fix,

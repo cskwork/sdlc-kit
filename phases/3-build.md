@@ -22,7 +22,8 @@ Changes:
   tree) or, for a new symbol, with the behavior disabled, output in `logs/`;
   it must fail on its assertion, not a missing symbol or compile error.
 - **Proof for the claim**, only for a numeric performance or unchanged-behavior
-  (refactor) claim; base run before the first edit, output in `logs/`.
+  (refactor) claim or an added or changed database query; base run before
+  the first edit, output in `logs/`.
   - *Performance*: repeated base and after samples of one fixed, realistic
     workload, command and environment, with median, spread, errors and work
     done; insufficient samples or a difference within spread do not establish
@@ -31,6 +32,12 @@ Changes:
     behavioral assertion, not compilation, when deliberately broken in a disposable
     worktree; tests alone do not replace the real-interface run, nor do lint
     or typecheck.
+  - *Query*: base and after actual plans (`EXPLAIN ANALYZE` or equivalent) on
+    the largest realistic data scope, with time and plan shape. Fail on time
+    over 2x or 500 ms, a full scan repeated per outer row, a lost hash join,
+    or a correlated subquery added to a join condition or select list on a
+    large table; prefer a scoped set filter. A missing index becomes a
+    proposed DDL file, not applied.
   - *Optimization loop*, only on the human's request: an agreed target and
     effort limit; per round one hypothesis, change and measurement, kept or
     reverted alone.
