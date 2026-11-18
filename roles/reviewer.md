@@ -21,8 +21,8 @@ Inputs: intent.md, PLAN.md, `refs/`. Blocking:
   trip (migration, data deletion, public API, security, infra);
 - an identifier the plan renames, retires or redirects whose consumers
   `refs/` do not list, or a listed consumer with no scenario;
-- a performance or refactor claim with no planned proof method
-  (Proof for the claim in `phases/3-build.md`).
+- a change needing Proof for the claim (`phases/3-build.md`) with no
+  planned proof method.
 
 ## Diff mode (phase 3)
 
@@ -42,7 +42,7 @@ Blocking:
 - a test that cannot fail or asserts nothing; a bug fix without a test that
   failed before it; a new-behavior test with no recorded assertion failure;
   an observable blocking diff finding untested and unexplained; a
-  performance or refactor claim unproved in `logs/`; a missing shared-premise
+  Proof for the claim missing from `logs/`; a missing shared-premise
   test required by `phases/3-build.md`;
 - a name that lies, one rule decided in two places, a hardcoded environment
   value, dead code the change left behind;
