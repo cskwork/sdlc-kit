@@ -233,20 +233,46 @@ commit unless you said more. Windows: run `sdlc.sh` in Git Bash or WSL.
 ## Personal to-do
 
 Keep work across projects in one human-readable `~/.sdlc/todo.md`.
-A tray app, a TUI and a localhost web page show and update the same file live.
+A tray badge, a TUI and a localhost web page (a board by default, the list one click away) show and update the same file live.
 Set `SDLC_TODO` to use another file.
 This optional add-on requires Node 18+; the core loop still needs only bash.
 
 ```bash
 cargo build --release --manifest-path ~/sdlc-kit/todo/app/Cargo.toml   # once, for the app (Rust 1.88+)
 SDLC_TODO_LANG=ko bash ~/sdlc-kit/todo/app/install-macos.sh            # macOS: also add it to ~/Applications
-node ~/sdlc-kit/todo/todo.mjs                     # the app (TUI with its web link if the app is not built)
+node ~/sdlc-kit/todo/todo.mjs                     # the app: tray badge that opens the board (TUI with its web link if the app is not built)
 node ~/sdlc-kit/todo/todo.mjs --ui tui,web        # any of tui, web, app
-node ~/sdlc-kit/todo/todo.mjs web --open          # web page only
+node ~/sdlc-kit/todo/todo.mjs web --open          # web page only (the board)
 node ~/sdlc-kit/todo/todo.mjs add "Fix login ~/code/web https://acme.atlassian.net/browse/WEB-123" --by jira
 node ~/sdlc-kit/todo/todo.mjs next                # first Open item
 node ~/sdlc-kit/todo/todo.mjs take <id> --json    # one item a worker owns, with its replies
 ```
+
+The web page opens on the **board**, where you answer and approve without leaving it.
+Columns follow the sdlc phase: General (items with no sdlc work, shown only when there are some), Intent, Plan, Build, Evidence, Deliver, then Done for the last 7 days, collapsed; older-format (`legacy`) items sit in a collapsed box below.
+Rows say whose turn it is, from the same status as everywhere else: your turn, waiting on others, blocked, agent's turn; a pulsing dot marks a card an agent is working on.
+Open items that share one ticket link are one card. Cards with no change for more than 14 days hide behind a toggle, unless they are your turn, blocked or pinned.
+The top strip shows the counts, the feed status and alerts, the last update, the language menu, and the views Board, List, Runs and Health; Runs and Health appear only with a feed.
+Below about 900 px wide the page shows the list, and the List view keeps everything the page did before.
+
+A card opens the decision panel: the question, an **AI pick** badge on the suggested choice, the brief's Background and Why, the choice buttons, a free reply box, Approve intent/plan through the same SHA-bound `/api/approve`, and Fix by agent on a block.
+A choice sends the same ordinary reply as in the list, to the card's item whose turn is yours.
+"Your turn n/N" pages through your cards with ←/→ or j/k, and Esc closes the panel. While a request runs the buttons wait; a toast confirms it, and a failure shows its reason in the panel.
+**Open ticket** opens the link in one popup window docked to the right of the screen, not a tab, and points that window at the next card's ticket as you move on; ticket sites such as Jira refuse to be framed (X-Frame-Options).
+A newly opened board asks older board windows to close (BroadcastChannel); a browser closes only windows scripts may close, such as the app's.
+
+An optional **feed** lets another program, such as a ticket factory, add its own status to the board. The server reads `SDLC_TODO_FEED`, else `todo-feed.json` beside the to-do file (`~/.sdlc/todo-feed.json` by default; up to 1 MB), watches it, serves it at `GET /api/feed` behind the token like every `/api` route, and sends it as `feed` (and `feedError` when unreadable) in every payload and event. Without the file the board works the same. Schema version 1; every field is optional and every string is shown as plain text:
+
+```json
+{"version": 1, "source": "factory", "generatedAt": "ISO time",
+ "status": {"state": "idle|running|held|off", "text": "", "lanes": {"busy": 1, "total": 3}, "nextRunAt": "ISO time"},
+ "alerts": [{"level": "bad|warn|info", "text": "", "since": "ISO time"}],
+ "items": {"<ticket label or sdlc slug>": {"slug": "", "column": "", "chip": "", "turn": "", "waitingText": "", "service": "", "nextStep": "", "updatedAt": "ISO time"}},
+ "runs": [{"key": "", "label": "", "startedAt": "ISO time", "endedAt": "ISO time", "outcome": "ok|fail|unknown"}],
+ "health": [{"title": "", "rows": [{"label": "", "value": "", "level": "bad|warn|info"}]}]}
+```
+
+A feed item matches a card by its ticket label (`WEB-123`), else by a member's sdlc slug. `column` (a phase or `done`) moves the card; `turn` (`you`, `others`, `blocked` or `agent`) changes its row only while the to-do says agent's or others' turn, so a feed never hides your turn or a block; `chip` is shown on the card. Runs draws `runs` as a day timeline; Health shows `health` and `alerts`. The kit still calls no ticket API: the producer writes the file.
 
 The TUI and web page show English or Korean: pass `--lang ko` (TUI or `web`) or set `SDLC_TODO_LANG=ko`; the flag wins, an unknown variable means English, and English is the default.
 Press `L` in the TUI or use the page's language menu to switch until restart or reload.
@@ -262,7 +288,7 @@ An agent working on an item right now marks it with `todo.mjs working <id> ["ste
 When the human has to run something (a VPN login that asks for an OTP, say), the agent records it with `run <id> "command"` (`  - run: command`; a reply, `resume`, `done` or no text clears it). The app card shows the command and an **Open in Terminal** button: on macOS with zsh, Terminal opens with the command typed at the prompt but not run, so you read it and press Enter; elsewhere the button copies it. The page and TUI details show the command.
 A reply shows "answered — no agent has picked it up yet" until an agent reads it with `next` or `take`; after an sdlc wait the item then waits for you again until sdlc.sh moves on. A worker that waits on you outside sdlc (an approval, a ticket answer) records it with `wait` and drops it with `resume`. When someone else must answer first (QA, a planner), `others <id> "who"` marks it "waiting on someone else": it leaves Needs you, `next` passes it by (`take` exits 15), and a reply, `wait` or `resume` clears it.
 All surfaces share one server: the first launch writes its port and token to `todo-web.json` beside the to-do file (owner-only), and later launches, the app and `todo.mjs serve` reuse it while it answers.
-A pinned item (`todo.mjs pin <id>`), such as a setting switched with its choices, stays at the top of every app tab and is not counted as needing you. The app (`todo/app`, macOS and Windows) sits in the menu bar or tray with a count of items that need you, notifies you when one appears, and shows the decisions that need you one at a time, like pages of a book (the page number and arrows sit at the foot; the arrow keys turn the page), with approvals, blocks and questions the agent recommends no answer for first: the question, the situation, what happens once you answer, why, the agent's pick and what each choice does (the phase, repos and full work document fold away under More). On a wide window a decision opens as a two-page spread, what to read on the left and how to answer on the right. You can keep a memo of your own on an item and set the text size and font (Pretendard is built in); both stay in `todo-app.json` beside the session file and never reach agents. It opens the related tickets, and answers, approves and requests fixes through the same web API, so it never writes `todo.md` itself; closing the window keeps it in the tray, and Quit stops the server it started. On macOS, `todo/app/install-macos.sh [DIR]` builds `sdlc To-do.app` (name: `SDLC_TODO_APP_NAME`) in `~/Applications`; its Info.plist records the kit, node, language and `SDLC_TODO`, because Finder starts apps without a shell `PATH`. Run it again after updating the kit or moving node.
+A pinned item (`todo.mjs pin <id>`), such as a setting switched with its choices, stays at the top of every app tab and is not counted as needing you. The app (`todo/app`, macOS and Windows) starts with no window: it sits in the menu bar or tray with a count of items that need you and notifies you when one appears. Launching it or a left click on the icon opens the board, in a Google Chrome app window (`--app`, no tabs) on macOS when Chrome is installed, otherwise in the default browser; its menu has Open board, Open list window and Quit. `--background` or `SDLC_TODO_BACKGROUND=1` starts it in the tray only, for a login item. While the server is offline a click shows the list window with the reason. The list window, the fallback, shows the decisions that need you one at a time, like pages of a book (the page number and arrows sit at the foot; the arrow keys turn the page), with approvals, blocks and questions the agent recommends no answer for first: the question, the situation, what happens once you answer, why, the agent's pick and what each choice does (the phase, repos and full work document fold away under More). On a wide window a decision opens as a two-page spread, what to read on the left and how to answer on the right. You can keep a memo of your own on an item and set the text size and font (Pretendard is built in); both stay in `todo-app.json` beside the session file and never reach agents. It opens the related tickets, and answers, approves and requests fixes through the same web API, so it never writes `todo.md` itself; closing the window keeps it in the tray, and Quit stops the server it started. On macOS, `todo/app/install-macos.sh [DIR]` builds `sdlc To-do.app` (name: `SDLC_TODO_APP_NAME`) in `~/Applications`; its Info.plist records the kit, node, language and `SDLC_TODO`, because Finder starts apps without a shell `PATH`. Run it again after updating the kit or moving node.
 **Fix by agent** (app and page button, TUI `f`) on a blocked sdlc item records `fix requested`; the next `next` or `take` hands the block to an agent once (exit `0`, `"fix": true`), then it stops the queue again until cleared.
 To start an agent right away, put a command in `todo-agent.json` beside the to-do file, for example `{"fix": ["claude", "-p", "follow {kit}/todo/AGENT.md; take {id} and clear its block"]}`; `{id}`, `{kit}` and `{project}` are filled in and it runs detached in the project.
 To add a language, copy `todo/locales/en.mjs` to `todo/locales/<code>.mjs`, translate `name` and every message, and add its import to `locales` in `todo/i18n.mjs`.
@@ -290,6 +316,7 @@ Web access stays on `127.0.0.1`, with Host/Origin checks and a per-run token hel
 The kit never writes the token to disk; the browser may keep the opened URL in history. The token dies when the process exits.
 Approve binds the bytes shown through `sdlc.sh approve <intent|plan> <slug> --human "<words>" --sha <hex>`; changed bytes are refused.
 Same-user programs are outside this boundary, as with `--human`.
+The board and the feed change none of this. The feed is untrusted text: the page shows it as plain text, and it can move or label a card but never answer, approve or hide your turn.
 
 ## Upgrading from v0.x
 

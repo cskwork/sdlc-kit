@@ -20,6 +20,7 @@ const assets = new Map([
   ['/app.js', ['page/app.js', js]],
   ['/app.css', ['page/app.css', 'text/css; charset=utf-8']],
   ['/markdown.js', ['page/markdown.js', js]],
+  ['/board.js', ['page/board.js', js]],
   ['/i18n.mjs', ['i18n.mjs', js]],
   ['/status.mjs', ['status.mjs', js]],
   ...languages.map(language => [`/locales/${language}.mjs`, [`locales/${language}.mjs`, js]])
@@ -77,6 +78,21 @@ function briefDocument(item) {
   try { bytes = fs.readFileSync(item.brief); }
   catch (error) { fail(error.code === 'ENOENT' ? 404 : 409, `brief not readable: ${item.brief}`); }
   return { gate: '', file: item.brief, markdown: bytes.toString('utf8'), sha: createHash('sha256').update(bytes).digest('hex') };
+}
+// The board's optional feed: JSON another tool writes. It is untrusted text; a missing file is no feed, and an
+// unreadable or invalid one says so instead of keeping stale data.
+const feedLimit = 1024 * 1024;
+// Beside the list, like todo-working.json: ~/.sdlc/todo-feed.json for the default list.
+export const feedPath = (file = core.todoPath()) => process.env.SDLC_TODO_FEED || path.join(path.dirname(file), 'todo-feed.json');
+export function readFeed(file) {
+  let bytes;
+  try { bytes = fs.readFileSync(file); }
+  catch (error) { return error.code === 'ENOENT' || error.code === 'ENOTDIR' ? { feed: null, error: '' } : { feed: null, error: 'feed not readable' }; }
+  if (bytes.length > feedLimit) return { feed: null, error: 'feed too large' };
+  try {
+    const feed = JSON.parse(bytes.toString('utf8'));
+    return feed && typeof feed === 'object' && !Array.isArray(feed) ? { feed, error: '' } : { feed: null, error: 'feed is not a JSON object' };
+  } catch { return { feed: null, error: 'feed is not valid JSON' }; }
 }
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -137,17 +153,19 @@ export async function liveSession(file = core.sessionPath()) {
   } catch { return null; }
 }
 
-export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage, session = '' } = {}) {
+export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage, session = '', feed = feedPath(file) } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('invalid port');
   if (!isLanguage(lang)) throw new Error(`invalid language: ${lang}`);
   if (!onUrl && !open && !process.stdout.isTTY) throw new Error('web requires a terminal or --open');
   const token = randomBytes(16).toString('hex'), expected = Buffer.from(token);
   const authorized = value => typeof value === 'string' && Buffer.byteLength(value) === expected.length && timingSafeEqual(Buffer.from(value), expected);
   const clients = new Set();
+  let feedState = readFeed(feed);
   const payload = () => {
     const model = core.load(file);
     // The version hashes the item as loaded; the working marker is not part of it.
-    return { items: core.withWorking(model.items, file).map((item, i) => ({ ...item, version: core.itemVersion(model.items[i], model), turn: statusOf(item) })), file, lang };
+    return { items: core.withWorking(model.items, file).map((item, i) => ({ ...item, version: core.itemVersion(model.items[i], model), turn: statusOf(item) })), file, lang,
+      feed: feedState.feed, ...(feedState.error ? { feedError: feedState.error } : {}) };
   };
   const sendEvent = (res, value, event = '') => res.write(`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(value)}\n\n`);
   const broadcast = () => {
@@ -187,6 +205,8 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
         } else if (url.pathname === '/api/live') {
           // Liveness only: /api/items syncs every sdlc item and can take seconds on a long list.
           json(200, { ok: true });
+        } else if (url.pathname === '/api/feed') {
+          json(200, feedState);
         } else if (url.pathname === '/api/items') {
           await synced();
           json(200, payload());
@@ -262,12 +282,14 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   actualPort = server.address().port;
   // Watching only loads the file: sync writes it, so syncing in the watcher would loop.
   const stopWatch = core.watch(file, broadcast), stopWorking = core.watchWorking(file, broadcast);
+  // Polling stat survives a feed that does not exist yet and one replaced by rename.
+  const stopFeed = core.watch(feed, () => { feedState = readFeed(feed); broadcast(); });
   const keepalive = setInterval(() => { for (const res of clients) res.write(': keepalive\n\n'); }, 15000);
   keepalive.unref();
   let closing;
   const close = () => {
     if (!closing) {
-      stopWatch(); stopWorking();
+      stopWatch(); stopWorking(); stopFeed();
       clearInterval(keepalive);
       if (session && readSession(session)?.token === token) fs.rmSync(session, { force: true });
       for (const res of clients) res.end();

@@ -33,7 +33,9 @@ for (const mode of ['light', 'dark']) {
       }
     }
     assert.ok(contrast(colors.bad, colors['bad-bg']) >= 4.5, `${mode} error notice text`);
-    for (const [foreground, background] of [['accent', 'highlight'], ['busy', 'busy-bg'], ['ok', 'ok-bg'], ['muted', 'open-bg'], ['bad', 'bad-bg'], ['busy', 'paper'], ['busy', 'highlight']]) {
+    // Board surfaces: the canvas around it, cards, and the tint of the your-turn lane.
+    for (const [foreground, background] of [['accent', 'highlight'], ['busy', 'busy-bg'], ['ok', 'ok-bg'], ['muted', 'open-bg'], ['bad', 'bad-bg'], ['busy', 'paper'], ['busy', 'highlight'],
+      ['ink', 'card'], ['muted', 'card'], ['muted', 'canvas'], ['muted', 'lane-you'], ['accent', 'lane-you'], ['bad', 'lane-you'], ['busy', 'lane-you'], ['ok', 'card'], ['muted', 'paper']]) {
       const ratio = contrast(colors[foreground], colors[background]);
       assert.ok(ratio >= 4.5, `${mode} status --${foreground} on --${background}: ${ratio.toFixed(3)}:1 < 4.5:1`);
     }
@@ -569,4 +571,60 @@ test('narrow keeps the modal; resizing moves the selection between modal and pan
   assert.equal(dialog.open, false, 'the pane closes on a narrow screen');
   p.setWide(true);
   assert.equal(p.nodes.get('detail-title').textContent, 'Queued task', 'the selection is kept');
+});
+
+test('single window: a newer tray window asks older ones to close; its own or an older message does not', () => {
+  const p = page();
+  const channels = [];
+  let closed = 0;
+  p.context.close = () => { closed++; };
+  p.context.FakeChannel = class {
+    constructor(name) { this.name = name; this.listeners = []; channels.push(this); }
+    addEventListener(type, listener) { if (type === 'message') this.listeners.push(listener); }
+    // Like BroadcastChannel: every other channel of the same name receives it, the sender does not.
+    postMessage(data) { for (const other of channels) if (other !== this && other.name === this.name) for (const fn of other.listeners) fn({ data }); }
+  };
+  const older = vm.runInContext('singleWindow(FakeChannel, true)', p.context);
+  assert.equal(older.name, 'sdlc-todo-board');
+  assert.equal(closed, 0, 'the first page stays');
+  vm.runInContext('singleWindow(FakeChannel, true)', p.context);
+  assert.equal(closed, 1, 'the older page closes when a newer one opens');
+  for (const fn of older.listeners) fn({ data: { type: 'board-open', at: 0 } });
+  assert.equal(closed, 1, 'a message from before this page was born is ignored');
+  assert.equal(vm.runInContext('singleWindow(undefined, true)', p.context), null, 'no BroadcastChannel: nothing happens');
+  // A page that is not a tray window neither announces itself nor closes.
+  assert.equal(vm.runInContext('singleWindow(FakeChannel, false)', p.context), null);
+  assert.equal(vm.runInContext('appWindow', p.context), false, 'no app=1 in the fragment');
+  assert.equal(channels.length, 2);
+  // An unsent draft or a request in flight keeps the older window open.
+  vm.runInContext(`drafts.set('x', { reply: 'half an answer', words: '', seed: '' })`, p.context);
+  vm.runInContext('singleWindow(FakeChannel, true)', p.context);
+  assert.equal(closed, 1, 'a draft keeps the window');
+  vm.runInContext(`drafts.clear(); todoPage.addBusyCheck(() => true)`, p.context);
+  vm.runInContext('singleWindow(FakeChannel, true)', p.context);
+  assert.equal(closed, 1, 'a busy view keeps the window');
+});
+
+test('single window: only a fragment with app=1 marks a tray window; the token is read the same', () => {
+  const app = page('#t=0123456789abcdef0123456789abcdef&app=1');
+  assert.equal(vm.runInContext('appWindow', app.context), true);
+  assert.equal(vm.runInContext('token', app.context), '0123456789abcdef0123456789abcdef');
+  assert.equal(vm.runInContext('appWindow', page('#t=0123456789abcdef0123456789abcdef').context), false);
+});
+
+test('board hook: views subscribe to snapshots and read the feed the server sent', () => {
+  const p = page();
+  vm.runInContext(`
+    var calls = 0;
+    todoPage.subscribe(() => calls++);
+    apply({ items: [], file: '/tmp/todo.md', feed: { source: 'line' }, feedError: '' });
+  `, p.context);
+  assert.equal(vm.runInContext('calls', p.context), 1);
+  assert.equal(vm.runInContext('todoPage.feed.source', p.context), 'line');
+  vm.runInContext(`apply({ items: [], file: '/tmp/todo.md' })`, p.context);
+  assert.equal(vm.runInContext('todoPage.feed.source', p.context), 'line', 'a snapshot without a feed field keeps the feed');
+  vm.runInContext(`apply({ items: [], file: '/tmp/todo.md', feed: null, feedError: 'feed is not valid JSON' })`, p.context);
+  assert.equal(vm.runInContext('todoPage.feed', p.context), null);
+  assert.equal(vm.runInContext('todoPage.feedError', p.context), 'feed is not valid JSON');
+  assert.equal(vm.runInContext('calls', p.context), 3);
 });
