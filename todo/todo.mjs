@@ -24,6 +24,8 @@ const usage = `Usage: node ${path.join(kit, 'todo', 'todo.mjs')} <command>
   working <id> ["what"] | working <id> --off (an agent works on it now: call on start, again at least every 60 s, --off when done; a mark not refreshed for 3 min expires)
   done <id> ["result"] | web [--port N] [--open] [--lang L] | serve [--lang L] | help
   No command: the app (--ui tui,web,app picks any of them; --no-web for the TUI alone, --lang L).
+  The app sits in the tray with the Needs-you count and opens the board on launch and on a click;
+  SDLC_TODO_BACKGROUND=1 (e.g. for a login item) starts it in the tray alone.
   Without a built app it opens the TUI with its web link; build it with: cargo build --release --manifest-path ${path.join(kit, 'todo', 'app', 'Cargo.toml')}
   serve keeps a web server for the app; launches share it through ${core.sessionPath()}.
   --lang ${languages.join('|')} sets the UI language; default SDLC_TODO_LANG, else ${defaultLanguage}.`;

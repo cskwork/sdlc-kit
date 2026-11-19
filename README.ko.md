@@ -194,20 +194,46 @@ Windows에서는 Git Bash나 WSL로 `sdlc.sh`를 실행하세요.
 ## 개인 to-do
 
 여러 프로젝트의 할 일을 사람이 읽을 수 있는 `~/.sdlc/todo.md` 하나에 모읍니다.
-트레이 앱, TUI, localhost 웹 페이지는 같은 파일을 실시간으로 보여 주고 고칩니다.
+트레이 배지, TUI, localhost 웹 페이지(기본은 보드, 목록은 버튼 하나로 전환)는 같은 파일을 실시간으로 보여 주고 고칩니다.
 다른 파일을 쓰려면 `SDLC_TODO`를 지정하세요.
 이 선택 기능에는 Node 18+가 필요하고, 핵심 루프는 여전히 bash만 있으면 됩니다.
 
 ```bash
 cargo build --release --manifest-path ~/sdlc-kit/todo/app/Cargo.toml   # 앱을 쓸 때 한 번 (Rust 1.88+)
 SDLC_TODO_LANG=ko bash ~/sdlc-kit/todo/app/install-macos.sh            # macOS: ~/Applications에도 추가
-node ~/sdlc-kit/todo/todo.mjs                     # 앱 (앱을 빌드하지 않았으면 웹 링크가 있는 TUI)
+node ~/sdlc-kit/todo/todo.mjs                     # 앱: 보드를 여는 트레이 배지 (앱을 빌드하지 않았으면 웹 링크가 있는 TUI)
 node ~/sdlc-kit/todo/todo.mjs --ui tui,web        # tui, web, app 중 원하는 것
-node ~/sdlc-kit/todo/todo.mjs web --open          # 웹 페이지만 열기
+node ~/sdlc-kit/todo/todo.mjs web --open          # 웹 페이지만 열기 (보드)
 node ~/sdlc-kit/todo/todo.mjs add "Fix login ~/code/web https://acme.atlassian.net/browse/WEB-123" --by jira
 node ~/sdlc-kit/todo/todo.mjs next                # 첫 Open 항목
 node ~/sdlc-kit/todo/todo.mjs take <id> --json    # 작업자가 맡은 항목 하나와 그 답
 ```
+
+웹 페이지는 **보드**로 열리고, 보드에서 바로 답하고 승인합니다.
+열은 sdlc 단계입니다. 일반(sdlc 작업이 없는 항목, 있을 때만 보임), 의도, 계획, 구현, 검증, 배포, 그리고 최근 7일 완료(접혀 있음) 순이고, 이전 형식(`legacy`) 항목은 아래 접힌 상자에 있습니다.
+행은 다른 화면과 같은 상태로 누구 차례인지 나눕니다. 내 차례, 다른 사람 답 대기, 막힘·환경 대기, 에이전트 차례이며, 에이전트가 작업 중인 카드에는 깜박이는 점이 붙습니다.
+같은 티켓 링크를 가진 열린 항목은 카드 하나로 합칩니다. 14일 넘게 변화가 없는 카드는 토글 뒤에 숨기며, 내 차례·막힘·고정 카드는 숨기지 않습니다.
+위쪽 띠에는 건수, 피드 상태와 알림, 마지막 업데이트, 언어 메뉴, 보기 전환 [보드] [목록] [실행] [건강]이 있고, [실행]과 [건강]은 피드가 있을 때만 보입니다.
+화면 폭이 약 900px보다 좁으면 목록을 보여 주며, [목록] 보기는 이전 페이지의 기능을 모두 그대로 둡니다.
+
+카드를 누르면 결정 패널이 열립니다. 질문, 권장 선택지의 **AI 권장** 배지, 브리프의 배경과 이유, 선택지 버튼, 직접 답하기 칸, 의도·계획 승인(같은 SHA 묶음 `/api/approve`), 막힌 항목의 자가 조치가 보입니다.
+선택지는 목록과 같은 보통 답변을 보내고, 카드 안에서 내 차례인 항목으로 갑니다.
+"내 차례 n/N"은 ←/→ 또는 j/k로 내 카드를 넘기고, Esc로 패널을 닫습니다. 요청 중에는 버튼이 잠기고, 끝나면 토스트로 알리며, 실패하면 이유를 패널에 보여 줍니다.
+**티켓 열기**는 링크를 탭이 아닌 화면 오른쪽에 붙은 팝업 창 하나로 열고, 다른 카드로 넘어가면 같은 창을 그 티켓으로 바꿉니다. Jira 같은 티켓 사이트는 iframe을 거부(X-Frame-Options)하므로 팝업을 씁니다.
+새 보드 창이 열리면 이전 보드 창에 닫으라고 알립니다(BroadcastChannel). 브라우저는 스크립트가 닫을 수 있는 창(앱이 연 창 등)만 닫습니다.
+
+선택 기능인 **피드**로 다른 프로그램(티켓 공장 같은 자동화)이 보드에 자기 상태를 더할 수 있습니다. 서버는 `SDLC_TODO_FEED`, 없으면 할 일 파일 옆 `todo-feed.json`(기본 `~/.sdlc/todo-feed.json`, 최대 1MB)을 읽고 바뀌면 다시 읽습니다. 다른 `/api`처럼 토큰이 있어야 하는 `GET /api/feed`로 내주고, 모든 응답과 이벤트에 `feed`(읽지 못하면 `feedError`도)로 싣습니다. 파일이 없어도 보드는 똑같이 동작합니다. 스키마는 버전 1이고, 모든 필드는 선택이며 문자열은 모두 일반 텍스트로만 보입니다.
+
+```json
+{"version": 1, "source": "factory", "generatedAt": "ISO time",
+ "status": {"state": "idle|running|held|off", "text": "", "lanes": {"busy": 1, "total": 3}, "nextRunAt": "ISO time"},
+ "alerts": [{"level": "bad|warn|info", "text": "", "since": "ISO time"}],
+ "items": {"<ticket label or sdlc slug>": {"slug": "", "column": "", "chip": "", "turn": "", "waitingText": "", "service": "", "nextStep": "", "updatedAt": "ISO time"}},
+ "runs": [{"key": "", "label": "", "startedAt": "ISO time", "endedAt": "ISO time", "outcome": "ok|fail|unknown"}],
+ "health": [{"title": "", "rows": [{"label": "", "value": "", "level": "bad|warn|info"}]}]}
+```
+
+피드 항목은 티켓 라벨(`WEB-123`)로, 없으면 카드 안 항목의 sdlc slug로 카드에 맞춥니다. `column`(단계 또는 `done`)은 카드의 열을 바꿉니다. `turn`(`you`, `others`, `blocked`, `agent`)은 to-do 상태가 에이전트 차례나 다른 사람 대기일 때만 행을 바꾸므로, 피드가 내 차례나 막힘을 가리는 일은 없습니다. `chip`은 카드에 표시됩니다. [실행]은 `runs`를 하루 타임라인으로, [건강]은 `health`와 `alerts`를 보여 줍니다. 키트는 여전히 티켓 API를 부르지 않고, 파일은 피드를 만드는 쪽이 씁니다.
 
 TUI와 웹 페이지는 영어나 한국어로 표시합니다. `--lang ko`(TUI 또는 `web`)를 주거나 `SDLC_TODO_LANG=ko`를 지정하세요. 플래그가 우선하고, 모르는 값이면 영어, 기본값도 영어입니다.
 TUI에서는 `L`, 웹 페이지에서는 언어 메뉴로 바꾸며 다시 시작하거나 새로 고칠 때까지 유지됩니다.
@@ -223,7 +249,7 @@ TUI에서는 `L`, 웹 페이지에서는 언어 메뉴로 바꾸며 다시 시�
 사람이 직접 실행해야 하는 명령(OTP를 묻는 VPN 연결 등)은 에이전트가 `run <id> "명령"`으로 남깁니다(`  - run: 명령`, 내 답변·`resume`·`done`·빈 값이 지움). 앱 카드에는 명령과 **터미널에서 열기** 버튼이 보입니다. macOS의 zsh에서는 명령이 입력만 된 채로 Terminal이 열리므로, 확인하고 Enter를 누르면 됩니다. 다른 환경에서는 버튼이 명령을 복사합니다. 페이지와 TUI 상세에도 명령이 보입니다.
 단 답은 에이전트가 `next`나 `take`로 읽기 전까지 "답변 전달됨 — 에이전트 수신 전"으로 보이고, sdlc 대기였다면 읽은 뒤 sdlc.sh가 다음 단계로 넘어갈 때까지 다시 내 차례로 돌아옵니다. sdlc 밖에서 사람을 기다리는 작업자(승인, 티켓 답변 등)는 `wait`로 남기고 `resume`으로 지웁니다. 다른 사람(QA·기획)이 먼저 답해야 하면 `others <id> "누구"`로 "다른 사람 회신 대기"를 표시합니다. 이 항목은 확인 필요에서 빠지고 `next`가 건너뛰며(`take`는 exit 15), 내 답글·`wait`·`resume`이 지웁니다.
 모든 화면은 서버 하나를 같이 씁니다. 처음 띄운 쪽이 포트와 토큰을 to-do 파일 옆 `todo-web.json`(소유자만 읽기)에 남기고, 뒤에 띄운 화면·앱·`todo.mjs serve`는 그 서버가 응답하는 동안 다시 씁니다.
-고정 항목(`todo.mjs pin <id>`, 예: 선택지로 켜고 끄는 설정)은 앱의 모든 탭 맨 위에 남고 내 차례 건수에 들어가지 않습니다. 앱(`todo/app`, macOS·Windows)은 메뉴 막대나 트레이에서 내 차례 건수를 보여 주고, 새로 생기면 알림을 띄우며, 내 차례인 결정을 책장처럼 한 번에 한 건씩 보여 줍니다. 승인·막힘, 그리고 에이전트 권장 답이 없는 질문이 먼저 나옵니다. 쪽 번호와 화살표는 창 아래에 있고, 좌우 화살표 키로도 넘깁니다. 질문·지금 상황·답하면 하려는 것·왜·AI 권장·선택지별 설명이 보이고, 진행 단계·저장소·전체 작업 문서는 '자세히'에 접혀 있습니다. 창이 넓으면 두 쪽으로 펼쳐져 왼쪽에서 읽고 오른쪽 '내 답'에서 답합니다. 항목마다 나만 보는 메모를 적을 수 있고 글자 크기와 글꼴(Pretendard 내장)을 바꿀 수 있습니다. 둘 다 세션 파일 옆 `todo-app.json`에 남고 에이전트에게 가지 않습니다. 관련 티켓을 열며, 답변·승인·자가 조치를 같은 웹 API로 보냅니다. `todo.md`를 직접 쓰지 않습니다. 창을 닫아도 트레이에 남고, 종료하면 앱이 띄운 서버도 멈춥니다. macOS에서는 `todo/app/install-macos.sh [폴더]`가 `~/Applications`에 `sdlc To-do.app`(이름은 `SDLC_TODO_APP_NAME`)을 만듭니다. Finder는 셸 `PATH` 없이 앱을 띄우므로 키트·node·언어·`SDLC_TODO` 경로를 Info.plist에 적어 둡니다. 키트를 업데이트하거나 node를 옮기면 다시 실행하세요.
+고정 항목(`todo.mjs pin <id>`, 예: 선택지로 켜고 끄는 설정)은 앱의 모든 탭 맨 위에 남고 내 차례 건수에 들어가지 않습니다. 앱(`todo/app`, macOS·Windows)은 창 없이 시작해 메뉴 막대나 트레이에서 내 차례 건수를 보여 주고, 새로 생기면 알림을 띄웁니다. 앱을 실행하거나 아이콘을 왼쪽 클릭하면 보드를 엽니다. macOS에 Google Chrome이 있으면 탭 없는 Chrome 앱 창(`--app`)으로, 없으면 기본 브라우저로 엽니다. 메뉴에는 보드 열기, 목록 창 열기, 끝내기가 있습니다. 로그인 항목처럼 트레이 아이콘만 띄우려면 `--background`나 `SDLC_TODO_BACKGROUND=1`을 쓰세요. 서버가 오프라인이면 클릭했을 때 그 이유와 함께 목록 창을 보여 줍니다. 대체 화면인 목록 창은 내 차례인 결정을 책장처럼 한 번에 한 건씩 보여 줍니다. 승인·막힘, 그리고 에이전트 권장 답이 없는 질문이 먼저 나옵니다. 쪽 번호와 화살표는 창 아래에 있고, 좌우 화살표 키로도 넘깁니다. 질문·지금 상황·답하면 하려는 것·왜·AI 권장·선택지별 설명이 보이고, 진행 단계·저장소·전체 작업 문서는 '자세히'에 접혀 있습니다. 창이 넓으면 두 쪽으로 펼쳐져 왼쪽에서 읽고 오른쪽 '내 답'에서 답합니다. 항목마다 나만 보는 메모를 적을 수 있고 글자 크기와 글꼴(Pretendard 내장)을 바꿀 수 있습니다. 둘 다 세션 파일 옆 `todo-app.json`에 남고 에이전트에게 가지 않습니다. 관련 티켓을 열며, 답변·승인·자가 조치를 같은 웹 API로 보냅니다. `todo.md`를 직접 쓰지 않습니다. 창을 닫아도 트레이에 남고, 종료하면 앱이 띄운 서버도 멈춥니다. macOS에서는 `todo/app/install-macos.sh [폴더]`가 `~/Applications`에 `sdlc To-do.app`(이름은 `SDLC_TODO_APP_NAME`)을 만듭니다. Finder는 셸 `PATH` 없이 앱을 띄우므로 키트·node·언어·`SDLC_TODO` 경로를 Info.plist에 적어 둡니다. 키트를 업데이트하거나 node를 옮기면 다시 실행하세요.
 막힌 sdlc 항목의 **자가 조치**(앱·페이지 버튼, TUI `f`)는 `fix requested`를 남기고, 다음 `next`나 `take`가 그 막힘을 에이전트에게 한 번 넘깁니다(종료 코드 `0`, `"fix": true`). 그 뒤 풀릴 때까지는 다시 큐를 멈춥니다.
 바로 에이전트를 띄우려면 to-do 파일 옆 `todo-agent.json`에 명령을 적으세요. 예: `{"fix": ["claude", "-p", "follow {kit}/todo/AGENT.md; take {id} and clear its block"]}`. `{id}`·`{kit}`·`{project}`를 채워 프로젝트 폴더에서 분리 실행합니다.
 언어를 더하려면 `todo/locales/en.mjs`를 `todo/locales/<code>.mjs`로 복사해 `name`과 모든 문구를 옮기고, `todo/i18n.mjs`의 `locales`에 import를 하나 더하세요.
@@ -251,6 +277,7 @@ Done에는 최근 30개를 두고, 넘치면 오래된 항목부터 같은 폴�
 키트는 토큰을 디스크에 쓰지 않습니다. 브라우저는 연 URL을 방문 기록에 남길 수 있으며, 프로세스가 종료되면 토큰도 효력을 잃습니다.
 승인은 `sdlc.sh approve <intent|plan> <slug> --human "<words>" --sha <hex>`로 화면에 보여 준 바이트에 묶이며, 내용이 바뀌면 거부됩니다.
 같은 사용자 계정으로 실행되는 프로그램은 기존 `--human`과 마찬가지로 이 보안 경계 밖에 있습니다.
+보드와 피드는 이 모델을 바꾸지 않습니다. 피드는 믿을 수 없는 텍스트로 다루어 일반 텍스트로만 보여 주며, 카드를 옮기거나 표시를 붙일 수는 있어도 답하거나 승인하거나 내 차례를 가릴 수는 없습니다.
 
 ## v0.x에서 올리기
 

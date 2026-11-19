@@ -5,28 +5,124 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
-<title data-i18n="page.title">To-do</title>
+<title>To-do board</title>
 <link rel="stylesheet" href="app.css">
 <script type="module" src="app.js"></script>
+<script type="module" src="board.js"></script>
 </head>
-<body>
-<div class="shell">
+<body data-view="board">
+<header class="strip">
+  <div class="strip-main">
+    <p id="board-counts" class="counts"></p>
+    <p id="feed-status" class="feed-status" hidden></p>
+  </div>
+  <div class="strip-side">
+    <span id="board-tools"><button type="button" id="stale-toggle" class="stale-toggle" aria-pressed="false" hidden></button></span>
+    <span class="live" id="live" data-state="connecting"><span class="dot" aria-hidden="true"></span><span id="live-text">Connecting</span></span>
+    <span id="board-updated" class="updated"></span>
+    <label for="lang" class="visually-hidden" data-i18n="page.language">Language</label>
+    <select id="lang" class="lang"></select>
+    <div id="views" class="seg" role="group" aria-label="View" data-i18n-label="board.views">
+      <button type="button" data-view="board" aria-pressed="true" data-i18n="board.view.board">Board</button>
+      <button type="button" data-view="list" aria-pressed="false" data-i18n="board.view.list">List</button>
+      <button type="button" data-view="runs" aria-pressed="false" hidden data-i18n="board.view.runs">Runs</button>
+      <button type="button" data-view="health" aria-pressed="false" hidden data-i18n="board.view.health">Health</button>
+    </div>
+  </div>
+</header>
+<p id="feed-alerts" class="alerts" role="status" hidden></p>
+
+<div id="board-view" class="board-view">
+  <main class="board-scroll" aria-label="Board" data-i18n-label="board.title">
+    <p id="board-loading" class="board-loading" data-i18n="board.loading">Loading the board…</p>
+    <div id="board" class="board" hidden></div>
+    <details id="legacy" class="legacy" hidden>
+      <summary id="legacy-title"></summary>
+      <div id="legacy-cards" class="legacy-cards"></div>
+    </details>
+  </main>
+  <aside id="panel" class="panel" hidden aria-labelledby="panel-title">
+    <div class="panel-bar">
+      <span id="panel-page" class="panel-page"></span>
+      <button type="button" id="panel-prev" class="icon" aria-label="Previous (← or k)" data-i18n-label="panel.prev"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false"><path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button type="button" id="panel-next" class="icon" aria-label="Next (→ or j)" data-i18n-label="panel.next"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false"><path d="M7.5 4.5 13 10l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button type="button" id="panel-close" class="icon close" aria-label="Close (Esc)" data-i18n-label="panel.close"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false"><path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <p id="panel-gone" class="notice" hidden data-i18n="panel.gone">This card changed or went away.</p>
+    <div id="panel-content">
+      <h2 id="panel-title" tabindex="-1"></h2>
+      <p id="panel-tags" class="tags"></p>
+      <p id="panel-sent" class="sent" role="status" hidden></p>
+      <section class="ask" aria-labelledby="panel-ask-label">
+        <p id="panel-ask-label" class="ask-label"></p>
+        <p id="panel-question" class="question"></p>
+        <div id="panel-ai" class="ai" hidden>
+          <span class="ai-badge" data-i18n="panel.ai">AI pick</span>
+          <p id="panel-ai-text"></p>
+        </div>
+        <p id="panel-background" class="why" hidden></p>
+        <p id="panel-why" class="why" hidden></p>
+      </section>
+      <p id="panel-target" class="target" hidden></p>
+      <div id="panel-choices" class="choices board-choices" role="group" aria-label="Pick an answer" data-i18n-label="choices.label" hidden></div>
+      <section id="panel-gate" class="gate" hidden>
+        <div id="panel-glance" class="artifact glance"></div>
+        <label for="panel-note" class="visually-hidden" data-i18n="decide.words">Note (optional)</label>
+        <input id="panel-note" type="text" maxlength="500" placeholder="Note (optional)" data-i18n-placeholder="decide.words">
+        <div class="actions"><button type="button" id="panel-approve" class="primary">Approve</button></div>
+      </section>
+      <button type="button" id="panel-fix" class="secondary fix" hidden data-i18n="fix.button">Fix it</button>
+      <form id="panel-reply" class="reply" novalidate>
+        <label for="panel-reply-text" data-i18n="panel.reply">Answer in your own words</label>
+        <textarea id="panel-reply-text" rows="2" maxlength="2000" aria-describedby="panel-reply-help"></textarea>
+        <p id="panel-reply-help" class="hint" data-i18n="reply.help">A reply answers a question. It is not an approval.</p>
+        <div class="actions"><button type="submit" class="secondary" data-i18n="panel.send">Send</button></div>
+      </form>
+      <p id="panel-error" class="field-error" role="alert" hidden></p>
+      <div class="panel-actions">
+        <button type="button" id="panel-ticket" class="secondary" data-i18n="panel.ticket">Open ticket</button>
+        <button type="button" id="panel-more" class="quiet" aria-expanded="false" aria-controls="panel-details">More</button>
+      </div>
+      <div id="panel-details" class="panel-details" hidden>
+        <dl id="panel-fields" class="fields"></dl>
+        <section id="panel-members-box" hidden><h3 data-i18n="panel.members">Items on this ticket</h3><ul id="panel-members" class="members"></ul></section>
+        <section><h3 data-i18n="artifact.document">Work document</h3><div id="panel-doc" class="artifact"></div></section>
+        <section><h3 data-i18n="history.title">History</h3><ol id="panel-history" class="history"></ol></section>
+        <section id="panel-notes-box" hidden><h3 data-i18n="notes.title">Notes</h3><pre id="panel-notes" class="notes"></pre></section>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<main id="runs-view" class="feed-view" hidden>
+  <div id="runs-days" class="days"></div>
+  <h2 class="runs-head"><span id="runs-title"></span> <span id="runs-summary" class="muted"></span></h2>
+  <div class="timeline">
+    <div id="runs-axis" class="axis"></div>
+    <div id="runs-track" class="track"></div>
+    <p id="runs-empty" class="hint" hidden></p>
+  </div>
+  <p class="legend"><span class="run ok"><span class="run-bar"></span><span data-i18n="runs.ok">Done</span></span>
+    <span class="run fail"><span class="run-bar"></span><span data-i18n="runs.fail">Failed</span></span>
+    <span class="run unknown"><span class="run-bar"></span><span data-i18n="runs.unknown">No result</span></span></p>
+</main>
+
+<main id="health-view" class="feed-view" hidden>
+  <section id="health-alerts" class="health-card" hidden><h3 data-i18n="health.alerts">Alerts</h3><ul id="health-alert-list" class="alert-list"></ul></section>
+  <div id="health-sections" class="health-grid"></div>
+  <p id="health-empty" class="hint" data-i18n="health.empty">The feed has no health information.</p>
+  <p id="health-generated" class="hint"></p>
+</main>
+
+<div class="shell" id="list-view" hidden>
 <main class="page">
   <header class="top">
     <time id="changed" class="timestamp" aria-label="Last change" data-i18n-label="page.lastChange"></time>
     <h1 data-i18n="page.title">To-do</h1>
     <p class="meta">
       <span id="counts">0 your turn · 0 agent · 0 blocked · 0 done</span>
-      <span class="live" id="live" data-state="connecting"><span class="dot" aria-hidden="true"></span><span id="live-text">Connecting</span></span>
-      <label for="lang" class="visually-hidden" data-i18n="page.language">Language</label>
-      <select id="lang" class="lang"></select>
     </p>
   </header>
-
-  <div id="error" class="error" role="alert" hidden>
-    <p id="error-text"></p>
-    <button type="button" id="error-dismiss" class="quiet" data-i18n="error.dismiss">Dismiss</button>
-  </div>
 
   <section aria-labelledby="open-title">
     <h2 id="open-title" class="visually-hidden" data-i18n="list.open">Open</h2>
@@ -113,6 +209,11 @@
 </dialog>
 </div>
 
+<div id="error" class="error toast" role="alert" hidden>
+  <p id="error-text"></p>
+  <button type="button" id="error-dismiss" class="quiet" data-i18n="error.dismiss">Dismiss</button>
+</div>
+<div id="toast" class="toast ok" role="status" hidden></div>
 <div id="announce" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>

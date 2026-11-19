@@ -17,7 +17,7 @@ use std::process::Child;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::{TrayIcon, TrayIconBuilder, TrayIconEvent};
+use tray_icon::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 #[derive(Clone, PartialEq)]
 enum Conn { Connecting, Live, Offline(String) }
@@ -57,8 +57,8 @@ struct App {
     /// Fonts found on this machine, as (name, file); the settings card lists them.
     fonts: Vec<(String, String)>,
     settings: bool,
-    tray: Option<TrayIcon>,
-    badge: Option<usize>,
+    /// eframe shows the window after its first frame; the app starts in the tray, so that frame hides it again.
+    hidden_at_start: bool,
 }
 
 /// The window width, in points, from which the content opens as a two-page spread.
@@ -152,6 +152,45 @@ fn open_url(url: &str) {
     let _ = std::process::Command::new(program).args(args).spawn();
 }
 
+/// The board's address: the web page with the token in its fragment, as `urlOf` in todo/web.mjs builds it, plus
+/// `app=1`: only tray-opened windows close an older board window (singleWindow in todo/page/app.js).
+fn board_url(session: &Session) -> String { format!("{}/#t={}&app=1", session.origin(), session.token) }
+
+/// Google Chrome in /Applications or ~/Applications; it can open the board as an app window.
+fn chrome_installed() -> bool {
+    let home = std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Applications"));
+    std::iter::once(PathBuf::from("/Applications")).chain(home).any(|dir| dir.join("Google Chrome.app").is_dir())
+}
+
+/// Opens the board in a window of its own: a Chrome app window (no tabs or address bar) on macOS when
+/// Chrome is installed, else the default browser. The token goes only into the URL handed to the browser.
+fn open_board(session: &Session) {
+    let url = board_url(session);
+    if cfg!(target_os = "macos") && chrome_installed() {
+        let opened = std::process::Command::new("open").args(["-na", "Google Chrome", "--args"]).arg(format!("--app={url}"))
+            .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null())
+            .status().is_ok_and(|status| status.success());
+        if opened { return; }
+    }
+    open_url(&url);
+}
+
+/// Shows the list window, the fallback for the board.
+fn show_list(ctx: &egui::Context) {
+    ctx.send_viewport_cmd(ViewportCommand::Visible(true));
+    ctx.send_viewport_cmd(ViewportCommand::Focus);
+}
+
+/// The tray's main action: the board while the server is live; otherwise the list window, which shows
+/// why it is offline, rather than a dead URL.
+fn show_board(state: &State, ctx: &egui::Context) {
+    let session = { let shared = state.lock().unwrap(); if shared.conn == Conn::Live { shared.session.clone() } else { None } };
+    match session {
+        Some(session) => { std::thread::spawn(move || open_board(&session)); }
+        None => show_list(ctx),
+    }
+}
+
 /// Opens Terminal with `command` typed at the prompt but not run, so the human reads it and presses Enter.
 /// A throwaway ZDOTDIR loads the human's ~/.zshrc, then `print -z` puts the command in the line editor; nothing is
 /// typed into the terminal, so nothing can run early. Returns false where that is not possible (not macOS, no zsh).
@@ -179,7 +218,8 @@ fn quit(state: &State) -> ! {
 }
 
 /// Finds or starts the server, then follows its events; reconnects whenever the stream drops.
-fn connect(state: State, ctx: egui::Context, launcher: Launcher, lang: Lang) {
+/// With `open_board_once`, the board opens the first time the server answers with the list, as a launch shows it.
+fn connect(state: State, ctx: egui::Context, launcher: Launcher, lang: Lang, mut open_board_once: bool) {
     std::thread::spawn(move || {
         let mut known: Option<HashSet<String>> = None;
         loop {
@@ -215,11 +255,14 @@ fn connect(state: State, ctx: egui::Context, launcher: Launcher, lang: Lang) {
                     }
                 }
                 known = Some(current);
+                badge_from_events(&model, lang);
                 let mut shared = state.lock().unwrap();
                 shared.model = Some(model);
                 shared.conn = Conn::Live;
                 drop(shared);
                 ctx.request_repaint();
+                // The same path as a click on the tray icon.
+                if std::mem::take(&mut open_board_once) { show_board(&state, &ctx); }
             });
             if let Err(error) = result {
                 state.lock().unwrap().conn = Conn::Offline(error);
@@ -231,7 +274,7 @@ fn connect(state: State, ctx: egui::Context, launcher: Launcher, lang: Lang) {
 }
 
 impl App {
-    fn new(cc: &eframe::CreationContext, launcher: Launcher, lang: Lang) -> App {
+    fn new(cc: &eframe::CreationContext, launcher: Launcher, lang: Lang, background: bool) -> App {
         let prefs_file = launcher.session_file.with_file_name("todo-app.json");
         let (mut prefs, prefs_error) = Prefs::load(&prefs_file);
         let fonts = theme::fonts();
@@ -244,24 +287,25 @@ impl App {
             toast: prefs_error.map(|error| (error, true, Instant::now())),
             artifacts: HashMap::new(), busy: HashSet::new(),
         }));
-        let tray = build_tray(lang).ok();
+        if let Ok(tray) = build_tray(lang) { TRAY.set(Some((tray, None))); }
         let ctx = cc.egui_ctx.clone();
         let (menu_state, menu_ctx) = (state.clone(), ctx.clone());
         MenuEvent::set_event_handler(Some(move |event: MenuEvent| match event.id.0.as_str() {
-            "open" => { menu_ctx.send_viewport_cmd(ViewportCommand::Visible(true)); menu_ctx.send_viewport_cmd(ViewportCommand::Focus); }
+            "board" => show_board(&menu_state, &menu_ctx),
+            "list" => show_list(&menu_ctx),
             "quit" => quit(&menu_state),
             _ => {}
         }));
-        let click_ctx = ctx.clone();
+        // A left click opens the board; the right button keeps the menu (build_tray turns the left-click menu off).
+        let (click_state, click_ctx) = (state.clone(), ctx.clone());
         TrayIconEvent::set_event_handler(Some(move |event: TrayIconEvent| {
-            if let TrayIconEvent::DoubleClick { .. } = event {
-                click_ctx.send_viewport_cmd(ViewportCommand::Visible(true));
-                click_ctx.send_viewport_cmd(ViewportCommand::Focus);
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                show_board(&click_state, &click_ctx);
             }
         }));
-        connect(state.clone(), ctx, launcher, lang);
+        connect(state.clone(), ctx, launcher, lang, !background);
         App { state, lang, tab: Tab::Focus, open: HashSet::new(), focus: None, focus_at: 0, drafts: HashMap::new(), notes: HashMap::new(),
-            prefs, prefs_file, prefs_dirty: false, fonts, settings: false, tray, badge: None }
+            prefs, prefs_file, prefs_dirty: false, fonts, settings: false, hidden_at_start: false }
     }
 
     /// Runs one request off the UI thread; the event stream brings the new list back.
@@ -279,29 +323,52 @@ impl App {
         });
     }
 
-    fn update_tray(&mut self, count: usize) {
-        if self.badge == Some(count) { return; }
-        self.badge = Some(count);
-        if let Some(tray) = &self.tray {
-            let _ = tray.set_icon(Some(theme::tray_icon(count > 0, cfg!(target_os = "macos"))));
-            if cfg!(target_os = "macos") { tray.set_icon_as_template(true); }
-            #[cfg(target_os = "macos")]
-            tray.set_title(if count > 0 { Some(count.to_string()) } else { None });
-            let _ = tray.set_tooltip(Some(format!("{} · {} {count}", t(self.lang, "title"), t(self.lang, "tab.focus"))));
-        }
+}
+
+thread_local! {
+    /// The tray icon and the count its badge shows. It lives on the main thread, where the OS wants it.
+    static TRAY: std::cell::RefCell<Option<(TrayIcon, Option<usize>)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Sets the badge and tooltip to `count`. Main thread only; a call from elsewhere finds no tray and does nothing.
+fn update_tray(count: usize, lang: Lang) {
+    TRAY.with_borrow_mut(|slot| {
+        let Some((tray, badge)) = slot else { return };
+        if *badge == Some(count) { return; }
+        *badge = Some(count);
+        let _ = tray.set_icon(Some(theme::tray_icon(count > 0, cfg!(target_os = "macos"))));
+        if cfg!(target_os = "macos") { tray.set_icon_as_template(true); }
+        #[cfg(target_os = "macos")]
+        tray.set_title(if count > 0 { Some(count.to_string()) } else { None });
+        let _ = tray.set_tooltip(Some(format!("{} · {} {count}", t(lang, "title"), t(lang, "tab.focus"))));
+    });
+}
+
+/// Updates the badge from the event thread. A hidden window gets no frames on macOS, so while the app sits in the
+/// tray the frame loop cannot do it; the main dispatch queue can. Elsewhere the frame loop keeps doing it.
+fn badge_from_events(model: &Model, lang: Lang) {
+    #[cfg(target_os = "macos")]
+    {
+        let count = model.items.iter().filter(|i| needs_you(i)).count();
+        let lang = if model.lang.is_empty() { lang } else { Lang::parse(&model.lang) };
+        dispatch::Queue::main().exec_async(move || update_tray(count, lang));
     }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (model, lang);
 }
 
 fn build_tray(lang: Lang) -> Result<TrayIcon, String> {
     let menu = Menu::new();
     let items = [
-        MenuItem::with_id("open", t(lang, "tray.open"), true, None),
+        MenuItem::with_id("board", t(lang, "tray.board"), true, None),
+        MenuItem::with_id("list", t(lang, "tray.list"), true, None),
     ];
     for item in &items { menu.append(item).map_err(|e| e.to_string())?; }
     menu.append(&PredefinedMenuItem::separator()).map_err(|e| e.to_string())?;
     menu.append(&MenuItem::with_id("quit", t(lang, "tray.quit"), true, None)).map_err(|e| e.to_string())?;
     TrayIconBuilder::new()
         .with_menu(Box::new(menu))
+        .with_menu_on_left_click(false)
         .with_icon(theme::tray_icon(false, cfg!(target_os = "macos")))
         .with_icon_as_template(cfg!(target_os = "macos"))
         .with_tooltip(t(lang, "title"))
@@ -349,6 +416,10 @@ fn markdown(ui: &mut egui::Ui, p: &theme::Palette, text: &str) {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if !self.hidden_at_start {
+            self.hidden_at_start = true;
+            ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+        }
         if ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             ctx.send_viewport_cmd(ViewportCommand::Visible(false));
@@ -361,7 +432,7 @@ impl eframe::App for App {
         if !model.lang.is_empty() { self.lang = Lang::parse(&model.lang); }
         let lang = self.lang;
         let attention = model.items.iter().filter(|i| needs_you(i)).count();
-        self.update_tray(attention);
+        update_tray(attention, lang);
         if toast.is_some() { ctx.request_repaint_after(Duration::from_millis(500)); }
         // The working dots pulse and their minutes count up; nothing repaints on a timer while no agent works.
         if model.items.iter().any(|i| !i.done && i.turn.kind == "working") { ctx.request_repaint_after(Duration::from_secs(1)); }
@@ -1073,7 +1144,8 @@ fn tickets(item: &Item) -> Vec<(String, String)> {
 /// A document is cached per item version, so an edited intent or plan is fetched again.
 fn artifact_key(item: &Item) -> String { format!("{}:{}", item.id, item.version) }
 
-struct Args { session: PathBuf, kit: PathBuf, node: String, lang: String }
+/// `background` (`--background`, or SDLC_TODO_BACKGROUND=1 for login items) starts in the tray without opening the board.
+struct Args { session: PathBuf, kit: PathBuf, node: String, lang: String, background: bool }
 
 fn args() -> Result<Args, String> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
@@ -1088,16 +1160,18 @@ fn args() -> Result<Args, String> {
             .unwrap_or_default(),
         node: std::env::var("SDLC_TODO_NODE").unwrap_or_else(|_| "node".into()),
         lang: std::env::var("SDLC_TODO_LANG").unwrap_or_else(|_| "en".into()),
+        background: std::env::var("SDLC_TODO_BACKGROUND").is_ok_and(|value| value == "1"),
     };
     let mut list = std::env::args().skip(1);
     while let Some(flag) = list.next() {
+        if flag == "--background" { parsed.background = true; continue; }
         let value = list.next().ok_or_else(|| format!("missing value for {flag}"))?;
         match flag.as_str() {
             "--session" => parsed.session = value.into(),
             "--kit" => parsed.kit = value.into(),
             "--node" => parsed.node = value,
             "--lang" => parsed.lang = value,
-            _ => return Err(format!("unknown option: {flag}\nusage: sdlc-todo [--session FILE] [--kit DIR] [--node PATH] [--lang en|ko]")),
+            _ => return Err(format!("unknown option: {flag}\nusage: sdlc-todo [--session FILE] [--kit DIR] [--node PATH] [--lang en|ko] [--background]")),
         }
     }
     if !parsed.kit.join("todo").join("todo.mjs").is_file() { return Err(format!("no todo/todo.mjs under --kit {}", parsed.kit.display())); }
@@ -1114,6 +1188,7 @@ fn main() -> Result<(), String> {
     }
     let args = args()?;
     let lang = Lang::parse(&args.lang);
+    let background = args.background;
     let launcher = Launcher { session_file: args.session, kit: args.kit, node: args.node, lang: args.lang };
     // Without an icon eframe sets its own default as the window and Dock icon, over the bundle's.
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../AppIcon.png")).expect("valid app icon");
@@ -1121,7 +1196,7 @@ fn main() -> Result<(), String> {
         viewport: egui::ViewportBuilder::default().with_title(t(lang, "title")).with_icon(icon).with_inner_size([600.0, 820.0]).with_min_inner_size([420.0, 480.0]),
         ..Default::default()
     };
-    eframe::run_native("sdlc-todo", options, Box::new(move |cc| Ok(Box::new(App::new(cc, launcher, lang))))).map_err(|e| e.to_string())
+    eframe::run_native("sdlc-todo", options, Box::new(move |cc| Ok(Box::new(App::new(cc, launcher, lang, background))))).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

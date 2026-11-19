@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync, realpathSync, statSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, renameSync, symlinkSync, realpathSync, statSync, existsSync } from 'node:fs';
 import { tmpdir, networkInterfaces } from 'node:os';
 import { dirname, join, resolve, relative as pathRelative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,7 +41,8 @@ async function web(t, options = {}) {
   const root = mkdtempSync(join(tmpdir(), 'sdlc-todo-web-'));
   const file = join(root, 'todo.md');
   let opened;
-  const server = await startWeb({ file, kit, port: 0, open: false, onUrl(url) { opened = url; }, ...options });
+  // A temp feed: no test reads or watches ~/.sdlc/todo-feed.json.
+  const server = await startWeb({ file, kit, port: 0, open: false, onUrl(url) { opened = url; }, feed: join(root, 'feed.json'), ...options });
   t.after(async () => { await server.close(); rmSync(root, { recursive: true, force: true }); });
   const url = new URL(opened || server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get('t');
@@ -694,7 +695,7 @@ if [ "$1" = status ]; then
   printf '{"store":"%s/.sdlc","features":[{"slug":"probe","phase":"intent","state":"NEEDS-HUMAN","action":"approve intent --human"}]}\\n' "$PWD"
 fi
 `);
-  const server = await startWeb({ file: ctx.file, kit: stub, onUrl() {} });
+  const server = await startWeb({ file: ctx.file, kit: stub, onUrl() {}, feed: join(ctx.root, 'feed.json') });
   t.after(() => server.close());
   const url = new URL(server.url), token = new URLSearchParams(url.hash.slice(1)).get('t');
   const target = { ...ctx, url, token };
@@ -737,7 +738,7 @@ test('session file shares the running server with the owner only and goes away o
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const file = join(root, 'todo.md'), session = join(root, 'todo-web.json');
   await core.add(file, 'Needs nothing yet');
-  const server = await startWeb({ file, kit, port: 0, open: false, onUrl() {}, session });
+  const server = await startWeb({ file, kit, port: 0, open: false, onUrl() {}, session, feed: join(dirname(file), 'feed.json') });
   const stored = JSON.parse(readFileSync(session, 'utf8'));
   assert.match(stored.token, /^[a-f0-9]{32}$/);
   assert.equal(stored.pid, process.pid);
@@ -808,4 +809,48 @@ test('artifact syncs only the requested item, not every open sdlc item', async t
   const model = core.load(ctx.file);
   assert.equal(model.items.find(i => i.id === item.id).sdlc.state, 'NEEDS-HUMAN', 'the shown item is synced');
   assert.equal(model.items.find(i => i.id === other.id).sdlc.state, '', 'another item keeps its last state (no status call)');
+});
+
+test('feed: without SDLC_TODO_FEED the feed sits beside the list, never in ~/.sdlc for another list', async () => {
+  const { feedPath } = await import('../todo/web.mjs');
+  const saved = process.env.SDLC_TODO_FEED;
+  delete process.env.SDLC_TODO_FEED;
+  try { assert.equal(feedPath('/tmp/x/todo.md'), join('/tmp/x', 'todo-feed.json')); }
+  finally { if (saved !== undefined) process.env.SDLC_TODO_FEED = saved; }
+});
+
+test('feed: /api/feed needs the token like every /api route; a missing feed is no feed', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'sdlc-todo-feed-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const ctx = await web(t, { feed: join(dir, 'missing', 'feed.json') });
+  for (const token of [null, '0'.repeat(32)]) assert.equal((await request(ctx, '/api/feed', { token })).status, 403);
+  const response = await request(ctx, '/api/feed');
+  assert.equal(response.status, 200, response.text);
+  assert.deepEqual(response.json, { feed: null, error: '' });
+  const snapshot = await request(ctx, '/api/items');
+  assert.equal(snapshot.json.feed, null);
+  assert.equal(snapshot.json.feedError, undefined);
+});
+
+test('feed: an invalid feed says so, and an atomic replacement reaches the live stream', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'sdlc-todo-feed-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const feed = join(dir, 'feed.json');
+  writeFileSync(feed, '{"version":1,"items":');
+  const ctx = await web(t, { feed });
+  assert.deepEqual((await request(ctx, '/api/feed')).json, { feed: null, error: 'feed is not valid JSON' });
+  assert.equal((await request(ctx, '/api/items')).json.feedError, 'feed is not valid JSON');
+  const waitFor = eventStream(ctx, t);
+  await waitFor(value => Array.isArray(value.items));
+  const replaced = waitFor(value => value.feed?.source === '<b>line</b>', 3000);
+  writeFileSync(`${feed}.tmp`, JSON.stringify({ version: 1, source: '<b>line</b>', status: { state: 'running' } }));
+  renameSync(`${feed}.tmp`, feed);
+  const frame = await replaced;
+  assert.equal(frame.feedError, undefined);
+  assert.deepEqual((await request(ctx, '/api/feed')).json.feed.status, { state: 'running' }, 'text stays as written; the page shows it as text');
+  const gone = waitFor(value => value.feed === null && value.feedError === undefined, 3000);
+  rmSync(feed);
+  await gone;
+  writeFileSync(feed, '[1,2]');
+  await waitFor(value => value.feedError === 'feed is not a JSON object', 3000);
 });
