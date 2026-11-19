@@ -17,6 +17,7 @@ This release is major because the default screen changed: the page opens on the 
 
 ## Verification
 
+- CI selftest passed on ubuntu, macos and windows (PR #95).
 - `node --test tests/*.test.mjs`: 232 tests, 226 pass, 6 fail, all timing failures under machine load (`HTTP request timed out`, `timed out waiting for TUI state`, `timed out waiting for lock`). Rerun alone, 5 of the 6 pass. The sixth, "S14: twenty parallel CLI writers…", also fails on the previous release commit 518a1d6, and this release does not touch the lock code.
 - New tests cover board card grouping, lane and column with and without a feed, a feed that must not hide a card needing the human or move an open card to done, feed endpoint auth, a missing or invalid feed, the single-window rule, and test helpers that never read the real feed. `tests/todo-board.test.mjs`, `tests/todo-page.test.mjs` and `tests/todo-web.test.mjs` pass.
 - `todo/app`: `cargo build --release` passes, and `cargo test --release --offline` passes 8 tests.
