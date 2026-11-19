@@ -36,6 +36,7 @@ A browser check against the baseline also found defects that were already there:
 
 ## Verification
 
+- CI selftest passed on ubuntu, macos and windows (PR #96).
 - `node --test tests/*.test.mjs`: 232 tests, 223 pass, 9 fail. All 9 are timing failures under machine load: `HTTP request timed out` ×7, `timed out waiting for TUI state` ×1, and the S14 lock test, which also failed for v3.0.0. Run alone, `tests/todo-web.test.mjs` passes 44 of 47 on both the previous release (634b126) and this branch, each time with 3 different HTTP timeouts. `tests/todo-page.test.mjs`, `tests/todo-board.test.mjs` and `tests/todo-i18n.test.mjs` pass all 61 tests.
 - A browser gate in Chrome used a copy of a real 40-item list and a real factory feed. It covered 1440×900 in light and dark, the open decision panel, Runs and Health, 390×844, 200% page zoom and 200% text zoom. All 20 checks pass:
   - no page overflow and no cut text;
