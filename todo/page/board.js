@@ -87,7 +87,9 @@ function currentView() {
 function syncView() {
   const view = currentView();
   document.body.dataset.view = view;
-  $('board-view').hidden = view !== 'board';
+  // The board appears whole with the first snapshot; a placeholder pushed down by it would count as a layout shift.
+  $('board-view').hidden = view !== 'board' || !loaded;
+  $('board-loading').hidden = view !== 'board' || loaded;
   $('runs-view').hidden = view !== 'runs';
   $('health-view').hidden = view !== 'health';
   $('list-view').hidden = view !== 'list';
@@ -129,8 +131,9 @@ function renderStrip() {
   const counts = $('board-counts');
   const parts = [['you', 'board.tally.you'], ['agent', 'board.tally.agent'], ['others', 'board.tally.others'], ['blocked', 'board.tally.blocked']]
     .map(([lane, key]) => {
-      const part = el('span', `count-part lane-${lane}`);
-      part.append(el('span', '', t(key)), el('b', '', String(count(lane))));
+      const n = count(lane);
+      const part = el('span', `count-part lane-${lane}${n ? '' : ' zero'}`);
+      part.append(el('span', '', t(key)), el('b', '', String(n)));
       return part;
     });
   counts.replaceChildren(...parts);
@@ -189,7 +192,8 @@ function buildGrid(columns) {
       toggle.type = 'button';
       toggle.id = 'done-toggle';
       toggle.setAttribute('aria-expanded', String(doneOpen));
-      toggle.append(el('span', 'col-name'), el('span', 'col-count'));
+      // Spaces between the parts keep the spoken name matching the visible words (label in name).
+      toggle.append(el('span', 'col-name'), ' ', el('span', 'col-count'));
       head.append(toggle);
     } else head.append(el('span', 'col-name'), el('span', 'col-count'));
     grid.append(head);
@@ -225,11 +229,13 @@ function cardNode(card, now) {
     node.dataset.key = card.key;
     const top = el('span', 'card-top'), meta = el('span', 'card-meta');
     node._refs = { key: el('span', 'card-key'), proj: el('span', 'card-proj'), title: el('span', 'card-title'),
-      chip: el('span', 'card-chip'), age: el('span', 'card-age'), sent: el('span', 'card-sent'), dot: el('span', 'status-dot') };
+      chip: el('span', 'card-chip'), age: el('span', 'card-age'), sent: el('span', 'card-sent'), dot: el('span', 'status-dot'),
+      status: el('span', 'visually-hidden') };
     const r = node._refs;
-    top.append(r.key, r.proj);
-    meta.append(r.chip, r.age, r.sent, r.dot);
-    node.append(top, r.title, meta);
+    // Spaces between the parts keep words apart in the name read from the card's text.
+    top.append(r.key, ' ', r.proj);
+    meta.append(r.chip, ' ', r.age, ' ', r.sent, ' ', r.status, r.dot);
+    node.append(top, ' ', r.title, ' ', meta);
     nodes.set(card.key, node);
   }
   const r = node._refs, words = cardWords(card), proj = projectChip(card), age = ageOf(card, now);
@@ -252,7 +258,8 @@ function cardNode(card, now) {
     node.dataset.tone = toneOf(card);
     node.classList.toggle('edge', card.pinned || card.needsHuman);
     node.title = (card.work || card.target).title;
-    node.setAttribute('aria-label', [words.key, words.key ? words.title : '', proj, card.chip, status, age, card.sent ? t('board.sent') : ''].filter(Boolean).join(' · '));
+    // The card's name is its visible words (a narrow cell hides the project chip from both), then the dot's status.
+    r.status.textContent = status;
   }
   node.setAttribute('aria-current', String(card.key === selectedKey));
   node._card = card;
@@ -264,7 +271,6 @@ function renderBoard(now) {
   const columns = [...(general ? ['general'] : []), ...boardColumns, 'done'];
   const signature = JSON.stringify([columns, doneOpen]);
   if (signature !== layout) { layout = signature; buildGrid(columns); }
-  $('board-loading').hidden = loaded;
   $('board').hidden = !loaded;
   const grid = $('board');
   for (const head of grid.querySelectorAll('.col-head[data-column]')) {
@@ -273,12 +279,17 @@ function renderBoard(now) {
     head.querySelector('.col-count').textContent = String(visible.filter(card => card.column === column).length);
   }
   const done = $('done-toggle');
-  if (done) done.setAttribute('aria-label', t(doneOpen ? 'board.doneHide' : 'board.doneShow'));
+  const doneCount = visible.filter(card => card.column === 'done').length;
+  if (done) done.setAttribute('aria-label', `${t('board.column.done')} ${doneCount}, ${t(doneOpen ? 'board.doneHide' : 'board.doneShow')}`);
   for (const head of grid.querySelectorAll('.lane-head')) {
     const lane = head.dataset.lane, here = cards.filter(card => card.lane === lane && !['done', 'legacy'].includes(card.column));
     const hidden = showStale ? 0 : here.filter(card => card.stale).length;
     head.querySelector('.lane-name').textContent = t(`board.lane.${lane}`);
     head.querySelector('.lane-count').textContent = [t('board.count', { count: here.length - hidden }), hidden ? t('board.hidden', { count: hidden }) : ''].filter(Boolean).join(' · ');
+    // An empty lane shrinks to its label; its cells follow.
+    const none = here.length - hidden === 0;
+    head.toggleAttribute('data-empty', none);
+    for (const [key, cell] of cells) if (key.startsWith(`${lane}|`)) cell.toggleAttribute('data-empty', none);
     const empty = head.querySelector('.lane-empty');
     empty.textContent = lane === 'you' && !here.length && loaded ? t('board.youEmpty') : '';
     empty.hidden = !empty.textContent;
