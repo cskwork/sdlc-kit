@@ -336,7 +336,7 @@ test('choices: open items that need you and share a ticket link list together un
     const link = { label: 'A20-1462', url: 'https://jira/browse/A20-1462' };
     const ask = (id, extra = {}) => ({ id, title: id, done: false, status: 'waiting', waiting: 'q', events: [], notes: [], ...extra });
     apply({ items: [ask('d35', { link }), ask('other'), ask('busy', { link, status: 'workable' }), ask('d36', { link })] });
-    document.getElementById('open').children.map(li => li._head ? 'head:' + li.textContent : li.dataset.id);
+    document.getElementById('open').children.map(li => li._head ? 'head:' + li._heading.textContent : li.dataset.id);
   `, p.context);
   assert.deepEqual(order, ['head:A20-1462', 'd35', 'd36', 'other', 'busy']);
 });

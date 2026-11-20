@@ -6,6 +6,7 @@
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <title>To-do board</title>
+<link rel="icon" href="favicon.png">
 <link rel="stylesheet" href="app.css">
 <script type="module" src="app.js"></script>
 <script type="module" src="board.js"></script>
@@ -31,10 +32,10 @@
   </div>
 </header>
 <p id="feed-alerts" class="alerts" role="status" hidden></p>
+<p id="board-loading" class="board-loading" data-i18n="board.loading">Loading the board…</p>
 
 <div id="board-view" class="board-view">
   <main class="board-scroll" aria-label="Board" data-i18n-label="board.title">
-    <p id="board-loading" class="board-loading" data-i18n="board.loading">Loading the board…</p>
     <div id="board" class="board" hidden></div>
     <details id="legacy" class="legacy" hidden>
       <summary id="legacy-title"></summary>

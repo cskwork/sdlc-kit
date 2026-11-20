@@ -21,6 +21,7 @@ const assets = new Map([
   ['/app.css', ['page/app.css', 'text/css; charset=utf-8']],
   ['/markdown.js', ['page/markdown.js', js]],
   ['/board.js', ['page/board.js', js]],
+  ['/favicon.png', ['app/AppIcon.png', 'image/png']],
   ['/i18n.mjs', ['i18n.mjs', js]],
   ['/status.mjs', ['status.mjs', js]],
   ...languages.map(language => [`/locales/${language}.mjs`, [`locales/${language}.mjs`, js]])

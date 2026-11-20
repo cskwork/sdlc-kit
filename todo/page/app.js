@@ -279,13 +279,17 @@ const heads = new Map(); // link url -> li
 function headRow(ticket) {
   let li = heads.get(ticket.url);
   if (!li) {
+    // The heading sits inside the item: a list may only hold list items.
     li = el('li', 'ticket-head');
-    li.setAttribute('role', 'heading');
-    li.setAttribute('aria-level', '3');
+    const heading = el('span');
+    heading.setAttribute('role', 'heading');
+    heading.setAttribute('aria-level', '3');
+    li.append(heading);
+    li._heading = heading;
     li._head = ticket.url;
     heads.set(ticket.url, li);
   }
-  if (li.textContent !== ticket.label) li.textContent = ticket.label;
+  if (li._heading.textContent !== ticket.label) li._heading.textContent = ticket.label;
   return li;
 }
 function patchList(list, wanted, groups = false) {
@@ -412,7 +416,12 @@ function startEdit(li) {
     (next?.querySelector('[data-role="title"]') || $('add-text')).focus();
   };
   input.addEventListener('keydown', event => {
-    if (event.key === 'Enter') { event.preventDefault(); finish(true); }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      // Enter also confirms a Hangul (IME) syllable; committing then would cut the title short. Safari reports it as 229.
+      if (event.isComposing || event.keyCode === 229) return;
+      finish(true);
+    }
     else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(false); }
   });
   // Only Enter commits: moving a live row can blur its editor without a human decision.
