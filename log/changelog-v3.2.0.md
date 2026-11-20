@@ -18,6 +18,7 @@ The decision panel beside the board had a fixed width: 26% of the window, betwee
 
 ## Verification
 
+- CI selftest on ubuntu, macos and windows gates the merge (PR #97; `main` requires all three).
 - `node --test tests/*.test.mjs`: 232 tests, 226 pass, 6 fail. All 6 are timing failures under machine load: `HTTP request timed out` ×4, `timed out waiting for TUI state`, and `SSE change did not arrive within one second`. This release changes only page files. `tests/todo-page.test.mjs`, `tests/todo-board.test.mjs` and `tests/todo-i18n.test.mjs` pass all 61 tests.
 - A browser check in Chrome at 1440×900 used a copy of a real list and feed. All 14 checks pass:
   - the handle is hidden while the panel is closed, and shown when it opens;
