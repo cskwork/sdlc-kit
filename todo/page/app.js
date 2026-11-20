@@ -25,6 +25,7 @@ function setLanguage(next) {
   for (const node of document.querySelectorAll('[data-i18n]')) node.textContent = t(node.dataset.i18n);
   for (const node of document.querySelectorAll('[data-i18n-label]')) node.setAttribute('aria-label', t(node.dataset.i18nLabel));
   for (const node of document.querySelectorAll('[data-i18n-placeholder]')) node.placeholder = t(node.dataset.i18nPlaceholder);
+  for (const node of document.querySelectorAll('[data-i18n-title]')) node.title = t(node.dataset.i18nTitle);
   const shown = ['error-text', 'approve-error', 'reply-error', 'live-text', 'artifact-title', 'approve-submit', 'approve-help'].map($);
   for (const node of [...shown, ...$('artifact').children]) if (node._message) node.textContent = say(node._message);
   detailVersion = '';
