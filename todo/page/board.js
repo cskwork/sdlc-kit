@@ -121,6 +121,7 @@ function render() {
   if (view === 'runs') renderRuns(now);
   if (view === 'health') renderHealth();
   renderPanel(now);
+  $('panel-resize').hidden = $('panel').hidden;
   const yours = cards.filter(card => card.lane === 'you').length;
   document.title = yours ? `(${yours}) ${t('board.title')}` : t('board.title');
 }
@@ -370,6 +371,73 @@ document.addEventListener('keydown', event => {
   if (event.key === 'ArrowRight' || event.key === 'j') { event.preventDefault(); step(1); }
   else if (event.key === 'ArrowLeft' || event.key === 'k') { event.preventDefault(); step(-1); }
 });
+
+// ---------- panel width ----------
+// The handle on the panel's left edge sets --panel-size; CSS clamps it, so a smaller window never hides the board.
+// Drag it, click it to switch between wide and the default, or use ←/→ (Shift for bigger steps) and Home/End.
+// The width is kept in localStorage, which belongs to this server's port, so a server restart starts at the default.
+const resizer = $('panel-resize'), widthKey = 'sdlc-todo.panelWidth';
+const remPx = () => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+function widthBounds() {
+  const total = $('board-view').clientWidth, min = 20 * remPx();
+  return { total, min, max: Math.max(min, total - 24 * remPx()) };
+}
+function setPanelWidth(px) {
+  const { min, max } = widthBounds();
+  const width = Math.round(Math.min(max, Math.max(min, px)));
+  document.documentElement.style.setProperty('--panel-size', `${width}px`);
+  try { localStorage.setItem(widthKey, String(width)); } catch { /* private mode: this window only */ }
+}
+function resetPanelWidth() {
+  document.documentElement.style.removeProperty('--panel-size');
+  try { localStorage.removeItem(widthKey); } catch { /* nothing kept */ }
+}
+// One click or Enter: wide (half the board) from anything narrower, else back to the default.
+function togglePanelWidth() {
+  const { total } = widthBounds();
+  if ($('panel').offsetWidth < total / 2 - 8) setPanelWidth(total / 2); else resetPanelWidth();
+}
+try { const kept = Number(localStorage.getItem(widthKey)); if (kept > 0) document.documentElement.style.setProperty('--panel-size', `${kept}px`); } catch { /* none */ }
+let drag = null;
+resizer.addEventListener('pointerdown', event => {
+  if (event.button !== 0) return;
+  drag = { x: event.clientX, width: $('panel').offsetWidth, moved: false };
+  resizer.setPointerCapture(event.pointerId);
+});
+resizer.addEventListener('pointermove', event => {
+  if (!drag || !resizer.hasPointerCapture(event.pointerId)) return;
+  const dx = drag.x - event.clientX;
+  if (!drag.moved && Math.abs(dx) < 4) return; // a click, not a drag, until it moves 4px
+  drag.moved = true;
+  resizer.classList.add('dragging');
+  document.body.classList.add('resizing');
+  setPanelWidth(drag.width + dx);
+});
+resizer.addEventListener('lostpointercapture', () => {
+  if (drag && !drag.moved) togglePanelWidth();
+  drag = null;
+  resizer.classList.remove('dragging');
+  document.body.classList.remove('resizing');
+});
+resizer.addEventListener('keydown', event => {
+  if (event.key === 'Enter') { event.preventDefault(); togglePanelWidth(); return; }
+  const width = $('panel').offsetWidth, step = event.shiftKey ? 64 : 16, { min, max } = widthBounds();
+  const next = { ArrowLeft: width + step, ArrowRight: width - step, Home: min, End: max }[event.key];
+  if (next === undefined) return; // Escape still closes the panel
+  event.preventDefault();
+  event.stopPropagation(); // ←/→ here resize; they must not page to another card
+  setPanelWidth(next);
+});
+// The separator reports the panel's share of the board, whatever moved it (handle, window or text size).
+new ResizeObserver(() => {
+  const { total, min, max } = widthBounds();
+  if (!total) return;
+  const share = width => String(Math.round(width / total * 100));
+  resizer.setAttribute('aria-valuenow', share($('panel').offsetWidth));
+  resizer.setAttribute('aria-valuemin', share(min));
+  resizer.setAttribute('aria-valuemax', share(max));
+  resizer.setAttribute('aria-valuetext', t('panel.resizeValue', { share: share($('panel').offsetWidth) }));
+}).observe($('panel'));
 
 const skeletonMs = 1500;
 const docKey = item => `${item.id}|${statusOf(item).kind}`;

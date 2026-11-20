@@ -406,7 +406,7 @@ body[data-view="list"] .counts { display: none; }
 .seg button:hover { background: transparent; color: var(--ink); }
 .seg button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 1px 2px var(--shadow); }
 
-.board-view { display: grid; grid-template-columns: minmax(0, 1fr) auto; flex: 1; min-height: 0; }
+.board-view { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; flex: 1; min-height: 0; }
 .board-scroll { min-width: 0; overflow: auto; padding: 1rem 1.5rem 2rem; overscroll-behavior: contain; }
 .board-loading { padding: 3rem 1rem; text-align: center; color: var(--muted); }
 .board {
@@ -485,10 +485,20 @@ body[data-view="list"] .counts { display: none; }
 .legacy-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.5rem; }
 
 /* side panel: beside the board, never over it */
+/* A width set with the handle (--panel-size) stays between 20rem and leaving the board 24rem. */
 .panel {
-  width: var(--panel-w); min-height: 0; overflow-y: auto; padding: 0 1.5rem 2rem; background: var(--paper);
-  border-left: 1px solid var(--line); animation: panel-in 0.18s ease-out; overscroll-behavior: contain;
+  width: clamp(20rem, var(--panel-size, var(--panel-w)), calc(100vw - 24rem)); min-height: 0; overflow-y: auto;
+  padding: 0 1.5rem 2rem; background: var(--paper); animation: panel-in 0.18s ease-out; overscroll-behavior: contain;
 }
+/* The panel's left edge is its resize handle: drag it, click it (wide or default), or use the arrow keys. */
+.panel-resize {
+  display: flex; justify-content: flex-end; width: 0.75rem; cursor: col-resize;
+  touch-action: none; -webkit-user-select: none; user-select: none;
+}
+.panel-resize::before { content: ""; width: 1px; background: var(--line); transition: width 0.15s ease, background-color 0.15s ease; }
+.panel-resize:hover::before, .panel-resize:focus-visible::before, .panel-resize.dragging::before { width: 3px; background: var(--accent); }
+.panel-resize:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: 0; }
+body.resizing { cursor: col-resize; -webkit-user-select: none; user-select: none; }
 @keyframes panel-in { from { opacity: 0; transform: translateX(10px); } }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .panel-bar {
