@@ -331,7 +331,8 @@ $('legacy-cards').addEventListener('click', event => {
 });
 
 // ---------- panel ----------
-const drafts = new Map(); // target item id -> reply draft
+const drafts = new Map(); // target item id -> { reply, seed }: the list's draft shape, so todoPage.seedDraft applies
+const draftOf = id => { if (!drafts.has(id)) drafts.set(id, { reply: '', seed: '' }); return drafts.get(id); };
 // Work documents by item and status kind: a sync can change an item's version, so the version alone would refetch
 // in a loop; a new kind (a gate opened or closed) fetches again. 409 on approval drops the entry.
 const documents = new Map(); // `${id}|${kind}` -> { markdown, gate, sha, version } | { error } | { pending }
@@ -473,11 +474,13 @@ function renderPanel(now) {
   const sig = JSON.stringify([page.lang, card.key, card.members.map(m => [m.id, m.version, m.working?.what]), card.lane, card.entry, doc, loading, sending, showDetails]);
   if (sig === panelSig) return;
   panelSig = sig;
+  // The agent's suggested answer fills the reply field until the person edits it; a new suggestion replaces an unedited one.
+  const draft = draftOf(item.id), seeded = page.seedDraft(draft, item);
   if (panelTarget?.id !== item.id) {
-    $('panel-reply-text').value = drafts.get(item.id) || '';
+    $('panel-reply-text').value = draft.reply;
     $('panel-error').hidden = true;
     $('panel-note').value = '';
-  }
+  } else if (seeded !== null) $('panel-reply-text').value = seeded;
   panelTarget = item;
   panelCard = card;
   const words = cardWords(card), status = statusOf(item), glance = doc && !doc.pending && !doc.error ? glanceOf(doc.markdown) : null;
@@ -661,7 +664,7 @@ $('panel-reply').addEventListener('submit', event => {
   if (!text) { $('panel-error').textContent = t('reply.empty'); $('panel-error').hidden = false; $('panel-reply-text').focus(); return; }
   if (panelCard && panelTarget) answer(panelCard, panelTarget, text);
 });
-$('panel-reply-text').addEventListener('input', () => { if (panelTarget) drafts.set(panelTarget.id, $('panel-reply-text').value); });
+$('panel-reply-text').addEventListener('input', () => { if (panelTarget) draftOf(panelTarget.id).reply = $('panel-reply-text').value; });
 $('panel-reply-text').addEventListener('keydown', event => {
   if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); $('panel-reply').requestSubmit(); }
 });
@@ -726,8 +729,25 @@ const dayKey = ms => { const d = new Date(ms); return `${d.getFullYear()}-${Stri
 function runsOf() {
   return list(page.feed?.runs).map(record).filter(Boolean).map(run => ({
     key: str(run.key), label: str(run.label), start: timeOf(str(run.startedAt)), end: timeOf(str(run.endedAt)),
-    outcome: ['ok', 'fail'].includes(run.outcome) ? run.outcome : 'unknown'
+    outcome: ['ok', 'fail'].includes(run.outcome) ? run.outcome : 'unknown',
+    // Optional since the feed added them; null when a run's cost or tokens are unknown or the feed predates them.
+    costUsd: Number.isFinite(run.costUsd) && run.costUsd >= 0 ? run.costUsd : null,
+    tokens: Number.isSafeInteger(run.tokens) && run.tokens >= 0 ? run.tokens : null
   })).filter(run => Number.isFinite(run.start));
+}
+const usd = amount => t('runs.cost', { amount: amount.toFixed(2) });
+const tokenCount = count => t('runs.tokens', { tokens: new Intl.NumberFormat(page.lang, { notation: 'compact' }).format(count) });
+// A run's hover text: its time and result, then its cost and tokens when the feed knows them.
+function runTitle(run) {
+  return [`${clock(run.start)}${Number.isFinite(run.end) ? `–${clock(run.end)}` : ''}`, t(`runs.${run.outcome}`),
+    run.costUsd !== null ? usd(run.costUsd) : '', run.tokens !== null ? tokenCount(run.tokens) : ''].filter(Boolean).join(' · ');
+}
+// The day's known cost, and a warning when some of its runs have none; nothing when no run has a cost.
+function costSummary(runs) {
+  const known = runs.filter(run => run.costUsd !== null);
+  if (!known.length) return '';
+  const total = usd(known.reduce((sum, run) => sum + run.costUsd, 0));
+  return [t('runs.costTotal', { amount: total }), known.length < runs.length ? t('runs.costPartial') : ''].filter(Boolean).join(' · ');
 }
 function renderRuns(now) {
   const runs = runsOf(), today = dayKey(now);
@@ -748,7 +768,7 @@ function renderRuns(now) {
   const counts = { ok: 0, fail: 0, unknown: 0 };
   for (const run of here) counts[run.outcome]++;
   $('runs-title').textContent = t('runs.title', { date: dayLabel(runsDay), count: here.length });
-  $('runs-summary').textContent = t('runs.summary', counts);
+  $('runs-summary').textContent = [t('runs.summary', counts), costSummary(here)].filter(Boolean).join(' · ');
   // 08:00–19:00; runs outside the axis are clamped to its edge.
   const base = new Date(`${runsDay}T08:00`).getTime(), span = 11 * 3600000;
   const axis = $('runs-axis');
@@ -770,7 +790,7 @@ function renderRuns(now) {
     bar.style.width = `${width}%`;
     bar.style.top = `${row * 1.9}rem`;
     bar.append(el('span', 'run-bar'), el('span', 'run-label', [run.key, run.label].filter(Boolean).join(' · ')));
-    bar.title = `${clock(run.start)}${Number.isFinite(run.end) ? `–${clock(run.end)}` : ''} · ${t(`runs.${run.outcome}`)}`;
+    bar.title = runTitle(run);
     return bar;
   });
   const track = $('runs-track');
@@ -817,7 +837,8 @@ function renderHealth() {
 }
 
 // A page with an unsent answer or a request in flight is never closed for a newer window.
-page.addBusyCheck(() => sending || [...drafts.values()].some(draft => draft.trim()) || !!$('panel-note').value.trim());
+// An unedited suggestion is not the person's words, as on the list.
+page.addBusyCheck(() => sending || [...drafts.values()].some(draft => draft.reply.trim() && draft.reply !== draft.seed) || !!$('panel-note').value.trim());
 page.subscribe(() => { loaded = true; render(); });
 render();
 // Event times turn into "N days" and the clock moves on without a snapshot.

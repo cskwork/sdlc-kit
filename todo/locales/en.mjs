@@ -294,6 +294,10 @@ export default {
     'runs.unknown': 'No result',
     'runs.failCount': 'failed {count}',
     'runs.empty': 'No runs on this day.',
+    'runs.cost': '${amount}',
+    'runs.costTotal': 'cost {amount}',
+    'runs.costPartial': 'some cost unknown',
+    'runs.tokens': '{tokens} tokens',
     'health.alerts': 'Alerts',
     'health.empty': 'The automation sent no health information.'
   }
