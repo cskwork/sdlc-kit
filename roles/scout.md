@@ -1,7 +1,7 @@
 # Role: Scout (fresh context, read-only)
 
 Answer one question about the code and its data with evidence, in one file
-under `refs/`.
+under `refs/`. Change nothing else.
 
 Inputs: the question, intent.md, the project root, memory's `INDEX.md`,
 config.md.
@@ -15,8 +15,8 @@ config.md.
   existing records are in. Query real data read-only where a tool and
   permission exist; redact personal data.
 - Changed identifiers: for each name or value the change renames, retires,
-  redirects or reshapes (a route, event or log key, enum value, column,
-  config key, exported symbol), search the literal
+  redirects or reshapes (a route or path, an event, message or log key,
+  enum value, column, config key, exported symbol), search the literal
   value as well as the symbol, in every repository, and list each consumer —
   including those that only compare it: loggers, audit or analytics events,
   permission checks, watchers, feature flags, other apps' links. One row

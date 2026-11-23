@@ -1,14 +1,14 @@
 # Phase 2: Plan — explore, then document
 
 Goal: understand domain, data, logic, source of truth and user flow well
-enough to find side effects before any code. Scouts write
+enough to find side effects before code. Scouts write
 `refs/`; you compact them into one `PLAN.md`.
 
 ## 1. Scout
 
 `sdlc.sh check intent <slug>` must print GATE OPEN. Read memory's
 `INDEX.md` and phase 1's `refs/` and `logs/` first; do not re-scout a fact
-they give with a source.
+they cite.
 Dispatch scouts (`roles/scout.md`) in parallel, one per open question, each
 writing one `refs/` file:
 

@@ -181,7 +181,9 @@ sdlc.sh ship <slug> <stage> <sha> [repo] --checked "<명령>" --output "<판정 
 증거와 그 build 차수에 묶인 `stage:` 줄로 `.state`에 한 번만 기록되고(`events.log`에는 명령과
 출력이 남음), 다시 채점하거나 plan을 다시 승인하면 처음 단계부터 다시 기록합니다. 기록은 반영한 git
 저장소 단위라서, 한 저장소의 두 폴더를 가리키는 `Commit:` 줄은 기록을 함께 씁니다(`close`가
-`Shipped:` 줄을 맞추는 방식과 같음). 단계 이름은 영문자·숫자·`.`·`_`·`-`이고 한 번씩만 적습니다. `status`와 `next`는 `deliver READY · at stg (2/3)`처럼
+`Shipped:` 줄을 맞추는 방식과 같음). 단계 이름은 영문자·숫자·`.`·`_`·`-`이고 한 번씩만,
+쉼표나 공백으로 나눠 적으며 빈 항목이나 같은 줄의 `#` 주석은 허용하지 않습니다. `ship`에는 `Commit:` 줄이
+가리키는 폴더를 주고, 그 저장소의 `Commit:` 줄은 모두 반영한 트리를 담아야 합니다. `status`와 `next`는 `deliver READY · at stg (2/3)`처럼
 보여 주고, `status --json`에는 `stage`와 `stages`가 붙습니다. 그 뒤 `close <slug> shipped`는
 모든 `Commit:` 저장소가 마지막 단계에 닿아야 하고, 마지막 단계가 에이전트 손 밖이면
 `close <slug> shipped --at <stage> "<이유>"`로 기록된 단계를 지정합니다. 이유와 단계는 닫힘

@@ -56,11 +56,15 @@ status_extra() {
   done < <(printf '%s' "$stagerecs")
   printf ']'
 }
-# config.md stages: into stagelist (the words, for messages) and the array stages, read without globbing.
-# A name outside letters, digits, ".", "_" and "-", or a name listed twice, is refused.
+# config.md stages: into stagelist (the names, for messages) and the array stages, read without globbing.
+# Read raw (raw_setting keeps `, * and #, which value() would drop): items are separated by commas or
+# spaces; an empty item between commas, a name outside letters, digits, ".", "_" and "-", or a name listed
+# twice is refused.
 stage_list() {
-  local s seen=' '
-  stagelist=$(value "$STORE/config.md" stages | tr ',' ' ' | awk '{$1=$1;print}')
+  local raw s seen=' '
+  raw=$(raw_setting stages)
+  if [ -n "${raw//[[:space:],]/}" ]; then case ",${raw//[[:space:]]/}," in *,,*) die "config.md stages: has an empty item: '$raw'";; esac; else raw=; fi
+  stagelist=$(printf '%s' "$raw" | tr ',' ' ' | awk '{$1=$1;print}')
   stages=(); read -r -a stages < <(printf '%s\n' "$stagelist")
   for s in ${stages[@]+"${stages[@]}"}; do
     [[ $s =~ ^[A-Za-z0-9._-]+$ ]] || die "config.md stages: '$s' is not a stage name (letters, digits, '.', '_' and '-')"
@@ -111,7 +115,7 @@ ship_tree_check() {
 }
 # ship <slug> <stage> <sha> [repo] --checked <command> --output <line>: records one stage of the ladder.
 ship_command() {
-  local susage='ship <slug> <stage> <sha> [repo] --checked "<command>" --output "<deciding line>"' args=() schecked= soutput= stage ssha srepo pos i ci= stop full s
+  local susage='ship <slug> <stage> <sha> [repo] --checked "<command>" --output "<deciding line>"' args=() schecked= soutput= stage ssha srepo pos i ci= stop sreal full s
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --checked) [ "$#" -ge 2 ] && [ -z "$schecked" ] || die "$susage" 2; schecked=$(one_line "$2" | tr '\t' ' '); shift 2;;
@@ -131,12 +135,18 @@ ship_command() {
   validate_evidence || exit 1
   delivery_authority "$target" || die "$dreason"
   repo_path "$srepo"; [ -d "$REPO" ] || die "repo '$srepo' is not a directory under the project root"
-  stop=$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null) || die "not a git repository: $srepo"
+  sreal=$(cd "$REPO" && pwd -P); stop=$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null) || die "not a git repository: $srepo"
+  # The folder must be one a Commit line names (aliases such as "x/." count); every Commit line in the same
+  # repository must hold the shipped tree, so a differing one fails here rather than at close.
   for ((i=0;i<${#commits[@]};i++)); do
-    repo_path "${repos[i]}"; [ "$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null)" != "$stop" ] || { ci=$i; break; }
+    repo_path "${repos[i]}"; [ "$(cd "$REPO" 2>/dev/null && pwd -P)" != "$sreal" ] || { ci=$i; break; }
   done
   [ -n "$ci" ] || die "no Commit line for repo '$srepo' in evidence.md: ship a repository QA verified"
-  repo_path "${repos[ci]}"; ship_tree_check "$REPO" "${commits[ci]}" "$ssha" "$target"
+  for ((i=0;i<${#commits[@]};i++)); do
+    repo_path "${repos[i]}"; [ "$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null)" = "$stop" ] || continue
+    ship_tree_check "$REPO" "${commits[i]}" "$ssha" "$target"
+  done
+  repo_path "${repos[ci]}"
   # A later stage needs every earlier one recorded for this evidence first; a stage is recorded once per repository.
   ! has_stage "$stage" "$stop" || die "$stage is already recorded for this evidence in ${repos[ci]}: ship the next stage, or score new evidence to start the ladder again"
   for s in "${stages[@]}"; do [ "$s" != "$stage" ] || break; has_stage "$s" "$stop" || die "out of order: ship $s before $stage (config.md stages: $stagelist)"; done

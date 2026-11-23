@@ -233,7 +233,10 @@ and its build entry (the one record; `events.log` keeps the command and its
 output), so a new score or a re-approved plan starts the ladder again. A
 record belongs to the git repository shipped, so `Commit:` lines for two
 folders of one repository share it, as `close` matches `Shipped:` lines.
-Stage names are letters, digits, `.`, `_` and `-`, each listed once. `status` and `next` show `deliver READY · at
+Stage names are letters, digits, `.`, `_` and `-`, each listed once, separated
+by commas or spaces, with no empty item and no `#` comment on the line. `ship`
+takes a folder some `Commit:` line names, and every `Commit:` line in that
+repository must hold the shipped tree. `status` and `next` show `deliver READY · at
 stg (2/3)`; `status --json` adds `stage` and `stages`. `close <slug> shipped`
 then needs the last stage for every `Commit:` repository, or `close <slug>
 shipped --at <stage> "<reason>"` naming a recorded one when the rest is out of

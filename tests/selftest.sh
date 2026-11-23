@@ -1471,10 +1471,13 @@ regression_stages() {
   for stage in dev stg prd; do expect 0 ship "$SLUG" "$stage" "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; done
   expect 0 close "$SLUG" shipped 'every stage shipped'
   ok 'close shipped after every stage; a new score starts the ladder again'
-  mkdir -p svc-a svc-b; printf a > svc-a/x; printf b > svc-b/x; git add svc-a svc-b; git commit -qm 'two folders, one repository'; SHA=$(git rev-parse HEAD)
+  mkdir -p svc-a svc-b svc-c; printf a > svc-a/x; printf b > svc-b/x; printf c > svc-c/x; git add svc-a svc-b svc-c; git commit -qm 'two folders, one repository'; SHA=$(git rev-parse HEAD)
   ready mono 1; evidence; replace '/^- Commit:/ {print "- Commit: '"$SHA"' svc-a"; print "- Commit: '"$SHA"' svc-b"; next} {print}' "$E"; route deliver; delivery
-  expect 0 ship "$SLUG" dev "$SHA" svc-a --checked 'git rev-parse HEAD' --output "$SHA"
-  expect 1 ship "$SLUG" dev "$SHA" svc-b --checked 'git rev-parse HEAD' --output "$SHA"; contains 'dev is already recorded'
+  expect 1 ship "$SLUG" dev "$SHA" svc-c --checked 'git rev-parse HEAD' --output "$SHA"; contains "no Commit line for repo 'svc-c'"
+  expect 1 ship "$SLUG" dev "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains "no Commit line for repo '.'"
+  expect 0 ship "$SLUG" dev "$SHA" svc-b/. --checked 'git rev-parse HEAD' --output "$SHA"; contains 'Recorded mono at dev (1/3) for svc-b.'
+  tail -1 "$F/events.log" | grep -q $'\tship\tdeliver\tdev\t'"$SHA"' svc-b · ' || fail "ship event names another folder: $(tail -1 "$F/events.log")"
+  expect 1 ship "$SLUG" dev "$SHA" svc-a --checked 'git rev-parse HEAD' --output "$SHA"; contains 'dev is already recorded'
   expect 0 next "$SLUG"; contains 'at dev (1/3): ship to stg'
   expect 0 close "$SLUG" shipped --at dev 'monorepo: later stages belong to the release team'
   ok 'stages: Commit lines for folders of one repository share its stage records'
@@ -1489,6 +1492,14 @@ regression_stages() {
   expect 1 ship "$SLUG" dev "$SHA" --checked x --output y; contains 'names dev twice'
   replace '!/^stages:/ {print}' .sdlc/config.md; printf 'stages: dev, q?a\n' >> .sdlc/config.md
   expect 1 next "$SLUG"; contains "config.md stages: 'q?a' is not a stage name"
+  for raw in 'dev, *' 'dev, `stg`' 'dev, stg # comment'; do
+    replace '!/^stages:/ {print}' .sdlc/config.md; printf 'stages: %s\n' "$raw" >> .sdlc/config.md
+    expect 1 next "$SLUG"; contains 'is not a stage name'
+  done
+  for raw in 'dev,,prd' 'dev, stg,' ', dev'; do
+    replace '!/^stages:/ {print}' .sdlc/config.md; printf 'stages: %s\n' "$raw" >> .sdlc/config.md
+    expect 1 next "$SLUG"; contains 'config.md stages: has an empty item'
+  done
   ok 'stages: a stage named twice, or a name with other characters, is refused wherever stages: is read'
 }
 # A plan that raises a risk flag names how to undo it.
@@ -1499,7 +1510,7 @@ regression_undo() {
   undo_plan ''
   expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'a risk flag says yes (migration yes): add "- Undo:'
   # The agent adds the line, so it is the agent's turn (READY), naming the human approval that follows.
-  expect 0 next "$SLUG"; contains 'READY plan: edit PLAN.md: a risk flag says yes (migration yes)'; contains 'then approve plan --human migration yes'
+  expect 0 next "$SLUG"; contains 'READY plan: edit PLAN.md: a risk flag says yes (migration yes)'; contains '; plan not approved; then approve plan --human migration yes'
   undo_plan '<flag <name> | revert <what> | config <key> | none — why>'
   expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'a risk flag says yes'
   for placeholder in 'flag <name>' 'revert <what>' 'config <key>' 'none — <why>'; do
@@ -1515,6 +1526,12 @@ regression_undo() {
   expect 0 approve plan "$SLUG" --human 'risk and undo accepted'
   feature undo-none; expect 0 approve intent "$SLUG" --human 'approved scope'
   undo_plan 'none — the new column is additive and unused'
+  expect 0 approve plan "$SLUG" --human 'risk accepted'
+  undo_plan 'none — a<b holds for every row'
+  expect 10 next "$SLUG"; contains 'NEEDS-HUMAN plan: PLAN.md changed after approval; approve plan --human migration yes'
+  undo_plan 'revert the commit <'
+  expect 0 next "$SLUG"; contains 'READY plan: edit PLAN.md: Undo: replace the placeholder'; contains '; PLAN.md changed after approval; then approve plan --human migration yes'
+  undo_plan 'none — a<b holds for every row'
   expect 0 approve plan "$SLUG" --human 'risk accepted'
   n=0; for reason in 'none—additive' 'none –additive' 'none--additive' 'none - additive' 'none: additive'; do
     n=$((n+1)); feature "undo-none-$n"; expect 0 approve intent "$SLUG" --human 'approved scope'
@@ -1535,7 +1552,8 @@ regression_undo() {
   expect 0 approve plan "$SLUG" --human 'risk accepted again'; contains 'plan already approved'
   expect 0 next "$SLUG"; contains 'READY build'
   for i in 1 2 3; do reviewed "$SLUG" fail "finding $i"; done
-  expect 10 next "$SLUG"; contains 'a risk flag says yes (migration yes)'; contains '(PLAN.md, the agent first); then stopped for the human'
+  # The human cannot approve until the line is there: the agent's turn, not an approval request.
+  expect 0 next "$SLUG"; contains 'READY build: edit PLAN.md: a risk flag says yes (migration yes)'; contains '; stopped for the human: 3 review FAILs'; contains 'then approve plan --human migration yes'
   ok 'undo: a risk plan approved before the rule stays approved; a stop names the missing Undo line'
 }
 run_regressions() {
