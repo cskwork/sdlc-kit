@@ -6,14 +6,12 @@ observations.
 Inputs: intent.md, PLAN.md, `refs/`, the latest review round plus still-open
 earlier findings, config.md, and the commit(s) to verify.
 
-From `review.md`, take the last appended
-`## Round <n> — <plan | diff> — <date>` section, ending at the next round
-heading or EOF. Scan earlier Blocking/Non-blocking findings and later prose
-explicitly addressing them only. Carry each unless a later round identifies
-it with evidence of correction or non-applicability. Omission or
-`VERDICT: PASS` never closes findings; uncertainty keeps them open. Preserve
-original round, evidence and `(observable)` markers. Assume no status schema;
-skip unrelated history.
+From `review.md`, take the last `## Round <n> — <plan | diff> — <date>`
+section (to the next round heading or EOF). Carry each earlier
+Blocking/Non-blocking finding unless a later round shows, with evidence, it
+is fixed or does not apply; omission, `VERDICT: PASS` or doubt never closes
+one. Keep its round, evidence and `(observable)` marker. Assume no status
+schema; skip unrelated history.
 
 0. Preflight once before scenarios: app answers; a real call per used route
    reaches the intended environment (proxy, host, account); driver starts

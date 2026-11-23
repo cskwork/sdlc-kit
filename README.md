@@ -122,7 +122,15 @@ always says what comes next.
   review.md     reviewer rounds, each ending in VERDICT
   evidence.md   checks, one result row per scenario, shipping
   logs/         raw output behind every PASS and FAIL; scripts/ re-runs each scenario
+  events.log    one line per state change: UTC time, command, phase after, result, detail (append-only)
 ```
+
+`sdlc.sh stats [--json] [--since YYYY-MM-DD]` reads those logs across open and
+archived slugs: counts by phase and state, median and p90 time per phase,
+score rounds, returns to plan or build, the top BLOCKED reasons (Observed of
+BLOCKED rows) and closes per week. A slug without `events.log` (one made by an
+older kit) counts as legacy and is left out of the timings. `--since` keeps closes,
+phase times and archived slugs from that date on.
 
 Closed features move to `.sdlc/archive/`, with reproducible caches under
 `logs/` (`gradle-home`, `node_modules`, `build`, … — config.md `prune:`)
@@ -179,7 +187,8 @@ Optional config.md keys, with their defaults: `transcripts:` and `peers:`
 (empty: none),
 `transcripts_max: 20`, `memory_core_kb: 2`, `memory_page_kb: 16`,
 `memory_top_kb: 64` and `memory_total_kb: 256` (index warnings),
-`dream_every: 3` and `dream_max_days: 14`,
+`dream_every: 3` and `dream_max_days: 14`, `stages:` (empty: one-step
+shipping; see Shipping in stages),
 `prune: gradle-home .gradle node_modules build .m2 target` (empty prunes
 nothing) and `archive_warn_mb: 50`.
 
@@ -203,6 +212,35 @@ agent layer that replays without model calls on later rounds. The kit
 vendors e2e's agent guide (Apache-2.0, pinned) so it works offline;
 `adapters/e2e/update.sh [version]` refreshes it.
 
+## Shipping in stages
+
+A project that ships over days — dev, then staging, then production — lists
+its stages in order in config.md: `stages: dev, stg, prd`. On a deliver route,
+`next` names the next stage, and each one reached is recorded with
+
+```bash
+sdlc.sh ship <slug> <stage> <sha> [repo] --checked "<command>" --output "<deciding line>"
+```
+
+which needs what `close shipped` needs (a current deliver route, valid
+evidence, authority for the target, a `<sha>` whose tree equals the verified
+`Commit:` of that repository and, beyond `local`, on a remote) and refuses an
+unknown stage, a stage already recorded, or one whose earlier stages are not.
+The stage goes into `.state` as a `stage:` line bound to the scored evidence
+(the one record; `events.log` keeps the command and its output), so a new
+score starts the ladder again. `status` and `next` show `deliver READY · at
+stg (2/3)`; `status --json` adds `stage` and `stages`. `close <slug> shipped`
+then needs the last stage for every `Commit:` repository, or `close <slug>
+shipped --at <stage> "<reason>"` naming a recorded one when the rest is out of
+the agent's reach; the reason and stage go into the closed note and the event.
+Without `stages:`, nothing changes and `ship` and `--at` are refused.
+
+A plan with a risk flag set to yes also names how to undo it, under Risk
+flags: `- Undo: flag <name> | revert <what> | config <key> | none — <why>`.
+`approve plan` refuses it without one; a plan with every flag `no` needs none.
+When Undo names a flag, Shipping's `Policy:` line carries its removal
+follow-up.
+
 ## Rules that never relax
 
 - **Authority is not a gate.** Data loss, migrations, public API changes,
@@ -225,7 +263,8 @@ other skill is needed.
 ## Drive it from a host
 
 `sdlc.sh status --json` lists every feature with its phase, state, score and
-route. `sdlc.sh next <slug>` exits `0` ready, `10` needs a human, `20`
+route, plus `ageDays` (since its first event, else the folder's creation),
+`lastEventAt`, `stage` and `stages`. `sdlc.sh next <slug>` exits `0` ready, `10` needs a human, `20`
 blocked, `30` done. The scripts record and report; they never run a model. An
 unattended run ships no further than your recorded words allow — a local
 commit unless you said more. Windows: run `sdlc.sh` in Git Bash or WSL.

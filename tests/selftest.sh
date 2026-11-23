@@ -1351,6 +1351,134 @@ DOC
   [ ! -e "$F/.state.lock" ] || fail 'stale lock left behind'
   ok 'state lock: a live owner blocks until the wait runs out; a dead owner is reclaimed'
 }
+# Event log: one tab-separated line per state change, moved into archive/ with the folder.
+events_of() { awk -F'\t' '{print $2 ":" $3 ":" $4}' "$1" | tr '\n' ' '; }
+regression_events() {
+  repo regression-events
+  ready evented 1; evidence; route deliver; delivery
+  [ "$(events_of "$F/events.log")" = 'new:intent:created approve:plan:intent approve:build:plan review:evidence:pass score:deliver:deliver ' ] || fail "events: $(events_of "$F/events.log")"
+  awk -F'\t' 'NF!=5 || $1!~/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/ {exit 1}' "$F/events.log" || fail 'event line is not five tab-separated fields led by an ISO UTC time'
+  grep -q $'\tscore\tdeliver\tdeliver\t1/1 (100.0%) · must 1/1 · every must PASS; threshold met$' "$F/events.log" || fail "score event detail: $(cat "$F/events.log")"
+  expect 0 status "$SLUG" --json
+  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; f=json.load(sys.stdin)["features"][0]; assert f["ageDays"]==0 and f["lastEventAt"].endswith("Z") and f["stage"] is None and f["stages"]==[], f; assert set(("slug","phase","state","action","score","route","returns_plan","returns_build","review_fails")) <= set(f)' || fail "status JSON new fields: $OUTPUT"
+  ok 'events: new, approve, review and score each append one five-field line; status JSON adds ageDays, lastEventAt, stage and stages'
+  first=$(head -1 "$F/events.log")
+  expect 0 close "$SLUG" shipped 'shipped with events'
+  A=.sdlc/archive/$SLUG/events.log; assert_file "$A"
+  [ "$(head -1 "$A")" = "$first" ] || fail 'events.log was rewritten'
+  tail -1 "$A" | grep -q $'\tclose\tdone\tshipped\tshipped with events$' || fail "close event: $(tail -1 "$A")"
+  feature failing; expect 0 approve intent "$SLUG" --human 'approved scope'; plan 1; expect 0 approve plan "$SLUG" --agent reviewed
+  reviewed "$SLUG" fail 'missing case'
+  tail -1 "$F/events.log" | grep -q $'\treview\tbuild\tfail\tround 1: missing case$' || fail "review FAIL event: $(tail -1 "$F/events.log")"
+  ok 'events: close appends its line and the log moves into archive/ unchanged; a review FAIL is logged with the build phase after it'
+  mkdir -p .sdlc/work/old-legacy
+  expect 0 status old-legacy --json
+  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; f=json.load(sys.stdin)["features"][0]; assert f["lastEventAt"] is None and f["stages"]==[] and (f["ageDays"] is None or f["ageDays"]==0), f' || fail "legacy status JSON: $OUTPUT"
+  ok 'events: a legacy folder has no last event and its age from the folder'
+}
+regression_stats() {
+  repo regression-stats
+  ready shipped-one 1; evidence; route deliver; delivery; expect 0 close "$SLUG" shipped 'stats fixture'
+  ready blocked-one 1; evidence S1:BLOCKED:; route human
+  ready returned-one 2; evidence S2:FAIL:code; route build
+  mkdir -p .sdlc/work/old-legacy
+  expect 0 stats
+  contains 'Slugs: 4 (open 3, archived 1); legacy (no events.log, left out of timings): 1'
+  contains 'done DONE: 1'; contains 'Score rounds: 3 over 3 slugs (median 1, max 1)'; contains 'Returns: 0 to plan, 1 to build (1 slugs)'
+  contains '1× observed S1'; contains ': 1 shipped, 0 dropped'
+  for p in intent plan build evidence deliver; do contains "  $p: "; done
+  ok 'stats: counts by phase and state, phase times, score rounds, returns, BLOCKED reasons, closes per week; legacy counted apart'
+  expect 0 stats --json
+  printf '%s\n' "$OUTPUT" | python3 -c '
+import json,sys; d=json.load(sys.stdin)
+assert d["slugs"]=={"total":4,"open":3,"archived":1,"legacy":1}, d["slugs"]
+assert {"phase":"done","state":"DONE","n":1} in d["counts"], d["counts"]
+assert [p["phase"] for p in d["phaseTimes"]]==["intent","plan","build","evidence","deliver"], d["phaseTimes"]
+assert all(p["p90Seconds"]>=p["medianSeconds"]>=0 for p in d["phaseTimes"])
+assert d["scoreRounds"]["total"]==3 and d["returns"]=={"plan":0,"build":1,"slugs":1}
+assert d["blocked"]==[{"reason":"observed S1","n":1}] and len(d["closesPerWeek"])==1 and d["closesPerWeek"][0]["shipped"]==1' || fail "stats JSON: $OUTPUT"
+  ok 'stats --json: the same figures as machine output'
+  expect 0 stats --json --since 2999-01-01
+  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["since"]=="2999-01-01" and d["slugs"]["archived"]==0 and d["closesPerWeek"]==[] and d["phaseTimes"]==[], d' || fail "stats --since: $OUTPUT"
+  expect 2 stats --since 11/23; contains 'stats [--json] [--since YYYY-MM-DD]'
+  ok 'stats --since leaves out earlier closes and phase times; a malformed date is refused'
+}
+# A store with stages: ships in steps; close shipped needs the last stage or --at a recorded one.
+regression_stages() {
+  repo regression-stages
+  ready plain 1; evidence; route deliver
+  expect 1 ship "$SLUG" dev "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains 'no stages: in config.md'
+  delivery; expect 1 close "$SLUG" shipped --at dev 'no ladder'; contains 'close --at needs stages: in config.md'
+  expect 0 close "$SLUG" shipped 'no ladder: unchanged'
+  ok 'stages: without stages: ship and close --at are refused and close shipped is unchanged'
+  printf 'stages: dev, stg, prd\n' >> .sdlc/config.md
+  ready ladder 1
+  expect 1 ship "$SLUG" dev "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains 'current evidence and build need a deliver route'
+  evidence; route deliver
+  expect 0 next "$SLUG"; contains "ship to dev, then sdlc.sh ship $SLUG dev"
+  expect 2 ship "$SLUG" dev "$SHA"; contains 'ship <slug> <stage> <sha> [repo] --checked'
+  expect 1 ship "$SLUG" qa "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains "unknown stage 'qa': config.md stages: dev stg prd"
+  expect 1 ship "$SLUG" stg "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains 'out of order: ship dev before stg'
+  git checkout -q -b other-tree; printf 'other tree\n' > README; git commit -qam 'other tree'; OTHER=$(git rev-parse HEAD); git checkout -q main
+  expect 1 ship "$SLUG" dev "$OTHER" --checked 'git rev-parse HEAD' --output "$OTHER"; contains 'Shipped tree differs from verified Commit'
+  [ ! -f "$F/.state" ] || ! grep -q '^stage:' "$F/.state" || fail 'a refused ship recorded a stage'
+  ok 'ship: refuses no evidence, missing options, an unknown stage, a later stage first and a tree that differs from the verified Commit'
+  expect 0 ship "$SLUG" dev "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains 'Recorded ladder at dev (1/3) for .'
+  expect 0 next "$SLUG"; contains 'READY deliver · at dev (1/3): ship to stg'
+  expect 0 status; contains 'ladder deliver READY · at dev (1/3)'
+  expect 0 status "$SLUG" --json
+  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; f=json.load(sys.stdin)["features"][0]; s=f["stages"]; assert f["stage"]=="dev" and len(s)==1 and s[0]["stage"]=="dev" and s[0]["sha"]==sys.argv[1] and s[0]["repo"]=="." and s[0]["current"] and s[0]["ts"].endswith("Z") and f["state"]=="READY" and f["phase"]=="deliver", f' "$SHA" || fail "status JSON stage: $OUTPUT"
+  tail -1 "$F/events.log" | grep -q $'\tship\tdeliver\tdev\t'"$SHA"' . · checked: git rev-parse HEAD · output: '"$SHA"'$' || fail "ship event: $(tail -1 "$F/events.log")"
+  ok 'ship: records the stage in .state and an event; next, status and status JSON show it'
+  delivery
+  expect 1 close "$SLUG" shipped 'only dev'; contains "stage prd not recorded for .: sdlc.sh ship $SLUG prd"; contains 'or close --at'
+  expect 0 ship "$SLUG" stg "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"
+  expect 1 close "$SLUG" shipped --at prd 'prd not recorded'; contains 'stage prd not recorded'
+  expect 1 close "$SLUG" shipped --at qa 'unknown'; contains "unknown stage 'qa'"
+  expect 2 close "$SLUG" dropped --at stg 'dropped has no stage'
+  expect 0 close "$SLUG" shipped --at stg 'production is released by the operations team'
+  grep -q '^closed: shipped .* production is released by the operations team (closed at stg of dev stg prd)$' ".sdlc/archive/$SLUG/.state" || fail "closed note: $(grep '^closed:' ".sdlc/archive/$SLUG/.state")"
+  tail -1 ".sdlc/archive/$SLUG/events.log" | grep -q $'\tclose\tdone\tshipped\t.*(closed at stg of dev stg prd)$' || fail 'close --at event'
+  ok 'close shipped with stages: needs the last stage, or --at a recorded stage with its reason in the note and event'
+  ready full-ladder 1; evidence; route deliver; delivery
+  for stage in dev stg prd; do expect 0 ship "$SLUG" "$stage" "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; done
+  expect 1 ship "$SLUG" dev "$SHA" --checked again --output again; contains 'dev is already recorded for this evidence'
+  expect 0 next "$SLUG"; contains 'at prd (3/3): every stage shipped'
+  evidence; printf 'more QA output\n' > "$F/logs/S2.txt"; printf '| S2 | PASS | | added | logs/S2.txt |\n' >> "$E"; delivery; route deliver
+  expect 0 next "$SLUG"; contains "READY deliver: ship to dev"
+  expect 1 close "$SLUG" shipped 'stages were for older evidence'; contains 'stage prd not recorded'
+  for stage in dev stg prd; do expect 0 ship "$SLUG" "$stage" "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; done
+  expect 0 close "$SLUG" shipped 'every stage shipped'
+  ok 'close shipped after every stage; a new score starts the ladder again'
+}
+# A plan that raises a risk flag names how to undo it.
+undo_plan() { plan 1; replace '/Risk flags:/ {$0="- Risk flags: migration yes · data deletion no · public API no · security no · infra no"} {print}' "$F/PLAN.md"; [ -z "$1" ] || replace '/Risk flags:/ {print; print "- Undo: '"$1"'"; next} {print}' "$F/PLAN.md"; }
+regression_undo() {
+  repo regression-undo
+  feature undo-missing; expect 0 approve intent "$SLUG" --human 'approved scope'
+  undo_plan ''
+  expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'a risk flag says yes (migration yes): add "- Undo:'
+  expect 10 next "$SLUG"; contains 'a risk flag says yes (migration yes)'; contains 'then plan not approved; approve plan --human migration yes'
+  undo_plan '<flag <name> | revert <what> | config <key> | none — why>'
+  expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'a risk flag says yes'
+  undo_plan 'none'
+  expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'Undo: none needs its reason'
+  undo_plan 'maybe later'
+  expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'Undo: must start with flag, revert, config or none'
+  ok 'undo: a plan with a risk flag yes and no filled Undo: line cannot be approved, and next says so'
+  undo_plan 'revert the migration commit and run its down script'
+  expect 0 approve plan "$SLUG" --human 'risk and undo accepted'
+  feature undo-none; expect 0 approve intent "$SLUG" --human 'approved scope'
+  undo_plan 'none — the new column is additive and unused'
+  expect 0 approve plan "$SLUG" --human 'risk accepted'
+  feature undo-flag; expect 0 approve intent "$SLUG" --human 'approved scope'
+  undo_plan 'flag new_export off'
+  expect 0 approve plan "$SLUG" --human 'risk accepted'
+  feature undo-free; expect 0 approve intent "$SLUG" --human 'approved scope'
+  plan 1; grep -q 'Undo:' "$F/PLAN.md" && fail 'fixture plan has an Undo line'
+  expect 0 approve plan "$SLUG" --agent 'no risk, no undo line'
+  ok 'undo: revert, flag and none with a reason pass; a plan with every risk flag no needs no Undo: line'
+}
 run_regressions() {
   case "$1" in
     stop) regression_stop;; scenarios) regression_scenarios;; delivery) regression_delivery;; review) regression_review;; other) regression_other;;
@@ -1358,10 +1486,12 @@ run_regressions() {
     repos) regression_repos;; cells) regression_cells;; paths) regression_paths;; uncommitted) regression_uncommitted;;
     nested) regression_nested;; interrupt) regression_interrupt;; scoped) regression_scoped;; fingerprint) regression_fingerprint;; optin) regression_optin;;
     reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;; labels) regression_labels;; sha) regression_sha;; ship) regression_ship;; memory) regression_memory;;
+    events) regression_events;; stats) regression_stats;; stages) regression_stages;; undo) regression_undo;;
     all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init; regression_ultra
       for round2 in a b c d e; do regression_round2 "$round2"; done; regression_round3
       regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint; regression_optin
-      regression_reposflag; regression_carry; regression_target; regression_clarity; regression_labels; regression_sha; regression_ship; regression_memory;;
+      regression_reposflag; regression_carry; regression_target; regression_clarity; regression_labels; regression_sha; regression_ship; regression_memory
+      regression_events; regression_stats; regression_stages; regression_undo;;
     *) fail "unknown regression group: $1";;
   esac
 }
@@ -1515,6 +1645,8 @@ for invalid in risk coverage placeholder must duplicate; do
 done
 cp "$TMP/plan.valid" "$F/PLAN.md"
 replace '{gsub(/security no/,"security YES"); print}' "$F/PLAN.md"
+# A raised risk flag needs its Undo: line (a plan without one is refused; see regression_undo).
+replace '/Risk flags:/ {print; print "- Undo: revert the change commit"; next} {print}' "$F/PLAN.md"
 expect 1 approve plan first --agent reviewed; contains 'security'
 expect 10 next first; contains 'NEEDS-HUMAN plan'
 expect 0 approve plan first --human 'security scope approved'

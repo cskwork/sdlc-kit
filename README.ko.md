@@ -145,7 +145,7 @@ propose: keep in <페이지>, remove from peer` 줄로 보고해 사람이 처�
 
 config.md에 선택해 넣을 키와 기본값: `transcripts:`·`peers:`(비우면 없음), `transcripts_max: 20`,
 `memory_core_kb: 2`, `memory_page_kb: 16`, `memory_top_kb: 64`, `memory_total_kb: 256`(색인 경고),
-`dream_every: 3`, `dream_max_days: 14`, `prune: gradle-home .gradle node_modules build .m2 target`(비우면
+`dream_every: 3`, `dream_max_days: 14`, `stages:`(비우면 한 번에 반영, 아래 단계별 반영), `prune: gradle-home .gradle node_modules build .m2 target`(비우면
 지우지 않음), `archive_warn_mb: 50`.
 
 ## 설정
@@ -164,6 +164,31 @@ git이 추적하는 폴더로 지정하세요.
 모델 없음)과, 다음 라운드부터 모델 호출 없이 재생되는 선택 agent 층으로 나뉩니다.
 키트는 e2e의 에이전트 가이드를 버전 고정으로 들고 있어(Apache-2.0) 오프라인에서도
 쓸 수 있고, `adapters/e2e/update.sh [버전]`으로 갱신합니다.
+
+## 단계별 반영
+
+dev, 다음 staging, 다음 운영처럼 며칠에 걸쳐 반영하는 프로젝트는 config.md에 단계를 순서대로
+적습니다: `stages: dev, stg, prd`. deliver 경로에서 `next`가 다음 단계를 알려 주고, 반영한
+단계마다 다음 명령으로 기록합니다.
+
+```bash
+sdlc.sh ship <slug> <stage> <sha> [repo] --checked "<명령>" --output "<판정 출력 줄>"
+```
+
+`close shipped`와 같은 조건(지금 증거의 deliver 경로, 유효한 evidence, 대상에 대한 허락,
+그 저장소의 검증한 `Commit:`과 트리가 같고 `local`이 아니면 원격에 있는 `<sha>`)이 필요하고,
+모르는 단계, 이미 기록한 단계, 앞 단계가 기록되지 않은 단계는 거부합니다. 단계는 채점한
+증거에 묶인 `stage:` 줄로 `.state`에 한 번만 기록되고(`events.log`에는 명령과 출력이 남음),
+다시 채점하면 처음 단계부터 다시 기록합니다. `status`와 `next`는 `deliver READY · at stg (2/3)`처럼
+보여 주고, `status --json`에는 `stage`와 `stages`가 붙습니다. 그 뒤 `close <slug> shipped`는
+모든 `Commit:` 저장소가 마지막 단계에 닿아야 하고, 마지막 단계가 에이전트 손 밖이면
+`close <slug> shipped --at <stage> "<이유>"`로 기록된 단계를 지정합니다. 이유와 단계는 닫힘
+메모와 이벤트에 남습니다. `stages:`가 없으면 아무것도 바뀌지 않고 `ship`과 `--at`은 거부됩니다.
+
+위험 플래그가 yes인 plan은 Risk flags 아래에 되돌리는 방법도 적습니다:
+`- Undo: flag <name> | revert <what> | config <key> | none — <why>`. 없으면 `approve plan`이
+거부하고, 플래그가 모두 `no`인 plan에는 필요 없습니다. Undo가 플래그를 가리키면 Shipping의
+`Policy:` 줄에 그 플래그를 지우는 후속 작업을 적습니다.
 
 ## 늘 지키는 규칙
 
@@ -185,7 +210,12 @@ Build는 [ponytail](https://github.com/DietrichGebert/ponytail) 방식(가장 �
 
 ## 호스트에서 돌리기
 
-`sdlc.sh status --json`은 모든 기능의 단계, 상태, 점수, 경로를 보여 줍니다.
+`sdlc.sh status --json`은 모든 기능의 단계, 상태, 점수, 경로와 `ageDays`(첫 이벤트부터,
+없으면 폴더를 만든 때부터), `lastEventAt`, `stage`, `stages`를 보여 줍니다.
+`sdlc.sh stats [--json] [--since YYYY-MM-DD]`는 열린·보관된 기능의 `events.log`(상태가 바뀔 때마다
+UTC 시각, 명령, 바뀐 뒤 단계, 결과, 내용을 한 줄씩 덧붙이는 기록)를 모아 단계·상태별 수, 단계별
+소요 시간 중앙값과 p90, 채점 횟수, plan·build 복귀, BLOCKED 이유 상위, 주별 닫힘 수를 보여 줍니다.
+`events.log`가 없는 기능은 legacy로 세고 시간 계산에서 뺍니다.
 `sdlc.sh next <slug>`는 `0` 진행 가능, `10` 사람 필요, `20` 막힘, `30` 완료로
 끝납니다. 스크립트는 기록하고 보고할 뿐 모델을 돌리지 않습니다. 무인 실행은
 기록된 사람의 허락만큼만 반영합니다. 따로 허락하지 않았다면 로컬 커밋까지입니다.

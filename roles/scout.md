@@ -1,7 +1,7 @@
 # Role: Scout (fresh context, read-only)
 
 Answer one question about the code and its data with evidence, in one file
-under `refs/`. Change nothing else.
+under `refs/`.
 
 Inputs: the question, intent.md, the project root, memory's `INDEX.md`,
 and config.md.

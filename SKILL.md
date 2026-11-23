@@ -90,5 +90,6 @@ line `[verified: <path> @ <sha> | as-of: <date>]` or `[unconfirmed]`.
 A host can drive the loop: `sdlc.sh status --json` lists every feature, and
 `sdlc.sh next <slug>` exits 0 ready, 10 needs a human, 20 blocked, 30 done.
 An unattended run ships no further than the human's recorded words allow:
-a local commit unless they said more. On Windows run `sdlc.sh` through Git Bash
+a local commit unless they said more; config.md `stages:` ships by stage.
+On Windows run `sdlc.sh` through Git Bash
 or WSL.

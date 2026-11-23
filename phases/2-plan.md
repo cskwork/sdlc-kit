@@ -1,7 +1,7 @@
 # Phase 2: Plan — explore, then document
 
 Goal: understand domain, data, logic, source of truth and user flow well
-enough to find side effects here, before any code. Scouts write
+enough to find side effects before any code. Scouts write
 `refs/`; you compact them into one `PLAN.md`.
 
 ## 1. Scout
@@ -62,7 +62,6 @@ Summary, AS-IS → TO-BE and the flags, then `sdlc.sh approve plan <slug>
 
 `sdlc.sh next` names the failing scenarios the plan got wrong. Re-scout only
 that gap, update `refs/` and PLAN.md (add a missed scenario under the ID QA
-gave it), and approve again. An unchanged PLAN.md is refused unless the
-human approves it. Only the human can remove a scenario or drop its must; a
+gave it), and approve again. Only the human can remove a scenario or drop its must; a
 scenario only QA added goes by deleting its `evidence.md` row before the
 human approves.

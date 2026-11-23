@@ -18,10 +18,11 @@
 <bug fixes only: before the fix at <base sha> → <failing line>; after → <passing line>; reported surface re-driven → <result>>
 
 ## Shipping
+<!-- config.md stages: sdlc.sh ship records each -->
 - Ship to: <local | pr | deploy>
 - Shipped: <sha> <repo path, omit for the project root>
 - Checked with: <command>
 - Output: <the deciding output line, verbatim>
 - Allowed: <yes — "the human's words", when intent.md has none for this target>
-- Policy: <updated <where> | follow-up <what, owner> | unchanged>
+- Policy: <updated <where> | follow-up <what, owner>, an Undo flag's removal too | unchanged>
 - Memory: <pages updated | none — why>
