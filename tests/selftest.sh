@@ -1378,7 +1378,8 @@ regression_events() {
   expect 0 close "$SLUG" shipped 'log cannot be written'; contains 'events.log not written'; contains 'Archived unwritable'
   grep -q '^closed: shipped ' ".sdlc/archive/$SLUG/.state" || fail 'close did not finish when events.log could not be written'
   ok 'events: a failed events.log append warns and the command still completes'
-  feature aged; touch -t 202001010000 "$F"
+  # Logging began after the slug was made: its first event is not new, so the folder's age counts.
+  feature aged; sed -i.bak 1d "$F/events.log"; rm -f "$F/events.log.bak"; touch -t 202001010000 "$F"
   expect 0 status "$SLUG" --json
   if [ "$(stat -f %B "$F" 2>/dev/null || stat -c %W "$F" 2>/dev/null)" -lt 1600000000 ] 2>/dev/null; then
     printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; f=json.load(sys.stdin)["features"][0]; assert f["ageDays"]>365, f' || fail "ageDays ignored the older folder: $OUTPUT"
@@ -1440,16 +1441,17 @@ regression_stages() {
   expect 2 ship "$SLUG" dev "$SHA"; contains 'ship <slug> <stage> <sha> [repo] --checked'
   expect 1 ship "$SLUG" qa "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains "unknown stage 'qa': config.md stages: dev stg prd"
   expect 1 ship "$SLUG" stg "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains 'out of order: ship dev before stg'
-  git checkout -q -b other-tree; printf 'other tree\n' > README; git commit -qam 'other tree'; OTHER=$(git rev-parse HEAD); git checkout -q main
-  expect 1 ship "$SLUG" dev "$OTHER" --checked 'git rev-parse HEAD' --output "$OTHER"; contains 'Shipped tree differs from verified Commit'
+  # A commit with another tree and no Commit in its history (an empty root commit).
+  OTHER=$(git commit-tree "$(git mktree < /dev/null)" -m 'unrelated root')
+  expect 1 ship "$SLUG" dev "$OTHER" --checked 'git rev-parse HEAD' --output "$OTHER"; contains "stage commit $OTHER neither has the verified tree of Commit $SHA nor contains it"
   [ ! -f "$F/.state" ] || ! grep -q '^stage:' "$F/.state" || fail 'a refused ship recorded a stage'
   ok 'ship: refuses no evidence, missing options, an unknown stage, a later stage first and a tree that differs from the verified Commit'
   expect 0 ship "$SLUG" dev "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains 'Recorded ladder at dev (1/3) for .'
   expect 0 next "$SLUG"; contains 'READY deliver · at dev (1/3): ship to stg'
   expect 0 status; contains 'ladder deliver READY · at dev (1/3)'
   expect 0 status "$SLUG" --json
-  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; f=json.load(sys.stdin)["features"][0]; s=f["stages"]; assert f["stage"]=="dev" and len(s)==1 and s[0]["stage"]=="dev" and s[0]["sha"]==sys.argv[1] and s[0]["repo"]=="." and s[0]["current"] and s[0]["ts"].endswith("Z") and f["state"]=="READY" and f["phase"]=="deliver", f' "$SHA" || fail "status JSON stage: $OUTPUT"
-  tail -1 "$F/events.log" | grep -q $'\tship\tdeliver\tdev\t'"$SHA"' . · checked: git rev-parse HEAD · output: '"$SHA"'$' || fail "ship event: $(tail -1 "$F/events.log")"
+  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; f=json.load(sys.stdin)["features"][0]; s=f["stages"]; assert f["stage"]=="dev" and len(s)==1 and s[0]["stage"]=="dev" and s[0]["sha"]==sys.argv[1] and s[0]["repo"]=="." and s[0]["current"] and s[0]["match"]=="exact" and s[0]["ts"].endswith("Z") and f["state"]=="READY" and f["phase"]=="deliver", f' "$SHA" || fail "status JSON stage: $OUTPUT"
+  tail -1 "$F/events.log" | grep -q $'\tship\tdeliver\tdev\t'"$SHA"' . (exact) · checked: git rev-parse HEAD · output: '"$SHA"'$' || fail "ship event: $(tail -1 "$F/events.log")"
   ok 'ship: records the stage in .state and an event; next, status and status JSON show it'
   delivery
   expect 1 close "$SLUG" shipped 'only dev'; contains "stage prd not recorded for .: sdlc.sh ship $SLUG prd"; contains 'or close --at'
@@ -1475,8 +1477,8 @@ regression_stages() {
   ready mono 1; evidence; replace '/^- Commit:/ {print "- Commit: '"$SHA"' svc-a"; print "- Commit: '"$SHA"' svc-b"; next} {print}' "$E"; route deliver; delivery
   expect 1 ship "$SLUG" dev "$SHA" svc-c --checked 'git rev-parse HEAD' --output "$SHA"; contains "no Commit line for repo 'svc-c'"
   expect 1 ship "$SLUG" dev "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains "no Commit line for repo '.'"
-  expect 0 ship "$SLUG" dev "$SHA" svc-b/. --checked 'git rev-parse HEAD' --output "$SHA"; contains 'Recorded mono at dev (1/3) for svc-b.'
-  tail -1 "$F/events.log" | grep -q $'\tship\tdeliver\tdev\t'"$SHA"' svc-b · ' || fail "ship event names another folder: $(tail -1 "$F/events.log")"
+  expect 0 ship "$SLUG" dev "$SHA" svc-b/. --checked 'git rev-parse HEAD' --output "$SHA"; contains 'Recorded mono at dev (1/3) for svc-b/. (exact).'
+  tail -1 "$F/events.log" | grep -q $'\tship\tdeliver\tdev\t'"$SHA"' svc-b/. (exact) · ' || fail "ship event names another folder: $(tail -1 "$F/events.log")"
   expect 1 ship "$SLUG" dev "$SHA" svc-a --checked 'git rev-parse HEAD' --output "$SHA"; contains 'dev is already recorded'
   expect 0 next "$SLUG"; contains 'at dev (1/3): ship to stg'
   expect 0 close "$SLUG" shipped --at dev 'monorepo: later stages belong to the release team'
@@ -1556,6 +1558,38 @@ regression_undo() {
   expect 0 next "$SLUG"; contains 'READY build: edit PLAN.md: a risk flag says yes (migration yes)'; contains '; stopped for the human: 3 review FAILs'; contains 'then approve plan --human migration yes'
   ok 'undo: a risk plan approved before the rule stays approved; a stop names the missing Undo line'
 }
+# A stage sha may contain the verified Commit (a --no-ff promotion merge), and a repository is the same in
+# every worktree: a Commit made in a worktree ships from the main checkout, also after the worktree is gone.
+regression_stagerepos() {
+  repo regression-stagerepos
+  printf 'stages: dev, stg, prd\n' >> .sdlc/config.md
+  printf 'worktrees/\n' >> .git/info/exclude
+  git worktree add -q -b ticket worktrees/ticket; WT=worktrees/ticket
+  printf 'ticket change\n' >> "$WT/README"; git -C "$WT" commit -qam 'ticket change'; SHA=$(git -C "$WT" rev-parse HEAD)
+  ready wt 1; evidence; replace '/^- Commit:/ {$0=$0" worktrees/ticket"} {print}' "$E"; route deliver
+  grep -q "^repo: $(cd .git && pwd -P)"$'\t\tworktrees/ticket$' "$F/.state" || fail "score did not store the Commit's repository: $(grep '^repo:' "$F/.state")"
+  # Promotion: dev gets other work, then a --no-ff merge of the ticket branch.
+  git checkout -q -b dev; printf 'other work\n' > other.txt; git add other.txt; git commit -qm 'other work on dev'
+  git merge -q --no-ff -m 'promote ticket to dev' ticket; DEV=$(git rev-parse HEAD); git checkout -q main
+  expect 0 ship "$SLUG" dev "$DEV" . --checked 'git rev-parse dev' --output "$DEV"; contains 'Recorded wt at dev (1/3) for . (contains).'
+  expect 0 status "$SLUG" --json
+  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; s=json.load(sys.stdin)["features"][0]["stages"]; assert [(x["stage"],x["match"],x["repo"]) for x in s]==[("dev","contains",".")], s' || fail "stages match: $OUTPUT"
+  ok 'ship: a merge that contains the verified Commit is recorded as contains, from the main checkout of the worktree it was made in'
+  mkdir -p elsewhere; git -C elsewhere -c init.defaultBranch=main init -q; printf 'elsewhere/\n' >> .git/info/exclude
+  git -C elsewhere -c user.name=t -c user.email=t@t.invalid commit -q --allow-empty -m 'other repository'
+  expect 1 ship "$SLUG" stg "$(git -C elsewhere rev-parse HEAD)" elsewhere --checked x --output y; contains "no Commit line for repo 'elsewhere'"
+  ok 'ship: a folder of another repository is still refused'
+  git worktree remove --force "$WT"; [ ! -d "$WT" ] || fail 'worktree not removed'
+  git checkout -q -b stg; git merge -q --no-ff -m 'promote dev to stg' dev; STG=$(git rev-parse HEAD); git checkout -q main
+  expect 0 ship "$SLUG" stg "$STG" . --checked 'git rev-parse stg' --output "$STG"; contains '(contains)'
+  expect 0 next "$SLUG"; contains 'at stg (2/3): ship to prd'
+  printf '## Shipping\n- Ship to: local\n- Shipped: %s\n- Checked with: git rev-parse ticket\n- Output: %s\n- Memory: none — fixture\n' "$SHA" "$SHA" >> "$E"
+  expect 0 close "$SLUG" shipped --at stg 'production is released by another team'; contains 'Archived wt'
+  ok 'ship and close: once the worktree is gone, the stored repository lets the main checkout ship the next stage and close'
+  ready gone 1; evidence; replace '/^- Commit:/ {$0=$0" gone-tree"} {print}' "$E"
+  expect 1 score "$SLUG"; contains "Commit path 'gone-tree' is not a directory"
+  ok 'score still needs every Commit folder to exist'
+}
 run_regressions() {
   case "$1" in
     stop) regression_stop;; scenarios) regression_scenarios;; delivery) regression_delivery;; review) regression_review;; other) regression_other;;
@@ -1563,12 +1597,12 @@ run_regressions() {
     repos) regression_repos;; cells) regression_cells;; paths) regression_paths;; uncommitted) regression_uncommitted;;
     nested) regression_nested;; interrupt) regression_interrupt;; scoped) regression_scoped;; fingerprint) regression_fingerprint;; optin) regression_optin;;
     reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;; labels) regression_labels;; sha) regression_sha;; ship) regression_ship;; memory) regression_memory;;
-    events) regression_events;; stats) regression_stats;; stages) regression_stages;; undo) regression_undo;;
+    events) regression_events;; stats) regression_stats;; stages) regression_stages;; stagerepos) regression_stagerepos;; undo) regression_undo;;
     all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init; regression_ultra
       for round2 in a b c d e; do regression_round2 "$round2"; done; regression_round3
       regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint; regression_optin
       regression_reposflag; regression_carry; regression_target; regression_clarity; regression_labels; regression_sha; regression_ship; regression_memory
-      regression_events; regression_stats; regression_stages; regression_undo;;
+      regression_events; regression_stats; regression_stages; regression_stagerepos; regression_undo;;
     *) fail "unknown regression group: $1";;
   esac
 }

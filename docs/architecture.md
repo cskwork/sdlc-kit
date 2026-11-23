@@ -75,7 +75,10 @@ One feature lives in `.sdlc/work/<slug>/`. The agent writes the artifacts;
    With config.md `stages:`, `ship <slug> <stage> <sha> [repo]` runs the same
    delivery checks per stage, refuses unknown, repeated and out-of-order stages,
    and records a `stage:` line in `.state` keyed by the shipped repository's git
-   toplevel and bound to the scored evidence id and build entry;
+   common dir (shared by its worktrees; `score` stores each `Commit:` line's in
+   `repo:` lines) and bound to the scored evidence id and build entry; a stage
+   sha matches when its tree is the Commit's (`exact`) or it contains it
+   (`contains`);
    `close shipped` then needs the last stage per `Commit:` repository, or
    `--at <stage>` naming a recorded one, whose reason goes into the closed note.
    Reproducible caches under `logs/` are pruned, the folder moves to

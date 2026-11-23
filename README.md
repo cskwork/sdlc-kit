@@ -224,19 +224,29 @@ its stages in order in config.md: `stages: dev, stg, prd`. On a deliver route,
 sdlc.sh ship <slug> <stage> <sha> [repo] --checked "<command>" --output "<deciding line>"
 ```
 
-which needs what `close shipped` needs (a current deliver route, valid
-evidence, authority for the target, a `<sha>` whose tree equals the verified
-`Commit:` of that repository and, beyond `local`, on a remote) and refuses an
-unknown stage, a stage already recorded, or one whose earlier stages are not.
+which needs a current deliver route, valid evidence and authority for the
+target, as `close shipped` does, and a `<sha>` that, beyond `local`, is on a
+remote. The `<sha>` either has the verified `Commit:`'s tree (`exact`) or
+contains it (`contains`: a `--no-ff` merge that promoted it into a branch
+with other changes); the record, the output and `status --json`
+`stages[].match` say which. `close`'s `Shipped:` line still needs the exact
+tree. `ship` refuses an unknown stage, a stage already recorded, or one whose
+earlier stages are not.
 The stage goes into `.state` as a `stage:` line bound to the scored evidence
 and its build entry (the one record; `events.log` keeps the command and its
 output), so a new score or a re-approved plan starts the ladder again. A
-record belongs to the git repository shipped, so `Commit:` lines for two
-folders of one repository share it, as `close` matches `Shipped:` lines.
+record belongs to the git repository shipped, identified by its git common
+dir, which every worktree and the main checkout share: `Commit:` lines for two
+folders of one repository share it, and a `Commit:` made in a temporary
+worktree ships from the main checkout. `score` stores each `Commit:` line's
+repository in `.state`, so once the worktree is removed, `ship`, `next` and
+`close` still work; `close` then checks the `Shipped:` line in any folder of
+that repository and says so when none is left.
 Stage names are letters, digits, `.`, `_` and `-`, each listed once, separated
 by commas or spaces, with no empty item and no `#` comment on the line. `ship`
-takes a folder some `Commit:` line names, and every `Commit:` line in that
-repository must hold the shipped tree. `status` and `next` show `deliver READY · at
+takes the folder a `Commit:` line names, in that checkout or another of the
+same repository, and every `Commit:` line of that repository must match the
+`<sha>`. `status` and `next` show `deliver READY · at
 stg (2/3)`; `status --json` adds `stage` and `stages`. `close <slug> shipped`
 then needs the last stage for every `Commit:` repository, or `close <slug>
 shipped --at <stage> "<reason>"` naming a recorded one when the rest is out of

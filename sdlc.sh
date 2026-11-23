@@ -71,11 +71,11 @@ feature() {
   load_state
 }
 load_state() {
-  seq=0; entry=0; fails=0; rp=0; rb=0; lastfail=; intent=; plan=; review=; route=; score=; closed=; planned=; scored=; rounds=0; withdrawn=; heads=; planbody=; stagerecs=; ts=
+  seq=0; entry=0; fails=0; rp=0; rb=0; lastfail=; intent=; plan=; review=; route=; score=; closed=; planned=; scored=; rounds=0; withdrawn=; heads=; planbody=; stagerecs=; repoids=; ts=
   if [ -f "$F/.state" ]; then
     while IFS= read -r line; do
       key=${line%%:*}; val=${line#*:}; val=${val# }
-      case "$key" in seq) seq=$val;; entry) entry=$val;; fails) fails=$val;; returns_plan) rp=$val;; returns_build) rb=$val;; lastfail) lastfail=$val;; intent) intent=$val;; plan) plan=$val;; review) review=$val;; route) route=$val;; score) score=$val;; closed) closed=$val;; planned) planned=$val;; scored) scored=$val;; rounds) rounds=$val;; withdrawn) withdrawn=$val;; heads) heads=$val;; planbody) planbody=$val;; stage) stagerecs="${stagerecs}${val}"$'\n';; esac
+      case "$key" in seq) seq=$val;; entry) entry=$val;; fails) fails=$val;; returns_plan) rp=$val;; returns_build) rb=$val;; lastfail) lastfail=$val;; intent) intent=$val;; plan) plan=$val;; review) review=$val;; route) route=$val;; score) score=$val;; closed) closed=$val;; planned) planned=$val;; scored) scored=$val;; rounds) rounds=$val;; withdrawn) withdrawn=$val;; heads) heads=$val;; planbody) planbody=$val;; stage) stagerecs="${stagerecs}${val}"$'\n';; repo) repoids="${repoids}${val}"$'\n';; esac
     done < "$F/.state"
   fi
   read -r ish iwho iseq its inote < <(printf '%s\n' "$intent")
@@ -88,7 +88,7 @@ save_state() {
   {
     printf 'seq: %s\nentry: %s\nfails: %s\nreturns_plan: %s\nreturns_build: %s\nlastfail: %s\n' "$seq" "$entry" "$fails" "$rp" "$rb" "$lastfail"
     printf 'planned: %s\nscored: %s\nrounds: %s\nwithdrawn: %s\n' "$planned" "$scored" "$rounds" "$withdrawn"
-    for key in intent plan planbody review route score closed heads; do eval 'val=$'"$key"; [ -z "$val" ] || printf '%s: %s\n' "$key" "$val"; done; [ -z "$stagerecs" ] || printf '%s' "$stagerecs" | sed 's/^/stage: /'
+    for key in intent plan planbody review route score closed heads; do eval 'val=$'"$key"; [ -z "$val" ] || printf '%s: %s\n' "$key" "$val"; done; [ -z "$stagerecs" ] || printf '%s' "$stagerecs" | sed 's/^/stage: /'; [ -z "$repoids" ] || printf '%s\n' "$repoids" | awk 'NF{print "repo: " $0}'
   } > "$tmp"
   mv "$tmp" "$F/.state"
 }
@@ -462,7 +462,7 @@ case "$command" in
     paths=(); if [ -n "$selected" ]; then feature "$selected"; paths[0]=$F; else for path in "$STORE"/work/*; do
       [ -d "$path" ] || continue; if is_slug "$(basename "$path")"; then paths[${#paths[@]}]=$path; else err "skipped $(basename "$path"): not a valid slug"; fi
     done; fi
-    sep=
+    sep=; [ "$asjson" -eq 0 ] || NOW=$(date +%s)
     for path in "${paths[@]}"; do
       feature "$(basename "$path")"; derive
       if [ "$asjson" -eq 0 ]; then stage_now; printf '%s %s %s%s %s score=%s\n' "$slug" "$phase" "$STATE" "$stagenote" "$action" "${score:--}"
@@ -566,7 +566,7 @@ case "$command" in
       deliver) lastfail=;;
     esac
     for id in "${ids[@]}"; do case " $scored " in *" $id "*) :;; *) scored="${scored}${scored:+ }$id";; esac; done
-    event; route="$dest $eid $scoring_entry $seq $reason"; score="$passed/$total $pct must $must_pass/$must_total"; save_state; log_event score "$dest" "$display_score${fail_display:+ · fail $fail_display}${blocked_display:+ · blocked $blocked_display} · $reason"; show_score;;
+    repoids=$(repo_ids); event; route="$dest $eid $scoring_entry $seq $reason"; score="$passed/$total $pct must $must_pass/$must_total"; save_state; log_event score "$dest" "$display_score${fail_display:+ · fail $fail_display}${blocked_display:+ · blocked $blocked_display} · $reason"; show_score;;
   close)
     closeat=; if [ "$#" -eq 5 ] && [ "$3" = --at ] && [ "$2" = shipped ]; then closeat=$4; set -- "$1" "$2" "$5"; fi; [ "$#" -eq 3 ] || die 'close <slug> shipped [--at stage]|dropped reason' 2; feature "$1"; mutable
     note=$(one_line "$3"); [ -n "$note" ] || die 'close reason required' 2
@@ -580,18 +580,7 @@ case "$command" in
         validate_evidence || exit 1
         delivery_authority "$etarget" || die "$dreason"
         filled "$checked" && filled "$output" || die 'Shipping Checked with and Output required'
-        for ((i=0;i<${#commits[@]};i++)); do
-          repo_dir "${repos[i]}" Commit; commit_repo=$REPO; matchsha=; nodir=
-          source_repo=$(git -C "$commit_repo" rev-parse --show-toplevel) || die "not a git repository: ${repos[i]}"
-          for ((j=0;j<${#delivered[@]};j++)); do
-            # A Shipped line for another repository (a deploy repository not checked out here, say) is skipped.
-            repo_path "${drepos[j]}"
-            delivered_repo=$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null) || { [ -d "$REPO" ] || nodir=${drepos[j]}; continue; }
-            [ "$delivered_repo" != "$source_repo" ] || matchsha=${delivered[j]}
-          done
-          [ -n "$matchsha" ] || die "Shipped missing for repo: ${repos[i]}: add '- Shipped: <sha> ${repos[i]}'${nodir:+ (the line for '$nodir' was skipped: it is not a folder under the project root)}"
-          ship_tree_check "$commit_repo" "${commits[i]}" "$matchsha" "$etarget"
-        done; stage_close; memory_decision;;
+        close_shipped; stage_close; memory_decision;;
       *) die 'close result must be shipped or dropped' 2;;
     esac
     prune_logs; event; closed="$2 $ts $note"; save_state; log_event close "$2" "$note"; mkdir -p "$STORE/archive"; mv "$F" "$STORE/archive/$slug"

@@ -11,12 +11,16 @@
 
 - **`stages:` (`templates/config.md`, `lib/ladder.sh`, `sdlc.sh`):** an optional ordered list, such as `stages: dev, stg, prd`. Names are letters, digits, `.`, `_` and `-`, each listed once. It is read raw, so an empty item, a stray character or a trailing comment is refused.
   - `sdlc.sh ship <slug> <stage> <sha> [repo] --checked "<command>" --output "<line>"` records a stage.
-    - It needs what `close shipped` needs: a current deliver route, valid evidence, authority, and a `<sha>` whose tree equals the verified `Commit:` and is on a remote beyond `local`. It checks every `Commit:` line of that repository.
+    - It needs what `close shipped` needs: a current deliver route, valid evidence and authority. Beyond `local`, the `<sha>` must be on a remote.
+    - The `<sha>` matches when its tree equals the verified `Commit:` (`exact`) or it contains the `Commit:` (`contains`). `contains` covers a `--no-ff` merge that promoted the commit into a branch carrying other changes. The record, the ship output and `status --json` `stages[].match` say which. It checks every `Commit:` line of that repository. `close`'s `Shipped:` line still needs the exact tree.
     - It refuses an unknown stage, a repeat, an out-of-order stage, and a folder no `Commit:` line names.
-    - The record lives in `.state`. It is bound to the scored evidence and the build entry, so a new score or a re-approved plan starts the ladder again. It is keyed by git repository, so `Commit:` lines for folders of one repository share it.
+    - The record lives in `.state`. It is bound to the scored evidence and the build entry, so a new score or a re-approved plan starts the ladder again.
+    - It is keyed by git repository, identified by its git common dir, which every worktree and the main checkout share. `Commit:` lines for folders of one repository share it, and a `Commit:` made in a temporary worktree ships from the main checkout.
+    - `score` stores each `Commit:` line's repository in `.state` (`repo:` lines). After the worktree is removed, `ship`, `next` and `close` still work. `close` checks the `Shipped:` line in any remaining folder of that repository, and says so when none is left. A `.state` without `repo:` lines behaves as before.
   - `status` and `next` show `deliver READY · at stg (2/3)` and name the next stage. `status --json` adds `stage` and `stages`.
   - `close <slug> shipped` needs the last stage for every repository, or `--at <stage> "<reason>"` naming a recorded one. The reason goes into the closed note.
   - Without `stages:`, every flow is unchanged, and `ship` and `--at` are refused.
+- **`status --json` cost:** the new per-feature fields fork at most an awk over `events.log` and, only when that log does not start at `new`, one `stat`. A feature with no stage records forks nothing more.
 - **`events.log` and `stats`:** every state-changing command appends `ts⇥command⇥phase-after⇥result⇥detail` to `work/<slug>/events.log`. The file moves into `archive/` with the folder. A failed write warns and the command continues.
   - `status --json` adds `ageDays` and `lastEventAt`. `ageDays` counts from the earlier of folder creation and the first event.
   - `sdlc.sh stats [--json] [--since YYYY-MM-DD]` reports:
