@@ -133,7 +133,7 @@ parse() {
   }
   END{
     question();if(mode=="intent"){if(!outcomes)problem("What we will do needs a filled O1 line (done when)");if(target!="local"&&target!="pr"&&target!="deploy")problem("Ship to (under Shipping) must be local, pr or deploy, alone on its line (" (rawtarget==""?"missing":"found \"" rawtarget "\"") "): put any detail on a \"- Note:\" line");if(!ca)print "Y\034How sure we are table missing under a \"## How sure we are\" heading: copy it from templates/intent.md";else{n=split("Goal,Boundaries,Today,After,Done when,Limits",an,",");split("Outcome,Scope,AS-IS,TO-BE,Success,Constraints",ao,",");for(i=1;i<=n;i++){k=tolower(an[i]);gsub(/[^a-z]/,"",k);if(!(k in cs)){print "Y\034How sure we are needs a row for " an[i] " (was " ao[i] ")";cy++}else{pts+=(cs[k]=="clear")?2:(cs[k]=="assumed");if(cs[k]!="clear")weak=weak (weak==""?"":", ") cn[k] " " cs[k]}}if(!cy&&pts*100<90*2*n)print "Y\034clarity " int(pts*100/(2*n)) "% < 90%: settle " weak " by exploring, reproducing, researching or asking the requester"}}
-    if(mode=="plan"){if(NR>150)problem("PLAN.md has " NR " lines; keep it to 150 and move detail into refs/");if(!flags)problem("Risk flags: line missing");if(risky!=""){if(!undos||undo==""||undo~/^</)print "N\034a risk flag says yes (" risky "): add \"- Undo: flag <name> | revert <what> | config <key> | none — why\" under Risk flags";else if(undo!~/^(flag|revert|config|none)([ \t:]|$)/)print "N\034Undo: must start with flag, revert, config or none (found \"" undo "\")";else if(undo!~/^none/&&undo!~/^[a-z]+[ \t:]+[^ \t]/)print "N\034Undo: " undo " needs what to switch off or revert";else if(undo~/^none/&&undo!~/^none[ \t]*(—|–|-|--|:)[ \t]*[^ \t]/)print "N\034Undo: none needs its reason (none — why it cannot be undone)"}if(!count)problem("Scenarios need at least one row");n=split(objectives,os," ");for(i=1;i<=n;i++)if(os[i]!=""&&!covered[os[i]])problem(os[i] " has no must scenario")}
+    if(mode=="plan"){if(NR>150)problem("PLAN.md has " NR " lines; keep it to 150 and move detail into refs/");if(!flags)problem("Risk flags: line missing");if(risky!=""){if(!undos||undo==""||undo~/^</)print "N\034a risk flag says yes (" risky "): add \"- Undo: flag <name> | revert <what> | config <key> | none — why\" under Risk flags";else if(index(undo,"<"))print "N\034Undo: replace the placeholder with the real flag, change or key (found \"" undo "\")";else if(undo~/^none([ \t:]|—|–|-|$)/){r=undo;sub(/^none[ \t]*/,"",r);sep=sub(/^(—|–|--|-|:)/,"",r);gsub(/^[-:—– \t]+/,"",r);if(!sep||r=="")print "N\034Undo: none needs its reason (none — why it cannot be undone)"}else if(undo!~/^(flag|revert|config)([ \t:]|$)/)print "N\034Undo: must start with flag, revert, config or none (found \"" undo "\")";else if(undo!~/^[a-z]+[ \t:]+[^ \t]/)print "N\034Undo: " undo " needs what to switch off or revert"}if(!count)problem("Scenarios need at least one row");n=split(objectives,os," ");for(i=1;i<=n;i++)if(os[i]!=""&&!covered[os[i]])problem(os[i] " has no must scenario")}
     if(mode=="evidence"){if(!commits)problem("Commit lines missing");if(!count)problem("Results need at least one row");n=split(scenarios " " scored,ss," ");for(i=1;i<=n;i++)if(ss[i]!=""&&!seen[ss[i]]&&!missing[ss[i]]++)problem("evidence.md is missing " ss[i] ": scenarios are never removed")}
   }' "$2"
 }
@@ -230,7 +230,7 @@ derive() {
   STATE=READY; phase=intent; action=; exitcode=0
   if [ -n "$closed" ] || [ "$F" = "$STORE/archive/$slug" ]; then STATE=DONE; phase=done; action=$closed
   elif [ ! -f "$F/.state" ]; then STATE=BLOCKED; phase=legacy; action="legacy v0 feature: finish it with kit v0.27.0, or sdlc.sh close $slug dropped"
-  elif stopped; then STATE=NEEDS-HUMAN; phase=build; [ "$fails" -ge 3 ] || phase=evidence; action="stopped for the human: $stopreason; resume with approve plan --human"
+  elif stopped; then STATE=NEEDS-HUMAN; phase=build; [ "$fails" -ge 3 ] || phase=evidence; action="stopped for the human: $stopreason; resume with approve plan --human"; read_plan; [ -z "$uproblems" ] || action="$(joined "$uproblems") (PLAN.md, the agent first); then $action"
   else
     read_intent
     if [ -n "$iproblems" ]; then action=$(joined "$iproblems")
@@ -240,7 +240,7 @@ derive() {
     else
       phase=plan; read_plan
       if [ -n "$pproblems" ]; then action=$(joined "$pproblems")
-      elif ! gate_plan; then action="$greason; approve plan --agent"; [ -z "$uproblems" ] || action="$(joined "$uproblems"); then approve plan"; if human_gate plan || [ -n "$risks" ]; then STATE=NEEDS-HUMAN; action="${uproblems:+$(joined "$uproblems"); then }$greason; approve plan --human $risks"; fi
+      elif ! gate_plan; then action="$greason; approve plan --agent"; if [ -n "$uproblems" ]; then action="edit PLAN.md: $(joined "$uproblems"); then approve plan --human $risks"; elif human_gate plan || [ -n "$risks" ]; then STATE=NEEDS-HUMAN; action="$greason; approve plan --human $risks"; fi
       else
         read_evidence
         if [ "$verdict" != pass ] || [ "$ventry" != "$entry" ]; then phase=build; action='implement PLAN.md, commit any change, review'; if [ "$dest" = build ] && [ "$entry" -eq "$((rentry+1))" ]; then action="fix $(printf '%s' "$lastfail" | tr ',' ' ') (return $rb/3), commit, review"; fi
@@ -489,7 +489,7 @@ case "$command" in
         hash=$(sha < "$F/intent.md"); [ "$#" -eq 4 ] || [ "$hash" = "$(printf '%s' "$6" | tr 'A-F' 'a-f')" ] || die 'intent.md changed since it was shown'; if [ "$ish" = "$hash" ]; then printf 'intent already approved\n'; exit; fi; problems "$cproblems" || exit 1
         event; intent="$hash $who $seq $ts $note"
       else
-        gate_intent || die "$greason"; read_plan; problems "$pproblems$uproblems" || exit 1
+        gate_intent || die "$greason"; read_plan; problems "$pproblems" || exit 1
         if [ "$who" = agent ]; then human_gate plan && die 'plan needs --human approval'; [ -z "$risks" ] || die "risk flags need --human approval: $risks"; fi
         plan_history
         if [ "$who" = agent ]; then problems "$violations" || exit 1
@@ -500,7 +500,7 @@ case "$command" in
         fi
         hash=$(sha < "$F/PLAN.md"); [ "$#" -eq 4 ] || [ "$hash" = "$(printf '%s' "$6" | tr 'A-F' 'a-f')" ] || die 'PLAN.md changed since it was shown'
         if [ "$who" = agent ] && pending_plan && [ "$psh" = "$hash" ]; then die 'PLAN.md unchanged since Evidence routed to plan'; fi
-        if [ "$psh" = "$hash" ] && [ "$pish" = "$ihash" ] && [ -z "$removed" ] && ! pending_plan && ! stopped; then printf 'plan already approved\n'; exit; fi
+        if [ "$psh" = "$hash" ] && [ "$pish" = "$ihash" ] && [ -z "$removed" ] && ! pending_plan && ! stopped; then printf 'plan already approved\n'; exit; fi; problems "$uproblems" || exit 1
         # Only the human or a counted return to plan resets the review FAIL cap; an agent re-approval keeps it.
         keep=$fails; if [ "$who" = human ] || pending_plan; then keep=0; fi
         # The build's review PASS carries over when nothing it judged moved: every HEAD it bound is unchanged

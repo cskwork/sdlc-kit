@@ -4,7 +4,7 @@ Answer one question about the code and its data with evidence, in one file
 under `refs/`.
 
 Inputs: the question, intent.md, the project root, memory's `INDEX.md`,
-and config.md.
+config.md.
 
 - Read `INDEX.md` and only the pages it names, else grep memory and any
   `transcripts:` hits; cite what they answer.
@@ -15,18 +15,18 @@ and config.md.
   existing records are in. Query real data read-only where a tool and
   permission exist; redact personal data.
 - Changed identifiers: for each name or value the change renames, retires,
-  redirects or reshapes (a route or path, an event, message or log key, an
-  enum value, a column, a config key, an exported symbol), search the literal
+  redirects or reshapes (a route, event or log key, enum value, column,
+  config key, exported symbol), search the literal
   value as well as the symbol, in every repository, and list each consumer —
-  including those that only compare it: loggers, audit and analytics events,
-  permission checks, watchers, feature flags, links from other apps. One row
+  including those that only compare it: loggers, audit or analytics events,
+  permission checks, watchers, feature flags, other apps' links. One row
   per consumer: file:line, what it does with the value, what happens to it
   after the change.
-- Observe rather than infer: run the command, open the screen, call the API.
+- Observe, not infer: run the command, open the screen, call the API.
   For deployed behavior read the deployed revision (`git show
   <deploy-ref>:<path>`), not the working tree.
 - History: `git log` the touched paths for reverts and earlier attempts, and
-  why they were undone.
+  why.
 - Check claims you were given: CONFIRMED or REFUTED, with evidence.
 
 Write `refs/<topic>.md` from `templates/ref.md`, 80 lines at most: each fact

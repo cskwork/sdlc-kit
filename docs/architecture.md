@@ -13,7 +13,7 @@ and an optional Node.js to-do add-on. The script never runs a model; the agent
 | Phase files | `phases/1-intent.md` … `phases/4-evidence.md` | What the agent does in each phase and which artifact it writes. |
 | Role files | `roles/scout.md`, `roles/reviewer.md`, `roles/qa.md` | Prompts for subagents that run in a fresh context: read-only scouts (Plan), the adversarial reviewer (Build), and persona QA (Evidence). |
 | Templates | `templates/config.md`, `intent.md`, `PLAN.md`, `evidence.md`, `ref.md` | Skeletons the script copies and later parses. |
-| State machine | `sdlc.sh` | `init`, `new`, `status [--json]`, `next`, `check`, `approve`, `review`, `score`, `close`, `ship`, `stats`, `memory index`, `dream [--check]`. The lock, memory index, close-time memory check and log pruning, and dream live in `lib/store.sh`; the event log, `stats` and the stage ladder (`ship`, close's stage check) in `lib/ladder.sh`. `sdlc.sh` sources both. Every command that changes `.state` appends one tab-separated line to `events.log` in the feature folder (time, command, phase after, result, detail), which moves with it into the archive. Commands that write `.state` hold `.state.lock` from read to write. Parses the Markdown artifacts with awk, keeps per-feature state in `.sdlc/work/<slug>/.state`, and derives phase, state and next action. |
+| State machine | `sdlc.sh` | `init`, `new`, `status [--json]`, `next`, `check`, `approve`, `review`, `score`, `close`, `ship`, `stats`, `memory index`, `dream [--check]`. The lock, memory index, close-time memory check and log pruning, and dream live in `lib/store.sh`; the event log, `stats` and the stage ladder (`ship`, close's stage check) in `lib/ladder.sh`. `sdlc.sh` sources both. Every command that changes `.state` appends one tab-separated line to `events.log` in the feature folder (time, command, phase after, result, detail), which moves with it into the archive; a failed append only warns. Commands that write `.state` hold `.state.lock` from read to write. Parses the Markdown artifacts with awk, keeps per-feature state in `.sdlc/work/<slug>/.state`, and derives phase, state and next action. |
 | QA adapter (optional) | `adapters/e2e/` | Templates and a vendored agent guide for writing browser/mobile scenarios as `e2e` tests when `qa_runner: e2e`. |
 | Personal to-do (optional) | `todo/todo.mjs`, `todo/core.mjs`, `todo/tui.mjs`, `todo/web.mjs`, `todo/locales/`, `todo/app/` | One Markdown to-do file (`~/.sdlc/todo.md`) shown in a tray app, a TUI and a localhost web page that share one server; syncs each item's sdlc status by calling `sdlc.sh status <slug> --json`. The Rust app only calls the web API. |
 | Tests | `tests/selftest.sh`, `tests/todo*.test.mjs`, `tests/fixture/` | Bash selftest of the script and prompt budgets, plus `node --test` suites for the to-do. |
@@ -74,7 +74,8 @@ One feature lives in `.sdlc/work/<slug>/`. The agent writes the artifacts;
    a commit present on a remote, and needs a `Memory:` decision in evidence.md.
    With config.md `stages:`, `ship <slug> <stage> <sha> [repo]` runs the same
    delivery checks per stage, refuses unknown, repeated and out-of-order stages,
-   and records a `stage:` line in `.state` bound to the scored evidence id;
+   and records a `stage:` line in `.state` keyed by the shipped repository's git
+   toplevel and bound to the scored evidence id and build entry;
    `close shipped` then needs the last stage per `Commit:` repository, or
    `--at <stage>` naming a recorded one, whose reason goes into the closed note.
    Reproducible caches under `logs/` are pruned, the folder moves to

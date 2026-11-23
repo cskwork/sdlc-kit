@@ -129,7 +129,9 @@ always says what comes next.
 archived slugs: counts by phase and state, median and p90 time per phase,
 score rounds, returns to plan or build, the top BLOCKED reasons (Observed of
 BLOCKED rows) and closes per week. A slug without `events.log` (one made by an
-older kit) counts as legacy and is left out of the timings. `--since` keeps closes,
+older kit) counts as legacy, and one whose log does not start with `new` (in
+flight when logging began) as partial; both are left out of the timings. A
+failed append to `events.log` warns and never undoes the command. `--since` keeps closes,
 phase times and archived slugs from that date on.
 
 Closed features move to `.sdlc/archive/`, with reproducible caches under
@@ -227,8 +229,11 @@ evidence, authority for the target, a `<sha>` whose tree equals the verified
 `Commit:` of that repository and, beyond `local`, on a remote) and refuses an
 unknown stage, a stage already recorded, or one whose earlier stages are not.
 The stage goes into `.state` as a `stage:` line bound to the scored evidence
-(the one record; `events.log` keeps the command and its output), so a new
-score starts the ladder again. `status` and `next` show `deliver READY · at
+and its build entry (the one record; `events.log` keeps the command and its
+output), so a new score or a re-approved plan starts the ladder again. A
+record belongs to the git repository shipped, so `Commit:` lines for two
+folders of one repository share it, as `close` matches `Shipped:` lines.
+Stage names are letters, digits, `.`, `_` and `-`, each listed once. `status` and `next` show `deliver READY · at
 stg (2/3)`; `status --json` adds `stage` and `stages`. `close <slug> shipped`
 then needs the last stage for every `Commit:` repository, or `close <slug>
 shipped --at <stage> "<reason>"` naming a recorded one when the rest is out of
@@ -237,7 +242,9 @@ Without `stages:`, nothing changes and `ship` and `--at` are refused.
 
 A plan with a risk flag set to yes also names how to undo it, under Risk
 flags: `- Undo: flag <name> | revert <what> | config <key> | none — <why>`.
-`approve plan` refuses it without one; a plan with every flag `no` needs none.
+`approve plan` refuses it without one, and `next` hands the edit to the agent;
+a plan with every flag `no` needs none, and a plan approved before this rule
+stays approved.
 When Undo names a flag, Shipping's `Policy:` line carries its removal
 follow-up.
 
@@ -263,7 +270,7 @@ other skill is needed.
 ## Drive it from a host
 
 `sdlc.sh status --json` lists every feature with its phase, state, score and
-route, plus `ageDays` (since its first event, else the folder's creation),
+route, plus `ageDays` (since the earlier of its first event and the folder's creation),
 `lastEventAt`, `stage` and `stages`. `sdlc.sh next <slug>` exits `0` ready, `10` needs a human, `20`
 blocked, `30` done. The scripts record and report; they never run a model. An
 unattended run ships no further than your recorded words allow — a local

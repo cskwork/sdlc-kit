@@ -320,6 +320,7 @@ regression_other() {
   done
   plan 1
   replace '/Risk flags:/ {$0="- Risk flags: migration no · security yes, auth changes; secrets reviewed · infra no"} {print}' "$F/PLAN.md"
+  replace '/Risk flags:/ {print; print "- Undo: revert the auth change"; next} {print}' "$F/PLAN.md"
   expect 1 approve plan "$SLUG" --agent flags; contains 'security yes, auth changes; secrets reviewed'
   expect 10 next "$SLUG"; contains 'security yes, auth changes; secrets reviewed'
   ok 'PLAN length/placeholders rejected and raised risk segment shown in full'
@@ -1371,6 +1372,18 @@ regression_events() {
   reviewed "$SLUG" fail 'missing case'
   tail -1 "$F/events.log" | grep -q $'\treview\tbuild\tfail\tround 1: missing case$' || fail "review FAIL event: $(tail -1 "$F/events.log")"
   ok 'events: close appends its line and the log moves into archive/ unchanged; a review FAIL is logged with the build phase after it'
+  expect 0 close "$SLUG" dropped 'free the slug'
+  ready unwritable 1; evidence; route deliver; delivery
+  rm "$F/events.log"; mkdir "$F/events.log"
+  expect 0 close "$SLUG" shipped 'log cannot be written'; contains 'events.log not written'; contains 'Archived unwritable'
+  grep -q '^closed: shipped ' ".sdlc/archive/$SLUG/.state" || fail 'close did not finish when events.log could not be written'
+  ok 'events: a failed events.log append warns and the command still completes'
+  feature aged; touch -t 202001010000 "$F"
+  expect 0 status "$SLUG" --json
+  if [ "$(stat -f %B "$F" 2>/dev/null || stat -c %W "$F" 2>/dev/null)" -lt 1600000000 ] 2>/dev/null; then
+    printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; f=json.load(sys.stdin)["features"][0]; assert f["ageDays"]>365, f' || fail "ageDays ignored the older folder: $OUTPUT"
+    ok 'events: ageDays runs from the folder when it is older than the first event'
+  else printf 'skip: this file system cannot move a folder creation time back\n'; fi
   mkdir -p .sdlc/work/old-legacy
   expect 0 status old-legacy --json
   printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; f=json.load(sys.stdin)["features"][0]; assert f["lastEventAt"] is None and f["stages"]==[] and (f["ageDays"] is None or f["ageDays"]==0), f' || fail "legacy status JSON: $OUTPUT"
@@ -1382,8 +1395,10 @@ regression_stats() {
   ready blocked-one 1; evidence S1:BLOCKED:; route human
   ready returned-one 2; evidence S2:FAIL:code; route build
   mkdir -p .sdlc/work/old-legacy
+  # In flight when logging began: its log does not start with new, so it has no phase timings.
+  ready partial-one 1; sed -i.bak 1d "$F/events.log"; rm -f "$F/events.log.bak"
   expect 0 stats
-  contains 'Slugs: 4 (open 3, archived 1); legacy (no events.log, left out of timings): 1'
+  contains 'Slugs: 5 (open 4, archived 1); left out of timings: legacy (no events.log) 1, partial (logging began mid-flight) 1'
   contains 'done DONE: 1'; contains 'Score rounds: 3 over 3 slugs (median 1, max 1)'; contains 'Returns: 0 to plan, 1 to build (1 slugs)'
   contains '1× observed S1'; contains ': 1 shipped, 0 dropped'
   for p in intent plan build evidence deliver; do contains "  $p: "; done
@@ -1391,13 +1406,19 @@ regression_stats() {
   expect 0 stats --json
   printf '%s\n' "$OUTPUT" | python3 -c '
 import json,sys; d=json.load(sys.stdin)
-assert d["slugs"]=={"total":4,"open":3,"archived":1,"legacy":1}, d["slugs"]
+assert d["slugs"]=={"total":5,"open":4,"archived":1,"legacy":1,"partial":1}, d["slugs"]
+assert next(p for p in d["phaseTimes"] if p["phase"]=="intent")["slugs"]==3, d["phaseTimes"]
 assert {"phase":"done","state":"DONE","n":1} in d["counts"], d["counts"]
 assert [p["phase"] for p in d["phaseTimes"]]==["intent","plan","build","evidence","deliver"], d["phaseTimes"]
 assert all(p["p90Seconds"]>=p["medianSeconds"]>=0 for p in d["phaseTimes"])
 assert d["scoreRounds"]["total"]==3 and d["returns"]=={"plan":0,"build":1,"slugs":1}
 assert d["blocked"]==[{"reason":"observed S1","n":1}] and len(d["closesPerWeek"])==1 and d["closesPerWeek"][0]["shipped"]==1' || fail "stats JSON: $OUTPUT"
-  ok 'stats --json: the same figures as machine output'
+  ok 'stats --json: the same figures as machine output; a slug whose log does not start with new counts as partial, without timings'
+  SLUG=blocked-one; F=$PWD/.sdlc/work/$SLUG
+  esc=$(printf '\033'); replace '/\| S1 \|/ {$0="| S1 | BLOCKED | | red '"$esc"'[31m text | |"} {print}' "$F/evidence.md"
+  expect 0 stats --json
+  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert {"reason":"red \x1b[31m text","n":1} in d["blocked"], d["blocked"]' || fail "stats JSON with a control character: $OUTPUT"
+  ok 'stats --json escapes control characters in a BLOCKED reason'
   expect 0 stats --json --since 2999-01-01
   printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["since"]=="2999-01-01" and d["slugs"]["archived"]==0 and d["closesPerWeek"]==[] and d["phaseTimes"]==[], d' || fail "stats --since: $OUTPUT"
   expect 2 stats --since 11/23; contains 'stats [--json] [--since YYYY-MM-DD]'
@@ -1450,6 +1471,25 @@ regression_stages() {
   for stage in dev stg prd; do expect 0 ship "$SLUG" "$stage" "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; done
   expect 0 close "$SLUG" shipped 'every stage shipped'
   ok 'close shipped after every stage; a new score starts the ladder again'
+  mkdir -p svc-a svc-b; printf a > svc-a/x; printf b > svc-b/x; git add svc-a svc-b; git commit -qm 'two folders, one repository'; SHA=$(git rev-parse HEAD)
+  ready mono 1; evidence; replace '/^- Commit:/ {print "- Commit: '"$SHA"' svc-a"; print "- Commit: '"$SHA"' svc-b"; next} {print}' "$E"; route deliver; delivery
+  expect 0 ship "$SLUG" dev "$SHA" svc-a --checked 'git rev-parse HEAD' --output "$SHA"
+  expect 1 ship "$SLUG" dev "$SHA" svc-b --checked 'git rev-parse HEAD' --output "$SHA"; contains 'dev is already recorded'
+  expect 0 next "$SLUG"; contains 'at dev (1/3): ship to stg'
+  expect 0 close "$SLUG" shipped --at dev 'monorepo: later stages belong to the release team'
+  ok 'stages: Commit lines for folders of one repository share its stage records'
+  ready rebind 1; evidence; route deliver
+  expect 0 ship "$SLUG" dev "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"
+  printf -- '- More: out of scope note\n' >> "$F/PLAN.md"; expect 0 approve plan "$SLUG" --agent 'plan re-approved'
+  reviewed "$SLUG" pass 'review again'; route deliver
+  expect 0 next "$SLUG"; contains 'READY deliver: ship to dev'
+  ok 'stages: a re-approved plan with the same evidence starts the ladder again'
+  replace '!/^stages:/ {print}' .sdlc/config.md; printf 'stages: dev, stg, dev\n' >> .sdlc/config.md
+  expect 1 next "$SLUG"; contains 'config.md stages: names dev twice'
+  expect 1 ship "$SLUG" dev "$SHA" --checked x --output y; contains 'names dev twice'
+  replace '!/^stages:/ {print}' .sdlc/config.md; printf 'stages: dev, q?a\n' >> .sdlc/config.md
+  expect 1 next "$SLUG"; contains "config.md stages: 'q?a' is not a stage name"
+  ok 'stages: a stage named twice, or a name with other characters, is refused wherever stages: is read'
 }
 # A plan that raises a risk flag names how to undo it.
 undo_plan() { plan 1; replace '/Risk flags:/ {$0="- Risk flags: migration yes · data deletion no · public API no · security no · infra no"} {print}' "$F/PLAN.md"; [ -z "$1" ] || replace '/Risk flags:/ {print; print "- Undo: '"$1"'"; next} {print}' "$F/PLAN.md"; }
@@ -1458,11 +1498,16 @@ regression_undo() {
   feature undo-missing; expect 0 approve intent "$SLUG" --human 'approved scope'
   undo_plan ''
   expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'a risk flag says yes (migration yes): add "- Undo:'
-  expect 10 next "$SLUG"; contains 'a risk flag says yes (migration yes)'; contains 'then plan not approved; approve plan --human migration yes'
+  # The agent adds the line, so it is the agent's turn (READY), naming the human approval that follows.
+  expect 0 next "$SLUG"; contains 'READY plan: edit PLAN.md: a risk flag says yes (migration yes)'; contains 'then approve plan --human migration yes'
   undo_plan '<flag <name> | revert <what> | config <key> | none — why>'
   expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'a risk flag says yes'
-  undo_plan 'none'
-  expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'Undo: none needs its reason'
+  for placeholder in 'flag <name>' 'revert <what>' 'config <key>' 'none — <why>'; do
+    undo_plan "$placeholder"; expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'Undo: replace the placeholder'
+  done
+  for bare in 'none' 'none —' 'none:' 'none--'; do
+    undo_plan "$bare"; expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'Undo: none needs its reason'
+  done
   undo_plan 'maybe later'
   expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'Undo: must start with flag, revert, config or none'
   ok 'undo: a plan with a risk flag yes and no filled Undo: line cannot be approved, and next says so'
@@ -1471,6 +1516,10 @@ regression_undo() {
   feature undo-none; expect 0 approve intent "$SLUG" --human 'approved scope'
   undo_plan 'none — the new column is additive and unused'
   expect 0 approve plan "$SLUG" --human 'risk accepted'
+  n=0; for reason in 'none—additive' 'none –additive' 'none--additive' 'none - additive' 'none: additive'; do
+    n=$((n+1)); feature "undo-none-$n"; expect 0 approve intent "$SLUG" --human 'approved scope'
+    undo_plan "$reason"; expect 0 approve plan "$SLUG" --human 'risk accepted'
+  done
   feature undo-flag; expect 0 approve intent "$SLUG" --human 'approved scope'
   undo_plan 'flag new_export off'
   expect 0 approve plan "$SLUG" --human 'risk accepted'
@@ -1478,6 +1527,16 @@ regression_undo() {
   plan 1; grep -q 'Undo:' "$F/PLAN.md" && fail 'fixture plan has an Undo line'
   expect 0 approve plan "$SLUG" --agent 'no risk, no undo line'
   ok 'undo: revert, flag and none with a reason pass; a plan with every risk flag no needs no Undo: line'
+  # A risk plan approved before the rule (no Undo line): re-approving it is a no-op and the build goes on.
+  feature undo-legacy; expect 0 approve intent "$SLUG" --human 'approved scope'
+  undo_plan 'revert the change commit'; expect 0 approve plan "$SLUG" --human 'risk accepted'
+  replace '!/^- Undo:/ {print}' "$F/PLAN.md"; old=$(sha_of "$F/PLAN.md")
+  replace '/^plan: / {sub(/^plan: [0-9a-f]+/,"plan: '"$old"'")} {print}' "$F/.state"
+  expect 0 approve plan "$SLUG" --human 'risk accepted again'; contains 'plan already approved'
+  expect 0 next "$SLUG"; contains 'READY build'
+  for i in 1 2 3; do reviewed "$SLUG" fail "finding $i"; done
+  expect 10 next "$SLUG"; contains 'a risk flag says yes (migration yes)'; contains '(PLAN.md, the agent first); then stopped for the human'
+  ok 'undo: a risk plan approved before the rule stays approved; a stop names the missing Undo line'
 }
 run_regressions() {
   case "$1" in
