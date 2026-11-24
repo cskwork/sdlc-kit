@@ -820,6 +820,55 @@ test('ticket: the panel never moves when the ticket opens, follows or closes', (
   assert.equal(view.dataset.dock, undefined, 'closing and reopening never docks the panel');
 });
 
+test('ticket: in the tray app\'s window the page asks the app (window.ipc) and opens no popup', () => {
+  const { b } = selectedBoard([linked('aaaaaa'), linked('bbbbbb'), askItem('cccccc', 'v1', '')]);
+  const posts = [];
+  b.context.ipc = { postMessage(message) { posts.push(message); } };
+  b.key('j');
+  assert.deepEqual(posts, [], 'no ticket opened yet: a selection asks for nothing');
+  b.key('k');
+  assert.equal(b.key('t').prevented, true);
+  assert.deepEqual(posts, ['{"open":"https://tracker.invalid/browse/T-aaaaaa"}'], 'exactly one message, the open');
+  b.key('t');
+  assert.equal(posts[1], '{"open":"https://tracker.invalid/browse/T-aaaaaa"}', 'the same ticket again asks again (Chrome brings it back)');
+  b.key('j');
+  assert.equal(posts[2], '{"follow":"https://tracker.invalid/browse/T-bbbbbb"}', 'the selection follows');
+  b.key('j');
+  assert.equal(posts.length, 3, 'an item without a ticket moves nothing');
+  b.nodes.get('panel-ticket').click();
+  assert.equal(posts.length, 3, 'the button on an item without a ticket does nothing');
+  assert.equal(b.opened.length, 0, 'never window.open in the app');
+});
+
+test('ticket: in the app a link to this machine is refused with a message, not sent to the app', () => {
+  const local = (id, url) => askItem(id, 'v1', '', { link: { label: id, url } });
+  const { p, b } = selectedBoard([local('aaaaaa', 'http://127.0.0.1:5173/x'), local('bbbbbb', 'http://LOCALHOST./y'),
+    local('cccccc', 'http://[::1]:8080/'), linked('dddddd'), local('eeeeee', 'http://127.0.0.1:9/z')]);
+  const posts = [], errors = [];
+  b.context.ipc = { postMessage(message) { posts.push(message); } };
+  const shown = p.context.todoPage.showError;
+  p.context.todoPage.showError = error => errors.push(error);
+  try {
+    b.key('t'); b.key('j'); b.key('t'); b.key('j'); b.key('t');
+    assert.deepEqual(posts, [], 'no loopback address reaches the app');
+    assert.deepEqual(errors.map(error => error.key), ['panel.notTicket', 'panel.notTicket', 'panel.notTicket']);
+    b.key('j'); b.key('t');
+    assert.deepEqual(posts, ['{"open":"https://tracker.invalid/browse/T-dddddd"}']);
+    b.key('j');
+    assert.equal(posts.length, 1, 'the selection does not follow to a loopback address');
+    assert.equal(errors.length, 3, 'and says nothing for a mere selection');
+  } finally { p.context.todoPage.showError = shown; }
+  assert.equal(p.context.todoPage.t('panel.notTicket'), p.context.todoPage.lang === 'ko' ? '이 링크는 티켓 창으로 열 수 없어요' : 'This link cannot open in the ticket window');
+});
+
+test('ticket: outside the app (no window.ipc, or one without postMessage) the popup opens as before', () => {
+  const { b } = selectedBoard([linked('aaaaaa')]);
+  b.context.ipc = {};
+  b.key('t');
+  assert.equal(b.opened.length, 1);
+  assert.equal(b.opened[0].name, 'sdlc-ticket');
+});
+
 test('ticket: the panel handle keeps the right-side keys, ← widens and → narrows', () => {
   const { b, view } = selectedBoard([linked('aaaaaa')]);
   view.clientWidth = 1600;

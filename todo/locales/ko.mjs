@@ -275,6 +275,7 @@ export default {
     'panel.send': '답 보내기',
     'panel.ticket': '티켓 열기',
     'panel.popupBlocked': '브라우저가 티켓 창을 막았어요. 이 페이지의 팝업을 허용해 주세요.',
+    'panel.notTicket': '이 링크는 티켓 창으로 열 수 없어요',
     'panel.more': '자세히',
     'panel.less': '접기',
     'panel.members': '같은 티켓의 항목',

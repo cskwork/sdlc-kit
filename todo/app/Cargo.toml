@@ -20,6 +20,14 @@ ttf-parser = { version = "=0.25.1", default-features = false }
 [target.'cfg(target_os = "macos")'.dependencies]
 # Already in the tree through winit; runs badge updates on the main thread while the window is hidden.
 dispatch = "0.2"
+# The board window: the web board in WKWebView (see src/board.rs). objc2 0.6 and objc2-app-kit 0.3 are already in the
+# tree through tray-icon; wry uses the same versions.
+wry = { version = "0.55", default-features = false }
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSGeometry", "NSNotification", "NSObject", "NSArray", "NSEnumerator"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSResponder", "NSWindow", "NSView", "NSScreen", "NSGraphics", "NSMenu", "NSMenuItem", "NSEvent", "NSRunningApplication", "libc"] }
+objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "WKWebView", "WKWebViewConfiguration"] }
+raw-window-handle = "0.6"
 
 [profile.release]
 opt-level = "s"

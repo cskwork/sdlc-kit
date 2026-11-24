@@ -281,6 +281,7 @@ export default {
     'panel.send': 'Send',
     'panel.ticket': 'Open ticket',
     'panel.popupBlocked': 'The browser blocked the ticket window. Allow pop-ups for this page.',
+    'panel.notTicket': 'This link cannot open in the ticket window',
     'panel.more': 'More',
     'panel.less': 'Less',
     'panel.members': 'Items on this ticket',
