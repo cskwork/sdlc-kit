@@ -99,8 +99,11 @@ has_stage() { printf '%s' "$stagerecs" | awk -F'\t' -v s="$1" -v b="$rid:$entry"
 repo_identity() {
   local common prefix
   prefix=$(git -C "$1" rev-parse --show-prefix 2>/dev/null) || return 1
-  common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) ||
-    common=$(cd "$1" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null) || return 1
+  # Older git echoes the unknown --path-format flag back with status 0: take the output only when it is one
+  # line naming an existing directory.
+  common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common=
+  case "$common" in ''|-*|*$'\n'*) common=;; *) [ -d "$common" ] || common=;; esac
+  [ -n "$common" ] || common=$(cd "$1" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null) || return 1
   case "$common" in /*|[A-Za-z]:*) common=$(cd "$common" && pwd -P);; *) common=$(cd "$1" && cd "$common" && pwd -P);; esac || return 1
   printf '%s\t%s' "$common" "$prefix"
 }
@@ -202,20 +205,31 @@ ship_tree_check() {
 # contains the Commit (contains: a --no-ff merge that promoted it with other changes), into smatch; beyond
 # local ($4) it must be on a remote.
 ship_match() {
-  local paths=() p
+  local top base idx out rc=0
   commit_present "$1" "$2"
   git -C "$1" rev-parse --verify -q "$3^{commit}" >/dev/null || die "unknown stage commit: $3"
   if git -C "$1" diff --quiet "$2" "$3"; then smatch=exact
   elif git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null; then
     smatch=contains
-    # Containing it is not enough: a later commit may have reverted it. Every path the Commit changed against
-    # its first parent (every path, for a root commit) must still hold the Commit's version.
-    while IFS= read -r -d '' p; do paths[${#paths[@]}]=$p; done < <(
-      if git -C "$1" rev-parse -q --verify "$2^1" >/dev/null; then git -C "$1" diff -z --no-renames --name-only "$2^1" "$2"
-      else git -C "$1" ls-tree -r -z --name-only "$2"; fi)
-    if [ "${#paths[@]}" -gt 0 ] && ! git -C "$1" diff --quiet "$2" "$3" -- "${paths[@]/#/:(literal)}"; then
-      die "stage commit $3 no longer has the verified change of $2 at: $(git -C "$1" diff --no-renames --name-only "$2" "$3" -- "${paths[@]/#/:(literal)}" | awk '{printf "%s%s", (NR>1?", ":""), $0}')"
+    # Containing it is not enough: a later commit may have reverted it. The Commit's own change (against its
+    # first parent, or the empty tree for a root commit) must reverse-apply onto the stage commit's tree: then
+    # every hunk is still there, and later edits elsewhere in the same files do not matter. The patch goes
+    # through a pipe and a temporary index, never argv, and paths stay relative to the repository top.
+    top=$(git -C "$1" rev-parse --show-toplevel) || die "not a git repository: $1"
+    if base=$(git -C "$top" rev-parse -q --verify "$2^1"); then :
+    elif [ -n "$(git -C "$top" rev-list --parents -n 1 "$2" | awk '{print $2}')" ] ||
+      { [ -f "$(git -C "$top" rev-parse --git-path shallow)" ] && grep -q "^$(git -C "$top" rev-parse "$2")\$" "$(git -C "$top" rev-parse --git-path shallow)"; }; then
+      die "the parent of verified Commit $2 is not available (shallow clone?): fetch its history, then ship again"
+    else base=$(git -C "$top" hash-object -t tree /dev/null); fi
+    # An empty Commit (no change) is contained trivially; git apply refuses an empty patch.
+    if ! git -C "$top" diff-tree --quiet "$base" "$2"; then
+      idx=$(mktemp "${TMPDIR:-/tmp}/sdlc-index.XXXXXX") || die 'cannot create a temporary index'
+      if GIT_INDEX_FILE=$idx git -C "$top" read-tree "$3"; then
+        out=$(git -C "$top" diff-tree -p --binary --full-index "$base" "$2" | GIT_INDEX_FILE=$idx git -C "$top" apply --cached -R --check 2>&1) || rc=$?
+      else rc=1; out='cannot read the stage commit tree'; fi
+      rm -f "$idx"
     fi
+    [ "$rc" -eq 0 ] || die "stage commit $3 no longer has the verified change of $2: $(printf '%s\n' "$out" | awk 'NF{print;exit}')"
   else die "stage commit $3 neither has the verified tree of Commit $2 nor contains it"; fi
   if [ "$4" != local ]; then remote=$(git -C "$1" branch -r --contains "$3"); [ -n "$remote" ] || die 'Shipped commit is not on any remote'; fi
 }

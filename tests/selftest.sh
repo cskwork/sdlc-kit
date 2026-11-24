@@ -1353,6 +1353,21 @@ DOC
     [ ! -e "$F/.state.lock" ] && [ ! -e "$F/.state.lock.reclaim" ] || fail "stress round $round: lock left behind"
   done
   ok 'state lock: eight concurrent review runs, three rounds, each round recorded once'
+  # The reclaim race replayed: W reads live B's token, B releases, C takes the lock, then W's (slowed)
+  # liveness check finds B dead. W must not remove C's live lock.
+  cat > "$TMP/aba.sh" <<'ABA'
+die() { echo "die: $*"; exit 1; }
+. "$1/lib/store.sh"; LOCK=$2/.state.lock; mkdir -p "$2"
+( mkdir "$LOCK"; sh -c 'echo $PPID' > "$LOCK/pid"; sleep 0.3; rm -rf "$LOCK" ) &
+sleep 0.1
+( while ! mkdir "$LOCK" 2>/dev/null; do sleep 0.01; done; printf 'C.live\n' > "$LOCK/pid"; sleep 2 ) &
+kill() { sleep 1; builtin kill "$@"; }
+reclaim_lock; sleep 0.2
+cat "$LOCK/pid" 2>/dev/null || echo gone
+wait
+ABA
+  [ "$(bash "$TMP/aba.sh" "$KIT" "$TMP/aba" | head -1)" = C.live ] || fail 'a reclaimer removed a live lock taken after the owner it judged dead'
+  ok 'state lock: a reclaimer never removes a lock taken after the owner it read'
   SLUG=lock-race; F=$PWD/.sdlc/work/$SLUG
   mkdir "$F/.state.lock"; printf '%s\n' "$$" > "$F/.state.lock/pid"
   printf 'VERDICT: FAIL\n' >> "$F/review.md"
@@ -1584,7 +1599,7 @@ regression_stagerepos() {
   git merge -q --no-ff -m 'promote ticket to dev' ticket; DEV=$(git rev-parse HEAD); git checkout -q main
   # Revert the change on top of the promotion: the merge still contains the Commit but no longer has it.
   git checkout -q -b reverted dev; git revert --no-edit "$SHA" > /dev/null; REVERTED=$(git rev-parse HEAD); git checkout -q main
-  expect 1 ship "$SLUG" dev "$REVERTED" . --checked 'git rev-parse reverted' --output "$REVERTED"; contains "stage commit $REVERTED no longer has the verified change of $SHA at: README"
+  expect 1 ship "$SLUG" dev "$REVERTED" . --checked 'git rev-parse reverted' --output "$REVERTED"; contains "stage commit $REVERTED no longer has the verified change of $SHA: error: patch failed: README"
   expect 0 ship "$SLUG" dev "$DEV" . --checked 'git rev-parse dev' --output "$DEV"; contains 'Recorded wt at dev (1/3) for . (contains).'
   # A record in another field count (an earlier pre-release format) is ignored.
   printf 'stage: dev\t%s\tts\tbind\tid\t.\n' "$DEV" >> "$F/.state"
@@ -1620,6 +1635,62 @@ regression_stagerepos() {
   expect 1 score "$SLUG"; contains "Commit path 'gone-tree' is not a directory"
   ok 'score still needs every Commit folder to exist'
 }
+# contains is a patch-presence check: the Commit's change must reverse-apply onto the stage commit.
+# promote <branch> <commit>: a branch from main with other work, then a --no-ff merge of <commit>; prints its sha.
+promote() { git checkout -q -b "$1" main; printf 'other %s\n' "$1" > "other-$1.txt"; git add "other-$1.txt"; git commit -qm "other work on $1"; git merge -q --no-ff -m "promote to $1" "$2"; git rev-parse HEAD; git checkout -q main; }
+contains_slug() { ready "$1" 1; evidence; [ -z "${2:-}" ] || replace '/^- Commit:/ {$0=$0" '"$2"'"} {print}' "$E"; route deliver; }
+regression_contains() {
+  repo regression-contains
+  printf 'stages: dev, stg, prd\n' >> .sdlc/config.md
+  mkdir -p app/sub; seq 1 40 > app/sub/config.txt; git add app; git commit -qm 'app config'; git branch -q base
+  # A ticket edits line 5; QA verifies it at the tip of its branch, checked out on main.
+  git checkout -q -b t1 base; sed 's/^5$/five/' app/sub/config.txt > x && mv x app/sub/config.txt; git commit -qam 'ticket edits line 5'; C1=$(git rev-parse HEAD)
+  git checkout -q main; git merge -q --ff-only t1; SHA=$C1
+  contains_slug sub app/sub
+  # Another ticket later edits line 35 of the same file on dev: the verified hunk is still there.
+  DEV=$(promote dev "$C1"); git checkout -q dev; sed 's/^35$/thirty-five/' app/sub/config.txt > x && mv x app/sub/config.txt; git commit -qam 'other ticket, same file'; DEV=$(git rev-parse HEAD); git checkout -q main
+  expect 0 ship "$SLUG" dev "$DEV" app/sub --checked x --output y; contains '(contains)'
+  ok 'contains: a later edit to another hunk of the same file is accepted'
+  # Reverted on stg, shipped from the subfolder the Commit names: refused (paths are repository-relative).
+  git checkout -q -b stg dev; git revert --no-edit "$C1" > /dev/null; STG=$(git rev-parse HEAD); git checkout -q main
+  expect 1 ship "$SLUG" stg "$STG" app/sub --checked x --output y; contains "stage commit $STG no longer has the verified change of $C1: error: patch failed: app/sub/config.txt"
+  ok 'contains: a revert is refused, also when shipped from a subfolder'
+  # The verified Commit is a merge: its change is the diff to its first parent.
+  git checkout -q -b t2 main; git checkout -q -b side main; printf 'side\n' > side.txt; git add side.txt; git commit -qm 'side work'
+  git checkout -q t2; git merge -q --no-ff -m 'merge side into the ticket' side; C2=$(git rev-parse HEAD); git checkout -q main; git merge -q --ff-only t2; SHA=$C2
+  contains_slug merged
+  D2=$(promote dev2 "$C2"); expect 0 ship "$SLUG" dev "$D2" --checked x --output y; contains '(contains)'
+  ok 'contains: a merge Commit is checked against its first parent'
+  # Spaces (and, where the file system allows it, a newline) in paths; and a large change, all through a pipe.
+  git checkout -q -b t3 main; mkdir -p 'dir with space'; printf 'a\n' > 'dir with space/a b.txt'
+  nl=$(printf 'new\nline.txt'); if printf 'x\n' > "$nl" 2>/dev/null; then :; else nl=; fi
+  i=0; mkdir -p many; while [ "$i" -lt 2000 ]; do printf '%s\n' "$i" > "many/f$i.txt"; i=$((i+1)); done
+  git add -A 'dir with space' many ${nl:+"$nl"}; git commit -qm 'odd paths and 2000 files'; C3=$(git rev-parse HEAD); git checkout -q main; git merge -q --ff-only t3; SHA=$C3
+  contains_slug odd
+  D3=$(promote dev3 "$C3"); expect 0 ship "$SLUG" dev "$D3" --checked x --output y; contains '(contains)'
+  git checkout -q -b rev3 "$D3"; git rm -q 'dir with space/a b.txt'; git commit -qm 'drop the spaced file'; R3=$(git rev-parse HEAD); git checkout -q main
+  expect 1 ship "$SLUG" stg "$R3" --checked x --output y; contains "no longer has the verified change of $C3"
+  ok "contains: paths with spaces${nl:+ and a newline} and a 2000-file change go through a pipe; removing one file is refused"
+}
+# A root commit as the verified Commit is compared with the empty tree; an old git that echoes
+# --path-format back still yields the repository identity.
+regression_rootcommit() {
+  local oldpath real
+  repo regression-rootcommit
+  printf 'stages: dev, stg, prd\n' >> .sdlc/config.md
+  [ -z "$(git rev-list --parents -n 1 HEAD | awk '{print $2}')" ] || fail 'fixture HEAD is not a root commit'
+  ready root 1; evidence; route deliver
+  git checkout -q -b dev; printf 'dev work\n' > dev.txt; git add dev.txt; git commit -qm 'dev work'; git checkout -q main
+  expect 0 ship "$SLUG" dev "$(git rev-parse dev)" --checked x --output y; contains '(contains)'
+  ok 'contains: a root Commit is compared with the empty tree'
+  mkdir -p "$TMP/oldgit"; real=$(command -v git)
+  printf '#!/usr/bin/env bash\nargs=()\nfor a in "$@"; do if [ "$a" = --path-format=absolute ]; then printf "%%s\\n" "$a"; else args+=("$a"); fi; done\nexec "%s" "${args[@]}"\n' "$real" > "$TMP/oldgit/git"; chmod +x "$TMP/oldgit/git"
+  oldpath=$PATH; PATH="$TMP/oldgit:$PATH"
+  [ "$(git rev-parse --path-format=absolute --git-common-dir | head -1)" = --path-format=absolute ] || fail 'fake old git does not echo the flag'
+  ready oldgit 1; evidence; expect 0 score "$SLUG"; PATH=$oldpath
+  grep -q "^repo: $(cd .git && pwd -P)"$'\t\t'".$" "$F/.state" || fail "old git identity: $(grep '^repo:' "$F/.state")"
+  ok 'identity: a git that echoes --path-format back falls back to the relative common dir'
+}
 run_regressions() {
   case "$1" in
     stop) regression_stop;; scenarios) regression_scenarios;; delivery) regression_delivery;; review) regression_review;; other) regression_other;;
@@ -1627,12 +1698,12 @@ run_regressions() {
     repos) regression_repos;; cells) regression_cells;; paths) regression_paths;; uncommitted) regression_uncommitted;;
     nested) regression_nested;; interrupt) regression_interrupt;; scoped) regression_scoped;; fingerprint) regression_fingerprint;; optin) regression_optin;;
     reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;; labels) regression_labels;; sha) regression_sha;; ship) regression_ship;; memory) regression_memory;;
-    events) regression_events;; stats) regression_stats;; stages) regression_stages;; stagerepos) regression_stagerepos;; undo) regression_undo;;
+    events) regression_events;; stats) regression_stats;; stages) regression_stages;; stagerepos) regression_stagerepos;; contains) regression_contains;; rootcommit) regression_rootcommit;; undo) regression_undo;;
     all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init; regression_ultra
       for round2 in a b c d e; do regression_round2 "$round2"; done; regression_round3
       regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint; regression_optin
       regression_reposflag; regression_carry; regression_target; regression_clarity; regression_labels; regression_sha; regression_ship; regression_memory
-      regression_events; regression_stats; regression_stages; regression_stagerepos; regression_undo;;
+      regression_events; regression_stats; regression_stages; regression_stagerepos; regression_contains; regression_rootcommit; regression_undo;;
     *) fail "unknown regression group: $1";;
   esac
 }

@@ -228,8 +228,9 @@ which needs a current deliver route, valid evidence and authority for the
 target, as `close shipped` does, and a `<sha>` that, beyond `local`, is on a
 remote. The `<sha>` either has the verified `Commit:`'s tree (`exact`) or
 contains it (`contains`: a `--no-ff` merge that promoted it into a branch
-with other changes) and still holds the Commit's version of every path the
-Commit changed, so a later revert is refused; the record, the output and `status --json`
+with other changes) and the Commit's own change (against its first parent)
+still reverse-applies onto it, so a later revert is refused while another
+change's edit elsewhere in the same file is not; the record, the output and `status --json`
 `stages[].match` say which. `close`'s `Shipped:` line still needs the exact
 tree. `ship` refuses an unknown stage, a stage already recorded, or one whose
 earlier stages are not.
@@ -246,7 +247,8 @@ that repository and says so when none is left, and `check ship` verifies the
 Commit in the project root's or a `Shipped:` line's checkout of it. A
 `Commit:` whose object is missing (its branch deleted and pruned, a shallow
 clone) is named as such.
-Stage names are letters, digits, `.`, `_` and `-`, each listed once, separated
+Repository identity uses `git rev-parse --path-format=absolute` (git 2.31+);
+an older git falls back to the relative common dir. Stage names are letters, digits, `.`, `_` and `-`, each listed once, separated
 by commas or spaces, with no empty item and no `#` comment on the line. `ship`
 takes the folder a `Commit:` line names, in that checkout or another of the
 same repository, and every `Commit:` line of that repository must match the

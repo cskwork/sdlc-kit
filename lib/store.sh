@@ -1,38 +1,61 @@
 # Store upkeep for sdlc.sh, sourced by it (not run alone): the .state lock, the memory index, the
 # close-time memory decision and log pruning, and the dream brief. Uses sdlc.sh's helpers and globals.
 # A command that writes .state holds $F/.state.lock (mkdir is atomic everywhere) from load to save, so
-# two runs on one slug cannot both read the old state and the later write drop the earlier one. A lock
-# whose owner pid is gone, or that never got a pid within a minute, is reclaimed.
-# Reclaiming is serialized by a second mkdir lock and re-checks the owner inside it. Without that, a waiter
-# that read a dead owner could remove a lock another waiter had just taken after the owner's own exit
-# removed it, and two runs would hold the lock. Inside the reclaim lock, a lock dir whose owner is dead
-# cannot change: the dead owner never removes it, no one can mkdir over it, and other reclaimers wait.
-# The window left: a reclaimer that stalls over a minute inside the reclaim lock has it broken by another.
+# two runs on one slug cannot both read the old state and the later write drop the earlier one. The lock's
+# pid file holds a token unique to its holder ("<pid>.<random>"; a bare pid from an older kit reads the same
+# way). A lock whose owner pid is gone, or that never got a token within a minute, is reclaimed.
+#
+# Why reclaiming cannot remove a live lock: reclaimers are serialized by $LOCK.reclaim (itself a mkdir lock
+# holding a token). Inside it a reclaimer reads token T, confirms T's pid is dead, then reads the token again
+# and removes the lock only if it is still T. If the owner it read had meanwhile exited and released, and
+# another run took the lock, the second read is that run's token (or nothing yet), never T, so it skips:
+# tokens are not reused, even when a pid is. While the token is still T after its pid died, nothing else can
+# change the dir: its dead owner never releases it, mkdir cannot take it, and other reclaimers wait. A holder
+# releases only a lock whose token is its own, so neither a reclaimed lock nor one in another process's
+# hands is ever removed by a wrong owner.
+# Left: a reclaimer killed inside $LOCK.reclaim leaves it behind; another breaks it by the same token test,
+# and two mutex breakers racing could both enter the critical section only if one stalled between its
+# second read and rmdir while another reclaimer took the mutex: possible only after a reclaimer was killed.
+lock_token() { printf '%s.%s%s' "$$" "$RANDOM" "$RANDOM"; }
+# True when token $1's pid is gone, or ($1 empty) the dir $2 is over a minute old.
 lock_stale() {
-  { [ -n "$1" ] && ! kill -0 "$1" 2>/dev/null; } || { [ -z "$1" ] && [ -n "$(find "$LOCK" -maxdepth 0 -mmin +1 2>/dev/null)" ]; }
+  { [ -n "$1" ] && ! kill -0 "${1%%.*}" 2>/dev/null; } || { [ -z "$1" ] && [ -n "$(find "$2" -maxdepth 0 -mmin +1 2>/dev/null)" ]; }
 }
+# Removes lock dir $1 when its token is stale and unchanged across the liveness check.
+remove_if_stale() {
+  local t1 t2
+  t1=$(cat "$1/pid" 2>/dev/null) || t1=
+  [ -d "$1" ] && lock_stale "$t1" "$1" || return 1
+  t2=$(cat "$1/pid" 2>/dev/null) || t2=
+  [ "$t1" = "$t2" ] && [ -d "$1" ] || return 1
+  rm -rf "$1"
+}
+# One reclaim attempt under $LOCK.reclaim. Sets reclaimwait when another reclaimer holds that lock.
 reclaim_lock() {
-  local mutex=$LOCK.reclaim owner
-  if ! mkdir "$mutex" 2>/dev/null; then
-    [ -z "$(find "$mutex" -maxdepth 0 -mmin +1 2>/dev/null)" ] || rmdir "$mutex" 2>/dev/null || :
-    return 0
-  fi
-  owner=$(cat "$LOCK/pid" 2>/dev/null) || owner=
-  if [ -d "$LOCK" ] && lock_stale "$owner"; then rm -rf "$LOCK"; fi
-  rmdir "$mutex" 2>/dev/null || :
+  local mutex=$LOCK.reclaim mine
+  reclaimwait=
+  mkdir "$mutex" 2>/dev/null || { remove_if_stale "$mutex" || reclaimwait=1; return 0; }
+  mine=$(lock_token); printf '%s\n' "$mine" > "$mutex/pid"
+  remove_if_stale "$LOCK" || :
+  [ "$(cat "$mutex/pid" 2>/dev/null)" != "$mine" ] || rm -rf "$mutex"
 }
+# Releases lock dir $1 only while it holds this run's token (and, in bash 4+, only from the run itself).
+release_lock() { [ "${BASHPID:-$$}" = "$$" ] && [ -n "${locktoken:-}" ] && [ "$(cat "$1/pid" 2>/dev/null)" = "$locktoken" ] && rm -rf "$1" || :; }
 lock_state() {
   local tries=0 owner limit=$(( ${SDLC_LOCK_WAIT:-30} * 10 ))
-  LOCK=$F/.state.lock
+  LOCK=$F/.state.lock; reclaimwait=
   while ! mkdir "$LOCK" 2>/dev/null; do
     [ -d "$F" ] || die "feature moved while waiting for its lock: $slug"
     owner=$(cat "$LOCK/pid" 2>/dev/null) || owner=
-    if [ -d "$LOCK" ] && lock_stale "$owner"; then reclaim_lock; [ -d "$LOCK" ] || continue; fi
-    [ "$tries" -lt "$limit" ] || die "$slug is locked by another sdlc.sh run${owner:+ (pid $owner)}: retry when it ends, or remove $LOCK if no run is alive"
+    if [ -d "$LOCK" ] && lock_stale "$owner" "$LOCK"; then reclaim_lock; [ -d "$LOCK" ] || continue; fi
+    if [ "$tries" -ge "$limit" ]; then
+      [ -z "$reclaimwait" ] || die "$slug is locked: a stale lock cannot be reclaimed while $LOCK.reclaim is held${owner:+ (lock token $owner)}: retry, or remove $LOCK.reclaim if no sdlc.sh run is alive"
+      die "$slug is locked by another sdlc.sh run${owner:+ (pid ${owner%%.*})}: retry when it ends, or remove $LOCK if no run is alive"
+    fi
     sleep 0.1; tries=$((tries+1))
   done
-  printf '%s\n' "$$" > "$LOCK/pid"
-  trap 'rm -rf "$LOCK"' EXIT
+  locktoken=$(lock_token); printf '%s\n' "$locktoken" > "$LOCK/pid"
+  trap 'release_lock "$LOCK"' EXIT
 }
 # A number from config.md key $1, else $2.
 setting() { local v; v=$(value "$STORE/config.md" "$1"); case "$v" in ''|*[!0-9]*) printf '%s' "$2";; *) printf '%s' "$v";; esac; }
@@ -283,7 +306,8 @@ dream_done() {
 # gone; remove it here. Then warn on size and refresh the memory index.
 archived() {
   local size warnmb
-  F=$1; LOCK=$F/.state.lock; rm -rf "$LOCK"
+  # The lock moved with the folder: release it, and a reclaim lock a killed reclaimer left in it.
+  F=$1; LOCK=$F/.state.lock; release_lock "$LOCK"; remove_if_stale "$LOCK.reclaim" || :
   size=$(kb "$F"); warnmb=$(setting archive_warn_mb 50)
   [ "$size" -le $((warnmb*1024)) ] || err "archived $slug is still $((size/1024)) MB (archive_warn_mb $warnmb): move large logs out or add their cache folders to config.md prune:"
   memdir; [ ! -d "$MEM" ] || ( memory_index ) || err 'memory index not refreshed: run sdlc.sh memory index'

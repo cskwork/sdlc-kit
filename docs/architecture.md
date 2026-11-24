@@ -89,7 +89,8 @@ checks in order and returns the first thing that is missing as the next action.
 
 ## External dependencies
 
-- **Core loop:** Bash, awk, git, and one of `sha256sum`, `shasum` or `openssl`
+- **Core loop:** Bash, awk, git (2.31+ preferred: `ship` reads a repository's identity with `rev-parse
+  --path-format=absolute`; older git falls back to the relative common dir), and one of `sha256sum`, `shasum` or `openssl`
   (`sha()` in `sdlc.sh` tries them in that order). On Windows, Git Bash or WSL.
 - **To-do add-on:** Node.js 18+, standard library only (no `package.json`). The optional tray app needs Rust 1.88+ to build (`todo/app/Cargo.toml`).
 - **QA adapter:** the `e2e` npm package, pinned by `adapters/e2e/VERSION`, only
