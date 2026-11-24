@@ -130,7 +130,7 @@ async function main() {
       arity(0);
       const web = await import('./web.mjs');
       if (await web.liveSession()) { console.log('a to-do server is already running'); return; }
-      const server = await web.startWeb({ file, kit, port: 0, open: false, lang, session: core.sessionPath(), onUrl() {} });
+      const server = await web.startWeb({ file, kit, port: 0, open: false, lang, session: core.sessionPath(), onUrl() {}, deferInitialSync: true });
       const stop = () => server.close().finally(() => process.exit(0));
       process.once('SIGINT', stop); process.once('SIGTERM', stop);
       return;

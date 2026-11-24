@@ -1664,6 +1664,10 @@ regression_contains() {
   git checkout -q -b stg dev; git revert --no-edit "$C1" > /dev/null; STG=$(git rev-parse HEAD); git checkout -q main
   expect 1 ship "$SLUG" stg "$STG" app/sub --checked x --output y; contains "stage commit $STG no longer has the verified change of $C1: error: patch failed: app/sub/config.txt"
   ok 'contains: a revert is refused, also when shipped from a subfolder'
+  # A promotion branch that rewrote the line right before the verified hunk (a context line) still holds it.
+  CTX=$(promote ctx "$C1"); git checkout -q ctx; sed 's/^4$/four-on-ctx/' app/sub/config.txt > x && mv x app/sub/config.txt; git commit -qam 'neighbour line on ctx'; CTX=$(git rev-parse HEAD); git checkout -q main
+  expect 0 ship "$SLUG" stg "$CTX" app/sub --checked x --output y; contains '(contains)'
+  ok 'contains: an edit to the line next to the verified hunk on the promotion branch is accepted'
   # The verified Commit is a merge: its change is the diff to its first parent.
   git checkout -q -b t2 main; git checkout -q -b side main; printf 'side\n' > side.txt; git add side.txt; git commit -qm 'side work'
   git checkout -q t2; git merge -q --no-ff -m 'merge side into the ticket' side; C2=$(git rev-parse HEAD); git checkout -q main; git merge -q --ff-only t2; SHA=$C2

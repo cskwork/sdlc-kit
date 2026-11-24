@@ -26,10 +26,25 @@ struct Shared {
     model: Option<Model>,
     conn: Conn,
     session: Option<Session>,
+    board_session: Option<Session>,
     child: Option<Child>,
     toast: Option<(String, bool, Instant)>,
     artifacts: HashMap<String, Result<Artifact, String>>,
     busy: HashSet<String>,
+}
+
+impl Shared {
+    fn board_to_open(&mut self, requested: bool) -> Option<Session> {
+        if self.conn != Conn::Live { return None; }
+        let session = self.session.as_ref()?;
+        // A Chrome app window is tied to its original port and token. After a server
+        // replacement, open the new session once and leave the old window's drafts alone.
+        let replaced = cfg!(target_os = "macos")
+            && self.board_session.as_ref().is_some_and(|opened| opened != session);
+        if !requested && !replaced { return None; }
+        self.board_session = Some(session.clone());
+        Some(session.clone())
+    }
 }
 
 type State = Arc<Mutex<Shared>>;
@@ -175,6 +190,10 @@ fn open_board(session: &Session) {
     open_url(&url);
 }
 
+fn launch_board(session: Session) {
+    std::thread::spawn(move || open_board(&session));
+}
+
 /// Shows the list window, the fallback for the board.
 fn show_list(ctx: &egui::Context) {
     ctx.send_viewport_cmd(ViewportCommand::Visible(true));
@@ -184,9 +203,9 @@ fn show_list(ctx: &egui::Context) {
 /// The tray's main action: the board while the server is live; otherwise the list window, which shows
 /// why it is offline, rather than a dead URL.
 fn show_board(state: &State, ctx: &egui::Context) {
-    let session = { let shared = state.lock().unwrap(); if shared.conn == Conn::Live { shared.session.clone() } else { None } };
+    let session = state.lock().unwrap().board_to_open(true);
     match session {
-        Some(session) => { std::thread::spawn(move || open_board(&session)); }
+        Some(session) => launch_board(session),
         None => show_list(ctx),
     }
 }
@@ -226,12 +245,19 @@ fn connect(state: State, ctx: egui::Context, launcher: Launcher, lang: Lang, mut
             let session = match client::live(&launcher.session_file) {
                 Some(session) => session,
                 None => {
-                    state.lock().unwrap().conn = Conn::Connecting;
+                    {
+                        let mut shared = state.lock().unwrap();
+                        shared.conn = Conn::Connecting;
+                        // Reap an exited server before its successor checks file-lock owners.
+                        if let Some(child) = shared.child.as_mut() { let _ = child.try_wait(); }
+                    }
                     ctx.request_repaint();
                     match launcher.serve() {
                         Ok((child, session)) => {
                             let mut shared = state.lock().unwrap();
-                            if let Some(mut old) = shared.child.replace(child) { let _ = old.kill(); }
+                            if let Some(mut old) = shared.child.replace(child) {
+                                if old.kill().is_ok() { let _ = old.wait(); }
+                            }
                             session
                         }
                         Err(error) => {
@@ -259,10 +285,10 @@ fn connect(state: State, ctx: egui::Context, launcher: Launcher, lang: Lang, mut
                 let mut shared = state.lock().unwrap();
                 shared.model = Some(model);
                 shared.conn = Conn::Live;
+                let board = shared.board_to_open(std::mem::take(&mut open_board_once));
                 drop(shared);
                 ctx.request_repaint();
-                // The same path as a click on the tray icon.
-                if std::mem::take(&mut open_board_once) { show_board(&state, &ctx); }
+                if let Some(session) = board { launch_board(session); }
             });
             if let Err(error) = result {
                 state.lock().unwrap().conn = Conn::Offline(error);
@@ -283,7 +309,7 @@ impl App {
         theme::install(&cc.egui_ctx, &prefs.font);
         cc.egui_ctx.set_zoom_factor(prefs.zoom);
         let state: State = Arc::new(Mutex::new(Shared {
-            model: None, conn: Conn::Connecting, session: None, child: None,
+            model: None, conn: Conn::Connecting, session: None, board_session: None, child: None,
             toast: prefs_error.map(|error| (error, true, Instant::now())),
             artifacts: HashMap::new(), busy: HashSet::new(),
         }));

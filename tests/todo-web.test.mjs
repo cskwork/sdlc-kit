@@ -756,6 +756,35 @@ test('session file shares the running server with the owner only and goes away o
   assert.equal(await liveSession(session), null, 'a stale file whose server is gone is not live');
 });
 
+test('tray server streams the saved board before slow project status refresh', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'sdlc-todo-slow-sync-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = join(root, 'todo.md');
+  const session = join(root, 'todo-web.json');
+  const release = join(root, 'release');
+  await core.add(file, 'Saved item', { project: root, slug: 'probe' });
+  writeFileSync(join(root, 'sdlc.sh'), `
+for attempt in 1 2 3 4 5; do
+  [ ! -f "$PWD/release" ] || break
+  sleep 1
+done
+printf '%s\\n' '{"features":[{"slug":"probe","phase":"plan","state":"READY"}]}'
+`);
+  const server = await startWeb({ file, kit: root, session, onUrl() {}, deferInitialSync: true });
+  t.after(() => server.close());
+  const url = new URL(server.url);
+  const ctx = { url, token: new URLSearchParams(url.hash.slice(1)).get('t') };
+  const frame = eventStream(ctx, t);
+  try {
+    const initial = await frame(value => value.items?.length === 1);
+    assert.equal(initial.items[0].sdlc.state, '');
+  } finally {
+    writeFileSync(release, '');
+  }
+  const updated = await frame(value => value.items?.[0]?.sdlc?.state === 'READY', 7000);
+  assert.equal(updated.items[0].title, 'Saved item');
+});
+
 test('web fix records the request on a block and reports whether an agent started', async t => {
   const ctx = await web(t), dir = project(ctx.root);
   mkdirSync(join(dir, '.sdlc', 'work', 'legacy'));

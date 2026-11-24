@@ -213,7 +213,10 @@ ship_match() {
     smatch=contains
     # Containing it is not enough: a later commit may have reverted it. The Commit's own change (against its
     # first parent, or the empty tree for a root commit) must reverse-apply onto the stage commit's tree: then
-    # every hunk is still there, and later edits elsewhere in the same files do not matter. The patch goes
+    # every changed line is still there, and later edits elsewhere in the same files do not matter. -C0 drops
+    # the context lines from the match: a promotion branch that diverged next to a hunk (a conflict resolved
+    # there, or an edit on the line before) still holds the change. A revert or a rewrite of a changed line
+    # does not apply and is refused. The patch goes
     # through a pipe and a temporary index, never argv, and paths stay relative to the repository top.
     top=$(git -C "$1" rev-parse --show-toplevel) || die "not a git repository: $1"
     if base=$(git -C "$top" rev-parse -q --verify "$2^1"); then :
@@ -225,7 +228,7 @@ ship_match() {
     if ! git -C "$top" diff-tree --quiet "$base" "$2"; then
       idx=$(mktemp "${TMPDIR:-/tmp}/sdlc-index.XXXXXX") || die 'cannot create a temporary index'
       if GIT_INDEX_FILE=$idx git -C "$top" read-tree "$3"; then
-        out=$(git -C "$top" diff-tree -p --binary --full-index "$base" "$2" | GIT_INDEX_FILE=$idx git -C "$top" apply --cached -R --check 2>&1) || rc=$?
+        out=$(git -C "$top" diff-tree -p --binary --full-index "$base" "$2" | GIT_INDEX_FILE=$idx git -C "$top" apply --cached -R --check -C0 2>&1) || rc=$?
       else rc=1; out='cannot read the stage commit tree'; fi
       rm -f "$idx"
     fi

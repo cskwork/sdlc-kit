@@ -154,7 +154,7 @@ export async function liveSession(file = core.sessionPath()) {
   } catch { return null; }
 }
 
-export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage, session = '', feed = feedPath(file) } = {}) {
+export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage, session = '', feed = feedPath(file), deferInitialSync = false } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('invalid port');
   if (!isLanguage(lang)) throw new Error(`invalid language: ${lang}`);
   if (!onUrl && !open && !process.stdout.isTTY) throw new Error('web requires a terminal or --open');
@@ -173,7 +173,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
     try { const value = payload(); for (const res of clients) sendEvent(res, value); }
     catch (error) { for (const res of clients) sendEvent(res, { error: error.message }, 'error'); }
   };
-  await core.sync(file, { kit });
+  if (!deferInitialSync) await core.sync(file, { kit });
   // Reads share one sync: each runs sdlc.sh status per item, so a burst of artifact requests
   // (one per open card) would otherwise queue many multi-second syncs and time the app out.
   let syncing = null;
@@ -303,6 +303,9 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   const url = urlOf({ port: actualPort, token });
   try {
     if (session) writeSession(session, { port: actualPort, token, pid: process.pid });
+    // The tray app can follow the saved list immediately while project status commands
+    // run. The watcher sends the updated list once sync persists it.
+    if (deferInitialSync) void synced().catch(error => console.error(`to-do sync: ${error.message}`));
     if (onUrl) await onUrl(url);
     if (open) await openBrowser(url);
     else if (!onUrl) process.stdout.write(`${url}\n`);
