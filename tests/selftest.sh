@@ -1608,7 +1608,7 @@ regression_stagerepos() {
   git merge -q --no-ff -m 'promote ticket to dev' ticket; DEV=$(git rev-parse HEAD); git checkout -q main
   # Revert the change on top of the promotion: the merge still contains the Commit but no longer has it.
   git checkout -q -b reverted dev; git revert --no-edit "$SHA" > /dev/null; REVERTED=$(git rev-parse HEAD); git checkout -q main
-  expect 1 ship "$SLUG" dev "$REVERTED" . --checked 'git rev-parse reverted' --output "$REVERTED"; contains "stage commit $REVERTED no longer has the verified change of $SHA: error: patch failed: README"
+  expect 1 ship "$SLUG" dev "$REVERTED" . --checked 'git rev-parse reverted' --output "$REVERTED"; contains "stage commit $REVERTED no longer has the verified change of $SHA: reverted by $REVERTED"
   expect 0 ship "$SLUG" dev "$DEV" . --checked 'git rev-parse dev' --output "$DEV"; contains 'Recorded wt at dev (1/3) for . (contains).'
   # A record in another field count (an earlier pre-release format) is ignored.
   printf 'stage: dev\t%s\tts\tbind\tid\t.\n' "$DEV" >> "$F/.state"
@@ -1662,7 +1662,7 @@ regression_contains() {
   ok 'contains: a later edit to another hunk of the same file is accepted'
   # Reverted on stg, shipped from the subfolder the Commit names: refused (paths are repository-relative).
   git checkout -q -b stg dev; git revert --no-edit "$C1" > /dev/null; STG=$(git rev-parse HEAD); git checkout -q main
-  expect 1 ship "$SLUG" stg "$STG" app/sub --checked x --output y; contains "stage commit $STG no longer has the verified change of $C1: error: patch failed: app/sub/config.txt"
+  expect 1 ship "$SLUG" stg "$STG" app/sub --checked x --output y; contains "stage commit $STG no longer has the verified change of $C1: reverted by $STG"
   ok 'contains: a revert is refused, also when shipped from a subfolder'
   # A promotion branch that rewrote the line right before the verified hunk (a context line) still holds it.
   CTX=$(promote ctx "$C1"); git checkout -q ctx; sed 's/^4$/four-on-ctx/' app/sub/config.txt > x && mv x app/sub/config.txt; git commit -qam 'neighbour line on ctx'; CTX=$(git rev-parse HEAD); git checkout -q main
@@ -1683,8 +1683,12 @@ regression_contains() {
   contains_slug odd
   D3=$(promote dev3 "$C3"); expect 0 ship "$SLUG" dev "$D3" --checked x --output y; contains '(contains)'
   git checkout -q -b rev3 "$D3"; git rm -q 'dir with space/a b.txt'; git commit -qm 'drop the spaced file'; R3=$(git rev-parse HEAD); git checkout -q main
-  expect 1 ship "$SLUG" stg "$R3" --checked x --output y; contains "no longer has the verified change of $C3"
-  ok "contains: paths with spaces${nl:+ and a newline} and a 500-file change go through a pipe; removing one file is refused"
+  expect 0 ship "$SLUG" stg "$R3" --checked x --output y; contains '(contains-edited)'
+  # Reverting the merge that promoted the Commit is a revert of the Commit too.
+  git checkout -q -b prd3 "$C3^"; printf 'prd\n' > prd3.txt; git add prd3.txt; git commit -qm 'prd work'; git merge -q --no-ff -m 'promote to prd3' "$C3"; PM=$(git rev-parse HEAD)
+  git revert --no-edit -m 1 "$PM" > /dev/null; P3=$(git rev-parse HEAD); git checkout -q main
+  expect 1 ship "$SLUG" prd "$P3" --checked x --output y; contains "no longer has the verified change of $C3: reverted by $P3"
+  ok "contains: paths with spaces${nl:+ and a newline} and a 500-file change go through a pipe; a later removal of one file is contains-edited; reverting the promoting merge is refused"
 }
 # A root commit as the verified Commit is compared with the empty tree; an old git that echoes
 # --path-format back still yields the repository identity.

@@ -204,19 +204,33 @@ ship_tree_check() {
 # For ship: stage commit $3 in folder $1 matches verified Commit $2 when its tree is the same (exact) or it
 # contains the Commit (contains: a --no-ff merge that promoted it with other changes), into smatch; beyond
 # local ($4) it must be on a remote.
+# The first commit in $2..$3 (repository $1) whose git revert message names commit $2, or names a merge whose
+# second parent brought $2 in while its first parent did not; empty when there is none.
+revert_of() {
+  local c x
+  while read -r c x; do
+    [ -n "$x" ] && git -C "$1" rev-parse -q --verify "$x^{commit}" >/dev/null || continue
+    x=$(git -C "$1" rev-parse "$x")
+    if [ "$x" = "$(git -C "$1" rev-parse "$2")" ] || { git -C "$1" rev-parse -q --verify "$x^2" >/dev/null &&
+      git -C "$1" merge-base --is-ancestor "$2" "$x^2" && ! git -C "$1" merge-base --is-ancestor "$2" "$x^1"; }; then
+      printf '%s' "$c"; return
+    fi
+  done < <(git -C "$1" log --format='%H %B' "$2..$3" | awk '$1~/^[0-9a-f]{40}$/{c=$1} match($0,/This reverts commit [0-9a-f]+/){print c, substr($0,RSTART+20,RLENGTH-20)}')
+}
 ship_match() {
-  local top base idx out rc=0
+  local top base idx out rc=0 reverter
   commit_present "$1" "$2"
   git -C "$1" rev-parse --verify -q "$3^{commit}" >/dev/null || die "unknown stage commit: $3"
   if git -C "$1" diff --quiet "$2" "$3"; then smatch=exact
   elif git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null; then
     smatch=contains
-    # Containing it is not enough: a later commit may have reverted it. The Commit's own change (against its
-    # first parent, or the empty tree for a root commit) must reverse-apply onto the stage commit's tree: then
-    # every changed line is still there, and later edits elsewhere in the same files do not matter. -C0 drops
-    # the context lines from the match: a promotion branch that diverged next to a hunk (a conflict resolved
-    # there, or an edit on the line before) still holds the change. A revert or a rewrite of a changed line
-    # does not apply and is refused. The patch goes
+    # Containing it is not enough: a later commit may have reverted it. First, the Commit's own change (against
+    # its first parent, or the empty tree for a root commit) is reverse-applied onto the stage commit's tree
+    # with no context lines (-C0): when every changed line is still there, the match is `contains`. When some
+    # line is gone, a later change may simply have edited it (another ticket rewrote a file this one created),
+    # so the stage is refused only when a git revert in Commit..stage names the Commit, or names a merge that
+    # brought it in; otherwise the match is `contains-edited`. A hand-made revert without git revert's message
+    # is not detected: the record then says contains-edited, never contains. The patch goes
     # through a pipe and a temporary index, never argv, and paths stay relative to the repository top.
     top=$(git -C "$1" rev-parse --show-toplevel) || die "not a git repository: $1"
     if base=$(git -C "$top" rev-parse -q --verify "$2^1"); then :
@@ -232,7 +246,11 @@ ship_match() {
       else rc=1; out='cannot read the stage commit tree'; fi
       rm -f "$idx"
     fi
-    [ "$rc" -eq 0 ] || die "stage commit $3 no longer has the verified change of $2: $(printf '%s\n' "$out" | awk 'NF{print;exit}')"
+    if [ "$rc" -ne 0 ]; then
+      reverter=$(revert_of "$top" "$2" "$3")
+      [ -z "$reverter" ] || die "stage commit $3 no longer has the verified change of $2: reverted by $reverter ($(printf '%s\n' "$out" | awk 'NF{print;exit}'))"
+      smatch=contains-edited
+    fi
   else die "stage commit $3 neither has the verified tree of Commit $2 nor contains it"; fi
   if [ "$4" != local ]; then remote=$(git -C "$1" branch -r --contains "$3"); [ -n "$remote" ] || die 'Shipped commit is not on any remote'; fi
 }
@@ -265,7 +283,7 @@ ship_command() {
   for ((i=0;i<${#commits[@]};i++)); do commit_identity "$i" strict; [ "$cid" != "$sid" ] || [ "$cprefix" != "$sprefix" ] || { ci=$i; break; }; done
   [ -n "$ci" ] || die "no Commit line for repo '$srepo' in evidence.md: ship a repository QA verified"
   match=exact
-  for ((i=0;i<${#commits[@]};i++)); do commit_identity "$i" strict; [ "$cid" = "$sid" ] || continue; ship_match "$sdir" "${commits[i]}" "$ssha" "$target"; [ "$smatch" = exact ] || match=contains; done
+  for ((i=0;i<${#commits[@]};i++)); do commit_identity "$i" strict; [ "$cid" = "$sid" ] || continue; ship_match "$sdir" "${commits[i]}" "$ssha" "$target"; case "$smatch:$match" in contains-edited:*) match=contains-edited;; contains:exact) match=contains;; esac; done
   # A later stage needs every earlier one recorded for this evidence first; a stage is recorded once per repository.
   ! has_stage "$stage" "$sid" || die "$stage is already recorded for this evidence in $srepo: ship the next stage, or score new evidence to start the ladder again"
   for s in "${stages[@]}"; do [ "$s" != "$stage" ] || break; has_stage "$s" "$sid" || die "out of order: ship $s before $stage (config.md stages: $stagelist)"; done
