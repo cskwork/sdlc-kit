@@ -53,7 +53,7 @@ async function web(t, options = {}) {
   return { root, file, server, url, token };
 }
 
-function request(ctx, pathname, { method = 'GET', body, headers = {}, token = ctx.token, hostname = ctx.url.hostname } = {}) {
+function request(ctx, pathname, { method = 'GET', body, headers = {}, token = ctx.token, hostname = ctx.url.hostname, timeout = 2000 } = {}) {
   return new Promise((resolveResponse, reject) => {
     const data = body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body);
     const requestHeaders = {
@@ -75,7 +75,7 @@ function request(ctx, pathname, { method = 'GET', body, headers = {}, token = ct
       });
       res.on('error', reject);
     });
-    req.setTimeout(process.platform === 'win32' ? 60000 : 2000, () => req.destroy(new Error('HTTP request timed out')));
+    req.setTimeout(process.platform === 'win32' ? 60000 : timeout, () => req.destroy(new Error('HTTP request timed out')));
     req.on('error', reject);
     req.end(data);
   });
@@ -883,4 +883,64 @@ test('feed: an invalid feed says so, and an atomic replacement reaches the live 
   await gone;
   writeFileSync(feed, '[1,2]');
   await waitFor(value => value.feedError === 'feed is not a JSON object', 3000);
+});
+
+test('exec: the board runs an item command after the shown version is checked; exit 0 clears it, a failure keeps it, both reply and log', async t => {
+  const home = mkdtempSync(join(tmpdir(), 'sdlc-todo-home-')), oldHome = process.env.HOME;
+  process.env.HOME = home;
+  t.after(() => { process.env.HOME = oldHome; rmSync(home, { recursive: true, force: true }); });
+  // Spawning a process can take seconds on a loaded machine: these requests wait longer than the default 2 s.
+  const ctx = await web(t, { lang: 'ko' });
+  const item = await core.add(ctx.file, 'clean the build folder');
+  const set = value => core.exec(ctx.file, item.id, JSON.stringify(value));
+  // A gap that long can also outlive the server's keep-alive, so each request uses its own connection.
+  const slow = { timeout: 30000, headers: { Connection: 'close' } };
+  const run = (body, at = ctx) => request(at, '/api/exec', { method: 'POST', body, ...slow });
+  const shown = async (at = ctx) => items(await request(at, '/api/items', slow), at.file).find(i => i.id === item.id);
+
+  await core.run(ctx.file, item.id, 'open -a Terminal /x.command');
+  await set({ argv: ['sh', '-c', 'echo first; echo hi'], cwd: ctx.root, why: 'test' });
+  let snapshot = await shown();
+  assert.deepEqual(snapshot.exec, { argv: ['sh', '-c', 'echo first; echo hi'], cwd: ctx.root, why: 'test' });
+  assert.equal((await run({ id: item.id, version: 'stale' })).status, 409, 'a changed version runs nothing');
+  assert.equal((await run({ id: 'nope00', version: snapshot.version })).status, 404);
+  const ok = await run({ id: item.id, version: snapshot.version });
+  assert.equal(ok.status, 200, ok.text);
+  assert.deepEqual(ok.json.exec, { exitCode: 0, stdout: 'first\nhi\n', stderr: '', timedOut: false });
+  snapshot = items(ok, ctx.file).find(i => i.id === item.id);
+  assert.equal(snapshot.exec, null, 'exit 0 clears it');
+  assert.equal(snapshot.run, '', 'like any reply, exit 0 clears the terminal run too');
+  assert.equal(snapshot.events.at(-1).who, 'human');
+  assert.equal(snapshot.events.at(-1).what, `reply — 실행함: sh -c 'echo first; echo hi' (cwd ${ctx.root}) → exit 0 — hi`);
+  assert.equal((await run({ id: item.id, version: snapshot.version })).status, 409, 'no command left to run');
+
+  await core.run(ctx.file, item.id, 'open -a Terminal /x.command');
+  await set({ argv: ['sh', '-c', 'echo nope >&2; exit 3'], cwd: ctx.root });
+  const failed = await run({ id: item.id, version: (await shown()).version });
+  assert.equal(failed.json.exec.exitCode, 3);
+  snapshot = items(failed, ctx.file).find(i => i.id === item.id);
+  assert.ok(snapshot.exec, 'a failure keeps it for a retry');
+  assert.equal(snapshot.run, 'open -a Terminal /x.command', 'and keeps the terminal run');
+  assert.match(snapshot.events.at(-1).what, /→ exit 3 — nope$/);
+
+  // Another server over the same list, with a 1 s limit.
+  const quick = { ...(await web(t, { file: ctx.file, lang: 'ko', runTimeout: 1000 })), file: ctx.file };
+  await set({ argv: ['sleep', '30'], cwd: ctx.root });
+  const late = await run({ id: item.id, version: (await shown(quick)).version }, quick);
+  assert.equal(late.json.exec.timedOut, true, late.text);
+  assert.equal(late.json.exec.exitCode, null);
+  assert.match(items(late, ctx.file).find(i => i.id === item.id).events.at(-1).what, /→ 시간 초과\(1초\)$/);
+
+  await assert.rejects(async () => set({ argv: ['true'], cwd: join(ctx.root, 'gone') }), /not a directory/, 'the CLI refuses it too');
+  writeFileSync(ctx.file, readFileSync(ctx.file, 'utf8').replace(/^  - exec: .*$/m, `  - exec: ${JSON.stringify({ argv: ['true'], cwd: join(ctx.root, 'gone') })}`));
+  const badCwd = await run({ id: item.id, version: (await shown()).version });
+  assert.equal(badCwd.status, 400, badCwd.text);
+  assert.match(badCwd.json.error, /cwd is not a directory/);
+
+  const log = join(home, '.sdlc', 'todo-runs.log');
+  assert.equal(statSync(log).mode & 0o777, 0o600);
+  const lines = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.deepEqual(lines.map(line => line.exitCode), [0, 3, null], 'one line per execution; refusals run nothing');
+  assert.deepEqual(Object.keys(lines[0]), ['at', 'id', 'argv', 'cwd', 'exitCode', 'ms']);
+  assert.equal(lines[0].id, item.id);
 });

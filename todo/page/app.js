@@ -503,7 +503,7 @@ document.addEventListener('keydown', event => {
   const t = event.target;
   // The list's add shortcut; the board has its own keys.
   if (document.body?.dataset?.view && document.body.dataset.view !== 'list') return;
-  if (($('detail').open && !isWide) || t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
+  if (($('detail').open && !isWide) || $('run-confirm').open || t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
   event.preventDefault();
   addText.focus();
 });
@@ -621,6 +621,7 @@ function field(dl, name, value) {
 }
 function renderDetail() {
   const item = items.find(i => i.id === detailId);
+  renderRun($('detail-run'), item);
   // A heartbeat only moves working.beat: refresh the status words in place, so Details keeps focus.
   const version = item ? JSON.stringify({ ...item, working: item.working && { what: item.working.what, since: item.working.since } }) : '';
   if (version === detailVersion) { if (item && detailPill) detailPill.textContent = statusLabel(t, item); return; }
@@ -888,6 +889,115 @@ $('lang').addEventListener('change', () => {
   announce(t('announce.language', { name: locales[lang].name }));
 });
 
+// ---------- a command the page runs for the person ----------
+// An agent can leave one command (exec: {argv, cwd, why}) the person may run from here. Nothing runs without the
+// confirmation dialog; the server runs argv without a shell and saves the result as the person's reply.
+const runs = new Map(); // item id -> { command, running, result }
+const runViews = new Map(); // a shown run box -> { id, keys }
+const shellQuote = argv => argv.map(arg => /^[A-Za-z0-9_@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`).join(' ');
+const outputTail = result => [result.stdout, result.stderr].map(text => (text || '').trimEnd()).filter(Boolean).join('\n').split('\n').slice(-20).join('\n');
+// Draws the box for an item into a container (the list's details or the board's panel); `keys` names its shortcut.
+function renderRun(box, item, keys = '') {
+  runViews.set(box, { id: item?.id || '', keys });
+  const command = item && !item.done ? item.exec : null;
+  // A result belongs to the command that ran; a newer command shows without it.
+  if (item && command && runs.get(item.id) && !runs.get(item.id).running &&
+      JSON.stringify(runs.get(item.id).command) !== JSON.stringify(command)) runs.delete(item.id);
+  const state = item ? runs.get(item.id) : null;
+  const shown = command || state?.command;
+  const sig = JSON.stringify([lang, item?.id, command, state]);
+  if (box._sig === sig) return;
+  box._sig = sig;
+  box.hidden = !shown;
+  box.setAttribute('aria-busy', String(!!state?.running));
+  if (!shown) { box.replaceChildren(); return; }
+  const title = el('h3', '', t('run.title'));
+  title.id = `${box.id}-title`;
+  const code = el('pre', 'run-command'), where = el('p', 'run-where');
+  code.append(el('code', '', shellQuote(shown.argv)));
+  where.append(el('span', 'muted-label', t('run.cwd')), el('code', '', shown.cwd));
+  const parts = [title, code, where];
+  if (shown.why) { const why = el('p', 'run-why'); why.append(el('span', 'muted-label', t('run.why')), document.createTextNode(shown.why)); parts.push(why); }
+  if (command) {
+    const button = el('button', 'secondary', t('run.button'));
+    button.type = 'button';
+    button.id = `${box.id}-button`;
+    button.disabled = !!state?.running;
+    if (keys) { button.dataset.keys = keys; button.setAttribute('aria-keyshortcuts', keys); }
+    button.addEventListener('click', () => confirmRun(item.id));
+    const actions = el('div', 'actions');
+    actions.append(button);
+    parts.push(actions);
+  }
+  const status = el('div', '');
+  status.setAttribute('role', 'status');
+  if (state?.running) {
+    const line = el('p', 'run-state');
+    line.append(el('span', 'run-spinner'), el('span', '', t('run.running')));
+    status.append(line);
+  } else if (state?.result) {
+    const r = state.result;
+    const text = r.timedOut ? t('run.timeout') : r.exitCode === null ? t('run.signal') : t('run.exit', { code: r.exitCode });
+    const tail = outputTail(r);
+    status.append(el('p', `run-state ${r.exitCode === 0 ? 'ok' : 'fail'}`, text), tail ? el('pre', 'run-output', tail) : el('p', 'hint', t('run.noOutput')));
+  }
+  parts.push(status);
+  // Redrawing removes the focused button without a focusout, which would strand its tooltip: blur first, then
+  // give focus back to the new button, or to the heading once the command is gone.
+  const focused = box.contains?.(document.activeElement) ? document.activeElement : null;
+  focused?.blur?.();
+  box.replaceChildren(...parts);
+  if (focused) {
+    const button = parts.find(part => part.className === 'actions')?.firstChild;
+    const next = button && !button.disabled ? button : title;
+    if (next === title) title.tabIndex = -1;
+    next.focus?.({ preventScroll: true });
+  }
+}
+function refreshRuns() {
+  for (const [box, { id, keys }] of runViews) if (box.isConnected !== false) { box._sig = ''; renderRun(box, items.find(item => item.id === id), keys); }
+}
+const runDialog = $('run-confirm');
+let confirming = null;
+function confirmRun(id) {
+  const item = items.find(i => i.id === id);
+  if (!item?.exec || item.done || runs.get(id)?.running || runDialog.open) return;
+  confirming = { id, version: item.version, command: item.exec };
+  $('run-confirm-command').textContent = shellQuote(item.exec.argv);
+  $('run-confirm-cwd').textContent = item.exec.cwd;
+  runDialog.returnValue = '';
+  runDialog.showModal();
+}
+// Enter runs from anywhere in the dialog except on Cancel, whose own Enter cancels.
+runDialog.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || event.isComposing || event.target.value === 'cancel') return;
+  event.preventDefault();
+  runDialog.close('run');
+});
+runDialog.addEventListener('close', () => {
+  const chosen = runDialog.returnValue, request = confirming;
+  runDialog.returnValue = '';
+  confirming = null;
+  // After the browser has given focus back to the button that opened it, so the redraw can carry that focus on.
+  if (chosen === 'run' && request) setTimeout(() => executeRun(request), 0);
+});
+async function executeRun({ id, version, command }) {
+  const before = runs.get(id);
+  runs.set(id, { command, running: true, result: null });
+  refreshRuns();
+  try {
+    const data = await api('/api/exec', { id, version });
+    runs.set(id, { command, running: false, result: data.exec });
+    if (data.items) apply(data);
+    announce(t('run.done', { code: data.exec.timedOut ? '-' : data.exec.exitCode ?? '-' }));
+  } catch (error) {
+    runs.set(id, { ...before, command, running: false });
+    if (!before) runs.delete(id);
+    showError(sourceOf(error));
+  }
+  refreshRuns();
+}
+
 // The board (board.js, a separate module) reads state and acts through this; the list keeps its own code paths.
 const busyChecks = [() => inFlight > 0 || adding || !!$('add-text').value.trim() ||
   [...drafts.values()].some(draft => (draft.reply.trim() && draft.reply !== draft.seed) || draft.words.trim())];
@@ -895,7 +1005,7 @@ const busy = () => busyChecks.some(check => check());
 globalThis.todoPage = {
   get items() { return items; }, get feed() { return feed; }, get feedError() { return feedError; },
   get lang() { return lang; }, get t() { return t; }, get token() { return token; },
-  api, apply, announce, showError, sourceOf, oneLine, say, seedDraft,
+  api, apply, announce, showError, sourceOf, oneLine, say, seedDraft, renderRun, confirmRun,
   subscribe(listener) { listeners.push(listener); if (seenSnapshot) listener(); },
   addBusyCheck(check) { busyChecks.push(check); }
 };

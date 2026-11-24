@@ -131,7 +131,7 @@ function parse(source) {
     if (match) {
       const checked = match[1].toLowerCase() === 'x';
       item = { id: '', title: match[2].replace(/^~~(.*)~~$/, '$1'), done: section === 'done' || checked,
-        project: '', link: null, sdlc: null, waiting: '', others: '', brief: '', repos: [], choices: [], pick: null, suggest: '', run: '', pin: false, events: [], notes: [] };
+        project: '', link: null, sdlc: null, waiting: '', others: '', brief: '', repos: [], choices: [], pick: null, suggest: '', run: '', exec: null, pin: false, events: [], notes: [] };
       if (checked && section === 'open') item.checkedOpen = true;
       model.items.push(item);
       continue;
@@ -153,6 +153,8 @@ function parse(source) {
     else if ((field = text.match(/^  - pick: (.*)$/))) item.pick = pickIndex(field[1], item.choices, { strict: false });
     else if ((field = text.match(/^  - suggest: (.*)$/))) item.suggest = field[1];
     else if ((field = text.match(/^  - run: (.*)$/))) item.run = field[1];
+    // A hand-edited exec line that is not a valid command stays in the file as a note, never run and never lost.
+    else if ((field = text.match(/^  - exec: (.*)$/)) && execValue(field[1], { strict: false })) item.exec = execValue(field[1], { strict: false });
     else if (text === '  - pin: yes') item.pin = true;
     else if ((field = text.match(/^  - (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) ([^:]+): (.*)$/))) item.events.push({ at: field[1], who: field[2], what: field[3] });
     else item.notes.push(text);
@@ -180,6 +182,7 @@ function renderItem(item) {
   if (item.choices?.length && item.pick) lines.push(`  - pick: ${item.pick}`);
   if (item.suggest) lines.push(`  - suggest: ${item.suggest}`);
   if (item.run) lines.push(`  - run: ${item.run}`);
+  if (item.exec) lines.push(`  - exec: ${JSON.stringify(item.exec)}`);
   if (item.pin) lines.push('  - pin: yes');
   for (const e of item.events) lines.push(`  - ${e.at} ${e.who}: ${e.what}`);
   lines.push(...item.notes);
@@ -270,6 +273,7 @@ function finish(model, item, who, what) {
   item.others = '';
   item.suggest = '';
   item.run = '';
+  item.exec = null;
   event(item, who, what);
   model.items.splice(model.items.indexOf(item), 1);
   const firstDone = model.items.findIndex(i => i.done);
@@ -493,7 +497,7 @@ export async function add(file, text, options = {}) {
     const by = line(options.by || 'agent');
     if (!/^[^:\r\n]+$/.test(by)) fail('invalid event author');
     const item = { id: '', title, done: false, project, link: linkValue(options.link ?? parsed.link),
-      sdlc: slug ? { slug, phase: 'intent', state: '', action: '' } : null, waiting: '', brief, repos: [], choices: [], pick: null, suggest: '', run: '', events: [], notes: [] };
+      sdlc: slug ? { slug, phase: 'intent', state: '', action: '' } : null, waiting: '', brief, repos: [], choices: [], pick: null, suggest: '', run: '', exec: null, events: [], notes: [] };
     model.items.splice(model.items.findIndex(i => i.done) < 0 ? model.items.length : model.items.findIndex(i => i.done), 0, item);
     event(item, by, 'added');
     identify(model);
@@ -524,7 +528,7 @@ export const move = (file, id, delta, version) => update(file, id, (item, model)
 }, version);
 export const remove = (file, id, version) => update(file, id, (item, model) => { model.items.splice(model.items.indexOf(item), 1); }, version);
 export const done = (file, id, words = '', by = 'agent', version) => update(file, id, (item, model) => finish(model, item, by, `done${words ? ` — ${line(words)}` : ''}`), version);
-export const reply = (file, id, words, version) => update(file, id, item => { item.waiting = ''; item.others = ''; item.suggest = ''; item.run = ''; event(item, 'human', `reply — ${line(words)}`); }, version);
+export const reply = (file, id, words, version) => update(file, id, item => { item.waiting = ''; item.others = ''; item.suggest = ''; item.run = ''; item.exec = null; event(item, 'human', `reply — ${line(words)}`); }, version);
 // The kit never runs a model: a fix request is recorded for the next agent run, and the
 // human's own todo-agent.json may name a command that starts one now ({id} {kit} {project}).
 function agentCommand(file, name, values) {
@@ -556,7 +560,7 @@ export async function requestFix(file, id, version, { kit = defaultKit } = {}) {
   const cwd = item.project && path.isAbsolute(item.project) && fs.existsSync(item.project) ? item.project : os.homedir();
   return { item, launch: await launch(argv, cwd) };
 }
-export const wait = (file, id, words) => update(file, id, item => { item.waiting = line(words); if (!item.waiting) fail('wait text required'); item.others = ''; event(item, 'agent', `waiting — ${item.waiting}`); });
+export const wait = (file, id, words) => update(file, id, item => { item.waiting = line(words); if (!item.waiting) fail('wait text required'); item.others = ''; item.exec = null; event(item, 'agent', `waiting — ${item.waiting}`); });
 // Someone other than the human must answer first (a planner, QA). It leaves "Needs you" and agents pass it by;
 // a reply from the human or a wait clears it. No text clears it too.
 export const others = (file, id, words = '') => update(file, id, item => {
@@ -572,6 +576,7 @@ export const resume = (file, id, words = '') => update(file, id, item => {
   item.waiting = '';
   item.others = '';
   item.run = '';
+  item.exec = null;
   event(item, 'agent', `resumed${line(words) ? ` — ${line(words)}` : ''}`);
 });
 export const answer = (file, id, words) => update(file, id, item => { item.waiting = ''; item.suggest = ''; event(item, 'agent', `chat answer — ${line(words)}`); });
@@ -606,6 +611,42 @@ export const run = (file, id, words = '') => update(file, id, item => {
   item.run = text;
   event(item, 'agent', text ? `run — ${text}` : 'run cleared');
 });
+// A command the board runs for the human once they confirm it: `  - exec: {"argv":[...],"cwd":"/abs","why":"..."}`,
+// one line of JSON beside (never instead of) the terminal `run`. argv[0] is a bare name found on PATH or an absolute
+// path; cwd is an existing absolute directory. A reply, wait, resume, done or --clear removes it.
+const execKeys = ['argv', 'cwd', 'why'];
+export function execValue(value, { strict = true } = {}) {
+  const refuse = message => { if (strict) fail(`invalid exec JSON: ${message}`); return null; };
+  let parsed = value;
+  if (typeof value === 'string') {
+    if (/[\r\n]/.test(value)) return refuse('it must fit on one line');
+    try { parsed = JSON.parse(value); } catch { return refuse('not JSON'); }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return refuse('not a JSON object');
+  const unknown = Object.keys(parsed).filter(key => !execKeys.includes(key));
+  if (unknown.length) return refuse(`unknown key ${unknown[0]}`);
+  const { argv, cwd, why = '' } = parsed;
+  if (!Array.isArray(argv) || !argv.length || argv.some(arg => typeof arg !== 'string' || arg.includes('\0'))) return refuse('argv must be a non-empty array of strings');
+  if (!argv[0] || (argv[0].includes('/') || argv[0].includes('\\')) && !path.isAbsolute(argv[0])) return refuse('argv[0] must be a command name or an absolute path');
+  if (typeof cwd !== 'string' || !path.isAbsolute(cwd) || /[\r\n\0]/.test(cwd)) return refuse('cwd must be an absolute path');
+  if (strict && !isDirectory(cwd)) return refuse(`cwd is not a directory: ${cwd}`);
+  if (typeof why !== 'string' || /[\r\n]/.test(why) || why.length > 200) return refuse('why must be one line of at most 200 characters');
+  return { argv: [...argv], cwd, why: why.trim() };
+}
+function isDirectory(dir) {
+  try { return fs.statSync(dir).isDirectory(); } catch { return false; }
+}
+// POSIX shell quoting, for showing a command exactly: a word with only safe characters stays bare.
+export const shellQuote = argv => argv.map(arg => /^[A-Za-z0-9_@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`).join(' ');
+// Sets or replaces the command; null clears it.
+export const exec = (file, id, value) => {
+  const command = value === null ? null : execValue(value);
+  return update(file, id, item => {
+    if (JSON.stringify(item.exec ?? null) === JSON.stringify(command)) return;
+    item.exec = command;
+    event(item, 'agent', command ? `exec — ${shellQuote(command.argv)} (cwd ${command.cwd})` : 'exec cleared');
+  });
+};
 // A pinned item (e.g. a setting the human switches with its choices) stays at the top of every app tab without
 // counting as something that needs the human.
 export const pin = (file, id, value = 'on') => update(file, id, item => {

@@ -20,6 +20,7 @@ const usage = `Usage: node ${path.join(kit, 'todo', 'todo.mjs')} <command>
   choices <id> ["label | label | ..."] [--pick N] (up to 6 one-click answers, N marks the recommended one; no labels clears)
   pin <id> [on|off] (keep at the top of every app tab, e.g. a setting switched with choices; not counted as needing you)
   run <id> ["command"] (a command the human runs; the app opens a terminal with it typed, not run; a reply or no text clears it)
+  exec <id> --json '{"argv":[...],"cwd":"/abs","why":"..."}' | exec <id> --clear (one command the board runs, without a shell, once the human confirms; a reply, wait, resume or done clears it)
   suggest <id> ["answer"] (the one-line reply you recommend, pre-filled in the human's reply field; a reply or no text clears it)
   working <id> ["what"] | working <id> --off (an agent works on it now: call on start, again at least every 60 s, --off when done; a mark not refreshed for 3 min expires)
   done <id> ["result"] | web [--port N] [--open] [--lang L] | serve [--lang L] | help
@@ -34,7 +35,7 @@ const schemas = {
   add: { project: true, link: true, slug: true, by: true, brief: true },
   next: { json: false }, take: { json: false }, list: { json: false }, sync: {},
   compact: { 'dry-run': false },
-  start: { slug: true, phase: true }, phase: {}, wait: {}, others: {}, resume: {}, answer: {}, note: {}, brief: {}, repos: {}, choices: { pick: true }, suggest: {}, run: {}, pin: {}, working: { off: false }, done: {},
+  start: { slug: true, phase: true }, phase: {}, wait: {}, others: {}, resume: {}, answer: {}, note: {}, brief: {}, repos: {}, choices: { pick: true }, suggest: {}, run: {}, exec: { json: true, clear: false }, pin: {}, working: { off: false }, done: {},
   web: { port: true, open: false, lang: true }, serve: { lang: true }, help: {}, '': { 'no-web': false, lang: true, ui: true }
 };
 function argumentsFor(argv) {
@@ -56,7 +57,7 @@ function argumentsFor(argv) {
 function summary(item, live = core.readWorking(file)) {
   return { id: item.id, title: item.title, project: item.project, link: item.link,
     slug: item.sdlc?.slug || null, phase: item.sdlc?.phase || null, state: item.sdlc?.state || null,
-    action: item.sdlc?.action || '', waiting: item.waiting, asked: core.asked(item), others: item.others || '', brief: item.brief || '', repos: item.repos || [], choices: item.choices || [], pick: item.pick ?? null, suggest: item.suggest || '', run: item.run || '', pin: !!item.pin, replies: item.replies || core.replies(item), unread: item.unread || 0, fix: !!item.fixRequested, status: item.status, working: !item.done && live[item.id] || null };
+    action: item.sdlc?.action || '', waiting: item.waiting, asked: core.asked(item), others: item.others || '', brief: item.brief || '', repos: item.repos || [], choices: item.choices || [], pick: item.pick ?? null, suggest: item.suggest || '', run: item.run || '', exec: item.exec || null, pin: !!item.pin, replies: item.replies || core.replies(item), unread: item.unread || 0, fix: !!item.fixRequested, status: item.status, working: !item.done && live[item.id] || null };
 }
 const uiNames = ['tui', 'web', 'app'];
 const appPath = () => process.env.SDLC_TODO_APP || path.join(kit, 'todo', 'app', 'target', 'release', process.platform === 'win32' ? 'sdlc-todo.exe' : 'sdlc-todo');
@@ -182,6 +183,10 @@ async function main() {
     case 'others': arity(1, 2); await core.others(file, args[0], args[1] || ''); return;
     case 'suggest': arity(1, 2); await core.suggest(file, args[0], args[1] || ''); return;
     case 'run': arity(1, 2); await core.run(file, args[0], args[1] || ''); return;
+    case 'exec':
+      arity(1);
+      if ((flags.json === undefined) === !flags.clear) bad('exec needs --json JSON or --clear');
+      await core.exec(file, args[0], flags.clear ? null : flags.json); return;
     case 'pin': arity(1, 2); await core.pin(file, args[0], args[1] || 'on'); return;
     case 'working':
       arity(1, flags.off ? 1 : 2);

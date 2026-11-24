@@ -2,11 +2,12 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as core from './core.mjs';
-import { defaultLanguage, isLanguage, languages } from './i18n.mjs';
+import { defaultLanguage, isLanguage, languages, translator } from './i18n.mjs';
 import { statusOf } from './status.mjs';
 
 const execute = promisify(execFile);
@@ -95,6 +96,30 @@ export function readFeed(file) {
     return feed && typeof feed === 'object' && !Array.isArray(feed) ? { feed, error: '' } : { feed: null, error: 'feed is not a JSON object' };
   } catch { return { feed: null, error: 'feed is not valid JSON' }; }
 }
+// An exec request runs the item's command as given: argv through execFile (no shell), in its cwd, env inherited.
+const runLimit = 64 * 1024;
+const tail = text => text.length > runLimit ? text.slice(-runLimit) : text;
+const runsLogPath = () => path.join(os.homedir(), '.sdlc', 'todo-runs.log');
+function logRun(entry) {
+  const file = runsLogPath();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.appendFileSync(file, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
+  fs.chmodSync(file, 0o600);
+}
+function runArgv(argv, cwd, timeout) {
+  return new Promise(resolve => {
+    const started = Date.now();
+    const child = execFile(argv[0], argv.slice(1), { cwd, timeout, maxBuffer: 16 * 1024 * 1024, shell: false, windowsHide: true }, (error, stdout, stderr) => {
+      const timedOut = !!error?.killed && !!error.signal && Date.now() - started >= timeout;
+      // A command that could not start (not on PATH) reports 127, as a shell would.
+      const exitCode = !error ? 0 : typeof error.code === 'number' ? error.code : error.signal ? null : 127;
+      resolve({ exitCode, stdout: tail(String(stdout ?? '')), stderr: tail(String(stderr || (exitCode === 127 ? error.message : ''))), timedOut, signal: error?.signal || null });
+    });
+    // Nobody types into it: a command that reads stdin gets end of input instead of waiting for the timeout.
+    child.stdin?.end();
+  });
+}
+const lastLine = text => text.split(/\r?\n/).map(part => part.trim()).filter(Boolean).pop() || '';
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0, tooLarge = false;
@@ -154,7 +179,7 @@ export async function liveSession(file = core.sessionPath()) {
   } catch { return null; }
 }
 
-export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage, session = '', feed = feedPath(file), deferInitialSync = false } = {}) {
+export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage, session = '', feed = feedPath(file), deferInitialSync = false, runTimeout = 300000 } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('invalid port');
   if (!isLanguage(lang)) throw new Error(`invalid language: ${lang}`);
   if (!onUrl && !open && !process.stdout.isTTY) throw new Error('web requires a terminal or --open');
@@ -178,6 +203,35 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   // (one per open card) would otherwise queue many multi-second syncs and time the app out.
   let syncing = null;
   const synced = () => (syncing ??= core.sync(file, { kit }).finally(() => { syncing = null; }));
+  const t = translator(lang), running = new Set();
+  // Check the shown version, run with no todo.md lock held (it can take minutes), then record the result as the human's reply.
+  async function runItem(id, version) {
+    const model = core.load(file), item = model.items.find(item => item.id === id);
+    if (typeof id !== 'string' || !item) fail(404, 'item not found');
+    if (core.itemVersion(item, model) !== version) fail(409, 'This item changed. Reload and try again.');
+    if (item.done || !item.exec) fail(409, 'item has no command to run');
+    let command;
+    try { command = core.execValue(item.exec); } catch (error) { fail(400, error.message); }
+    if (running.has(id)) fail(409, 'this command is already running');
+    running.add(id);
+    const at = new Date(), started = Date.now();
+    let result;
+    try { result = await runArgv(command.argv, command.cwd, runTimeout); }
+    finally { running.delete(id); }
+    const ms = Date.now() - started;
+    logRun({ at: at.toISOString(), id, argv: command.argv, cwd: command.cwd, exitCode: result.exitCode, ms });
+    const vars = { command: core.shellQuote(command.argv), cwd: command.cwd, code: result.exitCode, seconds: Math.round(runTimeout / 1000), signal: result.signal };
+    const head = t(result.timedOut ? 'run.reply.timeout' : result.exitCode === null ? 'run.reply.signal' : 'run.reply', vars);
+    const output = lastLine(result.stdout) || lastLine(result.stderr);
+    const words = `${head}${output ? ` — ${output.length > 200 ? `${output.slice(0, 199)}…` : output}` : ''}`.replace(/[\r\n]+/g, ' ');
+    await core.update(file, id, current => {
+      current.waiting = ''; current.others = ''; current.suggest = '';
+      // Exit 0 ends the request and, like any reply, the terminal run; a failure keeps both so the human can retry or answer by hand.
+      if (result.exitCode === 0 && JSON.stringify(current.exec) === JSON.stringify(item.exec)) { current.exec = null; current.run = ''; }
+      current.events.push({ at: core.stamp(), who: 'human', what: `reply — ${words}` });
+    });
+    return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, timedOut: result.timedOut };
+  }
   let actualPort;
   const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
@@ -230,6 +284,11 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
       const body = await readBody(req);
       if (req.method !== 'POST') { json(405, { error: 'method not allowed' }); return; }
       let launch;
+      if (url.pathname === '/api/exec') {
+        const result = await runItem(body.id, body.version ?? null);
+        json(200, { ...payload(), exec: result });
+        return;
+      }
       if (url.pathname === '/api/items') {
         await core.add(file, text(body.text, 'text'), { by: 'human' });
       } else if (url.pathname === '/api/item') {

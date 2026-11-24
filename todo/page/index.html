@@ -69,6 +69,7 @@
       </section>
       <p id="panel-target" class="target" hidden></p>
       <div id="panel-choices" class="choices board-choices" role="group" aria-label="Pick an answer" data-i18n-label="choices.label" hidden></div>
+      <section id="panel-run" class="run-box" hidden aria-labelledby="panel-run-title"></section>
       <section id="panel-gate" class="gate" hidden>
         <div id="panel-glance" class="artifact glance"></div>
         <label for="panel-note" class="visually-hidden" data-i18n="decide.words">Note (optional)</label>
@@ -188,6 +189,7 @@
       </div>
     </form>
   </section>
+  <section id="detail-run" class="run-box" hidden aria-labelledby="detail-run-title"></section>
   <section id="reply-box" class="reply-box" hidden aria-labelledby="reply-title">
     <h3 id="reply-title" data-i18n="reply.title">Reply</h3>
     <div id="reply-choices" class="choices" role="group" aria-label="Pick an answer" data-i18n-label="choices.label" hidden></div>
@@ -222,6 +224,16 @@
   <p class="hint" data-i18n="keys.note">Single keys work when you are not typing in a box.</p>
   <dl id="keys-list" class="keys-list"></dl>
   <form method="dialog" class="actions"><button type="submit" class="secondary" data-i18n="keys.close">Close</button></form>
+</dialog>
+<dialog id="run-confirm" class="run-confirm" aria-labelledby="run-confirm-title" aria-describedby="run-confirm-note">
+  <h1 id="run-confirm-title" data-i18n="run.confirmTitle">Run this command?</h1>
+  <p id="run-confirm-note" class="hint" data-i18n="run.confirmNote">It runs exactly as shown on this computer. The result is saved as your reply.</p>
+  <pre class="run-command"><code id="run-confirm-command"></code></pre>
+  <p class="run-where"><span class="muted-label" data-i18n="run.cwd">Runs in</span> <code id="run-confirm-cwd"></code></p>
+  <form method="dialog" class="actions">
+    <button type="submit" value="cancel" class="secondary" data-i18n="run.cancel">Cancel</button>
+    <button type="submit" value="run" id="run-confirm-run" class="primary" autofocus data-i18n="run.confirm">Run</button>
+  </form>
 </dialog>
 <div id="tip" class="tip" popover="manual" role="tooltip"></div>
 <div id="toast" class="toast ok" role="status" hidden></div>

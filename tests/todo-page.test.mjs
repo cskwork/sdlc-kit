@@ -52,7 +52,7 @@ function page(hash = '', options = {}) {
       focus() { context.document.activeElement = this; },
       showModal() { this.open = true; this.modal = true; },
       show() { this.open = true; this.modal = false; },
-      close() { this.open = false; this.listeners.close?.(); },
+      close(value) { if (value !== undefined) this.returnValue = value; this.open = false; this.listeners.close?.(); },
       setAttribute(name, value) { this.attributes[name] = value; },
       matches() { return false; }, getClientRects() { return []; },
       insertBefore(child, before) {
@@ -934,7 +934,7 @@ test('keys: A moves focus to Approve and shows its tooltip but never approves; ?
   assert.equal(approve.attributes['aria-describedby'], undefined);
   b.key('?');
   assert.equal(b.nodes.get('keys-help').open, true);
-  assert.equal(b.nodes.get('keys-list').children.length, 24, 'twelve keys, each a term and its action');
+  assert.equal(b.nodes.get('keys-list').children.length, 26, 'thirteen keys, each a term and its action');
 });
 
 test('tooltips: each control names its action and its key, from the locale', () => {
@@ -953,4 +953,93 @@ test('tooltips: each control names its action and its key, from the locale', () 
   assert.equal(tip('panel-prev'), '이전 (← 또는 k)', 'a label that already names its keys is shown as is');
   assert.equal(b.nodes.get('panel-ticket').attributes['aria-keyshortcuts'], 'T');
   assert.equal(b.nodes.get('panel-choices').children[0].dataset.tip, '1 · A안');
+});
+
+// ---------- a command the board runs for the person ----------
+const command = { argv: ['rm', '-rf', '/tmp/dist dev'], cwd: '/tmp', why: '남은 빌드 폴더가 다음 빌드를 막아요' };
+function runBoard(list, result = { exitCode: 0, stdout: 'done\n', stderr: '', timedOut: false }) {
+  let finish;
+  const answered = new Promise(resolve => { finish = resolve; });
+  const p = page('#t=test-token', { fetch: async url => {
+    if (url === '/api/exec') { await answered; return { ok: true, text: async () => JSON.stringify({ exec: result }) }; }
+    return url === '/api/items' ? new Promise(() => {}) : { ok: true, text: async () => '{}' };
+  } });
+  boardItems(p, list);
+  const b = boardPage(p);
+  vm.runInContext(`select(cards[0].key, false)`, b.context);
+  const box = b.nodes.get('panel-run'), dialog = p.nodes.get('run-confirm');
+  const button = () => box.children.find(n => n.className === 'actions')?.children[0];
+  const runs = () => p.requests.filter(r => r.url === '/api/exec').map(r => JSON.parse(r.options.body));
+  return { p, b, box, dialog, button, runs, finish };
+}
+const text = node => [node.textContent || '', ...(node.children || []).map(text)].join(' ');
+
+test('run box: only an item with a command shows the block and its button, with the exact command, cwd and why', () => {
+  const plain = runBoard([askItem('aaaaaa', 'v1', '')]);
+  assert.equal(plain.box.hidden, true, 'no command, no block');
+  assert.equal(plain.button(), undefined);
+  assert.equal(plain.b.key('x').prevented, false, 'X does nothing without a command');
+  const { box, button } = runBoard([askItem('aaaaaa', 'v1', '', { exec: command })]);
+  assert.equal(box.hidden, false);
+  const shown = text(box);
+  assert.match(shown, /Command to run/);
+  assert.ok(shown.includes("rm -rf '/tmp/dist dev'"), shown);
+  assert.match(shown, /Runs in +\/tmp/);
+  assert.ok(shown.includes(command.why));
+  assert.equal(button().textContent, 'Run command');
+  assert.equal(button().attributes['aria-keyshortcuts'], 'X');
+  const done = runBoard([askItem('aaaaaa', 'v1', '', { exec: command, done: true, status: 'done' })]);
+  assert.equal(done.box.hidden, true, 'a done item offers nothing to run');
+});
+
+test('run box: nothing runs without the confirm dialog; Cancel and Esc run nothing, Run sends the shown version once', async () => {
+  const { p, b, box, dialog, button, runs, finish } = runBoard([askItem('aaaaaa', 'v1', '', { exec: command })]);
+  button().listeners.click();
+  assert.equal(dialog.open, true, 'the button only opens the dialog');
+  assert.equal(p.nodes.get('run-confirm-command').textContent, "rm -rf '/tmp/dist dev'", 'the dialog repeats the exact command');
+  assert.equal(p.nodes.get('run-confirm-cwd').textContent, '/tmp');
+  assert.equal(runs().length, 0);
+  dialog.returnValue = 'cancel'; dialog.close();
+  dialog.showModal(); dialog.returnValue = ''; dialog.close(); // Esc closes with no value
+  assert.equal(runs().length, 0, 'Cancel and Esc run nothing');
+  assert.equal(b.key('x').prevented, true, 'X opens it');
+  assert.equal(dialog.open, true);
+  const enter = { key: 'Enter', target: { value: 'run' }, preventDefault() { this.prevented = true; } };
+  dialog.listeners.keydown(enter);
+  assert.equal(enter.prevented, true, 'Enter confirms inside the dialog');
+  assert.equal(dialog.open, false);
+  await new Promise(resolve => setTimeout(resolve, 0)); // the request starts once focus is back on the page
+  assert.deepEqual(runs(), [{ id: 'aaaaaa', version: 'v1' }]);
+  assert.match(text(box), /Running…/, 'a spinner while it runs');
+  assert.equal(box.attributes['aria-busy'], 'true');
+  finish();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.match(text(box), /Finished · exit 0/);
+  assert.match(text(box), /done/, 'the output tail');
+  const cancelEnter = { key: 'Enter', target: { value: 'cancel' }, preventDefault() { this.prevented = true; } };
+  dialog.showModal(); dialog.listeners.keydown(cancelEnter);
+  assert.equal(cancelEnter.prevented, undefined, 'Enter on Cancel keeps its own meaning');
+});
+
+test('run box: X does nothing while typing or with the key list open; the key list names X', () => {
+  const { p, b, dialog } = runBoard([askItem('aaaaaa', 'v1', '', { exec: command })]);
+  assert.equal(b.key('x', { target: { tagName: 'TEXTAREA' } }).prevented, false);
+  assert.equal(dialog.open, undefined);
+  b.key('?');
+  assert.ok(b.nodes.get('keys-list').children.some(n => text(n).includes('Run the command')));
+  void p;
+});
+
+test('run box: the list page details show the same block and button', () => {
+  const p = page();
+  vm.runInContext(`items = [${JSON.stringify(askItem('aaaaaa', 'v1', '', { exec: command, run: 'open -a Terminal /x.command' }))}]; openDetail('aaaaaa');`, p.context);
+  const box = p.nodes.get('detail-run');
+  assert.equal(box.hidden, false);
+  assert.ok(text(box).includes("rm -rf '/tmp/dist dev'"));
+  assert.ok(p.nodes.get('detail-fields').children.some(n => n.textContent === 'Run in a terminal'), 'the terminal run still shows beside it');
+  const button = box.children.find(n => n.className === 'actions').children[0];
+  button.listeners.click();
+  assert.equal(p.nodes.get('run-confirm').open, true);
+  assert.equal(p.requests.filter(r => r.url === '/api/exec').length, 0);
 });

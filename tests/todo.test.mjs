@@ -186,6 +186,53 @@ test('run: CLI stores the command the human runs, lists it, adds one event per c
   assert.match(text, /agent: run cleared$/m);
 });
 
+test('exec: CLI sets a command the board runs, validates it, lists it beside run; --clear, a reply, wait, resume and done clear it', async t => {
+  const { root, file } = scratch(t);
+  const id = checkCode(await cli(file, ['add', 'clean dist-dev', '--by', 'factory']), 0).stdout.trim();
+  const json = value => JSON.stringify(value);
+  const good = { argv: ['rm', '-rf', join(root, 'dist dev')], cwd: root, why: '빌드 폴더가 남아 다음 빌드를 막아요' };
+  for (const bad of ['{"argv":[]', json({ argv: [], cwd: root }), json({ argv: ['rm', 3], cwd: root }), json({ argv: ['bin/rm'], cwd: root }),
+    json({ argv: ['rm'], cwd: 'relative' }), json({ argv: ['rm'], cwd: join(root, 'missing') }), json({ argv: ['rm'], cwd: root, why: 'x'.repeat(201) }),
+    json({ argv: ['rm'], cwd: root, extra: 1 }), json({ argv: ['rm'], cwd: root, why: 'two\nlines' })]) {
+    const result = checkCode(await cli(file, ['exec', id, '--json', bad]), 2);
+    assert.match(result.stderr, /invalid exec JSON/, bad);
+  }
+  checkCode(await cli(file, ['exec', id, '--json', json(good), '--clear']), 2);
+  checkCode(await cli(file, ['exec', id]), 2);
+  assert.doesNotMatch(readFileSync(file, 'utf8'), /^  - exec:/m, 'a refused command writes nothing');
+  // The terminal run string stays exactly as before, and an item may carry both.
+  checkCode(await cli(file, ['run', id, "open -a Terminal '/x/audit.command'"]), 0);
+  checkCode(await cli(file, ['exec', id, '--json', json(good)]), 0);
+  checkCode(await cli(file, ['exec', id, '--json', json(good)]), 0);
+  let text = readFileSync(file, 'utf8');
+  assert.match(text, /^  - run: open -a Terminal '\/x\/audit.command'$/m);
+  assert.equal(text.match(/^  - exec: (.*)$/m)[1], json(good), 'one line of JSON');
+  assert.equal(text.split('agent: exec — ').length - 1, 1, 'the same command adds no second event');
+  assert.equal(core.serialize(core.load(file)), text, 'round-trips byte for byte');
+  const listed = JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout)[0];
+  assert.deepEqual(listed.exec, good);
+  assert.equal(listed.run, "open -a Terminal '/x/audit.command'");
+  checkCode(await cli(file, ['exec', id, '--clear']), 0);
+  text = readFileSync(file, 'utf8');
+  assert.doesNotMatch(text, /^  - exec:/m, '--clear');
+  assert.match(text, /^  - run: /m, '--clear leaves run alone');
+  assert.match(text, /agent: exec cleared$/m);
+  assert.equal(JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout)[0].exec, null);
+  checkCode(await cli(file, ['run', id]), 0);
+  const clears = { reply: () => core.reply(file, id, '조치했어요'), wait: () => core.wait(file, id, 'again'),
+    resume: async () => { await core.wait(file, id, 'w'); await core.exec(file, id, json(good)); return core.resume(file, id); },
+    done: () => core.done(file, id, 'ok') };
+  for (const [name, clear] of Object.entries(clears)) {
+    if (name !== 'resume') await core.exec(file, id, json(good));
+    await clear();
+    assert.doesNotMatch(readFileSync(file, 'utf8'), /^  - exec:/m, `${name} clears it`);
+  }
+  writeFileSync(file, '## Open\n\n- [ ] hand edited\n  - exec: {"argv":"rm"}\n\n## Done\n');
+  const loaded = core.load(file).items[0];
+  assert.equal(loaded.exec, null, 'a hand-edited bad line loads as no command');
+  assert.match(core.serialize(core.load(file)), /^  - exec: \{"argv":"rm"\}$/m, 'and stays in the file');
+});
+
 test('pin: CLI keeps a setting at the top of the app, lists it, survives replies and round-trips; off clears it', async t => {
   const { file } = scratch(t);
   const id = checkCode(await cli(file, ['add', '[공장 설정] 판정 에이전트(judge): 켜짐', '--by', 'factory']), 0).stdout.trim();
