@@ -25,13 +25,16 @@ The tray app showed the board in a Google Chrome `--app` window. That tied a lig
     - `follow` moves an open ticket window when the selection changes, without taking focus.
   - **Other links.** Every other link leaving the board is handed off once: http(s) to Chrome, `mailto:` to the system; anything else is refused. No hidden relay windows remain.
   - **Automation permission.** The app asks once for permission to control Chrome at launch. A denied permission is logged and falls back to the default browser.
-  - **osascript.** Each script is limited to 8 s; a timeout opens nothing else. Queued clicks merge to the newest ticket. The script reuses the remembered window, then a window already showing the ticket, before it makes one.
+  - **osascript.** Each script is limited to 8 s; a timeout opens nothing else. One worker drains queued clicks to the newest ticket.
+  - **The person's own Chrome windows are never taken over.** `follow` moves only the window the app made. `open` looks for a window already on the ticket only to recover after its own timed-out run.
+  - **Permission check right after launch.** A just-started Chrome that answers `procNotFound` is asked again for up to 5 s.
+  - **Unopenable links.** A link to this machine shows "이 링크는 티켓 창으로 열 수 없어요" instead of doing nothing.
   - **Processes.** `ps` lists only this user's processes, and child processes are reaped.
   - **Window frame.** The saved frame is clamped into its screen. Moving the window saves it after 0.5 s. Quit and ⌘Q save at once.
 
 ## Verification
 
-- `cargo test --release` in `todo/app`: 24 of 24 pass, 16 of them new. `node --test tests/todo-page.test.mjs tests/todo-board.test.mjs`: 68 of 68. They cover:
+- `cargo test --release` in `todo/app`: 26 of 26 pass, 18 of them new. `node --test tests/todo-page.test.mjs tests/todo-board.test.mjs tests/todo-i18n.test.mjs`: 78 of 78. They cover:
   - the left-dock geometry;
   - restoring the saved frame only on a visible screen;
   - board versus ticket URL classification, including `127.0.0.1@evil`, `127.0.0.1.evil.example` and `[::1]`;
