@@ -501,16 +501,6 @@ body[data-view="list"] .counts { display: none; }
 .panel-resize:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: 0; }
 body.resizing { cursor: col-resize; -webkit-user-select: none; user-select: none; }
 @keyframes panel-in { from { opacity: 0; transform: translateX(10px); } }
-/* While the ticket window is open on the screen's right, the panel docks to the board's left edge beside it, its
-   handle moves to its right edge, and --panel-cap (board.js) keeps it inside the part of the screen left free.
-   Only the boxes swap places, so focus, scroll and drafts stay; reading-flow keeps Tab in the order on screen. */
-.board-view[data-dock="start"] { grid-template-columns: auto auto minmax(0, 1fr); reading-flow: grid-order; }
-.board-view[data-dock="start"] > .panel {
-  grid-area: 1 / 1; order: -2;
-  width: clamp(20rem, min(var(--panel-size, var(--panel-w)), var(--panel-cap, 100vw)), calc(100vw - 24rem));
-}
-.board-view[data-dock="start"] > .panel-resize { grid-area: 1 / 2; order: -1; justify-content: flex-start; }
-.board-view[data-dock="start"] > .board-scroll { grid-area: 1 / 3; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .panel-bar {
   position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 0.15rem;

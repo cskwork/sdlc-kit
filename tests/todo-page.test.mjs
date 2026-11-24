@@ -632,13 +632,13 @@ test('board hook: views subscribe to snapshots and read the feed the server sent
 // The board (board.js) in its own VM over a fake DOM, reading state and acting through the list page's todoPage.
 const boardSource = readFileSync(new URL('../todo/page/board.js', import.meta.url), 'utf8');
 function boardPage(p) {
-  const nodes = new Map(), docListeners = {}, winListeners = {}, intervals = [], opened = [];
+  const nodes = new Map(), docListeners = {}, opened = [];
   const make = () => {
     const n = {
       dataset: {}, value: '', hidden: false, textContent: '', title: '', elements: [], children: [], attributes: {}, listeners: {},
       style: { props: {}, setProperty(name, value) { this.props[name] = value; }, removeProperty(name) { delete this.props[name]; } },
-      offsetWidth: 0, offsetHeight: 0, clientWidth: 0,
-      classList: { contains() { return false; }, toggle() {}, add() {}, remove() {} },
+      offsetWidth: 0, offsetHeight: 0, clientWidth: 0, classOps: [],
+      classList: { contains() { return false; }, toggle(name) { n.classOps.push(['toggle', name]); }, add(name) { n.classOps.push(['add', name]); }, remove(name) { n.classOps.push(['remove', name]); } },
       addEventListener(type, fn) { this.listeners[type] = fn; },
       setAttribute(name, value) { this.attributes[name] = String(value); }, toggleAttribute() {},
       getAttribute(name) { return this.attributes[name] ?? null; }, hasAttribute(name) { return name in this.attributes; },
@@ -663,9 +663,9 @@ function boardPage(p) {
     matchMedia: () => ({ matches: false, addEventListener() {} }), getComputedStyle: () => ({ fontSize: '16px' }),
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, ResizeObserver: class { observe() {} },
     screen: { availWidth: 1440, availHeight: 900, availLeft: 0, availTop: 0 }, innerWidth: 1440, innerHeight: 900,
-    addEventListener(type, fn) { (winListeners[type] ||= []).push(fn); },
-    open(url) { const win = { url, closed: false, focus() {}, location: { href: url } }; opened.push(win); return win; },
-    setTimeout, clearTimeout, setInterval(fn, ms) { intervals.push({ fn, ms }); return intervals.length; }, clearInterval() {}, Intl, Date,
+    addEventListener() {},
+    open(url, name, features) { const win = { url, name, features, closed: false, focus() {}, location: { href: url } }; opened.push(win); return win; },
+    setTimeout, clearTimeout, setInterval() {}, clearInterval() {}, Intl, Date,
     ...i18n, ...status
   });
   context.window = context;
@@ -675,9 +675,7 @@ function boardPage(p) {
     for (const fn of docListeners.keydown || []) fn(event);
     return event;
   };
-  // The ticket watch: the newest one-second interval.
-  const watch = () => intervals.filter(interval => interval.ms === 1000).at(-1).fn();
-  return { context, nodes, docListeners, winListeners, intervals, opened, rootStyle, key, watch };
+  return { context, nodes, docListeners, opened, rootStyle, key };
 }
 const boardItems = (p, list) => { p.context.boardItems = list; vm.runInContext('items = boardItems', p.context); };
 const askItem = (id, version, suggest, extra = {}) => ({ id, version, title: `T-${id} question`, done: false, status: 'waiting', waiting: 'which one?',
@@ -763,7 +761,7 @@ test('board runs: some runs without a cost mark the day sum as partial; junk val
   assert.match(runsBoard(runs, 'ko').summary, / · 비용 \$1\.50 · 일부 비용 모름$/);
 });
 
-// ---------- v3.3.3: left dock beside the ticket window, keys, Enter to send, tooltips ----------
+// ---------- v3.3.4: ticket popup at the left, panel stays right; v3.3.3: keys, Enter to send, tooltips ----------
 const linked = (id, extra = {}) => askItem(id, 'v1', '', { link: { label: `T-${id}`, url: `https://tracker.invalid/browse/T-${id}` }, ...extra });
 function selectedBoard(list) {
   const p = page('#t=test-token');
@@ -775,69 +773,62 @@ function selectedBoard(list) {
   return { p, b, sent, view: b.nodes.get('board-view') };
 }
 
-test('dock: the panel docks left while the ticket window is open and returns right when it closes', () => {
-  const { p, b, view } = selectedBoard([linked('aaaaaa'), linked('bbbbbb')]);
-  assert.equal(view.dataset.dock, undefined, 'starts on the right');
+const features = win => Object.fromEntries(win.features.split(',').map(pair => pair.split('=')));
+
+test('ticket: the popup docks to the screen\'s left edge at 45% width and full height', () => {
+  const { b } = selectedBoard([linked('aaaaaa')]);
+  Object.assign(b.context.screen, { availWidth: 1440, availHeight: 875, availLeft: -1440, availTop: 25 });
+  b.nodes.get('panel').offsetWidth = 400;
   assert.equal(b.key('t').prevented, true, 't opens the ticket');
   assert.equal(b.opened.length, 1);
-  assert.equal(view.dataset.dock, 'start');
-  assert.equal(b.intervals.filter(interval => interval.ms === 1000).length, 1, 'a light check watches the window');
-  b.watch();
-  assert.equal(view.dataset.dock, 'start', 'still open: stays left');
-  b.opened[0].closed = true;
-  b.watch();
-  assert.equal(view.dataset.dock, undefined, 'closed: back to the right');
-  assert.equal(view.style.props['--panel-cap'], undefined);
-  // Coming back to the board window notices a closed ticket window at once.
-  b.key('t');
-  assert.equal(view.dataset.dock, 'start');
-  b.opened[1].closed = true;
-  for (const fn of b.winListeners.focus) fn();
-  assert.equal(view.dataset.dock, undefined);
-  void p;
+  assert.equal(b.opened[0].name, 'sdlc-ticket');
+  assert.deepEqual(features(b.opened[0]), { popup: 'yes', width: '648', height: '875', left: '-1440', top: '25' },
+    'left = availLeft, top = availTop, 45% of the width, full available height');
 });
 
-test('dock: live updates never move the panel', () => {
+test('ticket: a panel wider than 55% of the screen shrinks the popup so both fit, never below 480px', () => {
+  const widthFor = (screenWidth, panelWidth) => {
+    const { b } = selectedBoard([linked('aaaaaa')]);
+    Object.assign(b.context.screen, { availWidth: screenWidth, availLeft: 0, availTop: 0 });
+    b.nodes.get('panel').offsetWidth = panelWidth;
+    b.key('t');
+    return features(b.opened[0]);
+  };
+  assert.equal(widthFor(1440, 600).width, '648', 'a common panel leaves 45%');
+  assert.equal(widthFor(1440, 900).width, '524', 'screen less the panel less a 16px gap');
+  assert.equal(widthFor(1440, 1100).width, '480', 'the minimum');
+  assert.equal(widthFor(1440, 900).left, '0');
+});
+
+test('ticket: the panel never moves when the ticket opens, follows or closes', () => {
   const { p, b, view } = selectedBoard([linked('aaaaaa'), linked('bbbbbb')]);
+  const panel = b.nodes.get('panel'), handle = b.nodes.get('panel-resize');
+  const side = () => ({ dock: view.dataset.dock, viewClasses: view.classOps.length, panelClasses: panel.classOps.length,
+    handleClasses: handle.classOps.length, cap: view.style.props['--panel-cap'] });
+  const before = side();
+  assert.equal(before.dock, undefined);
   b.key('t');
-  boardItems(p, [linked('aaaaaa', { version: 'v2', waiting: 'changed?' }), linked('bbbbbb')]);
-  vm.runInContext('render()', b.context);
-  assert.equal(view.dataset.dock, 'start', 'a snapshot while open keeps it left');
+  assert.deepEqual(side(), before, 'opening changes no attribute or class on the panel');
+  b.key('j');
+  assert.equal(b.opened[0].location.href, 'https://tracker.invalid/browse/T-bbbbbb', 'the popup follows the selection');
   b.opened[0].closed = true;
-  b.watch();
-  boardItems(p, [linked('aaaaaa', { version: 'v3' }), linked('bbbbbb')]);
+  boardItems(p, [linked('aaaaaa', { version: 'v2' }), linked('bbbbbb')]);
   vm.runInContext('render()', b.context);
-  assert.equal(view.dataset.dock, undefined, 'a snapshot after closing keeps it right');
+  b.key('t');
+  assert.equal(b.opened.length, 2, 'a closed popup opens again');
+  assert.equal(features(b.opened[1]).left, '0');
+  assert.equal(view.dataset.dock, undefined, 'closing and reopening never docks the panel');
 });
 
-test('dock: → widens and ← narrows when docked left, the mirror of the right side; Home/End reach the bounds', () => {
+test('ticket: the panel handle keeps the right-side keys, ← widens and → narrows', () => {
   const { b, view } = selectedBoard([linked('aaaaaa')]);
   view.clientWidth = 1600;
   b.nodes.get('panel').offsetWidth = 400;
   const resize = name => { b.nodes.get('panel-resize').listeners.keydown({ key: name, shiftKey: false, preventDefault() {}, stopPropagation() {} }); return b.rootStyle.props['--panel-size']; };
-  assert.equal(resize('ArrowLeft'), '416px', 'on the right ← widens');
+  b.key('t');
+  assert.equal(resize('ArrowLeft'), '416px', 'with the ticket open ← still widens');
   assert.equal(resize('ArrowRight'), '384px');
-  b.key('t');
-  assert.equal(resize('ArrowRight'), '416px', 'docked left → widens');
-  assert.equal(resize('ArrowLeft'), '384px', 'docked left ← narrows');
-  assert.equal(resize('Home'), '320px');
-});
-
-test('dock: the width is capped to the screen the ticket window leaves free, never below the minimum', () => {
-  const { b, view } = selectedBoard([linked('aaaaaa')]);
-  view.clientWidth = 1600;
-  const end = () => { b.nodes.get('panel-resize').listeners.keydown({ key: 'End', preventDefault() {}, stopPropagation() {} }); return b.rootStyle.props['--panel-size']; };
-  assert.equal(end(), '1216px', 'on the right: board width less 24rem');
-  b.context.screen.availWidth = 1000;
-  b.key('t');
-  assert.equal(view.style.props['--panel-cap'], '534px', '55% of 1000 less 16');
-  assert.equal(end(), '534px');
-  b.opened[0].closed = true;
-  b.watch();
-  b.context.screen.availWidth = 400;
-  b.key('t');
-  assert.equal(end(), '320px', 'a tiny screen still keeps the 20rem minimum');
-  assert.equal(view.style.props['--panel-cap'], '320px');
+  assert.equal(resize('End'), '1216px', 'no cap: board width less 24rem');
 });
 
 test('keys: Enter sends the reply; Shift+Enter and an IME-composing Enter do not', () => {
