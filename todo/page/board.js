@@ -733,10 +733,16 @@ $('panel-fix').addEventListener('click', async () => {
 // window loses both, and another origin can never read them, so a fake page cannot approve or answer anything.
 // The decision panel never moves: it stays on the right, and the popup takes the left 45% of the screen beside it,
 // narrower (down to 480px) when a wide panel leaves less, so a full-screen board shows both.
+// In the tray app's own window (WKWebView, where the app adds window.ipc) the app shows tickets in the person's Chrome,
+// where their login lives, docked at the screen's left edge: the page only tells the app which ticket. `open` brings
+// that window forward (and makes it again when it was closed); `follow` moves an open one, behind the board.
 let ticketWindow = null, ticketUrl = '';
 const ticketMinWidth = 480, ticketGap = 16;
+const appTickets = () => (typeof window.ipc?.postMessage === 'function' ? window.ipc : null);
 function openTicket(url) {
   if (!isHttp(url)) return;
+  const app = appTickets();
+  if (app) { app.postMessage(JSON.stringify({ open: url })); ticketUrl = url; return; }
   if (ticketWindow && !ticketWindow.closed) {
     if (url !== ticketUrl) { ticketWindow.location.href = url; ticketUrl = url; }
     ticketWindow.focus();
@@ -754,6 +760,11 @@ function openTicket(url) {
 // Only a person's selection (a click or ←/→/j/k) moves the ticket window; live updates never call select().
 function followTicket(card) {
   const url = card?.link?.url;
+  const app = appTickets();
+  if (app) {
+    if (ticketUrl && isHttp(url) && url !== ticketUrl) { app.postMessage(JSON.stringify({ follow: url })); ticketUrl = url; }
+    return;
+  }
   if (!ticketWindow || ticketWindow.closed || !isHttp(url) || url === ticketUrl) return;
   ticketWindow.location.href = url;
   ticketUrl = url;

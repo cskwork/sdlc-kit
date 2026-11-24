@@ -134,59 +134,57 @@ impl WindowState {
     }
 }
 
-/// What the app knows of the board's relay pages (see `Relays` in the macOS part), apart from the pages themselves.
-///
-/// The board's named ticket popup (`window.open` with a size) is kept while it is the newest one: the board opens a
-/// new one only when it has none (after a reload), so an older named relay is no longer held. A sizeless relay
-/// (`target=_blank`, opened without an opener, so nobody holds it) goes after its first ticket. Each relay remembers
-/// its last ticket, which `focus()` on it sends again.
-#[derive(Default)]
-pub struct RelayBook { relays: Vec<RelayEntry> }
+/// What the board page asks of the app through `window.ipc.postMessage` (board.js, in the app's own window).
+#[derive(Debug, PartialEq)]
+pub enum Ask {
+    /// The person opened a ticket (its button or **T**): show it in the Chrome ticket window and bring that forward,
+    /// making the window again when it was closed.
+    Open(String),
+    /// The selection moved to another ticket: move an open ticket window to it, leaving it behind the board, and make
+    /// none when there is none.
+    Follow(String),
+}
 
-struct RelayEntry { id: u64, view: usize, named: bool, last: Option<String> }
+/// Numbers events so a delayed action can tell whether a newer one came since (the board's moves: only the last one
+/// saves the place).
+pub struct Latest(std::sync::atomic::AtomicU64);
 
-impl RelayBook {
-    /// Adds a relay; returns the ids of relays it replaces, to release.
-    pub fn add(&mut self, id: u64, view: usize, named: bool) -> Vec<u64> {
-        let gone: Vec<u64> = if named { self.relays.iter().filter(|relay| relay.named).map(|relay| relay.id).collect() } else { Vec::new() };
-        self.relays.retain(|relay| !gone.contains(&relay.id));
-        self.relays.push(RelayEntry { id, view, named, last: None });
-        gone
+impl Latest {
+    pub const fn new() -> Latest { Latest(std::sync::atomic::AtomicU64::new(0)) }
+    pub fn take(&self) -> u64 { self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1 }
+    pub fn is_newest(&self, ticket: u64) -> bool { self.0.load(std::sync::atomic::Ordering::SeqCst) == ticket }
+}
+
+/// The longest message the board sends: a ticket address with room to spare.
+const ASK_LIMIT: usize = 8 * 1024;
+
+/// Reads one message from the page at `from` (the sending frame's address). Only the board's own page (`board`, its
+/// `http://127.0.0.1:<port>` origin) is heard, and only `{"open": url}` or `{"follow": url}` with an http(s) address
+/// off this machine.
+pub fn ask(from: &str, board: &str, body: &str) -> Result<Ask, String> {
+    if from != board && !from.starts_with(&format!("{board}/")) { return Err(format!("not from the board: {from}")); }
+    if body.len() > ASK_LIMIT { return Err(format!("message of {} bytes, over {ASK_LIMIT}", body.len())); }
+    let value: serde_json::Value = serde_json::from_str(body).map_err(|e| format!("not JSON: {e}"))?;
+    let object = value.as_object().filter(|object| object.len() == 1).ok_or("not a one-field object")?;
+    let (kind, url) = object.iter().next().expect("one field");
+    let url = url.as_str().ok_or("the address is not a string")?.to_string();
+    if classify(&url) != Target::External { return Err(format!("not a ticket address: {url}")); }
+    match kind.as_str() {
+        "open" => Ok(Ask::Open(url)),
+        "follow" => Ok(Ask::Follow(url)),
+        other => Err(format!("unknown request: {other}")),
     }
-
-    /// A relay sent `url` on; returns whether it is now done (a one-shot relay), or None for a relay it does not know.
-    pub fn navigated(&mut self, id: u64, url: &str) -> Option<bool> {
-        let relay = self.relays.iter_mut().find(|relay| relay.id == id)?;
-        relay.last = Some(url.to_string());
-        Some(!relay.named)
-    }
-
-    /// Forgets a relay; true when it was known.
-    pub fn remove(&mut self, id: u64) -> bool {
-        let before = self.relays.len();
-        self.relays.retain(|relay| relay.id != id);
-        self.relays.len() != before
-    }
-
-    /// The last ticket of the relay whose page is `view`, for `focus()` on it.
-    pub fn last_for(&self, view: usize) -> Option<String> {
-        self.relays.iter().find(|relay| relay.view == view)?.last.clone()
-    }
-
-    #[cfg(test)]
-    pub fn len(&self) -> usize { self.relays.len() }
 }
 
 #[cfg(target_os = "macos")]
-pub use mac::{open_board, set_state_file};
+pub use mac::{open_board, save_now, set_state_file};
 
 #[cfg(target_os = "macos")]
 mod mac {
-    use super::{board_frame, classify, system_may_open, Frame, RelayBook, Target, WindowState, BOARD_MIN};
-    use crate::ticket::Latest;
-    use std::collections::HashMap;
+    use super::{ask, board_frame, classify, system_may_open, Ask, Frame, Target, WindowState, BOARD_MIN};
+    use super::Latest;
     use objc2::rc::{Retained, Weak};
-    use objc2::runtime::{AnyClass, AnyObject, Imp, NSObject, ProtocolObject, Sel};
+    use objc2::runtime::{NSObject, ProtocolObject};
     use objc2::{define_class, msg_send, sel, MainThreadMarker, MainThreadOnly};
     use objc2_app_kit::{NSApplication, NSBackingStoreType, NSEventModifierFlags, NSMenu, NSMenuItem, NSScreen, NSWindow,
         NSWindowDelegate, NSWindowStyleMask};
@@ -196,10 +194,9 @@ mod mac {
     use std::path::PathBuf;
     use std::ptr::NonNull;
     use std::rc::Rc;
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::OnceLock;
     use std::time::Duration;
-    use wry::{NewWindowFeatures, NewWindowResponse, Rect, WebView, WebViewBuilder, WebViewBuilderExtMacos, WebViewExtMacOS};
+    use wry::{NewWindowResponse, WebView, WebViewBuilder};
 
     static STATE_FILE: OnceLock<PathBuf> = OnceLock::new();
 
@@ -208,19 +205,8 @@ mod mac {
 
     struct Board { window: Retained<NSWindow>, _delegate: Retained<Delegate>, webview: Rc<WebView>, url: String }
 
-    /// What `window.open` from the board gets back (a relay): a page in a window that is never shown. The board keeps it as its
-    /// ticket popup and sends the next ticket to it (board.js followTicket); each address it is sent to goes to the
-    /// Chrome ticket window instead (see ticket.rs). Ticket sites run in Chrome, never in this app.
-    ///
-    /// The relay never closes, so the board's `ticketWindow.closed` stays false and opening the same ticket again
-    /// only calls `focus()` on it. WebKit passes that `focus()` to the UI delegate's `_focusWebView:`, which
-    /// `install_focus_hook` adds; it sends the relay's last ticket to Chrome again, which brings that window back or
-    /// makes a new one when it was closed.
-    /// The hidden window holding the relay pages, the pages by id (held so their handlers live) and what each relayed.
-    struct Relays { _window: Retained<NSWindow>, host: Host, pages: HashMap<u64, WebView>, book: RelayBook }
-
     #[derive(Default)]
-    struct Windows { board: Option<Board>, relays: Option<Relays> }
+    struct Windows { board: Option<Board> }
 
     thread_local! {
         /// The windows live on the main thread, as AppKit wants. No borrow is held across a call into AppKit or
@@ -258,6 +244,13 @@ mod mac {
             let frame = WINDOWS.with_borrow(|windows| windows.board.as_ref().map(|board| board.window.frame()));
             if let Some(frame) = frame { save_place(frame); }
         });
+    }
+
+    /// Keeps the board's place now: a quit skips the half second `save_when_still` waits. Main thread only.
+    pub fn save_now() {
+        if MainThreadMarker::new().is_none() { return; }
+        let frame = WINDOWS.with_borrow(|windows| windows.board.as_ref().map(|board| board.window.frame()));
+        if let Some(frame) = frame { save_place(frame); }
     }
 
     fn save_place(frame: NSRect) {
@@ -377,15 +370,15 @@ mod mac {
         window.setMinSize(NSSize::new(BOARD_MIN.0, BOARD_MIN.1));
         let built = WebViewBuilder::new()
             .with_url(url)
-            .with_new_window_req_handler(board_popup)
-            .with_navigation_handler(|to: String| board_navigation(&to))
+            .with_ipc_handler(|request| { guarded(|| board_message(&request.uri().to_string(), request.body())); })
+            .with_new_window_req_handler(|to, _| guarded(|| { hand_off(&to); NewWindowResponse::Deny }).unwrap_or(NewWindowResponse::Deny))
+            .with_navigation_handler(|to: String| guarded(|| board_navigation(&to)).unwrap_or(false))
             .with_document_title_changed_handler(title_follower(&window))
             .build(&Host::of(&window)?);
         let webview = match built {
             Ok(webview) => webview,
             Err(error) => { window.setDelegate(None); window.close(); return Err(error.to_string()); }
         };
-        install_focus_hook(&webview.webview());
         WINDOWS.with_borrow_mut(|windows| windows.board = Some(Board { window: window.clone(), _delegate: delegate, webview: Rc::new(webview), url: url.to_string() }));
         bring_forward(mtm, &window);
         Ok(())
@@ -393,7 +386,7 @@ mod mac {
 
     /// The ticket window takes the left side of the screen the board is on; Chrome needs the main screen's height to
     /// turn AppKit's bottom-left coordinates into its own.
-    fn open_ticket(url: &str) {
+    fn open_ticket(url: &str, follow: bool) {
         let Some(mtm) = MainThreadMarker::new() else { return };
         let all = NSScreen::screens(mtm);
         let main_height = all.iter().next().map(|screen| screen.frame().size.height).unwrap_or(900.0);
@@ -401,14 +394,14 @@ mod mac {
             .or_else(|| NSScreen::mainScreen(mtm))
             .map(|screen| frame_of(screen.visibleFrame()))
             .unwrap_or(Frame { x: 0.0, y: 0.0, width: 1440.0, height: main_height });
-        crate::ticket::open(url.to_string(), visible, main_height);
+        crate::ticket::open(url.to_string(), follow, visible, main_height);
     }
 
     /// A link the board does not show itself: http(s) to the Chrome ticket window, `mailto:` to the mail app; anything
     /// else is refused, since the system's handler would launch it.
     fn hand_off(url: &str) {
         match classify(url) {
-            Target::External => open_ticket(url),
+            Target::External => open_ticket(url, false),
             Target::Board => crate::open_url(url),
             Target::Other if system_may_open(url) => crate::open_url(url),
             Target::Other => eprintln!("sdlc-todo: refused to open {url}: only http(s) and mailto: links leave the board"),
@@ -423,92 +416,21 @@ mod mac {
         false
     }
 
-    /// `window.open` and `target=_blank` from the board. A ticket gets a relay page as its popup (see `Relays`);
-    /// WebKit then loads the ticket into the relay, which hands it to the Chrome ticket window.
-    fn board_popup(url: String, features: NewWindowFeatures) -> NewWindowResponse {
-        if classify(&url) != Target::External { hand_off(&url); return NewWindowResponse::Deny; }
-        match relay(features.opener.target_configuration, features.size.is_some()) {
-            Ok(webview) => NewWindowResponse::Create { webview },
-            Err(error) => {
-                eprintln!("sdlc-todo: no popup for the ticket ({error}); opening it without one");
-                open_ticket(&url);
-                NewWindowResponse::Deny
-            }
-        }
+    /// Runs a handler WebKit calls: a panic must not unwind into Objective-C, so it is logged and the call answers
+    /// None.
+    fn guarded<T>(body: impl FnOnce() -> T) -> Option<T> {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
+            .map_err(|_| eprintln!("sdlc-todo: a board window handler panicked"))
+            .ok()
     }
 
-    static RELAYS: AtomicU64 = AtomicU64::new(0);
-
-    /// A relay page made with the opener's configuration, as WebKit requires of a popup. Every navigation it is asked
-    /// for, the first one included, is handed off and cancelled, so it stays blank. A new named relay replaces the
-    /// older one (the board opens one only when it has none); a sizeless one goes after its first navigation.
-    fn relay(configuration: Retained<objc2_web_kit::WKWebViewConfiguration>, named: bool) -> Result<Retained<objc2_web_kit::WKWebView>, String> {
-        let mtm = MainThreadMarker::new().ok_or("not on the main thread")?;
-        if WINDOWS.with_borrow(|windows| windows.relays.is_none()) {
-            // Never ordered front, so never on screen.
-            let window = new_window(mtm, Frame { x: 0.0, y: 0.0, width: 64.0, height: 64.0 }, "relay");
-            let host = Host::of(&window)?;
-            WINDOWS.with_borrow_mut(|windows| windows.relays = Some(Relays { _window: window, host, pages: HashMap::new(), book: RelayBook::default() }));
-        }
-        // The relay window is held in WINDOWS for the app's life, so its view outlives this call.
-        let host = WINDOWS.with_borrow(|windows| windows.relays.as_ref().map(|relays| relays.host)).ok_or("no relay window")?;
-        let id = RELAYS.fetch_add(1, Ordering::Relaxed);
-        let page = WebViewBuilder::new()
-            .with_webview_configuration(configuration)
-            .with_bounds(Rect { position: wry::dpi::LogicalPosition::new(0, 0).into(), size: wry::dpi::LogicalSize::new(1, 1).into() })
-            .with_navigation_handler(move |to: String| { relayed(id, &to); false })
-            .with_new_window_req_handler(|url, _| { hand_off(&url); NewWindowResponse::Deny })
-            .build_as_child(&host)
-            .map_err(|e| e.to_string())?;
-        let webview = Retained::into_super(page.webview());
-        let view = Retained::as_ptr(&webview) as usize;
-        let replaced: Vec<WebView> = WINDOWS.with_borrow_mut(|windows| {
-            let relays = windows.relays.as_mut().expect("made above");
-            relays.pages.insert(id, page);
-            relays.book.add(id, view, named).into_iter().filter_map(|gone| relays.pages.remove(&gone)).collect()
-        });
-        // Dropped outside the borrow: a page going away can call back into WINDOWS.
-        drop(replaced);
-        Ok(webview)
-    }
-
-    /// A relay asked to load `to`: it goes to Chrome (or is refused) and is remembered for `focus()`.
-    fn relayed(id: u64, to: &str) {
-        if to.starts_with("about:") { return; }
-        let one_shot = WINDOWS.with_borrow_mut(|windows| windows.relays.as_mut()?.book.navigated(id, to));
-        hand_off(to);
-        // Not from inside the page's own callback: once WebKit is done with this navigation.
-        if one_shot == Some(true) {
-            dispatch::Queue::main().exec_async(move || {
-                let gone = WINDOWS.with_borrow_mut(|windows| {
-                    let relays = windows.relays.as_mut()?;
-                    relays.book.remove(id);
-                    relays.pages.remove(&id)
-                });
-                drop(gone);
-            });
-        }
-    }
-
-    /// `focus()` on a relay: its last ticket goes to Chrome again.
-    fn refocused(view: usize) {
-        let last = WINDOWS.with_borrow(|windows| windows.relays.as_ref()?.book.last_for(view));
-        if let Some(url) = last { open_ticket(&url); }
-    }
-
-    /// Adds `_focusWebView:` (WKUIDelegatePrivate: WebKit calls it when a page's `window.focus()` asks to bring its
-    /// window forward) to wry's UI delegate class. WebKit checks for it when a delegate is set, so this runs on the
-    /// board's delegate, before any relay is made; the board ignores it (it is no relay).
-    fn install_focus_hook(webview: &objc2_web_kit::WKWebView) {
-        unsafe extern "C-unwind" fn focus(_this: *mut AnyObject, _cmd: Sel, webview: *mut AnyObject) { refocused(webview as usize); }
-        let delegate: Option<Retained<AnyObject>> = unsafe { msg_send![webview, UIDelegate] };
-        let Some(delegate) = delegate else { return };
-        let class: *const AnyClass = delegate.class();
-        // Safety: a C function with the (id, SEL, id) -> void shape the "v@:@" types string declares. class_addMethod
-        // leaves a class that already has the selector alone.
-        unsafe {
-            let imp: Imp = std::mem::transmute::<unsafe extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject), Imp>(focus);
-            objc2::ffi::class_addMethod(class as *mut AnyClass, sel!(_focusWebView:), imp, c"v@:@".as_ptr());
+    /// A message from the board page (see `ask`): a ticket to open or follow in the Chrome ticket window.
+    fn board_message(from: &str, body: &str) {
+        let board = WINDOWS.with_borrow(|windows| windows.board.as_ref().map(|board| board.url.split("/#").next().unwrap_or("").to_string()));
+        match ask(from, &board.unwrap_or_default(), body) {
+            Ok(Ask::Open(url)) => open_ticket(&url, false),
+            Ok(Ask::Follow(url)) => open_ticket(&url, true),
+            Err(error) => eprintln!("sdlc-todo: ignored a message from the board: {error}"),
         }
     }
 }
@@ -571,25 +493,48 @@ mod tests {
         }
     }
 
+    const BOARD: &str = "http://127.0.0.1:51860";
+
     #[test]
-    fn relays_are_released_and_remember_their_ticket() {
-        let mut book = RelayBook::default();
-        // The board's named popup: kept, and focus() on it finds its last ticket again.
-        assert!(book.add(1, 0x10, true).is_empty());
-        assert_eq!(book.last_for(0x10), None);
-        assert_eq!(book.navigated(1, "https://j/browse/A-1"), Some(false));
-        assert_eq!(book.navigated(1, "https://j/browse/A-2"), Some(false));
-        assert_eq!(book.last_for(0x10).as_deref(), Some("https://j/browse/A-2"));
-        // A target=_blank relay is one-shot: done after its first ticket, then removed.
-        assert!(book.add(2, 0x20, false).is_empty());
-        assert_eq!(book.navigated(2, "https://j/browse/B-1"), Some(true));
-        assert!(book.remove(2) && !book.remove(2));
-        // Many links do not pile up: each goes after its one navigation.
-        for id in 3..103 { book.add(id, id as usize * 16, false); book.navigated(id, "https://e.x/"); book.remove(id); }
-        assert_eq!(book.len(), 1);
-        // A new named popup (the board reloaded) replaces the old one; an unknown relay or page is nothing.
-        assert_eq!(book.add(200, 0x30, true), vec![1]);
-        assert_eq!((book.len(), book.last_for(0x10), book.navigated(1, "https://e.x/")), (1, None, None));
+    fn the_board_page_may_ask_for_a_ticket_and_nothing_else() {
+        let from = "http://127.0.0.1:51860/";
+        let ticket = "https://dong-a.atlassian.net/browse/A20-1383";
+        assert_eq!(ask(from, BOARD, &format!(r#"{{"open":"{ticket}"}}"#)), Ok(Ask::Open(ticket.into())));
+        assert_eq!(ask(BOARD, BOARD, &format!(r#"{{"follow":"{ticket}"}}"#)), Ok(Ask::Follow(ticket.into())));
+        // Only the board's own page: another port, another host, a lookalike host.
+        for other in ["http://127.0.0.1:51861/", "http://localhost:51860/", "https://dong-a.atlassian.net/", "http://127.0.0.1:518600/",
+            "http://127.0.0.1:51860.evil.example/", ""] {
+            assert!(ask(other, BOARD, &format!(r#"{{"open":"{ticket}"}}"#)).is_err(), "{other}");
+        }
+        // Not JSON, not one field, an unknown request, a non-string address.
+        for body in ["", "open", r#"["open"]"#, "{}", r#"{"open":"https://e.x/","follow":"https://e.x/"}"#, r#"{"close":"https://e.x/"}"#,
+            r#"{"open":42}"#, r#"{"open":null}"#] {
+            assert!(ask(from, BOARD, body).is_err(), "{body}");
+        }
+        // Only an http(s) address off this machine: never the board's own server, a file, a scheme handler.
+        for url in ["http://127.0.0.1:51860/#t=x", "http://localhost/", "file:///Applications/Calculator.app", "javascript:alert(1)",
+            "vscode://file/etc/hosts", "data:text/html,x", "mailto:a@b.c"] {
+            assert!(ask(from, BOARD, &serde_json::json!({ "open": url }).to_string()).is_err(), "{url}");
+        }
+        // A huge message is refused before it is parsed.
+        let huge = serde_json::json!({ "open": format!("https://e.x/{}", "a".repeat(9000)) }).to_string();
+        assert!(ask(from, BOARD, &huge).unwrap_err().contains("over 8192"));
+    }
+
+    /// The sender's address reaches the handler through http::Uri, which drops the token fragment; the board's page
+    /// must still be recognised.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_board_pages_address_survives_the_ipc_request() {
+        let uri: wry::http::Uri = "http://127.0.0.1:51860/#t=0123456789abcdef0123456789abcdef&app=1".parse().unwrap();
+        assert!(ask(&uri.to_string(), BOARD, r#"{"open":"https://e.x/browse/A-1"}"#).is_ok(), "{uri}");
+    }
+
+    #[test]
+    fn only_the_newest_move_saves() {
+        let latest = Latest::new();
+        let (first, second, third) = (latest.take(), latest.take(), latest.take());
+        assert!(!latest.is_newest(first) && !latest.is_newest(second) && latest.is_newest(third));
     }
 
     #[test]

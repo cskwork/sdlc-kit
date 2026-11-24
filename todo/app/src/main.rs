@@ -167,7 +167,10 @@ fn open_url(url: &str) {
     let (program, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") { ("open", vec![url]) }
         else if cfg!(windows) { ("rundll32.exe", vec!["url.dll,FileProtocolHandler", url]) }
         else { ("xdg-open", vec![url]) };
-    let _ = std::process::Command::new(program).args(args).spawn();
+    // Waited for on a thread of its own, so the finished handler is reaped instead of left as a zombie.
+    if let Ok(mut child) = std::process::Command::new(program).args(args).spawn() {
+        std::thread::spawn(move || { let _ = child.wait(); });
+    }
 }
 
 /// The board's address: the web page with the token in its fragment, as `urlOf` in todo/web.mjs builds it, plus
@@ -247,6 +250,9 @@ fn open_terminal(command: &str) -> bool {
 }
 
 fn quit(state: &State) -> ! {
+    // The board's place waits half a second after a move; a quit right after one keeps it too.
+    #[cfg(target_os = "macos")]
+    board::save_now();
     if let Ok(mut shared) = state.lock() {
         if let Some(mut child) = shared.child.take() { let _ = child.kill(); }
     }
@@ -349,6 +355,9 @@ impl App {
             }
         }));
         connect(state.clone(), ctx, launcher, lang, !background);
+        // macOS asks once whether the app may control Chrome (for the ticket window); ask now, not at the first ticket.
+        #[cfg(target_os = "macos")]
+        ticket::ask_permission_early();
         App { state, lang, tab: Tab::Focus, open: HashSet::new(), focus: None, focus_at: 0, drafts: HashMap::new(), notes: HashMap::new(),
             prefs, prefs_file, prefs_dirty: false, fonts, settings: false, hidden_at_start: false }
     }
@@ -460,6 +469,12 @@ fn markdown(ui: &mut egui::Ui, p: &theme::Palette, text: &str) {
 }
 
 impl eframe::App for App {
+    /// ⌘Q and other exits that end the event loop: keep the board's place, as the tray's Quit does.
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        #[cfg(target_os = "macos")]
+        board::save_now();
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if !self.hidden_at_start {
             self.hidden_at_start = true;

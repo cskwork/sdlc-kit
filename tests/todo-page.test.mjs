@@ -820,6 +820,34 @@ test('ticket: the panel never moves when the ticket opens, follows or closes', (
   assert.equal(view.dataset.dock, undefined, 'closing and reopening never docks the panel');
 });
 
+test('ticket: in the tray app\'s window the page asks the app (window.ipc) and opens no popup', () => {
+  const { b } = selectedBoard([linked('aaaaaa'), linked('bbbbbb'), askItem('cccccc', 'v1', '')]);
+  const posts = [];
+  b.context.ipc = { postMessage(message) { posts.push(message); } };
+  b.key('j');
+  assert.deepEqual(posts, [], 'no ticket opened yet: a selection asks for nothing');
+  b.key('k');
+  assert.equal(b.key('t').prevented, true);
+  assert.deepEqual(posts, ['{"open":"https://tracker.invalid/browse/T-aaaaaa"}'], 'exactly one message, the open');
+  b.key('t');
+  assert.equal(posts[1], '{"open":"https://tracker.invalid/browse/T-aaaaaa"}', 'the same ticket again asks again (Chrome brings it back)');
+  b.key('j');
+  assert.equal(posts[2], '{"follow":"https://tracker.invalid/browse/T-bbbbbb"}', 'the selection follows');
+  b.key('j');
+  assert.equal(posts.length, 3, 'an item without a ticket moves nothing');
+  b.nodes.get('panel-ticket').click();
+  assert.equal(posts.length, 3, 'the button on an item without a ticket does nothing');
+  assert.equal(b.opened.length, 0, 'never window.open in the app');
+});
+
+test('ticket: outside the app (no window.ipc, or one without postMessage) the popup opens as before', () => {
+  const { b } = selectedBoard([linked('aaaaaa')]);
+  b.context.ipc = {};
+  b.key('t');
+  assert.equal(b.opened.length, 1);
+  assert.equal(b.opened[0].name, 'sdlc-ticket');
+});
+
 test('ticket: the panel handle keeps the right-side keys, ← widens and → narrows', () => {
   const { b, view } = selectedBoard([linked('aaaaaa')]);
   view.clientWidth = 1600;
