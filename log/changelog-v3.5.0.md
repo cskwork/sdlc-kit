@@ -19,18 +19,19 @@ The tray app showed the board in a Google Chrome `--app` window. That tied a lig
   - If Chrome is missing or the script fails, the default browser opens the ticket.
   - `install-macos.sh` adds `NSAppleEventsUsageDescription` for the one-time permission prompt.
 - **README.md:** describes the app's board window and the ticket window.
-- **Hardening (review):**
-  - Every link leaving the board goes through one hand-off: http(s) goes to Chrome, the board's own loopback URLs to the default browser, `mailto:` to the system, and everything else (`file:`, `data:`, `javascript:`, custom schemes) is refused.
-  - Opening the same ticket again brings Chrome's ticket window back, even when it was closed or buried. This uses WebKit's popup-focus hook.
-  - One-shot link relays are released.
-  - `ps` lists only this user's processes.
-  - osascript is limited to 8 s, and a burst of clicks ends on the newest ticket.
-  - The saved window frame is clamped into its screen.
-  - Moving the window saves after it stands still for 0.5 s.
+- **Hardening (two reviews):**
+  - **Tickets through the webview's public IPC.** In the app's window the board sends the ticket as `{open}` or `{follow}` through the webview's IPC channel, no longer as a `window.open` popup. The app accepts a message only from the board's own loopback origin, up to 8 KiB, with an http(s) ticket address.
+    - `open` shows and brings forward the Chrome ticket window, recreating it if it was closed.
+    - `follow` moves an open ticket window when the selection changes, without taking focus.
+  - **Other links.** Every other link leaving the board is handed off once: http(s) to Chrome, `mailto:` to the system; anything else is refused. No hidden relay windows remain.
+  - **Automation permission.** The app asks once for permission to control Chrome at launch. A denied permission is logged and falls back to the default browser.
+  - **osascript.** Each script is limited to 8 s; a timeout opens nothing else. Queued clicks merge to the newest ticket. The script reuses the remembered window, then a window already showing the ticket, before it makes one.
+  - **Processes.** `ps` lists only this user's processes, and child processes are reaped.
+  - **Window frame.** The saved frame is clamped into its screen. Moving the window saves it after 0.5 s. Quit and ⌘Q save at once.
 
 ## Verification
 
-- `cargo test --release` in `todo/app`: 21 of 21 pass, 13 of them new. They cover:
+- `cargo test --release` in `todo/app`: 24 of 24 pass, 16 of them new. `node --test tests/todo-page.test.mjs tests/todo-board.test.mjs`: 68 of 68. They cover:
   - the left-dock geometry;
   - restoring the saved frame only on a visible screen;
   - board versus ticket URL classification, including `127.0.0.1@evil`, `127.0.0.1.evil.example` and `[::1]`;
@@ -44,4 +45,4 @@ The tray app showed the board in a Google Chrome `--app` window. That tied a lig
   - the frame was saved on quit;
   - the ticket script reused one Chrome window at x 0 for two tickets.
 - Memory (footprint): the app plus its WebKit processes came to about 226 MB, against about 330–450 MB for the Chrome `--app` path. The Node server was about 21 MB in both.
-- Not verified before release: Korean typing with Enter-to-send, `<dialog>`/`popover`, and a ticket click from the board in the installed app. The machine locked during the GUI check, so these are checked by the user after install.
+- Not verified before release: Korean typing with Enter-to-send, `<dialog>`/`popover`, and a ticket click from the board in the installed app (the IPC round trip), and the launch permission prompt. The machine locked during the GUI check, so these are checked by the user after install.
