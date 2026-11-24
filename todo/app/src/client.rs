@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, PartialEq, Eq)]
 pub struct Session {
     pub port: u16,
     pub token: String,
@@ -146,14 +146,17 @@ impl Launcher {
             command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         }
         let mut child = command.spawn().map_err(|e| format!("{} {}: {e}", self.node, script.display()))?;
-        let deadline = Instant::now() + Duration::from_secs(20);
+        // The server syncs the whole board before listening. On a busy board this can
+        // take over a minute, so give startup longer than a regular HTTP request.
+        let startup_timeout = Duration::from_secs(90);
+        let deadline = Instant::now() + startup_timeout;
         while Instant::now() < deadline {
             if let Some(session) = live(&self.session_file) { return Ok((child, session)); }
             if let Ok(Some(status)) = child.try_wait() { return Err(format!("todo.mjs serve exited: {status}")); }
             std::thread::sleep(Duration::from_millis(250));
         }
-        let _ = child.kill();
-        Err("todo.mjs serve did not answer in 20 seconds".into())
+        if child.kill().is_ok() { let _ = child.wait(); }
+        Err(format!("todo.mjs serve did not answer in {} seconds", startup_timeout.as_secs()))
     }
 }
 
