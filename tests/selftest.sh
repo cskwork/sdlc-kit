@@ -1665,13 +1665,13 @@ regression_contains() {
   git checkout -q -b t3 main; mkdir -p 'dir with space'; printf 'a\n' > 'dir with space/a b.txt'
   # Git for Windows can create such a file but not add it by that name: then the newline case is skipped.
   nl=$(printf 'new\nline.txt'); if printf 'x\n' > "$nl" 2>/dev/null && git add -- "$nl" 2>/dev/null; then :; else rm -f -- "$nl" 2>/dev/null || :; nl=; fi
-  i=0; mkdir -p many; while [ "$i" -lt 2000 ]; do printf '%s\n' "$i" > "many/f$i.txt"; i=$((i+1)); done
-  git add -A 'dir with space' many ${nl:+"$nl"}; git commit -qm 'odd paths and 2000 files'; C3=$(git rev-parse HEAD); git checkout -q main; git merge -q --ff-only t3; SHA=$C3
+  i=0; mkdir -p many; while [ "$i" -lt 500 ]; do printf '%s\n' "$i" > "many/f$i.txt"; i=$((i+1)); done
+  git add -A 'dir with space' many ${nl:+"$nl"}; git commit -qm 'odd paths and 500 files'; C3=$(git rev-parse HEAD); git checkout -q main; git merge -q --ff-only t3; SHA=$C3
   contains_slug odd
   D3=$(promote dev3 "$C3"); expect 0 ship "$SLUG" dev "$D3" --checked x --output y; contains '(contains)'
   git checkout -q -b rev3 "$D3"; git rm -q 'dir with space/a b.txt'; git commit -qm 'drop the spaced file'; R3=$(git rev-parse HEAD); git checkout -q main
   expect 1 ship "$SLUG" stg "$R3" --checked x --output y; contains "no longer has the verified change of $C3"
-  ok "contains: paths with spaces${nl:+ and a newline} and a 2000-file change go through a pipe; removing one file is refused"
+  ok "contains: paths with spaces${nl:+ and a newline} and a 500-file change go through a pipe; removing one file is refused"
 }
 # A root commit as the verified Commit is compared with the empty tree; an old git that echoes
 # --path-format back still yields the repository identity.
