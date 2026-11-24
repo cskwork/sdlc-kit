@@ -51,7 +51,8 @@
 
 - CI selftest on ubuntu, macos and windows gates the merge (PR #98).
 - Local selftest:
-  - The filtered copy passes every group, with these new or extended groups: events 5, stats 4, stages 8, undo 3, other 8.
+  - The filtered copy passes every group, with these new or extended groups: events 5, stats 4, stages 8, undo 3, other 8, stagerepos 6, contains 4, rootcommit 2, and the lock group 16 (an ABA replay that fails on the old lock, and 8 writers × 3 rounds).
+  - The 8-writer stress loop passed 30/30 under bash 5.3 and 20/20 under /bin/bash 3.2.
   - A local hook blocks the four sections that run `git reset --hard`. CI runs those.
   - `interrupt` failed under load on both trees and passes alone.
   - Budgets: plan load 2500/2500 words, total under 6000, `sdlc.sh` 600 lines.
@@ -61,4 +62,6 @@
   - an alert card's answer box showed the suggested answer;
   - run tooltips and the day summary showed cost;
   - a day without cost fields rendered as before.
-- Two independent reviews ran. Every finding from them is fixed.
+- CI: the Windows job now has 30 minutes (the new groups brought it to about 20).
+- `status --json` on a real 58-slug store: median 14.3 s against 16.9 s for v3.2.0, output byte-identical to before the speed-up.
+- Six independent review rounds ran. Every finding from them is fixed.
