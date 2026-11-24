@@ -54,10 +54,17 @@ function argumentsFor(argv) {
   }
   return { command, flags, args };
 }
-function summary(item, live = core.readWorking(file)) {
+// The program a command would start, found the way the board finds it ('' when not found): an agent can tell
+// before leaving a command whether the human could run it here. The login shell is asked only when one has exec.
+async function execPaths(items) {
+  if (!items.some(item => item?.exec)) return () => '';
+  const web = await import('./web.mjs'), searchPath = await web.commandSearchPath();
+  return item => item?.exec ? web.resolveCommand(item.exec.argv[0], searchPath) : '';
+}
+function summary(item, live = core.readWorking(file), execPath = () => '') {
   return { id: item.id, title: item.title, project: item.project, link: item.link,
     slug: item.sdlc?.slug || null, phase: item.sdlc?.phase || null, state: item.sdlc?.state || null,
-    action: item.sdlc?.action || '', waiting: item.waiting, asked: core.asked(item), others: item.others || '', brief: item.brief || '', repos: item.repos || [], choices: item.choices || [], pick: item.pick ?? null, suggest: item.suggest || '', run: item.run || '', exec: item.exec || null, execResult: item.execResult || null, pin: !!item.pin, replies: item.replies || core.replies(item), unread: item.unread || 0, fix: !!item.fixRequested, status: item.status, working: !item.done && live[item.id] || null };
+    action: item.sdlc?.action || '', waiting: item.waiting, asked: core.asked(item), others: item.others || '', brief: item.brief || '', repos: item.repos || [], choices: item.choices || [], pick: item.pick ?? null, suggest: item.suggest || '', run: item.run || '', exec: item.exec || null, execPath: execPath(item), execResult: item.execResult || null, pin: !!item.pin, replies: item.replies || core.replies(item), unread: item.unread || 0, fix: !!item.fixRequested, status: item.status, working: !item.done && live[item.id] || null };
 }
 const uiNames = ['tui', 'web', 'app'];
 const appPath = () => process.env.SDLC_TODO_APP || path.join(kit, 'todo', 'app', 'target', 'release', process.platform === 'win32' ? 'sdlc-todo.exe' : 'sdlc-todo');
@@ -156,14 +163,14 @@ async function main() {
       arity(0);
       const model = await core.sync(file, { kit });
       const live = core.readWorking(file);
-      if (flags.json) console.log(JSON.stringify(model.items.map(item => summary(item, live))));
+      if (flags.json) { const paths = await execPaths(model.items); console.log(JSON.stringify(model.items.map(item => summary(item, live, paths)))); }
       else for (const item of model.items) console.log(`${item.id} [${item.status}] ${item.title}`);
       return;
     }
     case 'next': case 'take': {
       arity(command === 'take' ? 1 : 0);
       const result = command === 'take' ? await core.take(file, args[0], { kit }) : await core.next(file, { kit });
-      if (flags.json) console.log(JSON.stringify(result.item ? summary(result.item) : null));
+      if (flags.json) console.log(JSON.stringify(result.item ? summary(result.item, undefined, await execPaths([result.item])) : null));
       else if (result.item) console.log(`${result.item.id} [${result.item.status}] ${result.item.title}${result.item.sdlc?.action ? ` — ${result.item.sdlc.action}` : result.item.waiting ? ` — ${result.item.waiting}` : ''}`);
       process.exitCode = result.code;
       return;

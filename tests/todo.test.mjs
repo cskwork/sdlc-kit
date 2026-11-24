@@ -277,6 +277,19 @@ test('exec: a command left for the human is their turn, with or without a wait',
   assert.equal(core.load(file).items[0].status, 'workable');
 });
 
+test('exec: list, next and take JSON name the program the command would start, or nothing when it is not found', async t => {
+  const { root, file } = scratch(t);
+  const found = checkCode(await cli(file, ['add', 'found']), 0).stdout.trim();
+  const missing = checkCode(await cli(file, ['add', 'missing']), 0).stdout.trim();
+  checkCode(await cli(file, ['add', 'plain']), 0);
+  checkCode(await cli(file, ['exec', found, '--json', JSON.stringify({ argv: ['sh', '-c', 'true'], cwd: root })]), 0);
+  checkCode(await cli(file, ['exec', missing, '--json', JSON.stringify({ argv: ['no-such-command-xyz'], cwd: root })]), 0);
+  const listed = JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout);
+  assert.deepEqual(listed.map(item => [item.title, item.execPath]), [['found', '/bin/sh'], ['missing', ''], ['plain', '']]);
+  assert.equal((await next(file, 10)).execPath, '/bin/sh', 'next --json too');
+  assert.equal(JSON.parse(checkCode(await cli(file, ['take', missing, '--json']), 10).stdout).execPath, '', 'and take --json');
+});
+
 test('execResult: the latest run outcome round-trips, shows in list JSON, outlives every clear, and a bad line stays as a note', async t => {
   const { root, file } = scratch(t);
   const result = { argv: ['sh', '-c', 'echo hi'], cwd: root, resolved: '/bin/sh', exitCode: 0, timedOut: false, signal: null, at: '2026-11-25T05:00:00.000Z', run: 'ab12cd34' };

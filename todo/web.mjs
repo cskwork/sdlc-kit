@@ -251,7 +251,7 @@ export async function liveSession(file = core.sessionPath()) {
   } catch { return null; }
 }
 
-export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage, session = '', feed = feedPath(file), deferInitialSync = false, runTimeout = 300000, killAfter = 5000, searchPath } = {}) {
+export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage, session = '', feed = feedPath(file), deferInitialSync = false, runTimeout = 300000, killAfter = 5000, searchPath, finishRetryMs = 30000 } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('invalid port');
   if (!isLanguage(lang)) throw new Error(`invalid language: ${lang}`);
   if (!onUrl && !open && !process.stdout.isTTY) throw new Error('web requires a terminal or --open');
@@ -280,23 +280,54 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   const commandPath = searchPath ?? await (defaultSearchPath ??= commandSearchPath());
   const childEnv = { ...process.env, PATH: commandPath };
   // A run is recorded in todo.md before it starts and when it ends, so every server and tab sees it:
-  // "exec started run=<id> pid=<server pid> — <command>" and "exec finished run=<id> — <result>".
+  // "exec started run=<id> pid=<server pid> server=<server nonce> — <command>" and "exec finished run=<id> — <result>".
+  const serverId = randomBytes(4).toString('hex'), running = new Set();
   const startOf = runId => event => event.who === 'human' && event.what.startsWith(`exec started run=${runId} `);
   const unfinished = item => item.events.flatMap(event => {
-    const started = event.who === 'human' && event.what.match(/^exec started run=([0-9a-f]+) pid=(\d+) /);
+    const started = event.who === 'human' && event.what.match(/^exec started run=([0-9a-f]+) pid=(\d+)(?: server=([0-9a-f]+))? /);
     if (!started || item.events.some(other => other.who === 'human' && other.what.startsWith(`exec finished run=${started[1]} `))) return [];
-    return [{ runId: started[1], pid: Number(started[2]) }];
+    return [{ runId: started[1], pid: Number(started[2]), server: started[3] || '', at: Date.parse(event.at.replace(' ', 'T')) }];
   });
   const alive = pid => { try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };
-  // A server that stopped mid-run left a start without an end: say so on the item and keep the command for the human.
-  if (core.load(file).items.some(item => unfinished(item).some(run => run.pid === process.pid || !alive(run.pid)))) {
-    await core.mutate(file, model => {
-      for (const item of model.items) for (const run of unfinished(item)) {
-        if (run.pid !== process.pid && alive(run.pid)) continue;
-        item.events.push({ at: core.stamp(), who: 'human', what: `exec finished run=${run.runId} — ${t('run.interrupted')}` });
-        logRun({ at: new Date().toISOString(), id: item.id, run: run.runId, event: 'interrupted' });
+  // No run outlives its timeout, the KILL that follows, the pipe grace and a minute of slack: a start older than that
+  // is dead even if its pid now belongs to another process (a reboot can hand it to a root daemon, which answers EPERM).
+  const longestRun = runTimeout + killAfter + 2000 + 60000;
+  // This server knows its own runs; another server's run counts while its pid lives and it is not too old.
+  const live = run => run.server === serverId ? running.has(run.runId) :
+    run.pid !== process.pid && alive(run.pid) && !(Date.now() - run.at > longestRun);
+  // A run whose server stopped (or whose result could never be written) keeps its command for the human.
+  const markInterrupted = item => {
+    for (const run of unfinished(item)) {
+      if (live(run)) continue;
+      item.events.push({ at: core.stamp(), who: 'human', what: `exec finished run=${run.runId} — ${t('run.interrupted')}` });
+      logRun({ at: new Date().toISOString(), id: item.id, run: run.runId, event: 'interrupted' });
+    }
+  };
+  if (core.load(file).items.some(item => unfinished(item).some(run => !live(run)))) {
+    await core.mutate(file, model => { for (const item of model.items) markInterrupted(item); });
+  }
+  // A finish write that keeps failing (the lock stays busy under load) waits here and is written on the next request
+  // or keepalive tick; until then its run still counts as running, so nobody starts it twice.
+  const pendingFinish = new Map();
+  async function flushFinishes() {
+    for (const [runId, write] of pendingFinish) {
+      try { await core.mutate(file, write); pendingFinish.delete(runId); running.delete(runId); }
+      catch (error) { console.error(`to-do exec result still not written (run ${runId}): ${error.message}`); return; }
+    }
+  }
+  async function writeFinish(runId, write) {
+    const deadline = Date.now() + finishRetryMs;
+    for (let wait = 250; ; wait = Math.min(wait * 2, 8000)) {
+      try { await core.mutate(file, write); running.delete(runId); return; }
+      catch (error) {
+        if (Date.now() + wait > deadline) {
+          console.error(`to-do exec result not written yet (run ${runId}): ${error.message}`);
+          pendingFinish.set(runId, write);
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, wait));
       }
-    });
+    }
   }
   async function runItem(id, version, shownPath) {
     if (typeof id !== 'string' || !core.load(file).items.some(item => item.id === id)) fail(404, 'item not found');
@@ -308,12 +339,14 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
     await core.update(file, id, item => {
       if (item.done || !item.exec) fail(409, 'item has no command to run');
       try { command = core.execValue(item.exec); } catch (error) { fail(400, error.message); }
-      if (unfinished(item).some(run => alive(run.pid))) fail(409, 'this command is already running');
+      if (unfinished(item).some(live)) fail(409, 'this command is already running');
+      markInterrupted(item);
       program = resolveCommand(command.argv[0], commandPath);
       if (!program) fail(409, `command not found: ${command.argv[0]}`);
       if (program !== shownPath) fail(409, 'The command now resolves to a different program. Reload and try again.');
       snapshot = { exec: JSON.stringify(item.exec), run: item.run, waiting: item.waiting, others: item.others, suggest: item.suggest };
-      item.events.push({ at: core.stamp(), who: 'human', what: `exec started run=${runId} pid=${process.pid} — ${core.showExec(command)}` });
+      item.events.push({ at: core.stamp(), who: 'human', what: `exec started run=${runId} pid=${process.pid} server=${serverId} — ${core.showExec(command)}` });
+      running.add(runId);
     }, version);
     const at = new Date();
     logRun({ at: at.toISOString(), id, run: runId, event: 'start', argv: command.argv, cwd: command.cwd, path: program });
@@ -328,7 +361,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
     const words = head + (last ? t('run.reply.output', { text: last.length > 200 ? `${last.slice(0, 199)}…` : last }) : '');
     // The result goes to the item that started it (found by its start event, not its id, which follows the title).
     // Only fields still as they were at the start are cleared: an agent may have asked something new meanwhile.
-    await core.mutate(file, model => {
+    await writeFinish(runId, model => {
       const item = model.items.find(candidate => candidate.events.some(startOf(runId)));
       if (!item) return;
       const stamp = core.stamp();
@@ -352,6 +385,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   }
   let actualPort;
   const server = http.createServer(async (req, res) => {
+    if (pendingFinish.size) await flushFinishes();
     res.setHeader('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
@@ -462,7 +496,10 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   const stopWatch = core.watch(file, broadcast), stopWorking = core.watchWorking(file, broadcast);
   // Polling stat survives a feed that does not exist yet and one replaced by rename.
   const stopFeed = core.watch(feed, () => { feedState = readFeed(feed); broadcast(); });
-  const keepalive = setInterval(() => { for (const res of clients) res.write(': keepalive\n\n'); }, 15000);
+  const keepalive = setInterval(() => {
+    for (const res of clients) res.write(': keepalive\n\n');
+    if (pendingFinish.size) void flushFinishes();
+  }, 15000);
   keepalive.unref();
   let closing;
   const close = () => {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, renameSync, symlinkSync, realpathSync, statSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, renameSync, symlinkSync, realpathSync, statSync, existsSync, utimesSync } from 'node:fs';
 import { tmpdir, networkInterfaces } from 'node:os';
 import { dirname, join, resolve, relative as pathRelative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -925,7 +925,7 @@ test('exec: runs the resolved program after the shown version and path are check
   assert.equal(now.run, '', 'and the terminal run, like any reply');
   assert.equal(now.waiting, '', 'and answers the wait');
   const [started, finished, reply] = now.events.slice(-3);
-  assert.match(started.what, new RegExp(`^exec started run=[0-9a-f]{8} pid=${process.pid} — sh -c 'echo first; echo hi' \\(cwd ${ctx.root}\\)$`));
+  assert.match(started.what, new RegExp(`^exec started run=[0-9a-f]{8} pid=${process.pid} server=[0-9a-f]{8} — sh -c 'echo first; echo hi' \\(cwd ${ctx.root}\\)$`));
   assert.equal(finished.what, `exec finished run=${started.what.match(/run=(\w+)/)[1]} — 실행함: sh -c 'echo first; echo hi' (cwd ${ctx.root}) → exit 0 · 출력: "hi"`);
   assert.deepEqual([reply.who, reply.what], ['human', `reply — 실행함: sh -c 'echo first; echo hi' (cwd ${ctx.root}) → exit 0 · 출력: "hi"`]);
   const firstRun = started.what.match(/run=(\w+)/)[1];
@@ -1066,19 +1066,82 @@ test('exec: the result goes to the item that started it and clears only what did
   assert.equal(items(result, ctx.file).find(i => i.id === other.id).events.length, 1, 'nothing lands on another item');
 });
 
-test('exec: a run cut off by a server stop is marked interrupted at the next start; the command stays', async t => {
+test('exec: a run is live only while its own server runs it or, for another server, while its pid lives and it is young', async t => {
   const root = mkdtempSync(join(tmpdir(), 'sdlc-todo-web-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const file = join(root, 'todo.md');
   const exec = JSON.stringify({ argv: ['true'], cwd: root });
-  writeFileSync(file, `## Open\n\n- [ ] dead run\n  - exec: ${exec}\n  - 2026-11-25 09:00 human: exec started run=deadbeef pid=99999999 — true (cwd ${root})\n\n` +
-    `- [ ] live run\n  - exec: ${exec}\n  - 2026-11-25 09:00 human: exec started run=cafebabe pid=${process.pid === 1 ? 2 : process.ppid} — true (cwd ${root})\n\n## Done\n`);
+  const hourAgo = core.stamp(new Date(Date.now() - 3600000)), now = core.stamp(), otherPid = process.ppid;
+  const item = (title, run, pid, server, at) => `- [ ] ${title}\n  - exec: ${exec}\n  - ${at} human: exec started run=${run} pid=${pid}${server ? ` server=${server}` : ''} — true (cwd ${root})\n`;
+  writeFileSync(file, `## Open\n\n${item('dead pid', 'deadbeef', 99999999, 'aaaa0001', now)}\n${item('reused pid, too old', 'ba5eba11', otherPid, 'aaaa0002', hourAgo)}\n` +
+    `${item('this pid, another server', 'feedf00d', process.pid, 'aaaa0003', now)}\n${item('old format, dead pid', 'c0ffee00', 99999999, '', now)}\n` +
+    `${item('live other server', 'cafebabe', otherPid, 'aaaa0004', now)}\n## Done\n`);
   const server = await startWeb({ file, kit, port: 0, open: false, onUrl() {}, feed: join(root, 'feed.json'), searchPath: '/usr/bin:/bin', lang: 'ko' });
   t.after(() => server.close());
-  const [dead, live] = core.load(file).items;
-  assert.match(dead.events.at(-1).what, /^exec finished run=deadbeef — 중단됨 \(서버 재시작\)/);
-  assert.ok(dead.exec, 'the human decides whether to run it again');
-  assert.ok(live.events.at(-1).what.startsWith('exec started run=cafebabe'), 'a run another live server owns is left alone');
+  const byTitle = title => core.load(file).items.find(i => i.title === title);
+  for (const [title, run] of [['dead pid', 'deadbeef'], ['reused pid, too old', 'ba5eba11'], ['this pid, another server', 'feedf00d'], ['old format, dead pid', 'c0ffee00']]) {
+    assert.match(byTitle(title).events.at(-1).what, new RegExp(`^exec finished run=${run} — 중단됨 \\(서버 재시작\\)`), title);
+    assert.ok(byTitle(title).exec, `${title}: the human decides whether to run it again`);
+  }
+  assert.ok(byTitle('live other server').events.at(-1).what.startsWith('exec started run=cafebabe'), 'a young run of another live server is left alone');
+
+  // On demand: a dead start that appears after this server started is closed when someone runs the command.
+  const url = new URL(server.url), token = new URLSearchParams(url.hash.slice(1)).get('t');
+  const ctx = { url, token, file };
+  writeFileSync(file, readFileSync(file, 'utf8').replace('## Done', item('late dead start', 'abad1dea', 99999999, 'aaaa0005', now) + '\n## Done'));
+  const shownLate = items(await request(ctx, '/api/items', slowRequest), file).find(i => i.title === 'late dead start');
+  const ran = await request(ctx, '/api/exec', { method: 'POST', body: { id: shownLate.id, version: shownLate.version, path: shownLate.execPath }, ...slowRequest });
+  assert.equal(ran.status, 200, ran.text);
+  const events = byTitle('late dead start').events.map(event => event.what);
+  assert.ok(events.some(what => what.startsWith('exec finished run=abad1dea — 중단됨')), 'the dead run is closed first');
+  assert.match(events.at(-1), /^reply — 실행함: true .* → exit 0$/);
+  assert.match(events.find(what => what.startsWith('exec started run=') && !what.includes('abad1dea')), / server=[0-9a-f]{8} — /, 'a new start names its server');
+});
+
+test('exec: a finish write that meets a busy lock is retried, then kept and written on the next request', async t => {
+  const hold = (file, ms) => {
+    const lock = `${file}.lock`;
+    writeFileSync(lock, 'held by the test');
+    const beat = setInterval(() => { const at = new Date(); try { utimesSync(lock, at, at); } catch { /* released */ } }, 500);
+    const release = () => { clearInterval(beat); rmSync(lock, { force: true }); };
+    if (ms) setTimeout(release, ms);
+    return release;
+  };
+  const startedRuns = file => (readFileSync(file, 'utf8').match(/exec started run=/g) || []).length;
+  const finishedRuns = file => (readFileSync(file, 'utf8').match(/exec finished run=/g) || []).length;
+
+  // Busy for a few seconds: the retries outlast it and the result lands.
+  let { ctx, item, set, shown, run } = await execServer(t);
+  await set({ argv: ['sh', '-c', 'sleep 2; echo retried'], cwd: ctx.root });
+  let now = await shown();
+  let pending = run({ id: now.id, version: now.version, path: now.execPath });
+  await until(() => startedRuns(ctx.file) === 1);
+  hold(ctx.file, 6000);
+  let result = await pending;
+  assert.equal(result.status, 200, result.text);
+  assert.equal(finishedRuns(ctx.file), 1, 'written after the lock came free');
+  assert.equal(core.load(ctx.file).items.find(i => i.id === item.id).execResult.exitCode, 0);
+
+  // Busy past the retry budget: kept in memory, still running (no second start), written by the next request.
+  ({ ctx, item, set, shown, run } = await execServer(t, { finishRetryMs: 1500 }));
+  await set({ argv: ['sh', '-c', 'sleep 1; echo kept'], cwd: ctx.root });
+  now = await shown();
+  pending = run({ id: now.id, version: now.version, path: now.execPath });
+  await until(() => startedRuns(ctx.file) === 1);
+  const release = hold(ctx.file);
+  result = await pending;
+  assert.equal(result.status, 200, result.text);
+  assert.equal(result.json.exec.stdout, 'kept\n', 'the person still sees the result');
+  assert.equal(finishedRuns(ctx.file), 0, 'not written while the lock is held');
+  release();
+  now = await shown(); // any request writes what was kept
+  assert.equal(finishedRuns(ctx.file), 1);
+  assert.equal(now.execResult.exitCode, 0);
+  assert.match(now.events.at(-1).what, /^reply — 실행함: .* → exit 0 · 출력: "kept"$/);
+  await set({ argv: ['sh', '-c', 'echo again'], cwd: ctx.root });
+  now = await shown();
+  const again = await run({ id: now.id, version: now.version, path: now.execPath });
+  assert.equal(again.status, 200, 'once written, the run is over: the next one may start');
 });
 
 test('exec: a log that cannot be written never skips the reply', async t => {
