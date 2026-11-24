@@ -31,6 +31,7 @@ cp "$here/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$(cat "$kit/VERSION")</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSAppleEventsUsageDescription</key><string>Opens tickets in your Google Chrome, docked beside the board.</string>
   <key>LSEnvironment</key>
   <dict>
 PLIST

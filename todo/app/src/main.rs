@@ -1,10 +1,12 @@
 //! sdlc-todo: a small tray app for the sdlc-kit to-do. It never edits todo.md itself; every
 //! change goes through the same web API as the browser page, so the TUI, page and app agree.
 #![cfg_attr(windows, windows_subsystem = "windows")]
+mod board;
 mod client;
 mod i18n;
 mod prefs;
 mod theme;
+mod ticket;
 
 use client::{Artifact, Item, Launcher, Model, Session};
 use eframe::egui::{self, Align, Color32, CornerRadius, Layout, Margin, RichText, Sense, Stroke, ViewportCommand};
@@ -34,16 +36,17 @@ struct Shared {
 }
 
 impl Shared {
-    fn board_to_open(&mut self, requested: bool) -> Option<Session> {
+    /// The session the board should show, and whether to bring it forward (`requested`), or None to leave it be.
+    fn board_to_open(&mut self, requested: bool) -> Option<(Session, bool)> {
         if self.conn != Conn::Live { return None; }
         let session = self.session.as_ref()?;
-        // A Chrome app window is tied to its original port and token. After a server
-        // replacement, open the new session once and leave the old window's drafts alone.
+        // The board window is tied to its server's port and token. After a server replacement it loads the new
+        // address in place, open or hidden, without coming forward (on macOS; elsewhere a browser tab stays).
         let replaced = cfg!(target_os = "macos")
             && self.board_session.as_ref().is_some_and(|opened| opened != session);
         if !requested && !replaced { return None; }
         self.board_session = Some(session.clone());
-        Some(session.clone())
+        Some((session.clone(), requested))
     }
 }
 
@@ -177,9 +180,10 @@ fn chrome_installed() -> bool {
     std::iter::once(PathBuf::from("/Applications")).chain(home).any(|dir| dir.join("Google Chrome.app").is_dir())
 }
 
-/// Opens the board in a window of its own: a Chrome app window (no tabs or address bar) on macOS when
-/// Chrome is installed, else the default browser. The token goes only into the URL handed to the browser.
-fn open_board(session: &Session) {
+/// The board in a browser, where the app's own board window cannot open (not macOS, or the webview failed): a Chrome
+/// app window (no tabs or address bar) on macOS when Chrome is installed, else the default browser. The token goes
+/// only into the URL handed to the browser.
+fn open_board_in_browser(session: &Session) {
     let url = board_url(session);
     if cfg!(target_os = "macos") && chrome_installed() {
         let opened = std::process::Command::new("open").args(["-na", "Google Chrome", "--args"]).arg(format!("--app={url}"))
@@ -190,8 +194,21 @@ fn open_board(session: &Session) {
     open_url(&url);
 }
 
-fn launch_board(session: Session) {
-    std::thread::spawn(move || open_board(&session));
+/// Shows the board, from any thread. On macOS it is the app's own board window (src/board.rs), made on the main
+/// thread; when its webview cannot start, the reason goes to stderr and the board opens in the browser instead.
+fn launch_board(session: Session, show: bool, lang: Lang) {
+    #[cfg(target_os = "macos")]
+    dispatch::Queue::main().exec_async(move || {
+        if let Err(error) = board::open_board(&board_url(&session), t(lang, "title"), show) {
+            eprintln!("sdlc-todo: the board window could not start ({error}); opening the board in the browser");
+            std::thread::spawn(move || open_board_in_browser(&session));
+        }
+    });
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (show, lang);
+        std::thread::spawn(move || open_board_in_browser(&session));
+    }
 }
 
 /// Shows the list window, the fallback for the board.
@@ -202,10 +219,10 @@ fn show_list(ctx: &egui::Context) {
 
 /// The tray's main action: the board while the server is live; otherwise the list window, which shows
 /// why it is offline, rather than a dead URL.
-fn show_board(state: &State, ctx: &egui::Context) {
-    let session = state.lock().unwrap().board_to_open(true);
-    match session {
-        Some(session) => launch_board(session),
+fn show_board(state: &State, ctx: &egui::Context, lang: Lang) {
+    let board = state.lock().unwrap().board_to_open(true);
+    match board {
+        Some((session, show)) => launch_board(session, show, lang),
         None => show_list(ctx),
     }
 }
@@ -288,7 +305,7 @@ fn connect(state: State, ctx: egui::Context, launcher: Launcher, lang: Lang, mut
                 let board = shared.board_to_open(std::mem::take(&mut open_board_once));
                 drop(shared);
                 ctx.request_repaint();
-                if let Some(session) = board { launch_board(session); }
+                if let Some((session, show)) = board { launch_board(session, show, lang); }
             });
             if let Err(error) = result {
                 state.lock().unwrap().conn = Conn::Offline(error);
@@ -302,6 +319,8 @@ fn connect(state: State, ctx: egui::Context, launcher: Launcher, lang: Lang, mut
 impl App {
     fn new(cc: &eframe::CreationContext, launcher: Launcher, lang: Lang, background: bool) -> App {
         let prefs_file = launcher.session_file.with_file_name("todo-app.json");
+        #[cfg(target_os = "macos")]
+        board::set_state_file(prefs_file.with_file_name("todo-app-window.json"));
         let (mut prefs, prefs_error) = Prefs::load(&prefs_file);
         let fonts = theme::fonts();
         // Only a font found on this machine leads; a path that is gone falls back to the built-in one.
@@ -317,7 +336,7 @@ impl App {
         let ctx = cc.egui_ctx.clone();
         let (menu_state, menu_ctx) = (state.clone(), ctx.clone());
         MenuEvent::set_event_handler(Some(move |event: MenuEvent| match event.id.0.as_str() {
-            "board" => show_board(&menu_state, &menu_ctx),
+            "board" => show_board(&menu_state, &menu_ctx, lang),
             "list" => show_list(&menu_ctx),
             "quit" => quit(&menu_state),
             _ => {}
@@ -326,7 +345,7 @@ impl App {
         let (click_state, click_ctx) = (state.clone(), ctx.clone());
         TrayIconEvent::set_event_handler(Some(move |event: TrayIconEvent| {
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
-                show_board(&click_state, &click_ctx);
+                show_board(&click_state, &click_ctx, lang);
             }
         }));
         connect(state.clone(), ctx, launcher, lang, !background);
