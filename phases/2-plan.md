@@ -1,14 +1,14 @@
 # Phase 2: Plan — explore, then document
 
 Goal: understand domain, data, logic, source of truth and user flow well
-enough to find side effects here, before any code. Scouts write
+enough to find side effects before code. Scouts write
 `refs/`; you compact them into one `PLAN.md`.
 
 ## 1. Scout
 
 `sdlc.sh check intent <slug>` must print GATE OPEN. Read memory's
 `INDEX.md` and phase 1's `refs/` and `logs/` first; do not re-scout a fact
-they give with a source.
+they cite.
 Dispatch scouts (`roles/scout.md`) in parallel, one per open question, each
 writing one `refs/` file:
 
@@ -22,8 +22,8 @@ writing one `refs/` file:
 A bug adds `refs/repro.md`: from phase 1's reproduction, the
 failure as a failing test where one can reach it, and its cause, with rival
 causes ruled out.
-Scale to the unknowns: skip a scout whose answer you can cite with
-file:line or a phase 1 probe; a small change in known files may need none.
+Scale to the unknowns: skip a scout whose answer a file:line or phase 1
+probe gives; a small change in known files may need none.
 
 ## 2. Write PLAN.md
 
@@ -54,7 +54,8 @@ one round, two at most. A finding that changes the intent goes to the human.
 ## Gate
 
 When `plan` is in `human_gates` or a risk flag says yes: show the human the
-Summary, AS-IS → TO-BE and the flags, then `sdlc.sh approve plan <slug>
+Summary, AS-IS → TO-BE, the flags and `Undo:` (review again if added after a
+PASS), then `sdlc.sh approve plan <slug>
 --human "<their words>"`. Otherwise `sdlc.sh approve plan <slug> --agent
 "<what the gap check covered>"` and post the Summary as FYI. Then phase 3.
 
@@ -62,7 +63,6 @@ Summary, AS-IS → TO-BE and the flags, then `sdlc.sh approve plan <slug>
 
 `sdlc.sh next` names the failing scenarios the plan got wrong. Re-scout only
 that gap, update `refs/` and PLAN.md (add a missed scenario under the ID QA
-gave it), and approve again. An unchanged PLAN.md is refused unless the
-human approves it. Only the human can remove a scenario or drop its must; a
+gave it), and approve again. An unchanged PLAN.md needs the human. Only the human can remove a scenario or drop its must; a
 scenario only QA added goes by deleting its `evidence.md` row before the
 human approves.

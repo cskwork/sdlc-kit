@@ -628,3 +628,119 @@ test('board hook: views subscribe to snapshots and read the feed the server sent
   assert.equal(vm.runInContext('todoPage.feedError', p.context), 'feed is not valid JSON');
   assert.equal(vm.runInContext('calls', p.context), 3);
 });
+
+// The board (board.js) in its own VM over a fake DOM, reading state and acting through the list page's todoPage.
+const boardSource = readFileSync(new URL('../todo/page/board.js', import.meta.url), 'utf8');
+function boardPage(p) {
+  const nodes = new Map();
+  const make = () => {
+    const n = {
+      dataset: {}, value: '', hidden: false, textContent: '', title: '', elements: [], children: [], attributes: {}, listeners: {},
+      style: { setProperty() {}, removeProperty() {} }, offsetWidth: 0, clientWidth: 0,
+      classList: { contains() { return false; }, toggle() {}, add() {}, remove() {} },
+      addEventListener(type, fn) { this.listeners[type] = fn; },
+      setAttribute(name, value) { this.attributes[name] = String(value); }, toggleAttribute() {}, removeAttribute() {},
+      querySelector: () => make(), querySelectorAll: () => [],
+      focus() {}, scrollIntoView() {}, requestSubmit() {},
+      append(...children) { this.children.push(...children); }, replaceChildren(...children) { this.children = children; },
+      insertBefore(child, before) { const at = before ? this.children.indexOf(before) : -1; this.children.splice(at < 0 ? this.children.length : at, 0, child); },
+      remove() {}, get lastElementChild() { return this.children.at(-1); }
+    };
+    return n;
+  };
+  const node = id => { if (!nodes.has(id)) nodes.set(id, make()); return nodes.get(id); };
+  const context = vm.createContext({
+    todoPage: p.context.todoPage,
+    document: { getElementById: node, createElement: () => make(), createTextNode: text => ({ textContent: text }), addEventListener() {},
+      documentElement: { style: { setProperty() {}, removeProperty() {} } }, body: { dataset: {}, classList: { add() {}, remove() {} } }, activeElement: null },
+    matchMedia: () => ({ matches: false, addEventListener() {} }), getComputedStyle: () => ({ fontSize: '16px' }),
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, ResizeObserver: class { observe() {} },
+    setTimeout, clearTimeout, setInterval() {}, Intl, Date,
+    ...i18n, ...status
+  });
+  vm.runInContext(boardSource.replace(/^import .* from '\.\/(?:i18n|status)\.mjs';$/gm, ''), context);
+  return { context, nodes };
+}
+const boardItems = (p, list) => { p.context.boardItems = list; vm.runInContext('items = boardItems', p.context); };
+const askItem = (id, version, suggest, extra = {}) => ({ id, version, title: `T-${id} question`, done: false, status: 'waiting', waiting: 'which one?',
+  suggest, project: '', link: null, sdlc: null, others: '', brief: '', repos: [], choices: [], pick: null, run: '', pin: false,
+  events: [{ at: '2026-11-23 09:00', who: 'agent', what: 'waiting — which one?' }], notes: [], ...extra });
+
+test('board suggest: the answer box starts with the suggestion; an edit stays, a new suggestion replaces an unedited one', () => {
+  const p = page('#t=test-token');
+  boardItems(p, [askItem('aaaaaa', 'v1', '조치했어요'), askItem('bbbbbb', 'v1', 'B안')]);
+  const b = boardPage(p);
+  const field = b.nodes.get('panel-reply-text');
+  const keyOf = id => vm.runInContext(`render(); cards.find(card => card.target.id === '${id}').key`, b.context);
+  vm.runInContext(`select('${keyOf('aaaaaa')}', false)`, b.context);
+  assert.equal(field.value, '조치했어요', 'fill');
+  boardItems(p, [askItem('aaaaaa', 'v2', '다시 확인'), askItem('bbbbbb', 'v1', 'B안')]);
+  vm.runInContext('render()', b.context);
+  assert.equal(field.value, '다시 확인', 'a newer suggestion replaces an unedited one');
+  field.value = '내 답';
+  field.listeners.input();
+  boardItems(p, [askItem('aaaaaa', 'v3', '세 번째'), askItem('bbbbbb', 'v1', 'B안')]);
+  vm.runInContext('render()', b.context);
+  assert.equal(field.value, '내 답', 'an edit is never overwritten');
+  vm.runInContext(`select('${keyOf('bbbbbb')}', false)`, b.context);
+  assert.equal(field.value, 'B안', 'another card shows its own suggestion');
+  vm.runInContext(`select('${keyOf('aaaaaa')}', false)`, b.context);
+  assert.equal(field.value, '내 답', 'switching cards keeps each card\'s draft');
+});
+
+test('board suggest: a done item fills nothing, and an unedited suggestion never keeps the window', () => {
+  const p = page(); // no token: no load in flight, which would count as busy on its own
+  boardItems(p, [askItem('cccccc', 'v1', '조치했어요', { done: true, status: 'done',
+    events: [{ at: '2026-11-23 09:00', who: 'human', what: 'done' }] }), askItem('dddddd', 'v1', '네')]);
+  const b = boardPage(p);
+  const field = b.nodes.get('panel-reply-text');
+  const keyOf = id => vm.runInContext(`render(); cards.find(card => card.target.id === '${id}').key`, b.context);
+  vm.runInContext(`select('${keyOf('cccccc')}', false)`, b.context);
+  assert.equal(field.value, '', 'done-empty');
+  vm.runInContext(`select('${keyOf('dddddd')}', false)`, b.context);
+  assert.equal(field.value, '네');
+  const busy = () => vm.runInContext('busyChecks.some(check => check())', p.context);
+  assert.equal(busy(), false, 'a suggestion the person did not touch is not an unsent draft');
+  field.value = '아니요';
+  field.listeners.input();
+  assert.equal(busy(), true, 'an edited answer keeps the window');
+});
+
+const runAt = (hour, extra = {}) => ({ key: `T-${hour}`, label: 'run', outcome: 'ok',
+  startedAt: new Date(new Date().setHours(hour, 0, 0, 0)).toISOString(), endedAt: new Date(new Date().setHours(hour, 30, 0, 0)).toISOString(), ...extra });
+function runsBoard(runs, lang = 'en') {
+  const p = page('#t=test-token');
+  if (lang !== 'en') vm.runInContext(`setLanguage('${lang}')`, p.context);
+  p.context.boardFeed = { runs };
+  vm.runInContext('feed = boardFeed', p.context);
+  const b = boardPage(p);
+  vm.runInContext(`chosenView = 'runs'; render()`, b.context);
+  const clock = ms => new Intl.DateTimeFormat(lang, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms);
+  return { titles: b.nodes.get('runs-track').children.map(bar => bar.title), summary: b.nodes.get('runs-summary').textContent,
+    span: run => `${clock(Date.parse(run.startedAt))}–${clock(Date.parse(run.endedAt))}` };
+}
+
+test('board runs: a feed without cost or tokens renders exactly as before', () => {
+  const run = runAt(9);
+  const view = runsBoard([run]);
+  assert.deepEqual(view.titles, [`${view.span(run)} · Done`]);
+  assert.equal(view.summary, '08:00–19:00 · done 1 · failed 0 · no result 0');
+});
+
+test('board runs: a run\'s cost and tokens join its title; the day sums the known cost', () => {
+  const runs = [runAt(9, { costUsd: 0.951, tokens: 961234 }), runAt(11, { costUsd: 2, tokens: null })];
+  const en = runsBoard(runs);
+  assert.deepEqual(en.titles, [`${en.span(runs[0])} · Done · $0.95 · 961K tokens`, `${en.span(runs[1])} · Done · $2.00`]);
+  assert.equal(en.summary, '08:00–19:00 · done 2 · failed 0 · no result 0 · cost $2.95');
+  const ko = runsBoard(runs, 'ko');
+  assert.equal(ko.titles[0], `${ko.span(runs[0])} · 완료 · $0.95 · 96만 토큰`);
+  assert.match(ko.summary, / · 비용 \$2\.95$/);
+});
+
+test('board runs: some runs without a cost mark the day sum as partial; junk values count as unknown', () => {
+  const runs = [runAt(9, { costUsd: 1.5 }), runAt(11, { costUsd: null, tokens: 5000 }), runAt(13, { costUsd: '3', tokens: 1.5 })];
+  const en = runsBoard(runs);
+  assert.deepEqual(en.titles, [`${en.span(runs[0])} · Done · $1.50`, `${en.span(runs[1])} · Done · 5K tokens`, `${en.span(runs[2])} · Done`]);
+  assert.match(en.summary, / · cost \$1\.50 · some cost unknown$/);
+  assert.match(runsBoard(runs, 'ko').summary, / · 비용 \$1\.50 · 일부 비용 모름$/);
+});

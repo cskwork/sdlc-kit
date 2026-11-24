@@ -5,18 +5,18 @@ kit: <path to the kit>
 build:
 test:
 lint:
-# start the app for end-to-end scenarios (QA runs it detached, outliving the run), and the project's own e2e command
+# start the app for end-to-end scenarios (QA runs it detached), and the project's e2e command
 run:
 e2e:
-# how QA drives the interface: a browser driver, an HTTP client, the shell; empty = whatever the agent has
+# how QA drives the interface (browser driver, HTTP client, shell); empty = whatever the agent has
 qa:
-# optional scenario runner adapter in the kit's adapters/ folder (e2e); empty = scripts in logs/scripts/
+# optional scenario runner in the kit's adapters/ (e2e); empty = scripts in logs/scripts/
 qa_runner:
-# command that signs in for QA where the runner cannot (popup, SSO) and writes the session file it injects; empty = none
+# command that signs in for QA where the runner cannot (popup, SSO), writing the session file it injects
 qa_session:
-# gates a human approves: intent, plan. Plan also needs the human when PLAN.md raises a risk flag.
+# gates a human approves: intent, plan (a plan raising a risk flag always needs the human)
 human_gates: intent
-# durable memory: scouts read it first, Evidence adds verified facts to it (older configs call it knowledge:)
+# durable memory: scouts read it first, Evidence adds verified facts to it
 memory: .sdlc/memory
-# repositories a review PASS binds: their top folders under the project root, relative, no spaces, separated by spaces or commas ("." = the root's repository); empty = every one under the root; review --repos replaces it once
+# repositories a review PASS binds: top folders relative to the project root, no spaces, space- or comma-separated ("." = the root's); empty = all; review --repos replaces it once
 repos:

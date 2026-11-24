@@ -18,7 +18,7 @@ Inputs: intent.md, PLAN.md, `refs/`. Blocking:
 - a caller, data reader or writer, record state or tier the refs show but
   PLAN.md ignores; a side effect without a scenario;
 - AS-IS stated without observation; a risk flag set to no that the changes
-  trip (migration, data deletion, public API, security, infra);
+  trip; an `Undo:` that would not work;
 - an identifier the plan renames, retires or redirects whose consumers
   `refs/` do not list, or a listed consumer with no scenario;
 - a change needing Proof for the claim (`phases/3-build.md`) with no

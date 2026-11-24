@@ -17,6 +17,7 @@
 ## Side effects
 - <another reader or writer, caller, existing record state or shared path> → <how it stays correct> (<scenario ID>)
 - Risk flags: migration no · data deletion no · public API no · security no · infra no
+- Undo: <flag <name> | revert <what> | config <key> | none — why>
 
 ## Changes
 1. <file or symbol> — <what and why>
@@ -25,7 +26,7 @@
 | ID | Persona | Steps | Expected | Must | Covers |
 |---|---|---|---|---|---|
 | S1 | <who> | <steps through the real interface> | <observable result> | yes | O1 |
-<!-- write \| for a literal pipe inside a cell -->
+<!-- \| is a literal pipe in a cell -->
 
 ## Out of scope and open questions
 - <…>

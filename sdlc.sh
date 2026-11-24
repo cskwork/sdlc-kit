@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 set -o pipefail
-KIT=$(cd "$(dirname "$0")" && pwd); . "$KIT/lib/store.sh"
+KIT=$(cd "$(dirname "$0")" && pwd); . "$KIT/lib/store.sh"; . "$KIT/lib/ladder.sh"
 err() { printf 'sdlc: %s\n' "$*" >&2; }
 die() { err "$1"; exit "${2:-1}"; }
 usage() {
@@ -10,8 +10,9 @@ Usage: sdlc.sh init [--memory path] | new slug | status [slug] [--json]
        sdlc.sh next slug | check intent|plan|ship slug
        sdlc.sh approve intent|plan slug --human words|--agent review [--sha hex]
        sdlc.sh review slug pass|fail [--uncommitted] [--repos "path ..."] note
-       sdlc.sh score slug
-       sdlc.sh close slug shipped|dropped reason | memory index | dream [--check|--done] | help | --version
+       sdlc.sh score slug | stats [--json] [--since YYYY-MM-DD]
+       sdlc.sh ship slug stage sha [repo] --checked command --output line
+       sdlc.sh close slug shipped [--at stage]|dropped reason | memory index | dream [--check|--done] | help | --version
 USAGE
 }
 sha() {
@@ -70,11 +71,11 @@ feature() {
   load_state
 }
 load_state() {
-  seq=0; entry=0; fails=0; rp=0; rb=0; lastfail=; intent=; plan=; review=; route=; score=; closed=; planned=; scored=; rounds=0; withdrawn=; heads=; planbody=
+  seq=0; entry=0; fails=0; rp=0; rb=0; lastfail=; intent=; plan=; review=; route=; score=; closed=; planned=; scored=; rounds=0; withdrawn=; heads=; planbody=; stagerecs=; repoids=; ts=
   if [ -f "$F/.state" ]; then
     while IFS= read -r line; do
       key=${line%%:*}; val=${line#*:}; val=${val# }
-      case "$key" in seq) seq=$val;; entry) entry=$val;; fails) fails=$val;; returns_plan) rp=$val;; returns_build) rb=$val;; lastfail) lastfail=$val;; intent) intent=$val;; plan) plan=$val;; review) review=$val;; route) route=$val;; score) score=$val;; closed) closed=$val;; planned) planned=$val;; scored) scored=$val;; rounds) rounds=$val;; withdrawn) withdrawn=$val;; heads) heads=$val;; planbody) planbody=$val;; esac
+      case "$key" in seq) seq=$val;; entry) entry=$val;; fails) fails=$val;; returns_plan) rp=$val;; returns_build) rb=$val;; lastfail) lastfail=$val;; intent) intent=$val;; plan) plan=$val;; review) review=$val;; route) route=$val;; score) score=$val;; closed) closed=$val;; planned) planned=$val;; scored) scored=$val;; rounds) rounds=$val;; withdrawn) withdrawn=$val;; heads) heads=$val;; planbody) planbody=$val;; stage) stagerecs="${stagerecs}${val}"$'\n';; repo) repoids="${repoids}${val}"$'\n';; esac
     done < "$F/.state"
   fi
   read -r ish iwho iseq its inote < <(printf '%s\n' "$intent")
@@ -87,7 +88,7 @@ save_state() {
   {
     printf 'seq: %s\nentry: %s\nfails: %s\nreturns_plan: %s\nreturns_build: %s\nlastfail: %s\n' "$seq" "$entry" "$fails" "$rp" "$rb" "$lastfail"
     printf 'planned: %s\nscored: %s\nrounds: %s\nwithdrawn: %s\n' "$planned" "$scored" "$rounds" "$withdrawn"
-    for key in intent plan planbody review route score closed heads; do eval 'val=$'"$key"; [ -z "$val" ] || printf '%s: %s\n' "$key" "$val"; done
+    for key in intent plan planbody review route score closed heads; do eval 'val=$'"$key"; [ -z "$val" ] || printf '%s: %s\n' "$key" "$val"; done; [ -z "$stagerecs" ] || printf '%s' "$stagerecs" | sed 's/^/stage: /'; [ -z "$repoids" ] || printf '%s\n' "$repoids" | awk 'NF{print "repo: " $0}'
   } > "$tmp"
   mv "$tmp" "$F/.state"
 }
@@ -110,7 +111,7 @@ parse() {
       if(section~/^(blocking questions|questions for you)/){if(line~/^(-|[0-9]+\.)[ \t]/){question();q=line;sub(/^(-|[0-9]+\.)[ \t]+/,"",q)}else if(raw~/^[ \t]+/&&q!="")q=q " " line}
     }
     if(section~/^(delivery|shipping)/){v=line;sub(/^- /,"",v);if(tolower(v)~/^(target|ship to|authorized|allowed|checked with|output):/){key=v;sub(/:.*/,"",key);sub(/^[^:]*:[ \t]*/,"",v);key=tolower(key);if(key=="ship to")key="target";if(key=="allowed")key="authorized";if(key=="target"){rawtarget=v;target=tolower(v);print "T\034" target}if(key=="authorized")print "A\034" v;if(key=="checked with")print "K\034" v;if(key=="output")print "U\034" v}}
-    if(mode=="plan"&&low~/risk flags:/){flags++;v=line;sub(/^.*[Rr][Ii][Ss][Kk] [Ff][Ll][Aa][Gg][Ss]:[ \t]*/,"",v);n=split(v,segments,"·");for(i=1;i<=n;i++)if(tolower(segments[i])~/(^|[^a-z0-9_])yes([^a-z0-9_]|$)/)print "R\034" trim(segments[i])}
+    if(mode=="plan"&&low~/risk flags:/){flags++;v=line;sub(/^.*[Rr][Ii][Ss][Kk] [Ff][Ll][Aa][Gg][Ss]:[ \t]*/,"",v);n=split(v,segments,"·");for(i=1;i<=n;i++)if(tolower(segments[i])~/(^|[^a-z0-9_])yes([^a-z0-9_]|$)/){risky=risky (risky==""?"":"; ") trim(segments[i]);print "R\034" trim(segments[i])}};if(mode=="plan"&&low~/^- undo:/){undos++;undo=line;sub(/^[^:]*:[ \t]*/,"",undo);undo=tolower(undo)}
     if(mode=="evidence"&&(low~/^- commit:/||(section~/^(delivery|shipping)/&&low~/^- (delivered|shipped):/))){kind=low~/^- commit:/?"C":"D";v=line;sub(/^[^:]*:[ \t]*/,"",v);hash=v;sub(/[ \t].*/,"",hash);repo=v;sub(/^[^ \t]+[ \t]*/,"",repo);if(repo==v||repo=="")repo=".";if(hash!~/^[a-fA-F0-9]+$/||length(hash)<7||length(hash)>64){if(kind=="C")problem("invalid Commit: " hash)}else{print kind "\034" tolower(hash) "\034" repo;if(kind=="C")commits++}}
     if(line!~/^\|/)next
     id=fields(line);if(tolower(id)=="id"){header=cells;next}if(line~/^[| :\t-]+$/)next
@@ -127,12 +128,12 @@ parse() {
       if(result=="FAIL"&&cause!="code"&&cause!="plan")problem("FAIL needs cause code or plan: " id)
       if(result=="BLOCKED"&&(a[5]==""||a[5]~/^</))problem("BLOCKED needs Observed: " id)
       if(index(" " withdrawn " "," " id " "))problem(id " was removed by the human: delete its row")
-      print "E\034" id "\034" result "\034" cause "\034" a[6]
+      print "E\034" id "\034" result "\034" cause "\034" a[6];if(result=="BLOCKED")print "B\034" id "\034" a[5]
     }
   }
   END{
     question();if(mode=="intent"){if(!outcomes)problem("What we will do needs a filled O1 line (done when)");if(target!="local"&&target!="pr"&&target!="deploy")problem("Ship to (under Shipping) must be local, pr or deploy, alone on its line (" (rawtarget==""?"missing":"found \"" rawtarget "\"") "): put any detail on a \"- Note:\" line");if(!ca)print "Y\034How sure we are table missing under a \"## How sure we are\" heading: copy it from templates/intent.md";else{n=split("Goal,Boundaries,Today,After,Done when,Limits",an,",");split("Outcome,Scope,AS-IS,TO-BE,Success,Constraints",ao,",");for(i=1;i<=n;i++){k=tolower(an[i]);gsub(/[^a-z]/,"",k);if(!(k in cs)){print "Y\034How sure we are needs a row for " an[i] " (was " ao[i] ")";cy++}else{pts+=(cs[k]=="clear")?2:(cs[k]=="assumed");if(cs[k]!="clear")weak=weak (weak==""?"":", ") cn[k] " " cs[k]}}if(!cy&&pts*100<90*2*n)print "Y\034clarity " int(pts*100/(2*n)) "% < 90%: settle " weak " by exploring, reproducing, researching or asking the requester"}}
-    if(mode=="plan"){if(NR>150)problem("PLAN.md has " NR " lines; keep it to 150 and move detail into refs/");if(!flags)problem("Risk flags: line missing");if(!count)problem("Scenarios need at least one row");n=split(objectives,os," ");for(i=1;i<=n;i++)if(os[i]!=""&&!covered[os[i]])problem(os[i] " has no must scenario")}
+    if(mode=="plan"){if(NR>150)problem("PLAN.md has " NR " lines; keep it to 150 and move detail into refs/");if(!flags)problem("Risk flags: line missing");if(risky!=""){if(!undos||undo==""||undo~/^</)print "N\034a risk flag says yes (" risky "): add \"- Undo: flag <name> | revert <what> | config <key> | none — why\" under Risk flags";else if(undo~/<[a-z _-]+>/||undo~/<[ \t]*$/)print "N\034Undo: replace the placeholder with the real flag, change or key (found \"" undo "\")";else if(undo~/^none([ \t:]|—|–|-|$)/){r=undo;sub(/^none[ \t]*/,"",r);sep=sub(/^(—|–|--|-|:)/,"",r);gsub(/^[-:—– \t]+/,"",r);if(!sep||r=="")print "N\034Undo: none needs its reason (none — why it cannot be undone)"}else if(undo!~/^(flag|revert|config)([ \t:]|$)/)print "N\034Undo: must start with flag, revert, config or none (found \"" undo "\")";else if(undo!~/^[a-z]+[ \t:]+[^ \t]/)print "N\034Undo: " undo " needs what to switch off or revert"}if(!count)problem("Scenarios need at least one row");n=split(objectives,os," ");for(i=1;i<=n;i++)if(os[i]!=""&&!covered[os[i]])problem(os[i] " has no must scenario")}
     if(mode=="evidence"){if(!commits)problem("Commit lines missing");if(!count)problem("Results need at least one row");n=split(scenarios " " scored,ss," ");for(i=1;i<=n;i++)if(ss[i]!=""&&!seen[ss[i]]&&!missing[ss[i]]++)problem("evidence.md is missing " ss[i] ": scenarios are never removed")}
   }' "$2"
 }
@@ -143,9 +144,9 @@ read_intent() {
   done < <(parse intent "$F/intent.md")
 }
 read_plan() {
-  newplanned=; scenarios=; musts=' '; pproblems=; risks=
+  newplanned=; scenarios=; musts=' '; pproblems=; risks=; uproblems=
   while IFS=$'\034' read -r type a b; do
-    case "$type" in X) pproblems="${pproblems}${a}"$'\n';; R) risks="${risks}${a}; ";; S) newplanned="${newplanned}${newplanned:+ }$a:$([ "$b" = 1 ] && printf y || printf n)"; scenarios="$scenarios $a"; [ "$b" != 1 ] || musts="$musts$a ";; esac
+    case "$type" in X) pproblems="${pproblems}${a}"$'\n';; N) uproblems="${uproblems}${a}"$'\n';; R) risks="${risks}${a}; ";; S) newplanned="${newplanned}${newplanned:+ }$a:$([ "$b" = 1 ] && printf y || printf n)"; scenarios="$scenarios $a"; [ "$b" != 1 ] || musts="$musts$a ";; esac
   done < <(parse plan "$F/PLAN.md")
 }
 read_evidence() {
@@ -186,7 +187,7 @@ gate_plan() {
 }
 # What close shipped needs before a delivery: a current deliver route, the checkout QA verified, and authority.
 gate_ship() { greason=; if [ -n "$closed" ] || [ "$F" != "$STORE/work/$slug" ] || [ ! -f "$F/.state" ]; then greason='feature is closed, archived or legacy'; elif [ ! -f "$F/evidence.md" ]; then greason="no evidence yet: run QA, fill evidence.md, sdlc.sh score $slug"; else read_intent; read_plan; read_evidence
-  if { [ "$dest" = build ] && [ "$entry" -eq "$((rentry+1))" ] && [ "$ventry" != "$entry" ]; } || { route_current && [ "$dest" != deliver ]; }; then greason="route is $dest ($reason): sdlc.sh next $slug"; elif ! route_current; then greason="evidence not scored: sdlc.sh score $slug"; elif ! gate_plan; then greason="plan gate closed: $greason"; elif ! out=$(validate_evidence 2>&1); then greason=$(joined "${out//sdlc: /}"); elif ! out=$(validate_commits 2>&1); then greason="code changed after QA: $(joined "${out//sdlc: /}"); run QA at HEAD, then sdlc.sh score $slug"; elif ! delivery_authority "$target"; then greason="target not authorized: $dreason"; fi; fi; [ -z "$greason" ]; }
+  if { [ "$dest" = build ] && [ "$entry" -eq "$((rentry+1))" ] && [ "$ventry" != "$entry" ]; } || { route_current && [ "$dest" != deliver ]; }; then greason="route is $dest ($reason): sdlc.sh next $slug"; elif ! route_current; then greason="evidence not scored: sdlc.sh score $slug"; elif ! gate_plan; then greason="plan gate closed: $greason"; elif ! out=$(validate_evidence 2>&1); then greason=$(joined "${out//sdlc: /}"); elif ! out=$(elsewhere=1 validate_commits 2>&1); then greason="code changed after QA: $(joined "${out//sdlc: /}"); run QA at HEAD, then sdlc.sh score $slug"; elif ! delivery_authority "$target"; then greason="target not authorized: $dreason"; fi; fi; [ -z "$greason" ]; }
 pending_plan() { [ "$dest" = plan ] && [ "${rseq:-0}" -gt "${pseq:-0}" ]; }
 route_current() { [ "$rid" = "$eid" ] && [ "$rentry" = "$entry" ]; }
 authorized() { local v re='^yes([^a-z0-9_]|$)'; v=$(one_line "$1" | tr '[:upper:]' '[:lower:]'); [[ $v =~ $re ]]; }
@@ -229,7 +230,7 @@ derive() {
   STATE=READY; phase=intent; action=; exitcode=0
   if [ -n "$closed" ] || [ "$F" = "$STORE/archive/$slug" ]; then STATE=DONE; phase=done; action=$closed
   elif [ ! -f "$F/.state" ]; then STATE=BLOCKED; phase=legacy; action="legacy v0 feature: finish it with kit v0.27.0, or sdlc.sh close $slug dropped"
-  elif stopped; then STATE=NEEDS-HUMAN; phase=build; [ "$fails" -ge 3 ] || phase=evidence; action="stopped for the human: $stopreason; resume with approve plan --human"
+  elif stopped; then STATE=NEEDS-HUMAN; phase=build; [ "$fails" -ge 3 ] || phase=evidence; action="stopped for the human: $stopreason; resume with approve plan --human"; read_plan; [ -z "$uproblems" ] || { STATE=READY; action="edit PLAN.md: $(joined "$uproblems"); stopped for the human: $stopreason; then approve plan --human $risks"; }
   else
     read_intent
     if [ -n "$iproblems" ]; then action=$(joined "$iproblems")
@@ -239,7 +240,7 @@ derive() {
     else
       phase=plan; read_plan
       if [ -n "$pproblems" ]; then action=$(joined "$pproblems")
-      elif ! gate_plan; then action="$greason; approve plan --agent"; if human_gate plan || [ -n "$risks" ]; then STATE=NEEDS-HUMAN; action="$greason; approve plan --human $risks"; fi
+      elif ! gate_plan; then action="$greason; approve plan --agent"; if [ -n "$uproblems" ]; then action="edit PLAN.md: $(joined "$uproblems"); $greason; then approve plan --human $risks"; elif human_gate plan || [ -n "$risks" ]; then STATE=NEEDS-HUMAN; action="$greason; approve plan --human $risks"; fi
       else
         read_evidence
         if [ "$verdict" != pass ] || [ "$ventry" != "$entry" ]; then phase=build; action='implement PLAN.md, commit any change, review'; if [ "$dest" = build ] && [ "$entry" -eq "$((rentry+1))" ]; then action="fix $(printf '%s' "$lastfail" | tr ',' ' ') (return $rb/3), commit, review"; fi
@@ -250,7 +251,7 @@ derive() {
           # Before Shipping is filled, the delivery goes to intent.md's Ship to (target, set by read_evidence).
           phase=deliver
           if ! delivery_authority "$target"; then STATE=NEEDS-HUMAN; action=$dreason
-          else action="ship, fill Shipping, sdlc.sh close $slug shipped; before shipping: sdlc.sh check ship $slug"; fi
+          else deliver_action; fi
         else phase=evidence; qa_action; fi
       fi
     fi
@@ -391,7 +392,8 @@ validate_commits() {
   # A Commit repository the last review did not see (outside the project root) is refused.
   root_repo
   for ((i=0;i<${#commits[@]};i++)); do
-    repo_dir "${repos[i]}" Commit
+    # check ship (elsewhere): a removed worktree's Commit is verified in another checkout of its repository.
+    repo_path "${repos[i]}"; if [ -n "${elsewhere:-}" ] && [ ! -d "$REPO" ] && commit_elsewhere "$i"; then continue; fi; repo_dir "${repos[i]}" Commit
     full=$(git -C "$REPO" rev-parse --verify -q "${commits[i]}^{commit}") || die "unknown commit: ${commits[i]}"
     head=$(git -C "$REPO" rev-parse HEAD) || die "not a git repository: ${repos[i]}"
     [ "$head" = "$full" ] || die "HEAD differs from Commit: ${repos[i]}"
@@ -443,15 +445,16 @@ case "$command" in
     fi
     printf 'Initialized .sdlc/. Fill config.md, then sdlc.sh new <slug>.\n'; exit;;
 esac
-find_store; case "$command" in approve|review|score|close) LOCKING=1;; esac
+find_store; case "$command" in approve|review|score|close|ship) LOCKING=1;; esac
 case "$command" in
   memory|dream) store_command "$command" "$@";;
+  stats|ship) "${command}_command" "$@";;
   new)
     [ "$#" -eq 1 ] || die 'new <slug>' 2; slug=$1; valid_slug "$slug"
     [ ! -e "$STORE/work/$slug" ] && [ ! -e "$STORE/archive/$slug" ] || die "feature already exists: $slug"
     F=$STORE/work/$slug; mkdir -p "$F/refs" "$F/logs"
     awk -v slug="$slug" -v today="$(date +%Y-%m-%d)" '{gsub(/<slug>/,slug);if($0~/^- Date:/)$0="- Date: " today;print}' "$KIT/templates/intent.md" > "$F/intent.md"
-    load_state; save_state; printf 'Created %s. Fill intent.md until How sure we are reaches 90%%, then approve intent.\n' "$slug";;
+    load_state; save_state; log_event new created; printf 'Created %s. Fill intent.md until How sure we are reaches 90%%, then approve intent.\n' "$slug";;
   status)
     selected=; asjson=0
     for arg in "$@"; do case "$arg" in --json) [ "$asjson" -eq 0 ] || die 'duplicate --json' 2; asjson=1;; *) [ -z "$selected" ] || die 'status [slug] [--json]' 2; selected=$arg; valid_slug "$selected";; esac; done
@@ -460,17 +463,17 @@ case "$command" in
     paths=(); if [ -n "$selected" ]; then feature "$selected"; paths[0]=$F; else for path in "$STORE"/work/*; do
       [ -d "$path" ] || continue; if is_slug "$(basename "$path")"; then paths[${#paths[@]}]=$path; else err "skipped $(basename "$path"): not a valid slug"; fi
     done; fi
-    sep=
+    sep=; [ "$asjson" -eq 0 ] || NOW=$(date +%s)
     for path in "${paths[@]}"; do
       feature "$(basename "$path")"; derive
-      if [ "$asjson" -eq 0 ]; then printf '%s %s %s %s score=%s\n' "$slug" "$phase" "$STATE" "$action" "${score:--}"
+      if [ "$asjson" -eq 0 ]; then stage_now; printf '%s %s %s%s %s score=%s\n' "$slug" "$phase" "$STATE" "$stagenote" "$action" "${score:--}"
       else
         printf '%s{"slug":' "$sep"; json "$slug"; printf ',"phase":'; json "$phase"; printf ',"state":'; json "$STATE"; printf ',"action":'; json "$action"; printf ',"score":'; json "$score"; printf ',"route":'; json "$dest"
-        printf ',"returns_plan":%s,"returns_build":%s,"review_fails":%s}' "$rp" "$rb" "$fails"; sep=,
+        printf ',"returns_plan":%s,"returns_build":%s,"review_fails":%s' "$rp" "$rb" "$fails"; status_extra; printf '}'; sep=,
       fi
     done
     [ "$asjson" -eq 0 ] || printf ']}\n';;
-  next) [ "$#" -eq 1 ] || die 'next <slug>' 2; feature "$1"; derive; printf '%s %s: %s\n' "$STATE" "$phase" "$action"; exit "$exitcode";;
+  next) [ "$#" -eq 1 ] || die 'next <slug>' 2; feature "$1"; derive; stage_now; printf '%s %s%s: %s\n' "$STATE" "$phase" "$stagenote" "$action"; exit "$exitcode";;
   check|approve)
     if [ "$command" = check ]; then [ "$#" -eq 2 ] || die 'check intent|plan|ship <slug>' 2; case "$1" in intent|plan|ship) :;; *) die 'gate must be intent, plan or ship' 2;; esac
     else { [ "$#" -eq 4 ] || { [ "$#" -eq 6 ] && [ "$5" = --sha ] && [[ $6 =~ ^[0-9a-fA-F]{64}$ ]]; }; } || die 'approve intent|plan <slug> --human|--agent note [--sha hex]' 2; case "$1" in intent|plan) :;; *) die 'gate must be intent or plan' 2;; esac; fi
@@ -498,7 +501,7 @@ case "$command" in
         fi
         hash=$(sha < "$F/PLAN.md"); [ "$#" -eq 4 ] || [ "$hash" = "$(printf '%s' "$6" | tr 'A-F' 'a-f')" ] || die 'PLAN.md changed since it was shown'
         if [ "$who" = agent ] && pending_plan && [ "$psh" = "$hash" ]; then die 'PLAN.md unchanged since Evidence routed to plan'; fi
-        if [ "$psh" = "$hash" ] && [ "$pish" = "$ihash" ] && [ -z "$removed" ] && ! pending_plan && ! stopped; then printf 'plan already approved\n'; exit; fi
+        if [ "$psh" = "$hash" ] && [ "$pish" = "$ihash" ] && [ -z "$removed" ] && ! pending_plan && ! stopped; then printf 'plan already approved\n'; exit; fi; problems "$uproblems" || exit 1
         # Only the human or a counted return to plan resets the review FAIL cap; an agent re-approval keeps it.
         keep=$fails; if [ "$who" = human ] || pending_plan; then keep=0; fi
         # The build's review PASS carries over when nothing it judged moved: every HEAD it bound is unchanged
@@ -514,7 +517,7 @@ case "$command" in
         # Rounds already in review.md (the plan gap check) cannot pass the build.
         read -r rounds _ < <(printf '%s\n' "$(verdicts)")
       fi
-      save_state; printf '%s approved. Run sdlc.sh next %s.\n' "$which" "$slug"
+      save_state; log_event approve "$which" "$who: $note"; printf '%s approved. Run sdlc.sh next %s.\n' "$which" "$slug"
       [ -z "${carry:-}" ] || printf 'review PASS carried: the reviewed HEADs and PLAN.md outside Scenarios are unchanged. Phase 4: run QA, fill evidence.md, score.\n'
     fi;;
   review)
@@ -541,7 +544,7 @@ case "$command" in
     event; review="$2 $entry $seq $vsha $note"; rounds=$nrounds
     if [ "$2" = fail ]; then fails=$((fails+1)); printf 'review FAIL %s/3\n' "$fails"; [ "$fails" -lt 3 ] || printf '3 review FAILs this build: stop, the human decides\n'
     else printf 'review PASS. Phase 4: run QA, fill evidence.md, score.\n'; if printf '%s' "$heads" | awk -F'\t' '{for(j=1;j<NF;j+=2)if($j~/^[0-9a-f]+\+[0-9a-f]+$/)f=1}END{exit !f}'; then printf 'Uncommitted changes are bound, untracked unignored files included: a Commit must hold exactly those inside its path, on top of the reviewed HEAD. Amending or rebasing the reviewed HEAD itself needs a new review; a commit made on top of it may be reworded.\n'; fi; fi
-    save_state;;
+    save_state; log_event review "$2" "round $nrounds: $note";;
   score)
     [ "$#" -eq 1 ] || die 'score <slug>' 2; feature "$1"; mutable; gate_plan || die "$greason"
     read_intent; read_plan; read_evidence
@@ -564,9 +567,9 @@ case "$command" in
       deliver) lastfail=;;
     esac
     for id in "${ids[@]}"; do case " $scored " in *" $id "*) :;; *) scored="${scored}${scored:+ }$id";; esac; done
-    event; route="$dest $eid $scoring_entry $seq $reason"; score="$passed/$total $pct must $must_pass/$must_total"; save_state; show_score;;
+    repoids=$(repo_ids); event; route="$dest $eid $scoring_entry $seq $reason"; score="$passed/$total $pct must $must_pass/$must_total"; save_state; log_event score "$dest" "$display_score${fail_display:+ · fail $fail_display}${blocked_display:+ · blocked $blocked_display} · $reason"; show_score;;
   close)
-    [ "$#" -eq 3 ] || die 'close <slug> shipped|dropped reason' 2; feature "$1"; mutable
+    closeat=; if [ "$#" -eq 5 ] && [ "$3" = --at ] && [ "$2" = shipped ]; then closeat=$4; set -- "$1" "$2" "$5"; fi; [ "$#" -eq 3 ] || die 'close <slug> shipped [--at stage]|dropped reason' 2; feature "$1"; mutable
     note=$(one_line "$3"); [ -n "$note" ] || die 'close reason required' 2
     [ ! -e "$STORE/archive/$slug" ] || die "archive already exists: $slug"
     case "$2" in dropped) :;;
@@ -578,23 +581,10 @@ case "$command" in
         validate_evidence || exit 1
         delivery_authority "$etarget" || die "$dreason"
         filled "$checked" && filled "$output" || die 'Shipping Checked with and Output required'
-        for ((i=0;i<${#commits[@]};i++)); do
-          repo_dir "${repos[i]}" Commit; commit_repo=$REPO; matchsha=; nodir=
-          source_repo=$(git -C "$commit_repo" rev-parse --show-toplevel) || die "not a git repository: ${repos[i]}"
-          for ((j=0;j<${#delivered[@]};j++)); do
-            # A Shipped line for another repository (a deploy repository not checked out here, say) is skipped.
-            repo_path "${drepos[j]}"
-            delivered_repo=$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null) || { [ -d "$REPO" ] || nodir=${drepos[j]}; continue; }
-            [ "$delivered_repo" != "$source_repo" ] || matchsha=${delivered[j]}
-          done
-          [ -n "$matchsha" ] || die "Shipped missing for repo: ${repos[i]}: add '- Shipped: <sha> ${repos[i]}'${nodir:+ (the line for '$nodir' was skipped: it is not a folder under the project root)}"
-          git -C "$commit_repo" rev-parse --verify -q "$matchsha^{commit}" >/dev/null || die "unknown Shipped commit: $matchsha"
-          git -C "$commit_repo" diff --quiet "${commits[i]}" "$matchsha" || die 'Shipped tree differs from verified Commit'
-          if [ "$etarget" != local ]; then remote=$(git -C "$commit_repo" branch -r --contains "$matchsha"); [ -n "$remote" ] || die 'Shipped commit is not on any remote'; fi
-        done; memory_decision;;
+        close_shipped; stage_close; memory_decision;;
       *) die 'close result must be shipped or dropped' 2;;
     esac
-    prune_logs; event; closed="$2 $ts $note"; save_state; mkdir -p "$STORE/archive"; mv "$F" "$STORE/archive/$slug"
+    prune_logs; event; closed="$2 $ts $note"; save_state; log_event close "$2" "$note"; mkdir -p "$STORE/archive"; mv "$F" "$STORE/archive/$slug"
     printf 'Archived %s (%s).\n' "$slug" "$2"; archived "$STORE/archive/$slug";;
   *) die "unknown command: $command" 2;;
 esac

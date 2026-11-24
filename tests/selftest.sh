@@ -320,6 +320,7 @@ regression_other() {
   done
   plan 1
   replace '/Risk flags:/ {$0="- Risk flags: migration no · security yes, auth changes; secrets reviewed · infra no"} {print}' "$F/PLAN.md"
+  replace '/Risk flags:/ {print; print "- Undo: revert the auth change"; next} {print}' "$F/PLAN.md"
   expect 1 approve plan "$SLUG" --agent flags; contains 'security yes, auth changes; secrets reviewed'
   expect 10 next "$SLUG"; contains 'security yes, auth changes; secrets reviewed'
   ok 'PLAN length/placeholders rejected and raised risk segment shown in full'
@@ -1342,14 +1343,363 @@ DOC
   [ "$wins" -eq 1 ] && [ "$(state fails)" -eq 1 ] && [ "$(state seq)" -eq "$((seq0+1))" ] || fail "concurrent reviews: $wins succeeded, fails $(state fails), seq $seq0 -> $(state seq): $(cat "$TMP"/race*)"
   [ ! -e "$F/.state.lock" ] || fail 'lock left behind'
   ok 'state lock: four concurrent review runs on one round record it once'
-  mkdir "$F/.state.lock"; printf '%s\n' "$$" > "$F/.state.lock/pid"
+  ready lock-stress 1
+  for round in 1 2 3; do
+    for i in 1 2 3 4 5 6 7 8; do printf 'VERDICT: FAIL\n' >> "$F/review.md"; done
+    seq0=$(state seq)
+    for i in 1 2 3 4 5 6 7 8; do ( rc=0; bash "$SDLC" review "$SLUG" fail "stress $round.$i" > "$TMP/stress$i" 2>&1 || rc=$?; printf '%s\n' "$rc" > "$TMP/src$i" ) & done; wait
+    wins=0; for i in 1 2 3 4 5 6 7 8; do [ "$(cat "$TMP/src$i")" != 0 ] || wins=$((wins+1)); done
+    [ "$wins" -eq 1 ] && [ "$(state fails)" -eq "$round" ] && [ "$(state seq)" -eq "$((seq0+1))" ] || fail "stress round $round: $wins succeeded, fails $(state fails), seq $seq0 -> $(state seq): $(cat "$TMP"/stress*)"
+    [ ! -e "$F/.state.lock" ] && [ ! -e "$F/.state.lock.reclaim" ] || fail "stress round $round: lock left behind"
+  done
+  ok 'state lock: eight concurrent review runs, three rounds, each round recorded once'
+  # The reclaim race replayed: W reads live B's token, B releases, C takes the lock, then W's (slowed)
+  # liveness check finds B dead. W must not remove C's live lock.
+  cat > "$TMP/aba.sh" <<'ABA'
+die() { echo "die: $*"; exit 1; }
+. "$1/lib/store.sh"; LOCK=$2/.state.lock; mkdir -p "$2"
+( lock_take "$LOCK" "$(sh -c 'echo $PPID').b"; sleep 0.3; rm -f "$LOCK" ) &
+sleep 0.1
+( while ! lock_take "$LOCK" C.live; do sleep 0.01; done; sleep 2 ) &
+kill() { sleep 1; builtin kill "$@"; }
+reclaim_lock; sleep 0.2
+cat "$LOCK" 2>/dev/null || echo gone
+wait
+ABA
+  [ "$(bash "$TMP/aba.sh" "$KIT" "$TMP/aba" | head -1)" = C.live ] || fail 'a reclaimer removed a live lock taken after the owner it judged dead'
+  ok 'state lock: a reclaimer never removes a lock taken after the owner it read'
+  SLUG=lock-race; F=$PWD/.sdlc/work/$SLUG
+  ( exit 0 ) & dead=$!; wait "$dead" || :
+  # The lock file: a live token blocks until the wait runs out, a dead one is reclaimed.
+  printf '%s.1\n' "$$" > "$F/.state.lock"
   printf 'VERDICT: FAIL\n' >> "$F/review.md"
   SDLC_LOCK_WAIT=1 expect 1 review "$SLUG" fail 'held lock'; contains 'is locked by another sdlc.sh run'
-  ( exit 0 ) & dead=$!; wait "$dead" || :
-  printf '%s\n' "$dead" > "$F/.state.lock/pid"
+  printf '%s.1\n' "$dead" > "$F/.state.lock"
   expect 0 review "$SLUG" fail 'stale lock'; contains 'review FAIL 2/3'
   [ ! -e "$F/.state.lock" ] || fail 'stale lock left behind'
   ok 'state lock: a live owner blocks until the wait runs out; a dead owner is reclaimed'
+  # An older kit's lock directory (bare pid in pid): the same, removed whole.
+  mkdir "$F/.state.lock"; printf '%s\n' "$$" > "$F/.state.lock/pid"
+  printf 'VERDICT: FAIL\n' >> "$F/review.md"
+  SDLC_LOCK_WAIT=1 expect 1 review "$SLUG" fail 'held old lock'; contains 'is locked by another sdlc.sh run'
+  printf '%s\n' "$dead" > "$F/.state.lock/pid"
+  expect 0 review "$SLUG" fail 'stale old lock'; contains 'review FAIL 3/3'
+  [ ! -e "$F/.state.lock" ] || fail 'stale old-style lock left behind'
+  ok 'state lock: an older kit lock directory with a live pid is waited for, with a dead pid reclaimed'
+}
+# Event log: one tab-separated line per state change, moved into archive/ with the folder.
+events_of() { awk -F'\t' '{print $2 ":" $3 ":" $4}' "$1" | tr '\n' ' '; }
+regression_events() {
+  repo regression-events
+  ready evented 1; evidence; route deliver; delivery
+  [ "$(events_of "$F/events.log")" = 'new:intent:created approve:plan:intent approve:build:plan review:evidence:pass score:deliver:deliver ' ] || fail "events: $(events_of "$F/events.log")"
+  awk -F'\t' 'NF!=5 || $1!~/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/ {exit 1}' "$F/events.log" || fail 'event line is not five tab-separated fields led by an ISO UTC time'
+  grep -q $'\tscore\tdeliver\tdeliver\t1/1 (100.0%) · must 1/1 · every must PASS; threshold met$' "$F/events.log" || fail "score event detail: $(cat "$F/events.log")"
+  expect 0 status "$SLUG" --json
+  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; f=json.load(sys.stdin)["features"][0]; assert f["ageDays"]==0 and f["lastEventAt"].endswith("Z") and f["stage"] is None and f["stages"]==[], f; assert set(("slug","phase","state","action","score","route","returns_plan","returns_build","review_fails")) <= set(f)' || fail "status JSON new fields: $OUTPUT"
+  ok 'events: new, approve, review and score each append one five-field line; status JSON adds ageDays, lastEventAt, stage and stages'
+  first=$(head -1 "$F/events.log")
+  expect 0 close "$SLUG" shipped 'shipped with events'
+  A=.sdlc/archive/$SLUG/events.log; assert_file "$A"
+  [ "$(head -1 "$A")" = "$first" ] || fail 'events.log was rewritten'
+  tail -1 "$A" | grep -q $'\tclose\tdone\tshipped\tshipped with events$' || fail "close event: $(tail -1 "$A")"
+  feature failing; expect 0 approve intent "$SLUG" --human 'approved scope'; plan 1; expect 0 approve plan "$SLUG" --agent reviewed
+  reviewed "$SLUG" fail 'missing case'
+  tail -1 "$F/events.log" | grep -q $'\treview\tbuild\tfail\tround 1: missing case$' || fail "review FAIL event: $(tail -1 "$F/events.log")"
+  ok 'events: close appends its line and the log moves into archive/ unchanged; a review FAIL is logged with the build phase after it'
+  expect 0 close "$SLUG" dropped 'free the slug'
+  ready unwritable 1; evidence; route deliver; delivery
+  rm "$F/events.log"; mkdir "$F/events.log"
+  expect 0 close "$SLUG" shipped 'log cannot be written'; contains 'events.log not written'; contains 'Archived unwritable'
+  grep -q '^closed: shipped ' ".sdlc/archive/$SLUG/.state" || fail 'close did not finish when events.log could not be written'
+  ok 'events: a failed events.log append warns and the command still completes'
+  # Logging began after the slug was made: its first event is not new, so the folder's age counts.
+  feature aged; sed -i.bak 1d "$F/events.log"; rm -f "$F/events.log.bak"; touch -t 202001010000 "$F"
+  expect 0 status "$SLUG" --json
+  if [ "$(stat -f %B "$F" 2>/dev/null || stat -c %W "$F" 2>/dev/null)" -lt 1600000000 ] 2>/dev/null; then
+    printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; f=json.load(sys.stdin)["features"][0]; assert f["ageDays"]>365, f' || fail "ageDays ignored the older folder: $OUTPUT"
+    ok 'events: ageDays runs from the folder when it is older than the first event'
+  else printf 'skip: this file system cannot move a folder creation time back\n'; fi
+  mkdir -p .sdlc/work/old-legacy
+  expect 0 status old-legacy --json
+  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; f=json.load(sys.stdin)["features"][0]; assert f["lastEventAt"] is None and f["stages"]==[] and (f["ageDays"] is None or f["ageDays"]==0), f' || fail "legacy status JSON: $OUTPUT"
+  ok 'events: a legacy folder has no last event and its age from the folder'
+}
+regression_stats() {
+  repo regression-stats
+  ready shipped-one 1; evidence; route deliver; delivery; expect 0 close "$SLUG" shipped 'stats fixture'
+  ready blocked-one 1; evidence S1:BLOCKED:; route human
+  ready returned-one 2; evidence S2:FAIL:code; route build
+  mkdir -p .sdlc/work/old-legacy
+  # In flight when logging began: its log does not start with new, so it has no phase timings.
+  ready partial-one 1; sed -i.bak 1d "$F/events.log"; rm -f "$F/events.log.bak"
+  expect 0 stats
+  contains 'Slugs: 5 (open 4, archived 1); left out of timings: legacy (no events.log) 1, partial (logging began mid-flight) 1'
+  contains 'done DONE: 1'; contains 'Score rounds: 3 over 3 slugs (median 1, max 1)'; contains 'Returns: 0 to plan, 1 to build (1 slugs)'
+  contains '1× observed S1'; contains ': 1 shipped, 0 dropped'
+  for p in intent plan build evidence deliver; do contains "  $p: "; done
+  ok 'stats: counts by phase and state, phase times, score rounds, returns, BLOCKED reasons, closes per week; legacy counted apart'
+  expect 0 stats --json
+  printf '%s\n' "$OUTPUT" | python3 -c '
+import json,sys; d=json.load(sys.stdin)
+assert d["slugs"]=={"total":5,"open":4,"archived":1,"legacy":1,"partial":1}, d["slugs"]
+assert next(p for p in d["phaseTimes"] if p["phase"]=="intent")["slugs"]==3, d["phaseTimes"]
+assert {"phase":"done","state":"DONE","n":1} in d["counts"], d["counts"]
+assert [p["phase"] for p in d["phaseTimes"]]==["intent","plan","build","evidence","deliver"], d["phaseTimes"]
+assert all(p["p90Seconds"]>=p["medianSeconds"]>=0 for p in d["phaseTimes"])
+assert d["scoreRounds"]["total"]==3 and d["returns"]=={"plan":0,"build":1,"slugs":1}
+assert d["blocked"]==[{"reason":"observed S1","n":1}] and len(d["closesPerWeek"])==1 and d["closesPerWeek"][0]["shipped"]==1' || fail "stats JSON: $OUTPUT"
+  ok 'stats --json: the same figures as machine output; a slug whose log does not start with new counts as partial, without timings'
+  SLUG=blocked-one; F=$PWD/.sdlc/work/$SLUG
+  esc=$(printf '\033'); replace '/\| S1 \|/ {$0="| S1 | BLOCKED | | red '"$esc"'[31m text | |"} {print}' "$F/evidence.md"
+  expect 0 stats --json
+  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert {"reason":"red \x1b[31m text","n":1} in d["blocked"], d["blocked"]' || fail "stats JSON with a control character: $OUTPUT"
+  ok 'stats --json escapes control characters in a BLOCKED reason'
+  expect 0 stats --json --since 2999-01-01
+  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["since"]=="2999-01-01" and d["slugs"]["archived"]==0 and d["closesPerWeek"]==[] and d["phaseTimes"]==[], d' || fail "stats --since: $OUTPUT"
+  expect 2 stats --since 11/23; contains 'stats [--json] [--since YYYY-MM-DD]'
+  ok 'stats --since leaves out earlier closes and phase times; a malformed date is refused'
+}
+# A store with stages: ships in steps; close shipped needs the last stage or --at a recorded one.
+regression_stages() {
+  repo regression-stages
+  ready plain 1; evidence; route deliver
+  expect 1 ship "$SLUG" dev "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains 'no stages: in config.md'
+  delivery; expect 1 close "$SLUG" shipped --at dev 'no ladder'; contains 'close --at needs stages: in config.md'
+  expect 0 close "$SLUG" shipped 'no ladder: unchanged'
+  ok 'stages: without stages: ship and close --at are refused and close shipped is unchanged'
+  printf 'stages: dev, stg, prd\n' >> .sdlc/config.md
+  ready ladder 1
+  expect 1 ship "$SLUG" dev "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains 'current evidence and build need a deliver route'
+  evidence; route deliver
+  expect 0 next "$SLUG"; contains "ship to dev, then sdlc.sh ship $SLUG dev"
+  expect 2 ship "$SLUG" dev "$SHA"; contains 'ship <slug> <stage> <sha> [repo] --checked'
+  expect 1 ship "$SLUG" qa "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains "unknown stage 'qa': config.md stages: dev stg prd"
+  expect 1 ship "$SLUG" stg "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains 'out of order: ship dev before stg'
+  # A commit with another tree and no Commit in its history (an empty root commit).
+  OTHER=$(git commit-tree "$(git mktree < /dev/null)" -m 'unrelated root')
+  expect 1 ship "$SLUG" dev "$OTHER" --checked 'git rev-parse HEAD' --output "$OTHER"; contains "stage commit $OTHER neither has the verified tree of Commit $SHA nor contains it"
+  [ ! -f "$F/.state" ] || ! grep -q '^stage:' "$F/.state" || fail 'a refused ship recorded a stage'
+  ok 'ship: refuses no evidence, missing options, an unknown stage, a later stage first and a tree that differs from the verified Commit'
+  expect 0 ship "$SLUG" dev "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains 'Recorded ladder at dev (1/3) for .'
+  expect 0 next "$SLUG"; contains 'READY deliver · at dev (1/3): ship to stg'
+  expect 0 status; contains 'ladder deliver READY · at dev (1/3)'
+  expect 0 status "$SLUG" --json
+  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; f=json.load(sys.stdin)["features"][0]; s=f["stages"]; assert f["stage"]=="dev" and len(s)==1 and s[0]["stage"]=="dev" and s[0]["sha"]==sys.argv[1] and s[0]["repo"]=="." and s[0]["current"] and s[0]["match"]=="exact" and s[0]["ts"].endswith("Z") and f["state"]=="READY" and f["phase"]=="deliver", f' "$SHA" || fail "status JSON stage: $OUTPUT"
+  tail -1 "$F/events.log" | grep -q $'\tship\tdeliver\tdev\t'"$SHA"' . (exact) · checked: git rev-parse HEAD · output: '"$SHA"'$' || fail "ship event: $(tail -1 "$F/events.log")"
+  ok 'ship: records the stage in .state and an event; next, status and status JSON show it'
+  delivery
+  expect 1 close "$SLUG" shipped 'only dev'; contains "stage prd not recorded for .: sdlc.sh ship $SLUG prd"; contains 'or close --at'
+  expect 0 ship "$SLUG" stg "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"
+  expect 1 close "$SLUG" shipped --at prd 'prd not recorded'; contains 'stage prd not recorded'
+  expect 1 close "$SLUG" shipped --at qa 'unknown'; contains "unknown stage 'qa'"
+  expect 2 close "$SLUG" dropped --at stg 'dropped has no stage'
+  expect 0 close "$SLUG" shipped --at stg 'production is released by the operations team'
+  grep -q '^closed: shipped .* production is released by the operations team (closed at stg of dev stg prd)$' ".sdlc/archive/$SLUG/.state" || fail "closed note: $(grep '^closed:' ".sdlc/archive/$SLUG/.state")"
+  tail -1 ".sdlc/archive/$SLUG/events.log" | grep -q $'\tclose\tdone\tshipped\t.*(closed at stg of dev stg prd)$' || fail 'close --at event'
+  ok 'close shipped with stages: needs the last stage, or --at a recorded stage with its reason in the note and event'
+  ready full-ladder 1; evidence; route deliver; delivery
+  for stage in dev stg prd; do expect 0 ship "$SLUG" "$stage" "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; done
+  expect 1 ship "$SLUG" dev "$SHA" --checked again --output again; contains 'dev is already recorded for this evidence'
+  expect 0 next "$SLUG"; contains 'at prd (3/3): every stage shipped'
+  evidence; printf 'more QA output\n' > "$F/logs/S2.txt"; printf '| S2 | PASS | | added | logs/S2.txt |\n' >> "$E"; delivery; route deliver
+  expect 0 next "$SLUG"; contains "READY deliver: ship to dev"
+  expect 1 close "$SLUG" shipped 'stages were for older evidence'; contains 'stage prd not recorded'
+  for stage in dev stg prd; do expect 0 ship "$SLUG" "$stage" "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; done
+  expect 0 close "$SLUG" shipped 'every stage shipped'
+  ok 'close shipped after every stage; a new score starts the ladder again'
+  mkdir -p svc-a svc-b svc-c; printf a > svc-a/x; printf b > svc-b/x; printf c > svc-c/x; git add svc-a svc-b svc-c; git commit -qm 'two folders, one repository'; SHA=$(git rev-parse HEAD)
+  ready mono 1; evidence; replace '/^- Commit:/ {print "- Commit: '"$SHA"' svc-a"; print "- Commit: '"$SHA"' svc-b"; next} {print}' "$E"; route deliver; delivery
+  expect 1 ship "$SLUG" dev "$SHA" svc-c --checked 'git rev-parse HEAD' --output "$SHA"; contains "no Commit line for repo 'svc-c'"
+  expect 1 ship "$SLUG" dev "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"; contains "no Commit line for repo '.'"
+  expect 0 ship "$SLUG" dev "$SHA" svc-b/. --checked 'git rev-parse HEAD' --output "$SHA"; contains 'Recorded mono at dev (1/3) for svc-b/. (exact).'
+  tail -1 "$F/events.log" | grep -q $'\tship\tdeliver\tdev\t'"$SHA"' svc-b/. (exact) · ' || fail "ship event names another folder: $(tail -1 "$F/events.log")"
+  expect 1 ship "$SLUG" dev "$SHA" svc-a --checked 'git rev-parse HEAD' --output "$SHA"; contains 'dev is already recorded'
+  expect 0 next "$SLUG"; contains 'at dev (1/3): ship to stg'
+  expect 0 close "$SLUG" shipped --at dev 'monorepo: later stages belong to the release team'
+  ok 'stages: Commit lines for folders of one repository share its stage records'
+  ready rebind 1; evidence; route deliver
+  expect 0 ship "$SLUG" dev "$SHA" --checked 'git rev-parse HEAD' --output "$SHA"
+  printf -- '- More: out of scope note\n' >> "$F/PLAN.md"; expect 0 approve plan "$SLUG" --agent 'plan re-approved'
+  reviewed "$SLUG" pass 'review again'; route deliver
+  expect 0 next "$SLUG"; contains 'READY deliver: ship to dev'
+  ok 'stages: a re-approved plan with the same evidence starts the ladder again'
+  replace '!/^stages:/ {print}' .sdlc/config.md; printf 'stages: dev, stg, dev\n' >> .sdlc/config.md
+  expect 1 next "$SLUG"; contains 'config.md stages: names dev twice'
+  expect 1 ship "$SLUG" dev "$SHA" --checked x --output y; contains 'names dev twice'
+  replace '!/^stages:/ {print}' .sdlc/config.md; printf 'stages: dev, q?a\n' >> .sdlc/config.md
+  expect 1 next "$SLUG"; contains "config.md stages: 'q?a' is not a stage name"
+  for raw in 'dev, *' 'dev, `stg`' 'dev, stg # comment'; do
+    replace '!/^stages:/ {print}' .sdlc/config.md; printf 'stages: %s\n' "$raw" >> .sdlc/config.md
+    expect 1 next "$SLUG"; contains 'is not a stage name'
+  done
+  for raw in 'dev,,prd' 'dev, stg,' ', dev'; do
+    replace '!/^stages:/ {print}' .sdlc/config.md; printf 'stages: %s\n' "$raw" >> .sdlc/config.md
+    expect 1 next "$SLUG"; contains 'config.md stages: has an empty item'
+  done
+  ok 'stages: a stage named twice, or a name with other characters, is refused wherever stages: is read'
+}
+# A plan that raises a risk flag names how to undo it.
+undo_plan() { plan 1; replace '/Risk flags:/ {$0="- Risk flags: migration yes · data deletion no · public API no · security no · infra no"} {print}' "$F/PLAN.md"; [ -z "$1" ] || replace '/Risk flags:/ {print; print "- Undo: '"$1"'"; next} {print}' "$F/PLAN.md"; }
+regression_undo() {
+  repo regression-undo
+  feature undo-missing; expect 0 approve intent "$SLUG" --human 'approved scope'
+  undo_plan ''
+  expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'a risk flag says yes (migration yes): add "- Undo:'
+  # The agent adds the line, so it is the agent's turn (READY), naming the human approval that follows.
+  expect 0 next "$SLUG"; contains 'READY plan: edit PLAN.md: a risk flag says yes (migration yes)'; contains '; plan not approved; then approve plan --human migration yes'
+  undo_plan '<flag <name> | revert <what> | config <key> | none — why>'
+  expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'a risk flag says yes'
+  for placeholder in 'flag <name>' 'revert <what>' 'config <key>' 'none — <why>'; do
+    undo_plan "$placeholder"; expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'Undo: replace the placeholder'
+  done
+  for bare in 'none' 'none —' 'none:' 'none--'; do
+    undo_plan "$bare"; expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'Undo: none needs its reason'
+  done
+  undo_plan 'maybe later'
+  expect 1 approve plan "$SLUG" --human 'risk accepted'; contains 'Undo: must start with flag, revert, config or none'
+  ok 'undo: a plan with a risk flag yes and no filled Undo: line cannot be approved, and next says so'
+  undo_plan 'revert the migration commit and run its down script'
+  expect 0 approve plan "$SLUG" --human 'risk and undo accepted'
+  feature undo-none; expect 0 approve intent "$SLUG" --human 'approved scope'
+  undo_plan 'none — the new column is additive and unused'
+  expect 0 approve plan "$SLUG" --human 'risk accepted'
+  undo_plan 'none — a<b holds for every row'
+  expect 10 next "$SLUG"; contains 'NEEDS-HUMAN plan: PLAN.md changed after approval; approve plan --human migration yes'
+  undo_plan 'revert the commit <'
+  expect 0 next "$SLUG"; contains 'READY plan: edit PLAN.md: Undo: replace the placeholder'; contains '; PLAN.md changed after approval; then approve plan --human migration yes'
+  undo_plan 'none — a<b holds for every row'
+  expect 0 approve plan "$SLUG" --human 'risk accepted'
+  n=0; for reason in 'none—additive' 'none –additive' 'none--additive' 'none - additive' 'none: additive'; do
+    n=$((n+1)); feature "undo-none-$n"; expect 0 approve intent "$SLUG" --human 'approved scope'
+    undo_plan "$reason"; expect 0 approve plan "$SLUG" --human 'risk accepted'
+  done
+  feature undo-flag; expect 0 approve intent "$SLUG" --human 'approved scope'
+  undo_plan 'flag new_export off'
+  expect 0 approve plan "$SLUG" --human 'risk accepted'
+  feature undo-free; expect 0 approve intent "$SLUG" --human 'approved scope'
+  plan 1; grep -q 'Undo:' "$F/PLAN.md" && fail 'fixture plan has an Undo line'
+  expect 0 approve plan "$SLUG" --agent 'no risk, no undo line'
+  ok 'undo: revert, flag and none with a reason pass; a plan with every risk flag no needs no Undo: line'
+  # A risk plan approved before the rule (no Undo line): re-approving it is a no-op and the build goes on.
+  feature undo-legacy; expect 0 approve intent "$SLUG" --human 'approved scope'
+  undo_plan 'revert the change commit'; expect 0 approve plan "$SLUG" --human 'risk accepted'
+  replace '!/^- Undo:/ {print}' "$F/PLAN.md"; old=$(sha_of "$F/PLAN.md")
+  replace '/^plan: / {sub(/^plan: [0-9a-f]+/,"plan: '"$old"'")} {print}' "$F/.state"
+  expect 0 approve plan "$SLUG" --human 'risk accepted again'; contains 'plan already approved'
+  expect 0 next "$SLUG"; contains 'READY build'
+  for i in 1 2 3; do reviewed "$SLUG" fail "finding $i"; done
+  # The human cannot approve until the line is there: the agent's turn, not an approval request.
+  expect 0 next "$SLUG"; contains 'READY build: edit PLAN.md: a risk flag says yes (migration yes)'; contains '; stopped for the human: 3 review FAILs'; contains 'then approve plan --human migration yes'
+  ok 'undo: a risk plan approved before the rule stays approved; a stop names the missing Undo line'
+}
+# A stage sha may contain the verified Commit (a --no-ff promotion merge), and a repository is the same in
+# every worktree: a Commit made in a worktree ships from the main checkout, also after the worktree is gone.
+regression_stagerepos() {
+  repo regression-stagerepos
+  printf 'stages: dev, stg, prd\n' >> .sdlc/config.md
+  printf 'worktrees/\n' >> .git/info/exclude
+  git worktree add -q -b ticket worktrees/ticket; WT=worktrees/ticket
+  printf 'ticket change\n' >> "$WT/README"; git -C "$WT" commit -qam 'ticket change'; SHA=$(git -C "$WT" rev-parse HEAD)
+  ready wt 1; evidence; replace '/^- Commit:/ {$0=$0" worktrees/ticket"} {print}' "$E"; route deliver
+  grep -q "^repo: $(cd .git && pwd -P)"$'\t\tworktrees/ticket$' "$F/.state" || fail "score did not store the Commit's repository: $(grep '^repo:' "$F/.state")"
+  # Promotion: dev gets other work, then a --no-ff merge of the ticket branch.
+  git checkout -q -b dev; printf 'other work\n' > other.txt; git add other.txt; git commit -qm 'other work on dev'
+  git merge -q --no-ff -m 'promote ticket to dev' ticket; DEV=$(git rev-parse HEAD); git checkout -q main
+  # Revert the change on top of the promotion: the merge still contains the Commit but no longer has it.
+  git checkout -q -b reverted dev; git revert --no-edit "$SHA" > /dev/null; REVERTED=$(git rev-parse HEAD); git checkout -q main
+  expect 1 ship "$SLUG" dev "$REVERTED" . --checked 'git rev-parse reverted' --output "$REVERTED"; contains "stage commit $REVERTED no longer has the verified change of $SHA: error: patch failed: README"
+  expect 0 ship "$SLUG" dev "$DEV" . --checked 'git rev-parse dev' --output "$DEV"; contains 'Recorded wt at dev (1/3) for . (contains).'
+  # A record in another field count (an earlier pre-release format) is ignored.
+  printf 'stage: dev\t%s\tts\tbind\tid\t.\n' "$DEV" >> "$F/.state"
+  expect 0 status "$SLUG" --json
+  printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; s=json.load(sys.stdin)["features"][0]["stages"]; assert [(x["stage"],x["match"],x["repo"]) for x in s]==[("dev","contains",".")], s' || fail "stages match: $OUTPUT"
+  ok 'ship: a merge that contains the verified Commit is recorded as contains, from the main checkout of the worktree it was made in; a later revert of the change is refused; an odd-sized record is ignored'
+  # On a case-insensitive file system, the same checkout typed in other letter case is the same repository.
+  up=$(dirname "$PWD")/$(basename "$PWD" | tr '[:lower:]' '[:upper:]')
+  if [ -d "$up" ] && [ "$up" != "$PWD" ]; then
+    git checkout -q -b dev2 dev; git commit -q --allow-empty -m 'another promotion'; DEV2=$(git rev-parse HEAD); git checkout -q main
+    home=$PWD; cd "$up"; expect 1 ship "$SLUG" dev "$DEV2" . --checked x --output y; contains 'dev is already recorded'; cd "$home"
+    ok 'ship: the checkout typed in another letter case is the same repository'
+  else printf 'skip: the file system is case-sensitive\n'; fi
+  mkdir -p elsewhere; git -C elsewhere -c init.defaultBranch=main init -q; printf 'elsewhere/\n' >> .git/info/exclude
+  git -C elsewhere -c user.name=t -c user.email=t@t.invalid commit -q --allow-empty -m 'other repository'
+  expect 1 ship "$SLUG" stg "$(git -C elsewhere rev-parse HEAD)" elsewhere --checked x --output y; contains "no Commit line for repo 'elsewhere'"
+  ok 'ship: a folder of another repository is still refused'
+  git worktree remove --force "$WT"; [ ! -d "$WT" ] || fail 'worktree not removed'
+  expect 0 check ship "$SLUG"; contains 'GATE OPEN'
+  git checkout -q -b stg; git merge -q --no-ff -m 'promote dev to stg' dev; STG=$(git rev-parse HEAD); git checkout -q main
+  expect 0 ship "$SLUG" stg "$STG" . --checked 'git rev-parse stg' --output "$STG"; contains '(contains)'
+  expect 0 next "$SLUG"; contains 'at stg (2/3): ship to prd'
+  printf '## Shipping\n- Ship to: local\n- Shipped: %s\n- Checked with: git rev-parse ticket\n- Output: %s\n- Memory: none — fixture\n' "$SHA" "$SHA" >> "$E"
+  expect 0 close "$SLUG" shipped --at stg 'production is released by another team'; contains 'Archived wt'
+  ok 'ship, check ship and close: once the worktree is gone, the stored repository lets the main checkout check, ship the next stage and close'
+  # The verified Commit's object is gone (its branch deleted and pruned): say so, not "tree differs".
+  git worktree add -q -b lost worktrees/lost; printf 'lost\n' >> worktrees/lost/README; git -C worktrees/lost commit -qam 'lost change'; LOST=$(git -C worktrees/lost rev-parse HEAD)
+  ready lost 1; evidence; replace '/^- Commit:/ {$0="- Commit: '"$LOST"' worktrees/lost"} {print}' "$E"; route deliver
+  git worktree remove --force worktrees/lost; git update-ref -d refs/heads/lost; rm -f ".git/objects/${LOST:0:2}/${LOST:2}"
+  expect 1 ship "$SLUG" dev "$DEV" . --checked x --output y; contains "verified Commit $LOST is not in this repository"
+  ok 'ship: a verified Commit missing from the repository is named as such'
+  ready gone 1; evidence; replace '/^- Commit:/ {$0=$0" gone-tree"} {print}' "$E"
+  expect 1 score "$SLUG"; contains "Commit path 'gone-tree' is not a directory"
+  ok 'score still needs every Commit folder to exist'
+}
+# contains is a patch-presence check: the Commit's change must reverse-apply onto the stage commit.
+# promote <branch> <commit>: a branch from main with other work, then a --no-ff merge of <commit>; prints its sha.
+promote() { git checkout -q -b "$1" main; printf 'other %s\n' "$1" > "other-$1.txt"; git add "other-$1.txt"; git commit -qm "other work on $1"; git merge -q --no-ff -m "promote to $1" "$2"; git rev-parse HEAD; git checkout -q main; }
+contains_slug() { ready "$1" 1; evidence; [ -z "${2:-}" ] || replace '/^- Commit:/ {$0=$0" '"$2"'"} {print}' "$E"; route deliver; }
+regression_contains() {
+  repo regression-contains
+  printf 'stages: dev, stg, prd\n' >> .sdlc/config.md
+  mkdir -p app/sub; seq 1 40 > app/sub/config.txt; git add app; git commit -qm 'app config'; git branch -q base
+  # A ticket edits line 5; QA verifies it at the tip of its branch, checked out on main.
+  git checkout -q -b t1 base; sed 's/^5$/five/' app/sub/config.txt > x && mv x app/sub/config.txt; git commit -qam 'ticket edits line 5'; C1=$(git rev-parse HEAD)
+  git checkout -q main; git merge -q --ff-only t1; SHA=$C1
+  contains_slug sub app/sub
+  # Another ticket later edits line 35 of the same file on dev: the verified hunk is still there.
+  DEV=$(promote dev "$C1"); git checkout -q dev; sed 's/^35$/thirty-five/' app/sub/config.txt > x && mv x app/sub/config.txt; git commit -qam 'other ticket, same file'; DEV=$(git rev-parse HEAD); git checkout -q main
+  expect 0 ship "$SLUG" dev "$DEV" app/sub --checked x --output y; contains '(contains)'
+  ok 'contains: a later edit to another hunk of the same file is accepted'
+  # Reverted on stg, shipped from the subfolder the Commit names: refused (paths are repository-relative).
+  git checkout -q -b stg dev; git revert --no-edit "$C1" > /dev/null; STG=$(git rev-parse HEAD); git checkout -q main
+  expect 1 ship "$SLUG" stg "$STG" app/sub --checked x --output y; contains "stage commit $STG no longer has the verified change of $C1: error: patch failed: app/sub/config.txt"
+  ok 'contains: a revert is refused, also when shipped from a subfolder'
+  # The verified Commit is a merge: its change is the diff to its first parent.
+  git checkout -q -b t2 main; git checkout -q -b side main; printf 'side\n' > side.txt; git add side.txt; git commit -qm 'side work'
+  git checkout -q t2; git merge -q --no-ff -m 'merge side into the ticket' side; C2=$(git rev-parse HEAD); git checkout -q main; git merge -q --ff-only t2; SHA=$C2
+  contains_slug merged
+  D2=$(promote dev2 "$C2"); expect 0 ship "$SLUG" dev "$D2" --checked x --output y; contains '(contains)'
+  ok 'contains: a merge Commit is checked against its first parent'
+  # Spaces (and, where the file system allows it, a newline) in paths; and a large change, all through a pipe.
+  git checkout -q -b t3 main; mkdir -p 'dir with space'; printf 'a\n' > 'dir with space/a b.txt'
+  # Git for Windows can create such a file but not add it by that name: then the newline case is skipped.
+  nl=$(printf 'new\nline.txt'); if printf 'x\n' > "$nl" 2>/dev/null && git add -- "$nl" 2>/dev/null; then :; else rm -f -- "$nl" 2>/dev/null || :; nl=; fi
+  i=0; mkdir -p many; while [ "$i" -lt 500 ]; do printf '%s\n' "$i" > "many/f$i.txt"; i=$((i+1)); done
+  git add -A 'dir with space' many ${nl:+"$nl"}; git commit -qm 'odd paths and 500 files'; C3=$(git rev-parse HEAD); git checkout -q main; git merge -q --ff-only t3; SHA=$C3
+  contains_slug odd
+  D3=$(promote dev3 "$C3"); expect 0 ship "$SLUG" dev "$D3" --checked x --output y; contains '(contains)'
+  git checkout -q -b rev3 "$D3"; git rm -q 'dir with space/a b.txt'; git commit -qm 'drop the spaced file'; R3=$(git rev-parse HEAD); git checkout -q main
+  expect 1 ship "$SLUG" stg "$R3" --checked x --output y; contains "no longer has the verified change of $C3"
+  ok "contains: paths with spaces${nl:+ and a newline} and a 500-file change go through a pipe; removing one file is refused"
+}
+# A root commit as the verified Commit is compared with the empty tree; an old git that echoes
+# --path-format back still yields the repository identity.
+regression_rootcommit() {
+  local oldpath real
+  repo regression-rootcommit
+  printf 'stages: dev, stg, prd\n' >> .sdlc/config.md
+  [ -z "$(git rev-list --parents -n 1 HEAD | awk '{print $2}')" ] || fail 'fixture HEAD is not a root commit'
+  ready root 1; evidence; route deliver
+  git checkout -q -b dev; printf 'dev work\n' > dev.txt; git add dev.txt; git commit -qm 'dev work'; git checkout -q main
+  expect 0 ship "$SLUG" dev "$(git rev-parse dev)" --checked x --output y; contains '(contains)'
+  ok 'contains: a root Commit is compared with the empty tree'
+  mkdir -p "$TMP/oldgit"; real=$(command -v git)
+  printf '#!/usr/bin/env bash\nargs=()\nfor a in "$@"; do if [ "$a" = --path-format=absolute ]; then printf "%%s\\n" "$a"; else args+=("$a"); fi; done\nexec "%s" "${args[@]}"\n' "$real" > "$TMP/oldgit/git"; chmod +x "$TMP/oldgit/git"
+  oldpath=$PATH; PATH="$TMP/oldgit:$PATH"
+  [ "$(git rev-parse --path-format=absolute --git-common-dir | head -1)" = --path-format=absolute ] || fail 'fake old git does not echo the flag'
+  ready oldgit 1; evidence; expect 0 score "$SLUG"; PATH=$oldpath
+  grep -q "^repo: $(cd .git && pwd -P)"$'\t\t'".$" "$F/.state" || fail "old git identity: $(grep '^repo:' "$F/.state")"
+  ok 'identity: a git that echoes --path-format back falls back to the relative common dir'
 }
 run_regressions() {
   case "$1" in
@@ -1358,10 +1708,12 @@ run_regressions() {
     repos) regression_repos;; cells) regression_cells;; paths) regression_paths;; uncommitted) regression_uncommitted;;
     nested) regression_nested;; interrupt) regression_interrupt;; scoped) regression_scoped;; fingerprint) regression_fingerprint;; optin) regression_optin;;
     reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;; labels) regression_labels;; sha) regression_sha;; ship) regression_ship;; memory) regression_memory;;
+    events) regression_events;; stats) regression_stats;; stages) regression_stages;; stagerepos) regression_stagerepos;; contains) regression_contains;; rootcommit) regression_rootcommit;; undo) regression_undo;;
     all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init; regression_ultra
       for round2 in a b c d e; do regression_round2 "$round2"; done; regression_round3
       regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint; regression_optin
-      regression_reposflag; regression_carry; regression_target; regression_clarity; regression_labels; regression_sha; regression_ship; regression_memory;;
+      regression_reposflag; regression_carry; regression_target; regression_clarity; regression_labels; regression_sha; regression_ship; regression_memory
+      regression_events; regression_stats; regression_stages; regression_stagerepos; regression_contains; regression_rootcommit; regression_undo;;
     *) fail "unknown regression group: $1";;
   esac
 }
@@ -1515,6 +1867,8 @@ for invalid in risk coverage placeholder must duplicate; do
 done
 cp "$TMP/plan.valid" "$F/PLAN.md"
 replace '{gsub(/security no/,"security YES"); print}' "$F/PLAN.md"
+# A raised risk flag needs its Undo: line (a plan without one is refused; see regression_undo).
+replace '/Risk flags:/ {print; print "- Undo: revert the change commit"; next} {print}' "$F/PLAN.md"
 expect 1 approve plan first --agent reviewed; contains 'security'
 expect 10 next first; contains 'NEEDS-HUMAN plan'
 expect 0 approve plan first --human 'security scope approved'

@@ -31,6 +31,7 @@ const intent = `# Intent
 `;
 const plan = `# Plan
 - Risk flags: migration no · data deletion no · public API no · security yes · infra no
+- Undo: revert the change commit
 ## Scenarios
 | ID | Persona | Steps | Expected | Must | Covers |
 |---|---|---|---|---|---|

@@ -61,8 +61,8 @@ human's approval, review the uncommitted change instead. Record its verdict
 with `sdlc.sh review <slug> pass|fail "<one line>"`: the script reads the
 newest `review.md` round (each recording needs a new one) and binds a PASS to
 the HEAD of every repository in `--repos "<path> ..."` (before the note), else
-config `repos:`, else under the project root (name the touched repositories
-when the root holds many). `score` and `close` compare only repositories named
+config `repos:`, else under the project root (name the touched ones in a
+many-repository root). `score` and `close` compare only repositories named
 on evidence `Commit` lines; each Commit must be that HEAD. For an uncommitted
 review, `sdlc.sh review <slug> pass --uncommitted "<one line>"` also binds the
 working tree of each repository with uncommitted changes (non-ignored files,

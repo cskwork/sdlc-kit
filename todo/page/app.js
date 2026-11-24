@@ -518,12 +518,18 @@ let detailId = '', selectedId = '', opener = null, artifact = null, artifactRequ
 
 function draftFor(id) { if (!drafts.has(id)) drafts.set(id, { reply: '', words: '', seed: '' }); return drafts.get(id); }
 // The agent's suggested answer fills the reply field until the person edits it; a new suggestion replaces an unedited one.
+// Shared with the board (todoPage.seedDraft): returns the text the field now shows, or null to leave the field alone.
+function seedDraft(draft, item) {
+  const suggest = item.done ? '' : item.suggest || '';
+  if (draft.reply !== draft.seed || draft.seed === suggest) return null;
+  draft.reply = draft.seed = suggest;
+  return suggest;
+}
 function seedReply(item) {
-  const d = draftFor(item.id), suggest = item.done ? '' : item.suggest || '';
-  if (d.reply !== d.seed || d.seed === suggest) return;
-  d.reply = d.seed = suggest;
+  const d = draftFor(item.id), seeded = seedDraft(d, item);
+  if (seeded === null) return;
   d.replyVersion = item.version;
-  if (detailId === item.id) $('reply-text').value = suggest;
+  if (detailId === item.id) $('reply-text').value = seeded;
 }
 function openDetail(id, from, focus = true) {
   const item = items.find(i => i.id === id);
@@ -881,7 +887,7 @@ const busy = () => busyChecks.some(check => check());
 globalThis.todoPage = {
   get items() { return items; }, get feed() { return feed; }, get feedError() { return feedError; },
   get lang() { return lang; }, get t() { return t; }, get token() { return token; },
-  api, apply, announce, showError, sourceOf, oneLine, say,
+  api, apply, announce, showError, sourceOf, oneLine, say, seedDraft,
   subscribe(listener) { listeners.push(listener); if (seenSnapshot) listener(); },
   addBusyCheck(check) { busyChecks.push(check); }
 };

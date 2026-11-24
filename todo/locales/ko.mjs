@@ -288,6 +288,10 @@ export default {
     'runs.unknown': '결과 미상',
     'runs.failCount': '실패 {count}',
     'runs.empty': '이 날은 실행 기록이 없어요.',
+    'runs.cost': '${amount}',
+    'runs.costTotal': '비용 {amount}',
+    'runs.costPartial': '일부 비용 모름',
+    'runs.tokens': '{tokens} 토큰',
     'health.alerts': '알림',
     'health.empty': '자동 작업이 보낸 건강 정보가 없어요.'
   }

@@ -24,7 +24,7 @@ checked out — then counts and routes:
    **human** (an environment is missing)
 4. otherwise → **build** (phase 3)
 
-BLOCKED counts as not passed. On a human route, show the human the score lines,
+On a human route, show the human the score lines,
 the failing rows and their logs; they resume with `sdlc.sh approve plan
 <slug> --human` or drop the feature. For a BLOCKED row, offer all three:
 remove the scenario (the approval records the removal and the gap), retry
@@ -34,8 +34,8 @@ unchanged, the approval keeps the review PASS: go straight to QA.
 
 ## Ship
 
-Deliver (push, merge, release, deploy) only once `sdlc.sh check ship <slug>`
-prints `GATE OPEN`; a review PASS is not that. Delivery the human orders
+Deliver (push, merge, release, deploy) only after `sdlc.sh check ship <slug>`
+prints `GATE OPEN`, not on a review PASS. Delivery the human orders
 earlier is unverified: record
 `Shipped before evidence: <sha> — "<their words>"` in Shipping and the
 report; the slug stays open until `score` routes deliver.
@@ -43,20 +43,22 @@ Ship the verified commit by the project's rules and intent.md's Ship to:
 `local` needs nothing more; `pr` and `deploy` need the human's words, in
 intent.md or, for a later or different target, in evidence.md's Shipping as
 `Allowed: yes — "<their words>"`. Do not change code after scoring. Fill
-evidence.md's Shipping: Ship to, the shipped commit per repository, the
-command that checked it and its deciding output line. A changed policy is
+Shipping: Ship to, the shipped commit per repository, the checking command
+and its deciding output line. A changed policy is
 updated where it is written in the same delivery, or its follow-up and owner
-go in Shipping's `Policy:` line. Then:
+go in Shipping's `Policy:` line. With config.md `stages:`, record each
+stage with `sdlc.sh ship` (`next` names it). Then:
 - put in `memory` what the next feature would reuse and cannot look up
   cheaply — a verified fact, rule or trap from `refs/` — once, in its owning
   page; terms in `glossary.md` (`# Glossary` first).
-  A code fact ends `[verified: <file from the project root> @ <shipped short
-  sha> | as-of: <date>]`, re-checked there if the file changed, else `[unconfirmed]`. Name
+  A code fact's `[verified: …]` tag names the file from the project root and
+  the shipped short sha, re-checked there if the file changed. Name
   the pages in Shipping's `Memory:` line, or `none — <why>`;
 - add the saved scripts (`logs/scripts/`) worth keeping to the project's
   `e2e` suite, or name them as a follow-up in Shipping;
 - `sdlc.sh close <slug> shipped "<one line>"` — refused if the shipped
-  tree differs from the verified one or `Memory:` is missing.
+  tree differs from the verified one, `Memory:` is missing, or the last stage
+  is unrecorded (else `--at <stage>`).
 
 ## Report
 
