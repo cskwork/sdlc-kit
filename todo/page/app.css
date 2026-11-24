@@ -658,6 +658,11 @@ kbd {
 .run-box { margin-top: 1rem; padding: 0.85rem 1rem; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
 .run-box h3 { margin: 0; font-size: 0.875rem; font-weight: 600; }
 .run-command { margin: 0.5rem 0 0; padding: 0.6rem 0.75rem; border-radius: 8px; background: var(--open-bg); overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.run-command code, .run-where code { unicode-bidi: isolate; direction: ltr; }
+.run-warn { margin: 0.6rem 0 0; padding: 0.45rem 0.65rem; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font-size: 0.875rem; font-weight: 600; }
+.run-long { margin-top: 0.75rem; }
+.run-long .hint { margin: 0 0 0.4rem; }
+.run-command { max-block-size: 16rem; }
 .run-command code, .run-where code, .run-output { font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 0.8125rem; }
 .run-where, .run-why { margin: 0.4rem 0 0; font-size: 0.875rem; color: var(--muted); overflow-wrap: anywhere; }
 .run-box .actions { margin-top: 0.6rem; }

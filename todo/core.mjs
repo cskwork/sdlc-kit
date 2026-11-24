@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { displayCommand, shellWord } from './status.mjs';
 
 const execute = promisify(execFile);
 const defaultKit = fileURLToPath(new URL('../', import.meta.url));
@@ -72,7 +73,8 @@ function derive(item) {
   // An agent's own wait for the human outranks an sdlc BLOCKED it has already seen (e.g. a legacy slug); a call error does not.
   item.status = item.done ? 'done' : item.error || item.sdlc?.state === 'BLOCKED' && !(item.waiting && !replies(item).length) ? 'blocked' :
     // An agent's "someone else answers first" outranks an sdlc NEEDS-HUMAN it has already seen; its own wait does not.
-    ((item.waiting || item.sdlc?.state === 'NEEDS-HUMAN' && !item.others) && !replies(item).length) ? 'waiting' :
+    // A command left for the human to run (exec) is their turn until a run succeeds or someone clears it.
+    item.exec && !item.done || ((item.waiting || item.sdlc?.state === 'NEEDS-HUMAN' && !item.others) && !replies(item).length) ? 'waiting' :
     // Waiting on someone else (a planner, QA): neither the human nor an agent can act until they answer.
     item.others && !unread(item).length ? 'others' : 'workable';
   item.unread = unread(item).length;
@@ -131,7 +133,7 @@ function parse(source) {
     if (match) {
       const checked = match[1].toLowerCase() === 'x';
       item = { id: '', title: match[2].replace(/^~~(.*)~~$/, '$1'), done: section === 'done' || checked,
-        project: '', link: null, sdlc: null, waiting: '', others: '', brief: '', repos: [], choices: [], pick: null, suggest: '', run: '', exec: null, pin: false, events: [], notes: [] };
+        project: '', link: null, sdlc: null, waiting: '', others: '', brief: '', repos: [], choices: [], pick: null, suggest: '', run: '', exec: null, execResult: null, pin: false, events: [], notes: [] };
       if (checked && section === 'open') item.checkedOpen = true;
       model.items.push(item);
       continue;
@@ -155,6 +157,7 @@ function parse(source) {
     else if ((field = text.match(/^  - run: (.*)$/))) item.run = field[1];
     // A hand-edited exec line that is not a valid command stays in the file as a note, never run and never lost.
     else if ((field = text.match(/^  - exec: (.*)$/)) && execValue(field[1], { strict: false })) item.exec = execValue(field[1], { strict: false });
+    else if ((field = text.match(/^  - execResult: (.*)$/)) && execResultValue(field[1])) item.execResult = execResultValue(field[1]);
     else if (text === '  - pin: yes') item.pin = true;
     else if ((field = text.match(/^  - (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) ([^:]+): (.*)$/))) item.events.push({ at: field[1], who: field[2], what: field[3] });
     else item.notes.push(text);
@@ -165,6 +168,12 @@ export function load(file = todoPath()) {
   try { return parse(fs.readFileSync(file, 'utf8')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; return { preamble: header, items: [] }; }
 }
+// Nothing written to todo.md may break a line: a newline inside an event or field would start a forged field.
+// JSON.stringify escapes \n and \r but leaves U+0085, U+2028 and U+2029 raw, which some readers treat as line ends.
+const breaks = /[\r\n\u0085\u2028\u2029]/g;
+const breakEscape = c => ({ '\r': '\\r', '\n': '\\n' })[c] || `\\u${c.codePointAt(0).toString(16).padStart(4, '0')}`;
+const safeLine = text => String(text).replace(breaks, breakEscape);
+const oneLineJson = value => JSON.stringify(value).replace(breaks, breakEscape);
 function renderItem(item) {
   const lines = [`- [${item.done ? 'x' : ' '}] ${item.done ? `~~${item.title}~~` : item.title}`];
   if (item.project) lines.push(`  - project: ${item.project}`);
@@ -182,9 +191,10 @@ function renderItem(item) {
   if (item.choices?.length && item.pick) lines.push(`  - pick: ${item.pick}`);
   if (item.suggest) lines.push(`  - suggest: ${item.suggest}`);
   if (item.run) lines.push(`  - run: ${item.run}`);
-  if (item.exec) lines.push(`  - exec: ${JSON.stringify(item.exec)}`);
+  if (item.exec) lines.push(`  - exec: ${oneLineJson(item.exec)}`);
+  if (item.execResult) lines.push(`  - execResult: ${oneLineJson(item.execResult)}`);
   if (item.pin) lines.push('  - pin: yes');
-  for (const e of item.events) lines.push(`  - ${e.at} ${e.who}: ${e.what}`);
+  for (const e of item.events) lines.push(`  - ${e.at} ${e.who}: ${safeLine(e.what)}`);
   lines.push(...item.notes);
   return lines.join('\n');
 }
@@ -266,7 +276,7 @@ export async function compact(file = todoPath(), { dryRun = false } = {}) {
   // preimage for append-before-rename ordering and the existing sidecar handling.
   return mutate(file, model => report(structuredClone(model)));
 }
-function event(item, who, what) { item.events.push({ at: stamp(), who, what }); derive(item); }
+function event(item, who, what) { item.events.push({ at: stamp(), who, what: safeLine(what) }); derive(item); }
 function finish(model, item, who, what) {
   item.done = true;
   item.waiting = '';
@@ -497,7 +507,7 @@ export async function add(file, text, options = {}) {
     const by = line(options.by || 'agent');
     if (!/^[^:\r\n]+$/.test(by)) fail('invalid event author');
     const item = { id: '', title, done: false, project, link: linkValue(options.link ?? parsed.link),
-      sdlc: slug ? { slug, phase: 'intent', state: '', action: '' } : null, waiting: '', brief, repos: [], choices: [], pick: null, suggest: '', run: '', exec: null, events: [], notes: [] };
+      sdlc: slug ? { slug, phase: 'intent', state: '', action: '' } : null, waiting: '', brief, repos: [], choices: [], pick: null, suggest: '', run: '', exec: null, execResult: null, events: [], notes: [] };
     model.items.splice(model.items.findIndex(i => i.done) < 0 ? model.items.length : model.items.findIndex(i => i.done), 0, item);
     event(item, by, 'added');
     identify(model);
@@ -636,15 +646,29 @@ export function execValue(value, { strict = true } = {}) {
 function isDirectory(dir) {
   try { return fs.statSync(dir).isDirectory(); } catch { return false; }
 }
-// POSIX shell quoting, for showing a command exactly: a word with only safe characters stays bare.
-export const shellQuote = argv => argv.map(arg => /^[A-Za-z0-9_@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`).join(' ');
+// The command and its folder as shown everywhere (status.mjs): hidden characters become visible escapes.
+export const shellQuote = argv => displayCommand(argv).text;
+export const showExec = command => `${shellQuote(command.argv)} (cwd ${shellWord(command.cwd).text})`;
+// The outcome of the latest board run, for machines: a record, not a prompt. Nothing but a newer run changes it.
+// A hand-edited line that does not have this shape loads as a note and stays in the file.
+const resultKeys = ['argv', 'cwd', 'resolved', 'exitCode', 'timedOut', 'signal', 'at', 'run'];
+export function execResultValue(text) {
+  let value;
+  try { value = JSON.parse(text); } catch { return null; }
+  const ok = value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === resultKeys.length &&
+    resultKeys.every(key => key in value) && Array.isArray(value.argv) && value.argv.length && value.argv.every(arg => typeof arg === 'string') &&
+    typeof value.cwd === 'string' && typeof value.resolved === 'string' && (value.exitCode === null || Number.isInteger(value.exitCode)) &&
+    typeof value.timedOut === 'boolean' && (value.signal === null || typeof value.signal === 'string') &&
+    typeof value.at === 'string' && typeof value.run === 'string';
+  return ok ? Object.fromEntries(resultKeys.map(key => [key, value[key]])) : null;
+}
 // Sets or replaces the command; null clears it.
 export const exec = (file, id, value) => {
   const command = value === null ? null : execValue(value);
   return update(file, id, item => {
     if (JSON.stringify(item.exec ?? null) === JSON.stringify(command)) return;
     item.exec = command;
-    event(item, 'agent', command ? `exec — ${shellQuote(command.argv)} (cwd ${command.cwd})` : 'exec cleared');
+    event(item, 'agent', command ? `exec — ${showExec(command)}` : 'exec cleared');
   });
 };
 // A pinned item (e.g. a setting the human switches with its choices) stays at the top of every app tab without

@@ -1,6 +1,6 @@
 // To-do page. Rows are patched by id so drafts, focus and scroll survive live updates.
 import { defaultLanguage, isLanguage, languages, locales, phaseLabel, translator } from './i18n.mjs';
-import { countsOf, queueOf, statusLabel, statusOf, ticketGroups } from './status.mjs';
+import { countsOf, displayCommand, queueOf, shellWord, statusLabel, statusOf, ticketGroups, visibleText } from './status.mjs';
 const $ = id => document.getElementById(id);
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -117,7 +117,7 @@ const basename = project => project.replace(/[\\/]+$/, '').split(/[\\/]/).pop() 
 // What the person is asked to do: the explicit wait, the gate, else the sdlc question.
 function whatWaits(item) {
   const status = statusOf(item);
-  return item.waiting || (status.gate ? t(`next.${status.kind}`) : item.sdlc?.action || t(`next.${status.kind}`));
+  return item.waiting || (status.gate ? t(`next.${status.kind}`) : item.exec ? t('run.ask') : item.sdlc?.action || t(`next.${status.kind}`));
 }
 // Colour tone of a status pill, row bar and check ring: amber you, blue agent's turn, green with a pulsing dot
 // while an agent works on it now, grey not started or not picked up.
@@ -891,11 +891,18 @@ $('lang').addEventListener('change', () => {
 
 // ---------- a command the page runs for the person ----------
 // An agent can leave one command (exec: {argv, cwd, why}) the person may run from here. Nothing runs without the
-// confirmation dialog; the server runs argv without a shell and saves the result as the person's reply.
+// confirmation dialog; the server runs argv without a shell. Every place shows the command through status.mjs's
+// displayCommand, the same escape the server writes to todo.md and the reply, so hidden characters show as escapes.
 const runs = new Map(); // item id -> { command, running, result }
 const runViews = new Map(); // a shown run box -> { id, keys }
-const shellQuote = argv => argv.map(arg => /^[A-Za-z0-9_@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`).join(' ');
-const outputTail = result => [result.stdout, result.stderr].map(text => (text || '').trimEnd()).filter(Boolean).join('\n').split('\n').slice(-20).join('\n');
+const longCommand = 400; // characters shown before "Show all" must be opened
+// The last 20 output lines, each with hidden characters made visible.
+const outputTail = result => [result.stdout, result.stderr].map(text => (text || '').trimEnd()).filter(Boolean)
+  .join('\n').split(/\r?\n/).slice(-20).map(part => visibleText(part, { blanks: false }).text).join('\n');
+function commandView(command) {
+  const shown = displayCommand(command.argv), where = shellWord(command.cwd), why = visibleText(command.why || '');
+  return { ...shown, cwd: where.text, why: why.text, escaped: shown.escaped || where.escaped || why.escaped };
+}
 // Draws the box for an item into a container (the list's details or the board's panel); `keys` names its shortcut.
 function renderRun(box, item, keys = '') {
   runViews.set(box, { id: item?.id || '', keys });
@@ -905,19 +912,24 @@ function renderRun(box, item, keys = '') {
       JSON.stringify(runs.get(item.id).command) !== JSON.stringify(command)) runs.delete(item.id);
   const state = item ? runs.get(item.id) : null;
   const shown = command || state?.command;
-  const sig = JSON.stringify([lang, item?.id, command, state]);
+  const sig = JSON.stringify([lang, item?.id, command, item?.execPath, state]);
   if (box._sig === sig) return;
   box._sig = sig;
   box.hidden = !shown;
   box.setAttribute('aria-busy', String(!!state?.running));
   if (!shown) { box.replaceChildren(); return; }
+  const view = commandView(shown);
   const title = el('h3', '', t('run.title'));
   title.id = `${box.id}-title`;
-  const code = el('pre', 'run-command'), where = el('p', 'run-where');
-  code.append(el('code', '', shellQuote(shown.argv)));
-  where.append(el('span', 'muted-label', t('run.cwd')), el('code', '', shown.cwd));
-  const parts = [title, code, where];
-  if (shown.why) { const why = el('p', 'run-why'); why.append(el('span', 'muted-label', t('run.why')), document.createTextNode(shown.why)); parts.push(why); }
+  const parts = [title];
+  if (view.escaped) parts.push(el('p', 'run-warn', t('run.escaped')));
+  const code = el('pre', 'run-command');
+  code.append(el('code', '', view.text));
+  const where = el('p', 'run-where');
+  where.append(el('span', 'muted-label', t('run.cwd')), el('code', '', view.cwd), document.createTextNode(` · ${t('run.args', { count: view.count })}`));
+  parts.push(code, where);
+  if (view.why) { const why = el('p', 'run-why'); why.append(el('span', 'muted-label', t('run.why')), document.createTextNode(view.why)); parts.push(why); }
+  if (command && !item.execPath) parts.push(el('p', 'field-error', t('run.notFound', { name: shellWord(command.argv[0]).text })));
   if (command) {
     const button = el('button', 'secondary', t('run.button'));
     button.type = 'button';
@@ -937,7 +949,8 @@ function renderRun(box, item, keys = '') {
     status.append(line);
   } else if (state?.result) {
     const r = state.result;
-    const text = r.timedOut ? t('run.timeout') : r.exitCode === null ? t('run.signal') : t('run.exit', { code: r.exitCode });
+    const text = r.error ? t('run.startFailed', { error: r.error, code: r.exitCode }) : r.timedOut ? t('run.timeout') :
+      r.exitCode === null ? t('run.signal') : t('run.exit', { code: r.exitCode });
     const tail = outputTail(r);
     status.append(el('p', `run-state ${r.exitCode === 0 ? 'ok' : 'fail'}`, text), tail ? el('pre', 'run-output', tail) : el('p', 'hint', t('run.noOutput')));
   }
@@ -958,35 +971,61 @@ function refreshRuns() {
   for (const [box, { id, keys }] of runViews) if (box.isConnected !== false) { box._sig = ''; renderRun(box, items.find(item => item.id === id), keys); }
 }
 const runDialog = $('run-confirm');
-let confirming = null;
+let confirming = null, openedAt = 0;
+const clip = text => text.length > longCommand ? `${text.slice(0, longCommand)}…` : text;
+// Run is possible only when the program was found and the whole command has been on screen.
+function syncRunButton() {
+  $('run-confirm-run').disabled = !confirming?.path || !$('run-confirm-long').hidden;
+}
 function confirmRun(id) {
   const item = items.find(i => i.id === id);
   if (!item?.exec || item.done || runs.get(id)?.running || runDialog.open) return;
-  confirming = { id, version: item.version, command: item.exec };
-  $('run-confirm-command').textContent = shellQuote(item.exec.argv);
-  $('run-confirm-cwd').textContent = item.exec.cwd;
+  const view = commandView(item.exec), long = view.text.length > longCommand || view.cwd.length > longCommand;
+  confirming = { id, version: item.version, command: item.exec, path: item.execPath || '', view };
+  $('run-confirm-escaped').hidden = !view.escaped;
+  $('run-confirm-escaped').textContent = t('run.escaped');
+  $('run-confirm-command').textContent = long ? clip(view.text) : view.text;
+  $('run-confirm-cwd').textContent = long ? clip(view.cwd) : view.cwd;
+  $('run-confirm-args').textContent = t('run.args', { count: view.count });
+  $('run-confirm-program').textContent = item.execPath ? shellWord(item.execPath).text : '—';
+  $('run-confirm-missing').hidden = !!item.execPath;
+  $('run-confirm-missing').textContent = item.execPath ? '' : t('run.notFound', { name: shellWord(item.exec.argv[0]).text });
+  $('run-confirm-long').hidden = !long;
+  syncRunButton();
   runDialog.returnValue = '';
+  openedAt = Date.now();
   runDialog.showModal();
 }
-// Enter runs from anywhere in the dialog except on Cancel, whose own Enter cancels.
+$('run-confirm-full').addEventListener('click', () => {
+  if (!confirming) return;
+  $('run-confirm-command').textContent = confirming.view.text;
+  $('run-confirm-cwd').textContent = confirming.view.cwd;
+  $('run-confirm-long').hidden = true;
+  syncRunButton();
+  $('run-confirm-title').focus();
+});
+// Enter confirms from the title or text, after a reading pause: a held key's repeats and an Enter within 400 ms of
+// opening do nothing, so the Enter (or X) that opened the dialog cannot also run it. A focused button keeps its own Enter.
 runDialog.addEventListener('keydown', event => {
-  if (event.key !== 'Enter' || event.isComposing || event.target.value === 'cancel') return;
+  if (event.key !== 'Enter') return;
+  if (event.repeat || event.isComposing || Date.now() - openedAt < 400) { event.preventDefault(); return; }
+  if (event.target?.closest?.('button')) return;
   event.preventDefault();
-  runDialog.close('run');
+  if (!$('run-confirm-run').disabled) runDialog.close('run');
 });
 runDialog.addEventListener('close', () => {
   const chosen = runDialog.returnValue, request = confirming;
   runDialog.returnValue = '';
   confirming = null;
   // After the browser has given focus back to the button that opened it, so the redraw can carry that focus on.
-  if (chosen === 'run' && request) setTimeout(() => executeRun(request), 0);
+  if (chosen === 'run' && request?.path) setTimeout(() => executeRun(request), 0);
 });
-async function executeRun({ id, version, command }) {
+async function executeRun({ id, version, command, path }) {
   const before = runs.get(id);
   runs.set(id, { command, running: true, result: null });
   refreshRuns();
   try {
-    const data = await api('/api/exec', { id, version });
+    const data = await api('/api/exec', { id, version, path });
     runs.set(id, { command, running: false, result: data.exec });
     if (data.items) apply(data);
     announce(t('run.done', { code: data.exec.timedOut ? '-' : data.exec.exitCode ?? '-' }));

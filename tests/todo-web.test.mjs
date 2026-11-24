@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, renameSync
 import { tmpdir, networkInterfaces } from 'node:os';
 import { dirname, join, resolve, relative as pathRelative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startWeb, liveSession } from '../todo/web.mjs';
+import { startWeb, liveSession, runArgv, resolveCommand, commandSearchPath } from '../todo/web.mjs';
 import * as core from '../todo/core.mjs';
 
 const kit = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -43,7 +43,8 @@ async function web(t, options = {}) {
   const file = join(root, 'todo.md');
   let opened;
   // A temp feed: no test reads or watches ~/.sdlc/todo-feed.json.
-  const server = await startWeb({ file, kit, port: 0, open: false, onUrl(url) { opened = url; }, feed: join(root, 'feed.json'), ...options });
+  // A fixed command PATH: no test starts the login shell to read its PATH.
+  const server = await startWeb({ file, kit, port: 0, open: false, onUrl(url) { opened = url; }, feed: join(root, 'feed.json'), searchPath: '/usr/bin:/bin', ...options });
   t.after(async () => { await server.close(); rmSync(root, { recursive: true, force: true }); });
   const url = new URL(opened || server.url);
   const token = new URLSearchParams(url.hash.slice(1)).get('t');
@@ -885,62 +886,206 @@ test('feed: an invalid feed says so, and an atomic replacement reaches the live 
   await waitFor(value => value.feedError === 'feed is not a JSON object', 3000);
 });
 
-test('exec: the board runs an item command after the shown version is checked; exit 0 clears it, a failure keeps it, both reply and log', async t => {
+// ---------- exec: a command the board runs for the human ----------
+// Spawning a process can take seconds on a loaded machine: these requests wait longer than the default 2 s, and
+// each uses its own connection because a gap that long can outlive the server's keep-alive.
+const slowRequest = { timeout: 30000, headers: { Connection: 'close' } };
+async function execServer(t, options = {}) {
   const home = mkdtempSync(join(tmpdir(), 'sdlc-todo-home-')), oldHome = process.env.HOME;
   process.env.HOME = home;
   t.after(() => { process.env.HOME = oldHome; rmSync(home, { recursive: true, force: true }); });
-  // Spawning a process can take seconds on a loaded machine: these requests wait longer than the default 2 s.
-  const ctx = await web(t, { lang: 'ko' });
+  const ctx = await web(t, { lang: 'ko', ...options });
   const item = await core.add(ctx.file, 'clean the build folder');
+  const shown = async () => items(await request(ctx, '/api/items', slowRequest), ctx.file).find(i => i.title === 'clean the build folder' || i.id === item.id);
+  const run = body => request(ctx, '/api/exec', { method: 'POST', body, ...slowRequest });
+  const runShown = async () => { const now = await shown(); return run({ id: now.id, version: now.version, path: now.execPath }); };
   const set = value => core.exec(ctx.file, item.id, JSON.stringify(value));
-  // A gap that long can also outlive the server's keep-alive, so each request uses its own connection.
-  const slow = { timeout: 30000, headers: { Connection: 'close' } };
-  const run = (body, at = ctx) => request(at, '/api/exec', { method: 'POST', body, ...slow });
-  const shown = async (at = ctx) => items(await request(at, '/api/items', slow), at.file).find(i => i.id === item.id);
+  const log = () => readFileSync(join(home, '.sdlc', 'todo-runs.log'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  return { ctx, home, item, shown, run, runShown, set, log };
+}
+const until = async (check, ms = 20000) => { const end = Date.now() + ms; while (!check()) { if (Date.now() > end) throw new Error('timed out'); await new Promise(r => setTimeout(r, 50)); } };
 
+test('exec: runs the resolved program after the shown version and path are checked; exit 0 replies and clears, a failure keeps the wait', async t => {
+  const { ctx, item, shown, run, runShown, set, log } = await execServer(t);
+  await core.wait(ctx.file, item.id, '빌드 폴더를 지워 주세요');
   await core.run(ctx.file, item.id, 'open -a Terminal /x.command');
   await set({ argv: ['sh', '-c', 'echo first; echo hi'], cwd: ctx.root, why: 'test' });
-  let snapshot = await shown();
-  assert.deepEqual(snapshot.exec, { argv: ['sh', '-c', 'echo first; echo hi'], cwd: ctx.root, why: 'test' });
-  assert.equal((await run({ id: item.id, version: 'stale' })).status, 409, 'a changed version runs nothing');
-  assert.equal((await run({ id: 'nope00', version: snapshot.version })).status, 404);
-  const ok = await run({ id: item.id, version: snapshot.version });
+  let now = await shown();
+  assert.deepEqual(now.exec, { argv: ['sh', '-c', 'echo first; echo hi'], cwd: ctx.root, why: 'test' });
+  assert.equal(now.execPath, '/bin/sh', 'argv[0] resolved on the command PATH');
+  assert.equal((await run({ id: item.id, version: 'stale', path: now.execPath })).status, 409, 'a changed version runs nothing');
+  assert.equal((await run({ id: 'nope00', version: now.version, path: now.execPath })).status, 404);
+  assert.equal((await run({ id: item.id, version: now.version })).status, 400, 'the shown program is required');
+  assert.equal((await run({ id: item.id, version: now.version, path: '/usr/bin/sh-other' })).status, 409, 'a different program than shown runs nothing');
+  const ok = await run({ id: item.id, version: now.version, path: now.execPath });
   assert.equal(ok.status, 200, ok.text);
-  assert.deepEqual(ok.json.exec, { exitCode: 0, stdout: 'first\nhi\n', stderr: '', timedOut: false });
-  snapshot = items(ok, ctx.file).find(i => i.id === item.id);
-  assert.equal(snapshot.exec, null, 'exit 0 clears it');
-  assert.equal(snapshot.run, '', 'like any reply, exit 0 clears the terminal run too');
-  assert.equal(snapshot.events.at(-1).who, 'human');
-  assert.equal(snapshot.events.at(-1).what, `reply — 실행함: sh -c 'echo first; echo hi' (cwd ${ctx.root}) → exit 0 — hi`);
-  assert.equal((await run({ id: item.id, version: snapshot.version })).status, 409, 'no command left to run');
+  assert.deepEqual(ok.json.exec, { exitCode: 0, stdout: 'first\nhi\n', stderr: '', timedOut: false, signal: null, error: '' });
+  now = items(ok, ctx.file).find(i => i.id === item.id);
+  assert.equal(now.exec, null, 'exit 0 clears it');
+  assert.equal(now.run, '', 'and the terminal run, like any reply');
+  assert.equal(now.waiting, '', 'and answers the wait');
+  const [started, finished, reply] = now.events.slice(-3);
+  assert.match(started.what, new RegExp(`^exec started run=[0-9a-f]{8} pid=${process.pid} — sh -c 'echo first; echo hi' \\(cwd ${ctx.root}\\)$`));
+  assert.equal(finished.what, `exec finished run=${started.what.match(/run=(\w+)/)[1]} — 실행함: sh -c 'echo first; echo hi' (cwd ${ctx.root}) → exit 0 · 출력: "hi"`);
+  assert.deepEqual([reply.who, reply.what], ['human', `reply — 실행함: sh -c 'echo first; echo hi' (cwd ${ctx.root}) → exit 0 · 출력: "hi"`]);
+  const firstRun = started.what.match(/run=(\w+)/)[1];
+  assert.deepEqual({ ...now.execResult, at: 'x' }, { argv: ['sh', '-c', 'echo first; echo hi'], cwd: ctx.root, resolved: '/bin/sh', exitCode: 0,
+    timedOut: false, signal: null, at: 'x', run: firstRun }, 'the structured result machines read');
+  assert.ok(Date.parse(now.execResult.at) > 0);
+  assert.match(readFileSync(ctx.file, 'utf8'), /^  - execResult: \{"argv":\["sh","-c","echo first; echo hi"\].*"run":"\w+"\}$/m, 'one line of JSON');
+  assert.equal((await run({ id: item.id, version: now.version, path: '/bin/sh' })).status, 409, 'no command left to run');
 
+  await core.wait(ctx.file, item.id, '다시 지워 주세요');
   await core.run(ctx.file, item.id, 'open -a Terminal /x.command');
   await set({ argv: ['sh', '-c', 'echo nope >&2; exit 3'], cwd: ctx.root });
-  const failed = await run({ id: item.id, version: (await shown()).version });
+  const failed = await runShown();
   assert.equal(failed.json.exec.exitCode, 3);
-  snapshot = items(failed, ctx.file).find(i => i.id === item.id);
-  assert.ok(snapshot.exec, 'a failure keeps it for a retry');
-  assert.equal(snapshot.run, 'open -a Terminal /x.command', 'and keeps the terminal run');
-  assert.match(snapshot.events.at(-1).what, /→ exit 3 — nope$/);
+  now = items(failed, ctx.file).find(i => i.id === item.id);
+  assert.ok(now.exec, 'a failure keeps the command for a retry');
+  assert.equal(now.run, 'open -a Terminal /x.command', 'and the terminal run');
+  assert.equal(now.waiting, '다시 지워 주세요', 'and the wait: a failed run answers nothing');
+  assert.equal(now.status, 'waiting');
+  assert.match(now.events.at(-1).what, /^exec finished run=\w+ — 실행함: .* → exit 3 · 출력: "nope"$/);
+  assert.ok(!now.events.at(-1).what.startsWith('reply'), 'no reply event');
+  assert.equal(now.execResult.exitCode, 3, 'a newer run replaces the result');
+  assert.notEqual(now.execResult.run, firstRun);
 
-  // Another server over the same list, with a 1 s limit.
-  const quick = { ...(await web(t, { file: ctx.file, lang: 'ko', runTimeout: 1000 })), file: ctx.file };
-  await set({ argv: ['sleep', '30'], cwd: ctx.root });
-  const late = await run({ id: item.id, version: (await shown(quick)).version }, quick);
-  assert.equal(late.json.exec.timedOut, true, late.text);
-  assert.equal(late.json.exec.exitCode, null);
-  assert.match(items(late, ctx.file).find(i => i.id === item.id).events.at(-1).what, /→ 시간 초과\(1초\)$/);
-
-  await assert.rejects(async () => set({ argv: ['true'], cwd: join(ctx.root, 'gone') }), /not a directory/, 'the CLI refuses it too');
+  await assert.rejects(async () => set({ argv: ['true'], cwd: join(ctx.root, 'gone') }), /not a directory/, 'the CLI refuses a missing folder');
   writeFileSync(ctx.file, readFileSync(ctx.file, 'utf8').replace(/^  - exec: .*$/m, `  - exec: ${JSON.stringify({ argv: ['true'], cwd: join(ctx.root, 'gone') })}`));
-  const badCwd = await run({ id: item.id, version: (await shown()).version });
+  const badCwd = await runShown();
   assert.equal(badCwd.status, 400, badCwd.text);
   assert.match(badCwd.json.error, /cwd is not a directory/);
 
-  const log = join(home, '.sdlc', 'todo-runs.log');
-  assert.equal(statSync(log).mode & 0o777, 0o600);
-  const lines = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-  assert.deepEqual(lines.map(line => line.exitCode), [0, 3, null], 'one line per execution; refusals run nothing');
-  assert.deepEqual(Object.keys(lines[0]), ['at', 'id', 'argv', 'cwd', 'exitCode', 'ms']);
-  assert.equal(lines[0].id, item.id);
+  await set({ argv: ['no-such-command-xyz'], cwd: ctx.root });
+  now = await shown();
+  assert.equal(now.execPath, '', 'a command not on the PATH is not resolved');
+  const missing = await run({ id: item.id, version: now.version, path: '' });
+  assert.equal(missing.status, 409);
+  assert.match(missing.json.error, /command not found: no-such-command-xyz/);
+
+  const lines = log();
+  assert.deepEqual(lines.map(line => line.event || line.exitCode), ['start', 0, 'start', 3], 'a start and an end line per run; refusals run nothing');
+  assert.deepEqual(Object.keys(lines[1]), ['at', 'id', 'run', 'argv', 'cwd', 'exitCode', 'ms']);
+  assert.equal(lines[0].path, '/bin/sh');
+});
+
+test('exec: a timeout signals the whole process group, escalates to KILL and still records the result', async t => {
+  const { ctx, item, set, runShown, log } = await execServer(t, { runTimeout: 1000, killAfter: 500 });
+  await set({ argv: ['sh', '-c', 'trap "" TERM; sleep 30 & wait'], cwd: ctx.root });
+  const started = Date.now();
+  const late = await runShown();
+  assert.equal(late.status, 200, late.text);
+  assert.ok(Date.now() - started < 15000, 'a TERM-ignoring command does not hang the request');
+  assert.equal(late.json.exec.timedOut, true);
+  assert.equal(late.json.exec.exitCode, null);
+  assert.equal(late.json.exec.signal, 'SIGKILL', 'TERM was ignored, KILL followed');
+  assert.deepEqual([late.json.items.find(i => i.id === item.id).execResult.timedOut, late.json.items.find(i => i.id === item.id).execResult.signal, late.json.items.find(i => i.id === item.id).execResult.exitCode], [true, 'SIGKILL', null]);
+  const now = items(late, ctx.file).find(i => i.id === item.id);
+  assert.match(now.events.at(-1).what, /→ 시간 초과\(1초, SIGKILL\)$/);
+  assert.ok(now.exec, 'a timeout keeps the command');
+  assert.equal(log().at(-1).timedOut, true);
+});
+
+test('exec: runArgv kills grandchildren, settles soon after a backgrounded child, streams any output size and names start errors', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'sdlc-todo-argv-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const go = (argv, extra = {}) => runArgv({ program: resolveCommand(argv[0], '/usr/bin:/bin') || argv[0], argv, cwd: dir, env: process.env, timeout: 800, killAfter: 500, grace: 300, ...extra });
+  const pidFile = join(dir, 'grandchild.pid');
+  const killed = await go(['sh', '-c', `sh -c 'trap "" TERM; echo $$ > ${pidFile}; while :; do sleep 0.2; done' & wait`]);
+  assert.equal(killed.timedOut, true);
+  const grandchild = Number(readFileSync(pidFile, 'utf8'));
+  await until(() => { try { process.kill(grandchild, 0); return false; } catch { return true; } }, 5000);
+  const started = Date.now();
+  const quick = await go(['sh', '-c', '(sleep 20 &); echo quick'], { timeout: 30000 });
+  assert.equal(quick.exitCode, 0);
+  assert.equal(quick.stdout, 'quick\n');
+  assert.ok(Date.now() - started < 10000, 'a background child holding stdout does not delay the result to the timeout');
+  const big = await go(['sh', '-c', 'i=0; while [ $i -lt 400 ]; do printf "가나다라마바사아자차카타파하%.0s" $(seq 1 2000); i=$((i+1)); done; echo; echo end'], { timeout: 60000 });
+  assert.equal(big.exitCode, 0, 'tens of megabytes of output never kill the command');
+  assert.ok(Buffer.byteLength(big.stdout) <= 64 * 1024, 'only the last 64 KB is kept');
+  assert.ok(!big.stdout.includes('�'), 'cut on a UTF-8 character boundary');
+  assert.ok(big.stdout.endsWith('\nend\n'));
+  assert.deepEqual(await go(['no-such-command-xyz'], { program: 'no-such-command-xyz' }).then(r => [r.exitCode, r.error]), [127, 'ENOENT']);
+  writeFileSync(join(dir, 'plain'), 'not a program');
+  assert.deepEqual(await go(['plain'], { program: join(dir, 'plain') }).then(r => [r.exitCode, r.error]), [126, 'EACCES']);
+  assert.deepEqual(await go(['sh', '-c', 'true'], { cwd: join(dir, 'gone') }).then(r => [r.exitCode, r.error]), [126, 'ENOTDIR']);
+});
+
+test('exec: the command PATH drops relative and empty entries; resolution never uses the cwd', async () => {
+  assert.equal(await commandSearchPath({ shell: '/nonexistent/shell', inherited: '.::relative/bin:/usr/bin:/bin:/usr/bin' }), '/usr/bin:/bin');
+  assert.equal(resolveCommand('sh', '/usr/bin:/bin'), '/bin/sh');
+  assert.equal(resolveCommand('sh', ''), '');
+  assert.equal(resolveCommand('/bin/sh', ''), '/bin/sh');
+  assert.equal(resolveCommand('/etc/hosts', ''), '', 'not executable');
+});
+
+test('exec: the result goes to the item that started it and clears only what did not change meanwhile', async t => {
+  const { ctx, item, shown, run, set } = await execServer(t);
+  const startedRun = () => readFileSync(ctx.file, 'utf8').includes('exec started run=');
+  const runningOne = async () => { const now = await shown(); return { now, pending: run({ id: now.id, version: now.version, path: now.execPath }) }; };
+
+  // An agent asks a new question while it runs: the success leaves that question open and is not a reply to it.
+  await core.wait(ctx.file, item.id, 'q1');
+  await set({ argv: ['sh', '-c', 'sleep 4; echo done'], cwd: ctx.root });
+  let { now, pending } = await runningOne();
+  await until(startedRun);
+  const again = await run({ id: now.id, version: now.version, path: now.execPath });
+  assert.equal(again.status, 409, 'the start event changed the version: a second tab cannot run it again');
+  const fresh = await shown();
+  assert.equal((await run({ id: fresh.id, version: fresh.version, path: fresh.execPath })).status, 409, 'nor with the new version while it runs');
+  await core.wait(ctx.file, item.id, 'q2');
+  let result = await pending;
+  assert.equal(result.status, 200, result.text);
+  let after = items(result, ctx.file).find(i => i.id === item.id);
+  assert.equal(after.waiting, 'q2', 'the new question stays');
+  assert.equal(after.status, 'waiting');
+  assert.match(after.events.at(-1).what, /^exec finished run=\w+ — 실행함: .* → exit 0 · 출력: "done"$/);
+  assert.equal(after.events.filter(event => event.what.startsWith('reply — 실행함')).length, 0, 'not recorded as an answer to q2');
+
+  // Renamed while running: the id follows the title, the result follows the start event.
+  await set({ argv: ['sh', '-c', 'sleep 4; echo renamed'], cwd: ctx.root });
+  ({ now, pending } = await runningOne());
+  await until(() => (readFileSync(ctx.file, 'utf8').match(/exec started run=/g) || []).length === 2);
+  await core.edit(ctx.file, item.id, { title: 'renamed while running' });
+  result = await pending;
+  after = items(result, ctx.file).find(i => i.title === 'renamed while running');
+  assert.notEqual(after.id, item.id);
+  assert.match(after.events.at(-1).what, /^reply — 실행함: .* → exit 0 · 출력: "renamed"$/, 'answered on the renamed item');
+
+  // Done while running: the result is kept on it, never as a reply and never on another item.
+  const other = await core.add(ctx.file, 'clean the build folder');
+  await core.exec(ctx.file, after.id, JSON.stringify({ argv: ['sh', '-c', 'sleep 4; echo late'], cwd: ctx.root }));
+  const current = items(await request(ctx, '/api/items', slowRequest), ctx.file).find(i => i.id === after.id);
+  pending = run({ id: current.id, version: current.version, path: current.execPath });
+  await until(() => (readFileSync(ctx.file, 'utf8').match(/exec started run=/g) || []).length === 3);
+  await core.done(ctx.file, after.id, 'closed by agent');
+  result = await pending;
+  const closed = items(result, ctx.file).find(i => i.title === 'renamed while running');
+  assert.equal(closed.done, true);
+  assert.match(closed.events.at(-1).what, /^exec finished run=\w+ — .* → exit 0 · 출력: "late"$/);
+  assert.equal(items(result, ctx.file).find(i => i.id === other.id).events.length, 1, 'nothing lands on another item');
+});
+
+test('exec: a run cut off by a server stop is marked interrupted at the next start; the command stays', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'sdlc-todo-web-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = join(root, 'todo.md');
+  const exec = JSON.stringify({ argv: ['true'], cwd: root });
+  writeFileSync(file, `## Open\n\n- [ ] dead run\n  - exec: ${exec}\n  - 2026-11-25 09:00 human: exec started run=deadbeef pid=99999999 — true (cwd ${root})\n\n` +
+    `- [ ] live run\n  - exec: ${exec}\n  - 2026-11-25 09:00 human: exec started run=cafebabe pid=${process.pid === 1 ? 2 : process.ppid} — true (cwd ${root})\n\n## Done\n`);
+  const server = await startWeb({ file, kit, port: 0, open: false, onUrl() {}, feed: join(root, 'feed.json'), searchPath: '/usr/bin:/bin', lang: 'ko' });
+  t.after(() => server.close());
+  const [dead, live] = core.load(file).items;
+  assert.match(dead.events.at(-1).what, /^exec finished run=deadbeef — 중단됨 \(서버 재시작\)/);
+  assert.ok(dead.exec, 'the human decides whether to run it again');
+  assert.ok(live.events.at(-1).what.startsWith('exec started run=cafebabe'), 'a run another live server owns is left alone');
+});
+
+test('exec: a log that cannot be written never skips the reply', async t => {
+  const { ctx, home, item, set, runShown } = await execServer(t);
+  writeFileSync(join(home, '.sdlc'), 'a file where the folder should be');
+  await set({ argv: ['sh', '-c', 'echo still'], cwd: ctx.root });
+  const result = await runShown();
+  assert.equal(result.status, 200, result.text);
+  assert.match(items(result, ctx.file).find(i => i.id === item.id).events.at(-1).what, /^reply — 실행함: .* → exit 0 · 출력: "still"$/);
 });

