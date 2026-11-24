@@ -3,16 +3,31 @@
 # A command that writes .state holds $F/.state.lock (mkdir is atomic everywhere) from load to save, so
 # two runs on one slug cannot both read the old state and the later write drop the earlier one. A lock
 # whose owner pid is gone, or that never got a pid within a minute, is reclaimed.
+# Reclaiming is serialized by a second mkdir lock and re-checks the owner inside it. Without that, a waiter
+# that read a dead owner could remove a lock another waiter had just taken after the owner's own exit
+# removed it, and two runs would hold the lock. Inside the reclaim lock, a lock dir whose owner is dead
+# cannot change: the dead owner never removes it, no one can mkdir over it, and other reclaimers wait.
+# The window left: a reclaimer that stalls over a minute inside the reclaim lock has it broken by another.
+lock_stale() {
+  { [ -n "$1" ] && ! kill -0 "$1" 2>/dev/null; } || { [ -z "$1" ] && [ -n "$(find "$LOCK" -maxdepth 0 -mmin +1 2>/dev/null)" ]; }
+}
+reclaim_lock() {
+  local mutex=$LOCK.reclaim owner
+  if ! mkdir "$mutex" 2>/dev/null; then
+    [ -z "$(find "$mutex" -maxdepth 0 -mmin +1 2>/dev/null)" ] || rmdir "$mutex" 2>/dev/null || :
+    return 0
+  fi
+  owner=$(cat "$LOCK/pid" 2>/dev/null) || owner=
+  if [ -d "$LOCK" ] && lock_stale "$owner"; then rm -rf "$LOCK"; fi
+  rmdir "$mutex" 2>/dev/null || :
+}
 lock_state() {
   local tries=0 owner limit=$(( ${SDLC_LOCK_WAIT:-30} * 10 ))
   LOCK=$F/.state.lock
   while ! mkdir "$LOCK" 2>/dev/null; do
     [ -d "$F" ] || die "feature moved while waiting for its lock: $slug"
     owner=$(cat "$LOCK/pid" 2>/dev/null) || owner=
-    if { [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; } ||
-      { [ -z "$owner" ] && [ -n "$(find "$LOCK" -maxdepth 0 -mmin +1 2>/dev/null)" ]; }; then
-      rm -rf "$LOCK"; continue
-    fi
+    if [ -d "$LOCK" ] && lock_stale "$owner"; then reclaim_lock; [ -d "$LOCK" ] || continue; fi
     [ "$tries" -lt "$limit" ] || die "$slug is locked by another sdlc.sh run${owner:+ (pid $owner)}: retry when it ends, or remove $LOCK if no run is alive"
     sleep 0.1; tries=$((tries+1))
   done

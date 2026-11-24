@@ -228,7 +228,8 @@ which needs a current deliver route, valid evidence and authority for the
 target, as `close shipped` does, and a `<sha>` that, beyond `local`, is on a
 remote. The `<sha>` either has the verified `Commit:`'s tree (`exact`) or
 contains it (`contains`: a `--no-ff` merge that promoted it into a branch
-with other changes); the record, the output and `status --json`
+with other changes) and still holds the Commit's version of every path the
+Commit changed, so a later revert is refused; the record, the output and `status --json`
 `stages[].match` say which. `close`'s `Shipped:` line still needs the exact
 tree. `ship` refuses an unknown stage, a stage already recorded, or one whose
 earlier stages are not.
@@ -241,7 +242,10 @@ folders of one repository share it, and a `Commit:` made in a temporary
 worktree ships from the main checkout. `score` stores each `Commit:` line's
 repository in `.state`, so once the worktree is removed, `ship`, `next` and
 `close` still work; `close` then checks the `Shipped:` line in any folder of
-that repository and says so when none is left.
+that repository and says so when none is left, and `check ship` verifies the
+Commit in the project root's or a `Shipped:` line's checkout of it. A
+`Commit:` whose object is missing (its branch deleted and pruned, a shallow
+clone) is named as such.
 Stage names are letters, digits, `.`, `_` and `-`, each listed once, separated
 by commas or spaces, with no empty item and no `#` comment on the line. `ship`
 takes the folder a `Commit:` line names, in that checkout or another of the

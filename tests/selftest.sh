@@ -1343,6 +1343,17 @@ DOC
   [ "$wins" -eq 1 ] && [ "$(state fails)" -eq 1 ] && [ "$(state seq)" -eq "$((seq0+1))" ] || fail "concurrent reviews: $wins succeeded, fails $(state fails), seq $seq0 -> $(state seq): $(cat "$TMP"/race*)"
   [ ! -e "$F/.state.lock" ] || fail 'lock left behind'
   ok 'state lock: four concurrent review runs on one round record it once'
+  ready lock-stress 1
+  for round in 1 2 3; do
+    for i in 1 2 3 4 5 6 7 8; do printf 'VERDICT: FAIL\n' >> "$F/review.md"; done
+    seq0=$(state seq)
+    for i in 1 2 3 4 5 6 7 8; do ( rc=0; bash "$SDLC" review "$SLUG" fail "stress $round.$i" > "$TMP/stress$i" 2>&1 || rc=$?; printf '%s\n' "$rc" > "$TMP/src$i" ) & done; wait
+    wins=0; for i in 1 2 3 4 5 6 7 8; do [ "$(cat "$TMP/src$i")" != 0 ] || wins=$((wins+1)); done
+    [ "$wins" -eq 1 ] && [ "$(state fails)" -eq "$round" ] && [ "$(state seq)" -eq "$((seq0+1))" ] || fail "stress round $round: $wins succeeded, fails $(state fails), seq $seq0 -> $(state seq): $(cat "$TMP"/stress*)"
+    [ ! -e "$F/.state.lock" ] && [ ! -e "$F/.state.lock.reclaim" ] || fail "stress round $round: lock left behind"
+  done
+  ok 'state lock: eight concurrent review runs, three rounds, each round recorded once'
+  SLUG=lock-race; F=$PWD/.sdlc/work/$SLUG
   mkdir "$F/.state.lock"; printf '%s\n' "$$" > "$F/.state.lock/pid"
   printf 'VERDICT: FAIL\n' >> "$F/review.md"
   SDLC_LOCK_WAIT=1 expect 1 review "$SLUG" fail 'held lock'; contains 'is locked by another sdlc.sh run'
@@ -1571,21 +1582,40 @@ regression_stagerepos() {
   # Promotion: dev gets other work, then a --no-ff merge of the ticket branch.
   git checkout -q -b dev; printf 'other work\n' > other.txt; git add other.txt; git commit -qm 'other work on dev'
   git merge -q --no-ff -m 'promote ticket to dev' ticket; DEV=$(git rev-parse HEAD); git checkout -q main
+  # Revert the change on top of the promotion: the merge still contains the Commit but no longer has it.
+  git checkout -q -b reverted dev; git revert --no-edit "$SHA" > /dev/null; REVERTED=$(git rev-parse HEAD); git checkout -q main
+  expect 1 ship "$SLUG" dev "$REVERTED" . --checked 'git rev-parse reverted' --output "$REVERTED"; contains "stage commit $REVERTED no longer has the verified change of $SHA at: README"
   expect 0 ship "$SLUG" dev "$DEV" . --checked 'git rev-parse dev' --output "$DEV"; contains 'Recorded wt at dev (1/3) for . (contains).'
+  # A record in another field count (an earlier pre-release format) is ignored.
+  printf 'stage: dev\t%s\tts\tbind\tid\t.\n' "$DEV" >> "$F/.state"
   expect 0 status "$SLUG" --json
   printf '%s\n' "$OUTPUT" | python3 -c 'import json,sys; s=json.load(sys.stdin)["features"][0]["stages"]; assert [(x["stage"],x["match"],x["repo"]) for x in s]==[("dev","contains",".")], s' || fail "stages match: $OUTPUT"
-  ok 'ship: a merge that contains the verified Commit is recorded as contains, from the main checkout of the worktree it was made in'
+  ok 'ship: a merge that contains the verified Commit is recorded as contains, from the main checkout of the worktree it was made in; a later revert of the change is refused; an odd-sized record is ignored'
+  # On a case-insensitive file system, the same checkout typed in other letter case is the same repository.
+  up=$(dirname "$PWD")/$(basename "$PWD" | tr '[:lower:]' '[:upper:]')
+  if [ -d "$up" ] && [ "$up" != "$PWD" ]; then
+    git checkout -q -b dev2 dev; git commit -q --allow-empty -m 'another promotion'; DEV2=$(git rev-parse HEAD); git checkout -q main
+    home=$PWD; cd "$up"; expect 1 ship "$SLUG" dev "$DEV2" . --checked x --output y; contains 'dev is already recorded'; cd "$home"
+    ok 'ship: the checkout typed in another letter case is the same repository'
+  else printf 'skip: the file system is case-sensitive\n'; fi
   mkdir -p elsewhere; git -C elsewhere -c init.defaultBranch=main init -q; printf 'elsewhere/\n' >> .git/info/exclude
   git -C elsewhere -c user.name=t -c user.email=t@t.invalid commit -q --allow-empty -m 'other repository'
   expect 1 ship "$SLUG" stg "$(git -C elsewhere rev-parse HEAD)" elsewhere --checked x --output y; contains "no Commit line for repo 'elsewhere'"
   ok 'ship: a folder of another repository is still refused'
   git worktree remove --force "$WT"; [ ! -d "$WT" ] || fail 'worktree not removed'
+  expect 0 check ship "$SLUG"; contains 'GATE OPEN'
   git checkout -q -b stg; git merge -q --no-ff -m 'promote dev to stg' dev; STG=$(git rev-parse HEAD); git checkout -q main
   expect 0 ship "$SLUG" stg "$STG" . --checked 'git rev-parse stg' --output "$STG"; contains '(contains)'
   expect 0 next "$SLUG"; contains 'at stg (2/3): ship to prd'
   printf '## Shipping\n- Ship to: local\n- Shipped: %s\n- Checked with: git rev-parse ticket\n- Output: %s\n- Memory: none — fixture\n' "$SHA" "$SHA" >> "$E"
   expect 0 close "$SLUG" shipped --at stg 'production is released by another team'; contains 'Archived wt'
-  ok 'ship and close: once the worktree is gone, the stored repository lets the main checkout ship the next stage and close'
+  ok 'ship, check ship and close: once the worktree is gone, the stored repository lets the main checkout check, ship the next stage and close'
+  # The verified Commit's object is gone (its branch deleted and pruned): say so, not "tree differs".
+  git worktree add -q -b lost worktrees/lost; printf 'lost\n' >> worktrees/lost/README; git -C worktrees/lost commit -qam 'lost change'; LOST=$(git -C worktrees/lost rev-parse HEAD)
+  ready lost 1; evidence; replace '/^- Commit:/ {$0="- Commit: '"$LOST"' worktrees/lost"} {print}' "$E"; route deliver
+  git worktree remove --force worktrees/lost; git update-ref -d refs/heads/lost; rm -f ".git/objects/${LOST:0:2}/${LOST:2}"
+  expect 1 ship "$SLUG" dev "$DEV" . --checked x --output y; contains "verified Commit $LOST is not in this repository"
+  ok 'ship: a verified Commit missing from the repository is named as such'
   ready gone 1; evidence; replace '/^- Commit:/ {$0=$0" gone-tree"} {print}' "$E"
   expect 1 score "$SLUG"; contains "Commit path 'gone-tree' is not a directory"
   ok 'score still needs every Commit folder to exist'

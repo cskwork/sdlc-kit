@@ -187,7 +187,7 @@ gate_plan() {
 }
 # What close shipped needs before a delivery: a current deliver route, the checkout QA verified, and authority.
 gate_ship() { greason=; if [ -n "$closed" ] || [ "$F" != "$STORE/work/$slug" ] || [ ! -f "$F/.state" ]; then greason='feature is closed, archived or legacy'; elif [ ! -f "$F/evidence.md" ]; then greason="no evidence yet: run QA, fill evidence.md, sdlc.sh score $slug"; else read_intent; read_plan; read_evidence
-  if { [ "$dest" = build ] && [ "$entry" -eq "$((rentry+1))" ] && [ "$ventry" != "$entry" ]; } || { route_current && [ "$dest" != deliver ]; }; then greason="route is $dest ($reason): sdlc.sh next $slug"; elif ! route_current; then greason="evidence not scored: sdlc.sh score $slug"; elif ! gate_plan; then greason="plan gate closed: $greason"; elif ! out=$(validate_evidence 2>&1); then greason=$(joined "${out//sdlc: /}"); elif ! out=$(validate_commits 2>&1); then greason="code changed after QA: $(joined "${out//sdlc: /}"); run QA at HEAD, then sdlc.sh score $slug"; elif ! delivery_authority "$target"; then greason="target not authorized: $dreason"; fi; fi; [ -z "$greason" ]; }
+  if { [ "$dest" = build ] && [ "$entry" -eq "$((rentry+1))" ] && [ "$ventry" != "$entry" ]; } || { route_current && [ "$dest" != deliver ]; }; then greason="route is $dest ($reason): sdlc.sh next $slug"; elif ! route_current; then greason="evidence not scored: sdlc.sh score $slug"; elif ! gate_plan; then greason="plan gate closed: $greason"; elif ! out=$(validate_evidence 2>&1); then greason=$(joined "${out//sdlc: /}"); elif ! out=$(elsewhere=1 validate_commits 2>&1); then greason="code changed after QA: $(joined "${out//sdlc: /}"); run QA at HEAD, then sdlc.sh score $slug"; elif ! delivery_authority "$target"; then greason="target not authorized: $dreason"; fi; fi; [ -z "$greason" ]; }
 pending_plan() { [ "$dest" = plan ] && [ "${rseq:-0}" -gt "${pseq:-0}" ]; }
 route_current() { [ "$rid" = "$eid" ] && [ "$rentry" = "$entry" ]; }
 authorized() { local v re='^yes([^a-z0-9_]|$)'; v=$(one_line "$1" | tr '[:upper:]' '[:lower:]'); [[ $v =~ $re ]]; }
@@ -392,7 +392,8 @@ validate_commits() {
   # A Commit repository the last review did not see (outside the project root) is refused.
   root_repo
   for ((i=0;i<${#commits[@]};i++)); do
-    repo_dir "${repos[i]}" Commit
+    # check ship (elsewhere): a removed worktree's Commit is verified in another checkout of its repository.
+    repo_path "${repos[i]}"; if [ -n "${elsewhere:-}" ] && [ ! -d "$REPO" ] && commit_elsewhere "$i"; then continue; fi; repo_dir "${repos[i]}" Commit
     full=$(git -C "$REPO" rev-parse --verify -q "${commits[i]}^{commit}") || die "unknown commit: ${commits[i]}"
     head=$(git -C "$REPO" rev-parse HEAD) || die "not a git repository: ${repos[i]}"
     [ "$head" = "$full" ] || die "HEAD differs from Commit: ${repos[i]}"

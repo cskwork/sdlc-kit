@@ -49,7 +49,7 @@ born() {
 # runs this per feature, so it forks at most twice (one awk over events.log, one stat) and uses the run's
 # NOW; with no stages recorded it forks nothing more. Stage records bind <evidence id>:<entry>.
 status_extra() {
-  local first= last= start= fcmd= bind=$rid:$entry age=null sep= name ssha sts sbind sid smatch srepo current
+  local first= last= start= fcmd= bind=$rid:$entry age=null sep= name ssha sts sbind sid smatch srepo extra current
   if [ -f "$F/events.log" ]; then
     IFS=$'\t' read -r first last start fcmd < <(awk -F'\t' "$EPOCH"'NR==1{f=$1;c=$2} {l=$1} END{if(NR)printf "%s\t%s\t%s\t%s\n", f, l, epoch(f), c}' "$F/events.log") || : # an empty log prints nothing
   fi
@@ -61,8 +61,9 @@ status_extra() {
   if [ -z "$stagerecs" ]; then printf ',"stage":null,"stages":[]'; return; fi
   stage_now; printf ',"stage":'; if [ -n "$stagename" ]; then printf '"%s"' "$stagename"; else printf null; fi
   printf ',"stages":['
-  while IFS=$'\t' read -r name ssha sts sbind sid smatch srepo; do
-    [ -n "$name" ] || continue
+  while IFS=$'\t' read -r name ssha sts sbind sid smatch srepo extra; do
+    # A record without exactly seven fields (an earlier pre-release format) is ignored.
+    [ -n "$name" ] && [ -n "$srepo" ] && [ -z "$extra" ] || continue
     if [ "$sbind" = "$bind" ]; then current=true; else current=false; fi
     # Stage names, shas, match words and ISO times need no escaping; a repository path may.
     printf '%s{"stage":"%s","sha":"%s","repo":' "$sep" "$name" "$ssha"; json "$srepo"; printf ',"ts":"%s","match":"%s","current":%s}' "$sts" "$smatch" "$current"; sep=,
@@ -89,13 +90,18 @@ stage_list() {
 # The position (1-based) of stage $1 in stages, 0 when it is not listed.
 stage_pos() { local i; for ((i=0;i<${#stages[@]};i++)); do [ "${stages[i]}" != "$1" ] || { printf '%s' "$((i+1))"; return; }; done; printf 0; }
 # True when a stage $1 record for repository identity $2 is bound to the current evidence and entry.
-has_stage() { printf '%s' "$stagerecs" | awk -F'\t' -v s="$1" -v b="$rid:$entry" -v t="$2" '$1==s&&$4==b&&$5==t{f=1} END{exit !f}'; }
+has_stage() { printf '%s' "$stagerecs" | awk -F'\t' -v s="$1" -v b="$rid:$entry" -v t="$2" 'NF==7&&$1==s&&$4==b&&$5==t{f=1} END{exit !f}'; }
 # The identity of the repository holding folder $1 (its git common dir, resolved, shared by every worktree
 # of it) and the folder's path inside its checkout, tab-separated; fails when $1 is not in a repository.
+# git >= 2.31 prints the common dir absolute and in the file system's own letter case, so a folder typed in
+# another case on a case-insensitive file system is still the same repository; older git prints it relative
+# to the folder, resolved here.
 repo_identity() {
   local common prefix
-  common=$(cd "$1" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null) && prefix=$(git -C "$1" rev-parse --show-prefix 2>/dev/null) &&
-    common=$(cd "$1" && cd "$common" && pwd -P) || return 1
+  prefix=$(git -C "$1" rev-parse --show-prefix 2>/dev/null) || return 1
+  common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) ||
+    common=$(cd "$1" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null) || return 1
+  case "$common" in /*|[A-Za-z]:*) common=$(cd "$common" && pwd -P);; *) common=$(cd "$1" && cd "$common" && pwd -P);; esac || return 1
   printf '%s\t%s' "$common" "$prefix"
 }
 # score's record of each Commit line: identity, path inside the checkout, Commit path; one line each.
@@ -106,17 +112,35 @@ repo_ids() {
     printf '%s\t%s\n' "$id" "${repos[i]}"
   done
 }
-# Commit line $1's repository into cid and its path inside the checkout into cprefix: the identity score
-# stored, else (an older .state) the folder's own. A gone folder with nothing stored stops with $2 = strict,
-# else (status) it keys as its path.
+# Commit line $1's repository into cid and its path inside the checkout into cprefix: the folder's own while
+# it exists (so a moved project still matches), else the identity score stored. A gone folder with nothing
+# stored stops with $2 = strict, else (status) it keys as its path.
+stored_identity() { printf '%s' "$repoids" | awk -F'\t' -v r="$1" '$3==r{print $1 "\t" $2; exit}'; }
 commit_identity() {
   local line
-  line=$(printf '%s' "$repoids" | awk -F'\t' -v r="${repos[$1]}" '$3==r{print $1 "\t" $2; exit}')
-  if [ -z "$line" ]; then repo_path "${repos[$1]}"; line=$(repo_identity "$REPO") || {
+  repo_path "${repos[$1]}"
+  line=$(repo_identity "$REPO") || line=$(stored_identity "${repos[$1]}")
+  if [ -z "$line" ]; then
     [ "${2:-}" != strict ] || die "Commit path '${repos[$1]}' is not a repository folder under the project root, and this slug was scored before the kit stored repository identities: restore the folder, or score again"
-    line=$REPO$'\t'; }; fi
+    line=$REPO$'\t'
+  fi
   IFS=$'\t' read -r cid cprefix < <(printf '%s\n' "$line")
 }
+# check ship with Commit line $1's folder gone (a removed worktree): verify the Commit in an existing checkout
+# of the stored repository, the project root or a Shipped line's folder, into odir. 1 when nothing was stored
+# (the caller reports the gone folder as before); stops when no checkout of the repository is left.
+commit_elsewhere() {
+  local line id d j
+  line=$(stored_identity "${repos[$1]}"); [ -n "$line" ] || return 1; id=${line%%$'\t'*}
+  for ((j=-1;j<${#drepos[@]};j++)); do
+    if [ "$j" -lt 0 ]; then d=$ROOT; else repo_path "${drepos[j]}"; d=$REPO; fi
+    [ "$(repo_identity "$d" 2>/dev/null | awk -F'\t' '{print $1}')" = "$id" ] || continue
+    commit_present "$d" "${commits[$1]}"; odir=$d; return 0
+  done
+  die "Commit path '${repos[$1]}' is gone and no checkout of its repository ($id) is under the project root or on a Shipped line: name one in '- Shipped: <sha> <folder>'"
+}
+# Verified Commit $2 must be an object of the repository at folder $1.
+commit_present() { git -C "$1" cat-file -e "$2^{commit}" 2>/dev/null || die "verified Commit $2 is not in this repository (branch deleted and gc'd, or a shallow clone?): $1"; }
 # The distinct repositories of the evidence Commit lines into tops, and the first Commit path of each into
 # topnames ($1 as for commit_identity).
 commit_tops() {
@@ -128,10 +152,10 @@ commit_tops() {
   done
 }
 # close shipped: each Commit line needs a Shipped line for a folder of the same repository whose tree is the
-# verified one (and, beyond local, on a remote). The check runs in the Commit folder, or in the Shipped
-# line's folder once a worktree that held the Commit is gone: the main checkout shares its objects.
+# verified one (and, beyond local, on a remote). The check runs in that Shipped line's folder, which shares
+# the repository's objects with the Commit folder, so it works once a worktree that held the Commit is gone.
 close_shipped() {
-  local i j did dprefix matchsha mdir nodir cdir
+  local i j did dprefix matchsha mdir nodir
   for ((i=0;i<${#commits[@]};i++)); do
     commit_identity "$i" strict; matchsha=; mdir=; nodir=
     for ((j=0;j<${#delivered[@]};j++)); do
@@ -142,8 +166,7 @@ close_shipped() {
       [ "$did" != "$cid" ] || { matchsha=${delivered[j]}; mdir=$REPO; }
     done
     [ -n "$matchsha" ] || die "Shipped missing for repo: ${repos[i]}: add '- Shipped: <sha> ${repos[i]}'${nodir:+ (the line for '$nodir' was skipped: it is not a folder under the project root)}"
-    repo_path "${repos[i]}"; cdir=$REPO; [ -d "$cdir" ] || cdir=$mdir
-    ship_tree_check "$cdir" "${commits[i]}" "$matchsha" "$etarget"
+    ship_tree_check "$mdir" "${commits[i]}" "$matchsha" "$etarget"
   done
 }
 # The latest stage recorded for the current evidence into stagename, and " · at <stage> (n/N)" into
@@ -151,7 +174,7 @@ close_shipped() {
 stage_now() {
   local n
   stagenote=; stagename=; [ -n "$stagerecs" ] || return 0
-  stagename=$(printf '%s' "$stagerecs" | awk -F'\t' -v b="$rid:$entry" '$4==b{s=$1} END{print s}'); stagenote=
+  stagename=$(printf '%s' "$stagerecs" | awk -F'\t' -v b="$rid:$entry" 'NF==7&&$4==b{s=$1} END{print s}'); stagenote=
   [ -n "$stagename" ] || return 0
   stage_list; n=$(stage_pos "$stagename"); [ "$n" != 0 ] || n='?'
   stagenote=" · at $stagename ($n/${#stages[@]})"
@@ -170,6 +193,7 @@ deliver_action() {
 # Shipped commit $3 in repository folder $1 holds the tree of verified Commit $2 and, for a target other
 # than local ($4), is on a remote. Shared by close shipped and ship.
 ship_tree_check() {
+  commit_present "$1" "$2"
   git -C "$1" rev-parse --verify -q "$3^{commit}" >/dev/null || die "unknown Shipped commit: $3"
   git -C "$1" diff --quiet "$2" "$3" || die 'Shipped tree differs from verified Commit'
   if [ "$4" != local ]; then remote=$(git -C "$1" branch -r --contains "$3"); [ -n "$remote" ] || die 'Shipped commit is not on any remote'; fi
@@ -178,9 +202,20 @@ ship_tree_check() {
 # contains the Commit (contains: a --no-ff merge that promoted it with other changes), into smatch; beyond
 # local ($4) it must be on a remote.
 ship_match() {
+  local paths=() p
+  commit_present "$1" "$2"
   git -C "$1" rev-parse --verify -q "$3^{commit}" >/dev/null || die "unknown stage commit: $3"
   if git -C "$1" diff --quiet "$2" "$3"; then smatch=exact
-  elif git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null; then smatch=contains
+  elif git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null; then
+    smatch=contains
+    # Containing it is not enough: a later commit may have reverted it. Every path the Commit changed against
+    # its first parent (every path, for a root commit) must still hold the Commit's version.
+    while IFS= read -r -d '' p; do paths[${#paths[@]}]=$p; done < <(
+      if git -C "$1" rev-parse -q --verify "$2^1" >/dev/null; then git -C "$1" diff -z --no-renames --name-only "$2^1" "$2"
+      else git -C "$1" ls-tree -r -z --name-only "$2"; fi)
+    if [ "${#paths[@]}" -gt 0 ] && ! git -C "$1" diff --quiet "$2" "$3" -- "${paths[@]/#/:(literal)}"; then
+      die "stage commit $3 no longer has the verified change of $2 at: $(git -C "$1" diff --no-renames --name-only "$2" "$3" -- "${paths[@]/#/:(literal)}" | awk '{printf "%s%s", (NR>1?", ":""), $0}')"
+    fi
   else die "stage commit $3 neither has the verified tree of Commit $2 nor contains it"; fi
   if [ "$4" != local ]; then remote=$(git -C "$1" branch -r --contains "$3"); [ -n "$remote" ] || die 'Shipped commit is not on any remote'; fi
 }
@@ -210,10 +245,10 @@ ship_command() {
   # The folder is the one a Commit line names, in that checkout or another worktree or the main checkout of
   # the same repository (same path inside it); every Commit line of that repository must match the sha,
   # checked here in the given folder, which shares the repository's objects.
-  for ((i=0;i<${#commits[@]};i++)); do commit_identity "$i"; [ "$cid" != "$sid" ] || [ "$cprefix" != "$sprefix" ] || { ci=$i; break; }; done
+  for ((i=0;i<${#commits[@]};i++)); do commit_identity "$i" strict; [ "$cid" != "$sid" ] || [ "$cprefix" != "$sprefix" ] || { ci=$i; break; }; done
   [ -n "$ci" ] || die "no Commit line for repo '$srepo' in evidence.md: ship a repository QA verified"
   match=exact
-  for ((i=0;i<${#commits[@]};i++)); do commit_identity "$i"; [ "$cid" = "$sid" ] || continue; ship_match "$sdir" "${commits[i]}" "$ssha" "$target"; [ "$smatch" = exact ] || match=contains; done
+  for ((i=0;i<${#commits[@]};i++)); do commit_identity "$i" strict; [ "$cid" = "$sid" ] || continue; ship_match "$sdir" "${commits[i]}" "$ssha" "$target"; [ "$smatch" = exact ] || match=contains; done
   # A later stage needs every earlier one recorded for this evidence first; a stage is recorded once per repository.
   ! has_stage "$stage" "$sid" || die "$stage is already recorded for this evidence in $srepo: ship the next stage, or score new evidence to start the ladder again"
   for s in "${stages[@]}"; do [ "$s" != "$stage" ] || break; has_stage "$s" "$sid" || die "out of order: ship $s before $stage (config.md stages: $stagelist)"; done

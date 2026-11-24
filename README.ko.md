@@ -177,7 +177,8 @@ sdlc.sh ship <slug> <stage> <sha> [repo] --checked "<명령>" --output "<판정 
 
 `close shipped`처럼 지금 증거의 deliver 경로, 유효한 evidence, 대상에 대한 허락이 필요하고,
 `local`이 아니면 `<sha>`가 원격에 있어야 합니다. `<sha>`는 검증한 `Commit:`과 트리가 같거나(`exact`)
-그 커밋을 품어야 합니다(`contains`: 다른 변경과 함께 브랜치로 올린 `--no-ff` 머지). 기록, 출력,
+그 커밋을 품고, 그 커밋이 바꾼 모든 경로를 그 커밋의 내용 그대로 가져야 합니다(`contains`: 다른
+변경과 함께 브랜치로 올린 `--no-ff` 머지. 뒤에 되돌렸다면 거부). 기록, 출력,
 `status --json`의 `stages[].match`가 어느 쪽인지 보여 줍니다. `close`의 `Shipped:` 줄은 여전히
 트리가 같아야 합니다. 모르는 단계, 이미 기록한 단계, 앞 단계가 기록되지 않은 단계는 거부합니다. 단계는 채점한
 증거와 그 build 차수에 묶인 `stage:` 줄로 `.state`에 한 번만 기록되고(`events.log`에는 명령과
@@ -186,7 +187,8 @@ sdlc.sh ship <slug> <stage> <sha> [repo] --checked "<명령>" --output "<판정 
 한 저장소의 두 폴더를 가리키는 `Commit:` 줄은 기록을 함께 쓰고, 임시 worktree에서 만든 `Commit:`은
 본 checkout에서 반영할 수 있습니다. `score`가 `Commit:` 줄마다 저장소를 `.state`에 적어 두므로
 worktree를 지운 뒤에도 `ship`, `next`, `close`가 동작하고, `close`는 그 저장소의 남은 폴더에서
-`Shipped:` 줄을 확인하며 남은 폴더가 없으면 그렇다고 알립니다. 단계 이름은 영문자·숫자·`.`·`_`·`-`이고 한 번씩만,
+`Shipped:` 줄을 확인하며 남은 폴더가 없으면 그렇다고 알립니다. `check ship`은 프로젝트 루트나 `Shipped:` 줄의 같은 저장소
+checkout에서 커밋을 확인하고, 커밋 객체가 없으면(브랜치 삭제 후 정리, shallow clone) 그렇다고 알립니다. 단계 이름은 영문자·숫자·`.`·`_`·`-`이고 한 번씩만,
 쉼표나 공백으로 나눠 적으며 빈 항목이나 같은 줄의 `#` 주석은 허용하지 않습니다. `ship`에는 `Commit:` 줄이
 가리키는 폴더를(그 checkout이든 같은 저장소의 다른 checkout이든) 주고, 그 저장소의 `Commit:` 줄은
 모두 `<sha>`와 맞아야 합니다. `status`와 `next`는 `deliver READY · at stg (2/3)`처럼
