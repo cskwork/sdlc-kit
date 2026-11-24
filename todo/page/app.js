@@ -929,7 +929,7 @@ function renderRun(box, item, keys = '') {
   where.append(el('span', 'muted-label', t('run.cwd')), el('code', '', view.cwd), document.createTextNode(` · ${t('run.args', { count: view.count })}`));
   parts.push(code, where);
   if (view.why) { const why = el('p', 'run-why'); why.append(el('span', 'muted-label', t('run.why')), document.createTextNode(view.why)); parts.push(why); }
-  if (command && !item.execPath) parts.push(el('p', 'field-error', t('run.notFound', { name: shellWord(command.argv[0]).text })));
+  if (command && !item.execPath) parts.push(el('p', 'field-error', item.execUnsupported ? t('run.unsupported') : t('run.notFound', { name: shellWord(command.argv[0]).text })));
   if (command) {
     const button = el('button', 'secondary', t('run.button'));
     button.type = 'button';
@@ -989,7 +989,7 @@ function confirmRun(id) {
   $('run-confirm-args').textContent = t('run.args', { count: view.count });
   $('run-confirm-program').textContent = item.execPath ? shellWord(item.execPath).text : '—';
   $('run-confirm-missing').hidden = !!item.execPath;
-  $('run-confirm-missing').textContent = item.execPath ? '' : t('run.notFound', { name: shellWord(item.exec.argv[0]).text });
+  $('run-confirm-missing').textContent = item.execPath ? '' : item.execUnsupported ? t('run.unsupported') : t('run.notFound', { name: shellWord(item.exec.argv[0]).text });
   $('run-confirm-long').hidden = !long;
   syncRunButton();
   runDialog.returnValue = '';

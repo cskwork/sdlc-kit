@@ -139,6 +139,7 @@ export async function commandSearchPath({ shell = process.env.SHELL, inherited =
   return [...new Set([...login.split(path.delimiter), ...inherited.split(path.delimiter)].filter(entry => entry && path.isAbsolute(entry)))].join(path.delimiter);
 }
 const executable = file => { try { return fs.statSync(file).isFile() && (fs.accessSync(file, fs.constants.X_OK), true); } catch { return false; } };
+export const execSupported = (platform = process.platform) => platform !== 'win32';
 export function resolveCommand(name, searchPath) {
   if (path.isAbsolute(name)) return executable(name) ? name : '';
   for (const dir of searchPath.split(path.delimiter)) {
@@ -251,7 +252,7 @@ export async function liveSession(file = core.sessionPath()) {
   } catch { return null; }
 }
 
-export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage, session = '', feed = feedPath(file), deferInitialSync = false, runTimeout = 300000, killAfter = 5000, searchPath, finishRetryMs = 30000 } = {}) {
+export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage, session = '', feed = feedPath(file), deferInitialSync = false, runTimeout = 300000, killAfter = 5000, searchPath, finishRetryMs = 30000, platform = process.platform } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('invalid port');
   if (!isLanguage(lang)) throw new Error(`invalid language: ${lang}`);
   if (!onUrl && !open && !process.stdout.isTTY) throw new Error('web requires a terminal or --open');
@@ -262,7 +263,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   const payload = () => {
     const model = core.load(file);
     // The version hashes the item as loaded; the working marker is not part of it.
-    return { items: core.withWorking(model.items, file).map((item, i) => ({ ...item, ...(item.exec ? { execPath: resolveCommand(item.exec.argv[0], commandPath) } : {}), version: core.itemVersion(model.items[i], model), turn: statusOf(item) })), file, lang,
+    return { items: core.withWorking(model.items, file).map((item, i) => ({ ...item, ...(item.exec ? { execPath: canExec ? resolveCommand(item.exec.argv[0], commandPath) : '', ...(canExec ? {} : { execUnsupported: true }) } : {}), version: core.itemVersion(model.items[i], model), turn: statusOf(item) })), file, lang,
       feed: feedState.feed, ...(feedState.error ? { feedError: feedState.error } : {}) };
   };
   const sendEvent = (res, value, event = '') => res.write(`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(value)}\n\n`);
@@ -277,7 +278,9 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   const synced = () => (syncing ??= core.sync(file, { kit }).finally(() => { syncing = null; }));
   const t = translator(lang);
   // argv[0] is resolved once per request against a sane PATH; the dialog shows that program and the run spawns it.
-  const commandPath = searchPath ?? await (defaultSearchPath ??= commandSearchPath());
+  // Windows has no POSIX shell, process groups or login-shell PATH: the board does not run commands there yet.
+  const canExec = execSupported(platform);
+  const commandPath = !canExec ? '' : searchPath ?? await (defaultSearchPath ??= commandSearchPath());
   const childEnv = { ...process.env, PATH: commandPath };
   // A run is recorded in todo.md before it starts and when it ends, so every server and tab sees it:
   // "exec started run=<id> pid=<server pid> server=<server nonce> — <command>" and "exec finished run=<id> — <result>".
@@ -331,6 +334,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   }
   async function runItem(id, version, shownPath) {
     if (typeof id !== 'string' || !core.load(file).items.some(item => item.id === id)) fail(404, 'item not found');
+    if (!canExec) fail(409, 'Running a command from the board is not supported on Windows yet; run it yourself and reply.');
     if (typeof shownPath !== 'string') fail(400, 'invalid path');
     const runId = randomBytes(4).toString('hex');
     let command, program, snapshot;

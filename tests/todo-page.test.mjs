@@ -1081,6 +1081,14 @@ test('run dialog: hidden characters show as escapes with a warning; a long comma
   b.key('x');
   assert.equal(p.nodes.get('run-confirm-run').disabled, true);
   assert.equal(p.nodes.get('run-confirm-missing').textContent, 'Command not found: gradle');
+  dialog.close();
+
+  ({ p, b, dialog, box } = runBoard([askItem('aaaaaa', 'v1', '', withExec({ argv: ['sh', '-c', 'true'], cwd: 'C:/tmp' }, { execPath: '', execUnsupported: true }))]));
+  assert.match(text(box), /On Windows the board cannot run commands yet/);
+  assert.doesNotMatch(text(box), /Command not found/);
+  b.key('x');
+  assert.equal(p.nodes.get('run-confirm-run').disabled, true);
+  assert.match(p.nodes.get('run-confirm-missing').textContent, /On Windows/);
 });
 
 test('run box: X does nothing while typing or with the key list open; the key list names X', () => {

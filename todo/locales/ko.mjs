@@ -199,6 +199,7 @@ export default {
     'run.escaped': '보이지 않는 문자가 있어 \\n·\\u202e 같은 표시로 바꿔 보여 줘요. 꼭 확인하세요.',
     'run.args': '인자 {count}개',
     'run.program': '실행 파일',
+    'run.unsupported': 'Windows에서는 아직 보드에서 명령을 실행할 수 없어요. 직접 실행하고 답해 주세요.',
     'run.notFound': '명령을 찾을 수 없어요: {name}',
     'run.long': '명령이 길어요. 전체를 읽은 뒤에 실행할 수 있어요.',
     'run.full': '전체 보기',

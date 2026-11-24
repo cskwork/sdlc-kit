@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, statSync, utimesSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, statSync, utimesSync, realpathSync, accessSync, constants as fsConstants } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as core from '../todo/core.mjs';
 import { displayCommand, shellWord, statusOf, visibleText } from '../todo/status.mjs';
@@ -285,8 +285,14 @@ test('exec: list, next and take JSON name the program the command would start, o
   checkCode(await cli(file, ['exec', found, '--json', JSON.stringify({ argv: ['sh', '-c', 'true'], cwd: root })]), 0);
   checkCode(await cli(file, ['exec', missing, '--json', JSON.stringify({ argv: ['no-such-command-xyz'], cwd: root })]), 0);
   const listed = JSON.parse(checkCode(await cli(file, ['list', '--json']), 0).stdout);
-  assert.deepEqual(listed.map(item => [item.title, item.execPath]), [['found', '/bin/sh'], ['missing', ''], ['plain', '']]);
-  assert.equal((await next(file, 10)).execPath, '/bin/sh', 'next --json too');
+  const program = listed[0].execPath;
+  if (process.platform === 'win32') assert.equal(program, '', 'the board does not run commands on Windows yet');
+  else {
+    assert.ok(isAbsolute(program) && basename(program) === 'sh', `found sh on the PATH: ${program}`);
+    accessSync(program, fsConstants.X_OK);
+  }
+  assert.deepEqual(listed.slice(1).map(item => [item.title, item.execPath]), [['missing', ''], ['plain', '']]);
+  assert.equal((await next(file, 10)).execPath, program, 'next --json too');
   assert.equal(JSON.parse(checkCode(await cli(file, ['take', missing, '--json']), 10).stdout).execPath, '', 'and take --json');
 });
 

@@ -203,6 +203,7 @@ export default {
     'run.args.one': '{count} argument',
     'run.args.other': '{count} arguments',
     'run.program': 'Program',
+    'run.unsupported': 'On Windows the board cannot run commands yet. Run it yourself and reply.',
     'run.notFound': 'Command not found: {name}',
     'run.long': 'This command is long. Read all of it before you can run it.',
     'run.full': 'Show all',

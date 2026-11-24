@@ -58,7 +58,9 @@ function argumentsFor(argv) {
 // before leaving a command whether the human could run it here. The login shell is asked only when one has exec.
 async function execPaths(items) {
   if (!items.some(item => item?.exec)) return () => '';
-  const web = await import('./web.mjs'), searchPath = await web.commandSearchPath();
+  const web = await import('./web.mjs');
+  if (!web.execSupported()) return () => '';
+  const searchPath = await web.commandSearchPath();
   return item => item?.exec ? web.resolveCommand(item.exec.argv[0], searchPath) : '';
 }
 function summary(item, live = core.readWorking(file), execPath = () => '') {
