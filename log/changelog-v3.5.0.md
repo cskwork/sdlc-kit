@@ -19,10 +19,18 @@ The tray app showed the board in a Google Chrome `--app` window. That tied a lig
   - If Chrome is missing or the script fails, the default browser opens the ticket.
   - `install-macos.sh` adds `NSAppleEventsUsageDescription` for the one-time permission prompt.
 - **README.md:** describes the app's board window and the ticket window.
+- **Hardening (review):**
+  - Every link leaving the board goes through one hand-off: http(s) goes to Chrome, the board's own loopback URLs to the default browser, `mailto:` to the system, and everything else (`file:`, `data:`, `javascript:`, custom schemes) is refused.
+  - Opening the same ticket again brings Chrome's ticket window back, even when it was closed or buried. This uses WebKit's popup-focus hook.
+  - One-shot link relays are released.
+  - `ps` lists only this user's processes.
+  - osascript is limited to 8 s, and a burst of clicks ends on the newest ticket.
+  - The saved window frame is clamped into its screen.
+  - Moving the window saves after it stands still for 0.5 s.
 
 ## Verification
 
-- `cargo test --release` in `todo/app`: 16 of 16 pass, 8 of them new. They cover:
+- `cargo test --release` in `todo/app`: 21 of 21 pass, 13 of them new. They cover:
   - the left-dock geometry;
   - restoring the saved frame only on a visible screen;
   - board versus ticket URL classification, including `127.0.0.1@evil`, `127.0.0.1.evil.example` and `[::1]`;
