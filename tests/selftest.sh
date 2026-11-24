@@ -1663,7 +1663,8 @@ regression_contains() {
   ok 'contains: a merge Commit is checked against its first parent'
   # Spaces (and, where the file system allows it, a newline) in paths; and a large change, all through a pipe.
   git checkout -q -b t3 main; mkdir -p 'dir with space'; printf 'a\n' > 'dir with space/a b.txt'
-  nl=$(printf 'new\nline.txt'); if printf 'x\n' > "$nl" 2>/dev/null; then :; else nl=; fi
+  # Git for Windows can create such a file but not add it by that name: then the newline case is skipped.
+  nl=$(printf 'new\nline.txt'); if printf 'x\n' > "$nl" 2>/dev/null && git add -- "$nl" 2>/dev/null; then :; else rm -f -- "$nl" 2>/dev/null || :; nl=; fi
   i=0; mkdir -p many; while [ "$i" -lt 2000 ]; do printf '%s\n' "$i" > "many/f$i.txt"; i=$((i+1)); done
   git add -A 'dir with space' many ${nl:+"$nl"}; git commit -qm 'odd paths and 2000 files'; C3=$(git rev-parse HEAD); git checkout -q main; git merge -q --ff-only t3; SHA=$C3
   contains_slug odd
