@@ -328,6 +328,25 @@ A card opens the decision panel: the question, an **AI pick** badge on the sugge
 A choice sends the same ordinary reply as in the list, to the card's item whose turn is yours.
 "Your turn n/N" pages through your cards with ←/→ or j/k, and Esc closes the panel. While a request runs the buttons wait; a toast confirms it, and a failure shows its reason in the panel.
 **Open ticket** opens the link in one popup window docked to the right of the screen, not a tab, and points that window at the next card's ticket as you move on; ticket sites such as Jira refuse to be framed (X-Frame-Options).
+While the ticket window is open, the decision panel moves to the board's left edge, so you decide on the left while reading the ticket on the right. Its width handle moves to the panel's right edge (→ wider, ← narrower), and the panel stays within the 55% of the screen the ticket window leaves free. Closing the ticket window brings the panel back to the right; live updates never move it.
+In the reply box, Enter sends and Shift+Enter starts a new line; an Enter that confirms Korean (IME) input never sends. The list's reply box works the same.
+Every button shows a tooltip with its action and key on hover or keyboard focus, such as "Open ticket (T)". **Keys** in the top strip, or `?`, opens the table below. Single keys work only outside a text box.
+
+| Key | Does |
+|-----|------|
+| ←/→, j/k | Previous or next card of yours |
+| 1–9 | Send the choice with that number |
+| R | Go to the reply box |
+| Enter / Shift+Enter | In the reply box: send / new line |
+| T | Open ticket |
+| F | Fix by agent |
+| M | More or less |
+| A | Go to Approve (approve there with Enter or Space) |
+| ? | The key table |
+| Esc | Close the tooltip, the key table, then the panel |
+| ←/→, Home/End | On the width handle: panel width |
+
+Approval is a human gate, so no single key approves.
 A newly opened board asks older board windows to close (BroadcastChannel); a browser closes only windows scripts may close, such as the app's.
 
 An optional **feed** lets another program, such as a ticket factory, add its own status to the board. The server reads `SDLC_TODO_FEED`, else `todo-feed.json` beside the to-do file (`~/.sdlc/todo-feed.json` by default; up to 1 MB), watches it, serves it at `GET /api/feed` behind the token like every `/api` route, and sends it as `feed` (and `feedError` when unreadable) in every payload and event. Without the file the board works the same. Schema version 1; every field is optional and every string is shown as plain text:

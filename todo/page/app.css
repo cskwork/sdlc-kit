@@ -396,6 +396,7 @@ body[data-view="list"] .counts { display: none; }
   color: var(--ink); font-weight: 500; white-space: nowrap;
 }
 .stale-toggle[aria-pressed="true"] { background: var(--highlight); color: var(--accent); }
+#board-tools { display: inline-flex; align-items: center; gap: 0.5rem; }
 .strip .live { color: var(--muted); }
 .strip .live[data-state="live"] .dot { background: var(--live); }
 .strip .live[data-state="live"] #live-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
@@ -500,6 +501,16 @@ body[data-view="list"] .counts { display: none; }
 .panel-resize:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: 0; }
 body.resizing { cursor: col-resize; -webkit-user-select: none; user-select: none; }
 @keyframes panel-in { from { opacity: 0; transform: translateX(10px); } }
+/* While the ticket window is open on the screen's right, the panel docks to the board's left edge beside it, its
+   handle moves to its right edge, and --panel-cap (board.js) keeps it inside the part of the screen left free.
+   Only the boxes swap places, so focus, scroll and drafts stay; reading-flow keeps Tab in the order on screen. */
+.board-view[data-dock="start"] { grid-template-columns: auto auto minmax(0, 1fr); reading-flow: grid-order; }
+.board-view[data-dock="start"] > .panel {
+  grid-area: 1 / 1; order: -2;
+  width: clamp(20rem, min(var(--panel-size, var(--panel-w)), var(--panel-cap, 100vw)), calc(100vw - 24rem));
+}
+.board-view[data-dock="start"] > .panel-resize { grid-area: 1 / 2; order: -1; justify-content: flex-start; }
+.board-view[data-dock="start"] > .board-scroll { grid-area: 1 / 3; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .panel-bar {
   position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 0.15rem;
@@ -623,4 +634,33 @@ body.resizing { cursor: col-resize; -webkit-user-select: none; user-select: none
   .seg, #board-tools, .feed-status, .alerts, .updated { display: none; }
   .strip { min-height: 0; padding-inline: 1rem; }
   .strip .lang { min-height: 44px; }
+}
+
+/* ---------- keys and tooltips (board.js) ---------- */
+.keys-open { min-height: 2.25rem; padding: 0 0.75rem; white-space: nowrap; }
+/* One shared tooltip: placed by board.js below its control (above when there is no room). */
+.tip {
+  position: fixed; inset: auto; z-index: 50; margin: 0; max-inline-size: min(22rem, calc(100vw - 1rem));
+  padding: 0.3rem 0.6rem; border: 0; border-radius: 8px; background: var(--ink); color: var(--paper);
+  font-size: 0.75rem; font-weight: 500; line-height: 1.45; word-break: keep-all; overflow-wrap: break-word;
+  box-shadow: 0 4px 16px var(--shadow);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tip { transition: opacity 0.12s ease-out; }
+  @starting-style { .tip:popover-open { opacity: 0; } }
+}
+.keys-help {
+  inline-size: min(30rem, calc(100vw - 2rem)); padding: 1.5rem; border: 0; border-radius: 16px;
+  background: var(--paper); color: var(--ink); box-shadow: 0 16px 40px rgb(0 0 0 / 0.14);
+}
+.keys-help::backdrop { background: rgb(0 0 0 / 0.2); }
+.keys-help h2 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; }
+.keys-help .hint { margin-top: 0.25rem; font-size: 0.875rem; }
+.keys-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.5rem 1rem; margin: 1rem 0 0; font-size: 0.875rem; }
+.keys-list dt { white-space: nowrap; }
+.keys-list dd { margin: 0; word-break: keep-all; overflow-wrap: break-word; }
+.keys-help .actions { justify-content: flex-end; }
+kbd {
+  padding: 0.05rem 0.4rem; border-radius: 6px; background: var(--open-bg); color: var(--ink);
+  font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 0.8125rem; font-variant-numeric: tabular-nums;
 }

@@ -632,16 +632,21 @@ test('board hook: views subscribe to snapshots and read the feed the server sent
 // The board (board.js) in its own VM over a fake DOM, reading state and acting through the list page's todoPage.
 const boardSource = readFileSync(new URL('../todo/page/board.js', import.meta.url), 'utf8');
 function boardPage(p) {
-  const nodes = new Map();
+  const nodes = new Map(), docListeners = {}, winListeners = {}, intervals = [], opened = [];
   const make = () => {
     const n = {
       dataset: {}, value: '', hidden: false, textContent: '', title: '', elements: [], children: [], attributes: {}, listeners: {},
-      style: { setProperty() {}, removeProperty() {} }, offsetWidth: 0, clientWidth: 0,
+      style: { props: {}, setProperty(name, value) { this.props[name] = value; }, removeProperty(name) { delete this.props[name]; } },
+      offsetWidth: 0, offsetHeight: 0, clientWidth: 0,
       classList: { contains() { return false; }, toggle() {}, add() {}, remove() {} },
       addEventListener(type, fn) { this.listeners[type] = fn; },
-      setAttribute(name, value) { this.attributes[name] = String(value); }, toggleAttribute() {}, removeAttribute() {},
-      querySelector: () => make(), querySelectorAll: () => [],
-      focus() {}, scrollIntoView() {}, requestSubmit() {},
+      setAttribute(name, value) { this.attributes[name] = String(value); }, toggleAttribute() {},
+      getAttribute(name) { return this.attributes[name] ?? null; }, hasAttribute(name) { return name in this.attributes; },
+      removeAttribute(name) { delete this.attributes[name]; },
+      querySelector: () => make(), querySelectorAll: () => [], matches: () => false, closest: () => null, contains: () => false,
+      getClientRects: () => [{}], getBoundingClientRect: () => ({ left: 100, top: 100, right: 180, bottom: 136, width: 80, height: 36 }),
+      focus() { context.document.activeElement = this; }, scrollIntoView() {}, click() { this.listeners.click?.({}); },
+      requestSubmit() { this.listeners.submit?.({ preventDefault() {} }); }, showModal() { this.open = true; },
       append(...children) { this.children.push(...children); }, replaceChildren(...children) { this.children = children; },
       insertBefore(child, before) { const at = before ? this.children.indexOf(before) : -1; this.children.splice(at < 0 ? this.children.length : at, 0, child); },
       remove() {}, get lastElementChild() { return this.children.at(-1); }
@@ -649,17 +654,30 @@ function boardPage(p) {
     return n;
   };
   const node = id => { if (!nodes.has(id)) nodes.set(id, make()); return nodes.get(id); };
+  const rootStyle = { props: {}, setProperty(name, value) { this.props[name] = value; }, removeProperty(name) { delete this.props[name]; } };
   const context = vm.createContext({
     todoPage: p.context.todoPage,
-    document: { getElementById: node, createElement: () => make(), createTextNode: text => ({ textContent: text }), addEventListener() {},
-      documentElement: { style: { setProperty() {}, removeProperty() {} } }, body: { dataset: {}, classList: { add() {}, remove() {} } }, activeElement: null },
+    document: { getElementById: node, createElement: () => make(), createTextNode: text => ({ textContent: text }),
+      addEventListener(type, fn) { (docListeners[type] ||= []).push(fn); },
+      documentElement: { style: rootStyle }, body: { dataset: {}, classList: { add() {}, remove() {} } }, activeElement: null },
     matchMedia: () => ({ matches: false, addEventListener() {} }), getComputedStyle: () => ({ fontSize: '16px' }),
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, ResizeObserver: class { observe() {} },
-    setTimeout, clearTimeout, setInterval() {}, Intl, Date,
+    screen: { availWidth: 1440, availHeight: 900, availLeft: 0, availTop: 0 }, innerWidth: 1440, innerHeight: 900,
+    addEventListener(type, fn) { (winListeners[type] ||= []).push(fn); },
+    open(url) { const win = { url, closed: false, focus() {}, location: { href: url } }; opened.push(win); return win; },
+    setTimeout, clearTimeout, setInterval(fn, ms) { intervals.push({ fn, ms }); return intervals.length; }, clearInterval() {}, Intl, Date,
     ...i18n, ...status
   });
+  context.window = context;
   vm.runInContext(boardSource.replace(/^import .* from '\.\/(?:i18n|status)\.mjs';$/gm, ''), context);
-  return { context, nodes };
+  const key = (name, extra = {}) => {
+    const event = { key: name, target: context.document.body, prevented: false, preventDefault() { this.prevented = true; }, stopPropagation() {}, ...extra };
+    for (const fn of docListeners.keydown || []) fn(event);
+    return event;
+  };
+  // The ticket watch: the newest one-second interval.
+  const watch = () => intervals.filter(interval => interval.ms === 1000).at(-1).fn();
+  return { context, nodes, docListeners, winListeners, intervals, opened, rootStyle, key, watch };
 }
 const boardItems = (p, list) => { p.context.boardItems = list; vm.runInContext('items = boardItems', p.context); };
 const askItem = (id, version, suggest, extra = {}) => ({ id, version, title: `T-${id} question`, done: false, status: 'waiting', waiting: 'which one?',
@@ -743,4 +761,156 @@ test('board runs: some runs without a cost mark the day sum as partial; junk val
   assert.deepEqual(en.titles, [`${en.span(runs[0])} · Done · $1.50`, `${en.span(runs[1])} · Done · 5K tokens`, `${en.span(runs[2])} · Done`]);
   assert.match(en.summary, / · cost \$1\.50 · some cost unknown$/);
   assert.match(runsBoard(runs, 'ko').summary, / · 비용 \$1\.50 · 일부 비용 모름$/);
+});
+
+// ---------- v3.3.3: left dock beside the ticket window, keys, Enter to send, tooltips ----------
+const linked = (id, extra = {}) => askItem(id, 'v1', '', { link: { label: `T-${id}`, url: `https://tracker.invalid/browse/T-${id}` }, ...extra });
+function selectedBoard(list) {
+  const p = page('#t=test-token');
+  boardItems(p, list);
+  const b = boardPage(p);
+  const keyOf = id => vm.runInContext(`render(); cards.find(card => card.target.id === '${id}').key`, b.context);
+  vm.runInContext(`select('${keyOf(list[0].id)}', false)`, b.context);
+  const sent = () => p.requests.filter(r => r.url === '/api/item').map(r => JSON.parse(r.options.body));
+  return { p, b, sent, view: b.nodes.get('board-view') };
+}
+
+test('dock: the panel docks left while the ticket window is open and returns right when it closes', () => {
+  const { p, b, view } = selectedBoard([linked('aaaaaa'), linked('bbbbbb')]);
+  assert.equal(view.dataset.dock, undefined, 'starts on the right');
+  assert.equal(b.key('t').prevented, true, 't opens the ticket');
+  assert.equal(b.opened.length, 1);
+  assert.equal(view.dataset.dock, 'start');
+  assert.equal(b.intervals.filter(interval => interval.ms === 1000).length, 1, 'a light check watches the window');
+  b.watch();
+  assert.equal(view.dataset.dock, 'start', 'still open: stays left');
+  b.opened[0].closed = true;
+  b.watch();
+  assert.equal(view.dataset.dock, undefined, 'closed: back to the right');
+  assert.equal(view.style.props['--panel-cap'], undefined);
+  // Coming back to the board window notices a closed ticket window at once.
+  b.key('t');
+  assert.equal(view.dataset.dock, 'start');
+  b.opened[1].closed = true;
+  for (const fn of b.winListeners.focus) fn();
+  assert.equal(view.dataset.dock, undefined);
+  void p;
+});
+
+test('dock: live updates never move the panel', () => {
+  const { p, b, view } = selectedBoard([linked('aaaaaa'), linked('bbbbbb')]);
+  b.key('t');
+  boardItems(p, [linked('aaaaaa', { version: 'v2', waiting: 'changed?' }), linked('bbbbbb')]);
+  vm.runInContext('render()', b.context);
+  assert.equal(view.dataset.dock, 'start', 'a snapshot while open keeps it left');
+  b.opened[0].closed = true;
+  b.watch();
+  boardItems(p, [linked('aaaaaa', { version: 'v3' }), linked('bbbbbb')]);
+  vm.runInContext('render()', b.context);
+  assert.equal(view.dataset.dock, undefined, 'a snapshot after closing keeps it right');
+});
+
+test('dock: → widens and ← narrows when docked left, the mirror of the right side; Home/End reach the bounds', () => {
+  const { b, view } = selectedBoard([linked('aaaaaa')]);
+  view.clientWidth = 1600;
+  b.nodes.get('panel').offsetWidth = 400;
+  const resize = name => { b.nodes.get('panel-resize').listeners.keydown({ key: name, shiftKey: false, preventDefault() {}, stopPropagation() {} }); return b.rootStyle.props['--panel-size']; };
+  assert.equal(resize('ArrowLeft'), '416px', 'on the right ← widens');
+  assert.equal(resize('ArrowRight'), '384px');
+  b.key('t');
+  assert.equal(resize('ArrowRight'), '416px', 'docked left → widens');
+  assert.equal(resize('ArrowLeft'), '384px', 'docked left ← narrows');
+  assert.equal(resize('Home'), '320px');
+});
+
+test('dock: the width is capped to the screen the ticket window leaves free, never below the minimum', () => {
+  const { b, view } = selectedBoard([linked('aaaaaa')]);
+  view.clientWidth = 1600;
+  const end = () => { b.nodes.get('panel-resize').listeners.keydown({ key: 'End', preventDefault() {}, stopPropagation() {} }); return b.rootStyle.props['--panel-size']; };
+  assert.equal(end(), '1216px', 'on the right: board width less 24rem');
+  b.context.screen.availWidth = 1000;
+  b.key('t');
+  assert.equal(view.style.props['--panel-cap'], '534px', '55% of 1000 less 16');
+  assert.equal(end(), '534px');
+  b.opened[0].closed = true;
+  b.watch();
+  b.context.screen.availWidth = 400;
+  b.key('t');
+  assert.equal(end(), '320px', 'a tiny screen still keeps the 20rem minimum');
+  assert.equal(view.style.props['--panel-cap'], '320px');
+});
+
+test('keys: Enter sends the reply; Shift+Enter and an IME-composing Enter do not', () => {
+  const { b, sent } = selectedBoard([askItem('aaaaaa', 'v1', '조치했어요')]);
+  const field = b.nodes.get('panel-reply-text');
+  const press = extra => { const event = { key: 'Enter', shiftKey: false, prevented: false, preventDefault() { this.prevented = true; }, ...extra }; field.listeners.keydown(event); return event; };
+  assert.equal(press({ shiftKey: true }).prevented, false, 'Shift+Enter keeps its newline');
+  assert.equal(press({ isComposing: true }).prevented, true, 'composing Enter only confirms the syllable');
+  press({ keyCode: 229 });
+  assert.equal(sent().length, 0, 'nothing sent while composing or on Shift+Enter');
+  press({});
+  assert.deepEqual(sent().map(body => body.text), ['조치했어요'], 'one Enter sends the prefilled suggestion');
+});
+
+test('keys: the list reply box sends on Enter the same way', () => {
+  const p = page('#t=test-token');
+  let submitted = 0;
+  p.nodes.get('reply-form').requestSubmit = () => submitted++;
+  const press = extra => p.nodes.get('reply-text').listeners.keydown({ key: 'Enter', shiftKey: false, preventDefault() {}, ...extra });
+  press({ shiftKey: true });
+  press({ isComposing: true });
+  press({ keyCode: 229 });
+  assert.equal(submitted, 0);
+  press({});
+  assert.equal(submitted, 1);
+});
+
+test('keys: number keys press the choices; single keys do nothing inside a text box', () => {
+  const { b, sent } = selectedBoard([askItem('aaaaaa', 'v1', '', { choices: ['A안', 'B안'] })]);
+  assert.equal(b.key('2', { target: { tagName: 'TEXTAREA' } }).prevented, false, 'typing a 2 stays text');
+  for (const name of ['t', 'm', 'r', 'a', '?']) b.key(name, { target: { tagName: 'INPUT' } });
+  assert.equal(sent().length, 0);
+  assert.equal(b.nodes.get('keys-help').open, undefined);
+  assert.equal(b.key('9').prevented, false, 'no ninth choice');
+  assert.equal(b.key('2').prevented, true);
+  assert.deepEqual(sent().map(body => body.text), ['B안']);
+  const choice = b.nodes.get('panel-choices').children[0];
+  assert.equal(choice.attributes['aria-keyshortcuts'], '1');
+});
+
+test('keys: A moves focus to Approve and shows its tooltip but never approves; ? opens the key list', () => {
+  const { p, b } = selectedBoard([askItem('aaaaaa', 'v1', '')]);
+  const approve = b.nodes.get('panel-approve');
+  b.nodes.get('panel-gate').hidden = false;
+  approve.textContent = '승인';
+  assert.equal(b.key('a').prevented, true);
+  assert.equal(b.context.document.activeElement, approve);
+  assert.equal(p.requests.filter(r => r.url === '/api/approve').length, 0, 'a key never approves');
+  assert.equal(b.nodes.get('tip').hidden, false);
+  assert.equal(b.nodes.get('tip').textContent, '승인 (A, Enter)');
+  assert.equal(approve.attributes['aria-describedby'], 'tip', 'the shown tooltip describes its control');
+  assert.equal(b.key('Escape').prevented, true, 'Escape first dismisses the tooltip');
+  assert.equal(b.nodes.get('tip').hidden, true);
+  assert.equal(approve.attributes['aria-describedby'], undefined);
+  b.key('?');
+  assert.equal(b.nodes.get('keys-help').open, true);
+  assert.equal(b.nodes.get('keys-list').children.length, 24, 'twelve keys, each a term and its action');
+});
+
+test('tooltips: each control names its action and its key, from the locale', () => {
+  const p = page('#t=test-token');
+  vm.runInContext(`setLanguage('ko')`, p.context);
+  boardItems(p, [askItem('aaaaaa', 'v1', '', { choices: ['A안'] })]);
+  const b = boardPage(p);
+  vm.runInContext(`select(cards[0].key, false)`, b.context);
+  const tip = id => vm.runInContext(`tipText(document.getElementById('${id}'))`, b.context);
+  for (const [id, text] of [['panel-ticket', '티켓 열기'], ['panel-send', '답 보내기'], ['panel-more', '자세히'], ['panel-fix', '자가 조치']]) b.nodes.get(id).textContent = text;
+  b.nodes.get('panel-prev').attributes['aria-label'] = '이전 (← 또는 k)';
+  assert.equal(tip('panel-ticket'), '티켓 열기 (T)');
+  assert.equal(tip('panel-send'), '답 보내기 (Enter)');
+  assert.equal(tip('panel-more'), '자세히 (M)');
+  assert.equal(tip('panel-fix'), '자가 조치 (F)');
+  assert.equal(tip('panel-prev'), '이전 (← 또는 k)', 'a label that already names its keys is shown as is');
+  assert.equal(b.nodes.get('panel-ticket').attributes['aria-keyshortcuts'], 'T');
+  assert.equal(b.nodes.get('panel-choices').children[0].dataset.tip, '1 · A안');
 });
