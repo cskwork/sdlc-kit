@@ -230,8 +230,11 @@ remote. The `<sha>` either has the verified `Commit:`'s tree (`exact`) or
 contains it (`contains`: a `--no-ff` merge that promoted it into a branch
 with other changes) and the Commit's own change (against its first parent)
 still reverse-applies onto it with no context lines required (`git apply -C0`:
-every changed line is still there), so a later revert is refused while another
-change's edit elsewhere in the same file, even on the line next to it, is not; the record, the output and `status --json`
+every changed line is still there). When a later change edited one of those
+lines (another ticket rewrote a file this one created), the match is
+`contains-edited`; it is refused only when a `git revert` in between names the
+Commit or the merge that brought it in (a hand-made revert reads as
+`contains-edited`); the record, the output and `status --json`
 `stages[].match` say which. `close`'s `Shipped:` line still needs the exact
 tree. `ship` refuses an unknown stage, a stage already recorded, or one whose
 earlier stages are not.
