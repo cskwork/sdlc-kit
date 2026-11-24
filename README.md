@@ -229,8 +229,9 @@ target, as `close shipped` does, and a `<sha>` that, beyond `local`, is on a
 remote. The `<sha>` either has the verified `Commit:`'s tree (`exact`) or
 contains it (`contains`: a `--no-ff` merge that promoted it into a branch
 with other changes) and the Commit's own change (against its first parent)
-still reverse-applies onto it, so a later revert is refused while another
-change's edit elsewhere in the same file is not; the record, the output and `status --json`
+still reverse-applies onto it with no context lines required (`git apply -C0`:
+every changed line is still there), so a later revert is refused while another
+change's edit elsewhere in the same file, even on the line next to it, is not; the record, the output and `status --json`
 `stages[].match` say which. `close`'s `Shipped:` line still needs the exact
 tree. `ship` refuses an unknown stage, a stage already recorded, or one whose
 earlier stages are not.
