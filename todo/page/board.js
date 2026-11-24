@@ -380,6 +380,7 @@ function shortcut(key) {
   } else if (key === 'r' && visible($('panel-reply'))) $('panel-reply-text').focus();
   else if (key === 't' && visible($('panel-ticket'))) openTicket(panelCard?.link?.url);
   else if (key === 'f' && visible($('panel-fix')) && !$('panel-fix').disabled) $('panel-fix').click();
+  else if (key === 'x' && panelTarget?.exec && !panelTarget.done && visible($('panel-run'))) page.confirmRun(panelTarget.id);
   else if (key === 'm' && visible($('panel-content'))) $('panel-more').click();
   else if (key === 'a' && visible($('panel-gate'))) { $('panel-approve').focus(); showTip($('panel-approve')); }
   else return false;
@@ -388,7 +389,7 @@ function shortcut(key) {
 document.addEventListener('keydown', event => {
   // A shown tooltip is dismissed first, without moving focus (WCAG 1.4.13); the next Escape closes the panel.
   if (event.key === 'Escape' && hideTip()) { event.preventDefault(); return; }
-  if (currentView() !== 'board' || event.altKey || event.ctrlKey || event.metaKey || $('keys-help').open) return;
+  if (currentView() !== 'board' || event.altKey || event.ctrlKey || event.metaKey || $('keys-help').open || $('run-confirm').open) return;
   if (event.key === 'Escape') {
     if (selectedKey) { event.preventDefault(); closePanel(); }
     return;
@@ -494,6 +495,8 @@ function renderPanel(now) {
   $('panel-prev').disabled = $('panel-next').disabled = !queue.length || (queue.length === 1 && at === 0);
   if (!card) return;
   const item = card.target, doc = documentOf(item);
+  // The command box keeps its own state (running, result), so it is drawn on every pass, not only on a new signature.
+  page.renderRun($('panel-run'), item, 'X');
   const loading = !!doc?.pending && !!item.brief && Date.now() - doc.started < skeletonMs;
   const sig = JSON.stringify([page.lang, card.key, card.members.map(m => [m.id, m.version, m.working?.what]), card.lane, card.entry, doc, loading, sending, showDetails]);
   if (sig === panelSig) return;
@@ -550,7 +553,7 @@ function renderPanel(now) {
 function questionOf(card, item, status, fields, now) {
   const yourCall = plain(fields['your call']);
   if (yourCall && yourCall.toLowerCase() !== 'none') return yourCall;
-  if (status.actor === 'you') return plain(status.gate ? t(`next.${status.kind}`) : item.waiting || item.sdlc?.action || t(`next.${status.kind}`));
+  if (status.actor === 'you') return plain(status.gate ? t(`next.${status.kind}`) : item.waiting || (item.exec ? t('run.ask') : '') || item.sdlc?.action || t(`next.${status.kind}`));
   if (status.actor === 'blocked') return plain(item.error || item.sdlc?.action) || t('field.unknown');
   if (status.actor === 'others') return plain(item.others || str(card.entry?.waitingText)) || statusLabel(t, item, now);
   return [statusLabel(t, item, now), plain(str(card.entry?.waitingText))].filter(Boolean).join(' · ');
@@ -788,7 +791,7 @@ for (const [id, [shown, aria]] of Object.entries(controlKeys)) {
   if (aria) $(id).setAttribute('aria-keyshortcuts', aria);
 }
 const keyRows = [['← → · j k', 'keys.cards'], ['1–9', 'keys.choice'], ['R', 'keys.reply'], ['Enter', 'keys.send'],
-  ['Shift+Enter', 'keys.newline'], ['T', 'keys.ticket'], ['F', 'keys.fix'], ['M', 'keys.more'], ['A', 'keys.approve'],
+  ['Shift+Enter', 'keys.newline'], ['T', 'keys.ticket'], ['F', 'keys.fix'], ['X', 'keys.run'], ['M', 'keys.more'], ['A', 'keys.approve'],
   ['?', 'keys.help'], ['Esc', 'keys.escape'], ['← → · Home End', 'keys.resize']];
 function openKeys() {
   hideTip();

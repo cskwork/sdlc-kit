@@ -133,3 +133,33 @@ export function boardCards(items, feed = null, now = Date.now()) {
   }
   return cards;
 }
+
+// ---------- showing a command exactly ----------
+// One escape for every place a command is shown or recorded (board, list, dialog, todo.md events, the reply):
+// what a person reads must be what runs. Control, bidi and zero-width characters, line and paragraph separators,
+// U+FEFF and long blank runs would hide or reorder text, so they become visible escapes in bash's $'…' form.
+const hiddenClass = '[\\u0000-\\u001f\\u007f-\\u009f\\u00ad\\u034f\\u061c\\u115f\\u1160\\u17b4\\u17b5\\u180e\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\u3164\\ufe00-\\ufe0f\\ufeff\\ufff9-\\ufffb]| {4,}';
+const hidden = new RegExp(hiddenClass), hiddenAll = new RegExp(hiddenClass, 'g');
+// Output is read, never run: a run of spaces there (a progress bar) stays as written.
+const charsOnly = hiddenClass.replace('| {4,}', ''), hiddenChar = new RegExp(charsOnly), hiddenCharAll = new RegExp(charsOnly, 'g');
+const named = { '\n': '\\n', '\t': '\\t', '\r': '\\r' };
+const hex = (c, width) => c.codePointAt(0).toString(16).padStart(width, '0');
+const escapeChar = c => c.length > 1 ? '\\x20'.repeat(c.length) : named[c] || (c.codePointAt(0) < 0x100 ? `\\x${hex(c, 2)}` : `\\u${hex(c, 4)}`);
+// One argument as a POSIX shell word: bare when only safe characters, '…' otherwise, $'…' when something is hidden.
+export function shellWord(value) {
+  const text = String(value);
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(text)) return { text, escaped: false };
+  if (!hidden.test(text)) return { text: `'${text.replace(/'/g, `'\\''`)}'`, escaped: false };
+  return { text: `$'${text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(hiddenAll, escapeChar)}'`, escaped: true };
+}
+// argv as one line: { text, escaped, count }; cwd is quoted the same way with shellWord.
+export function displayCommand(argv) {
+  const words = argv.map(shellWord);
+  return { text: words.map(word => word.text).join(' '), escaped: words.some(word => word.escaped), count: argv.length };
+}
+// Free text (a reason, an output line) with hidden characters made visible, never quoted.
+// { blanks: false } leaves runs of spaces alone, for output.
+export function visibleText(value, { blanks = true } = {}) {
+  const text = String(value), [one, all] = blanks ? [hidden, hiddenAll] : [hiddenChar, hiddenCharAll];
+  return { text: text.replace(all, escapeChar), escaped: one.test(text) };
+}

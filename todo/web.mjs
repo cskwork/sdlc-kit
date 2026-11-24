@@ -2,12 +2,13 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as core from './core.mjs';
-import { defaultLanguage, isLanguage, languages } from './i18n.mjs';
-import { statusOf } from './status.mjs';
+import { defaultLanguage, isLanguage, languages, translator } from './i18n.mjs';
+import { shellWord, statusOf, visibleText } from './status.mjs';
 
 const execute = promisify(execFile);
 const defaultKit = fileURLToPath(new URL('../', import.meta.url));
@@ -95,6 +96,103 @@ export function readFeed(file) {
     return feed && typeof feed === 'object' && !Array.isArray(feed) ? { feed, error: '' } : { feed: null, error: 'feed is not a JSON object' };
   } catch { return { feed: null, error: 'feed is not valid JSON' }; }
 }
+// An exec request runs the item's command as given: no shell, argv[0] resolved to an absolute path first, its own
+// process group so a timeout reaches every process it started.
+const runLimit = 64 * 1024;
+// The last `limit` bytes of a stream, cut on a UTF-8 character boundary; no size kills the command.
+function tailBuffer(limit = runLimit) {
+  let chunks = [], size = 0, cut = false;
+  return {
+    push(chunk) {
+      chunks.push(chunk); size += chunk.length;
+      if (size > 2 * limit) { const kept = Buffer.concat(chunks).subarray(-limit); chunks = [kept]; size = kept.length; cut = true; }
+    },
+    text() {
+      let bytes = Buffer.concat(chunks);
+      if (bytes.length > limit) { bytes = bytes.subarray(-limit); cut = true; }
+      let from = 0;
+      while (cut && from < bytes.length && (bytes[from] & 0xc0) === 0x80) from++;
+      return bytes.subarray(from).toString('utf8');
+    }
+  };
+}
+let defaultSearchPath;
+const runsLogPath = () => path.join(os.homedir(), '.sdlc', 'todo-runs.log');
+// The log is a record, never a gate: a log that cannot be written must not skip the reply.
+function logRun(entry) {
+  try {
+    const file = runsLogPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const fd = fs.openSync(file, 'a', 0o600);
+    try { fs.fchmodSync(fd, 0o600); fs.writeSync(fd, `${JSON.stringify(entry)}\n`); }
+    finally { fs.closeSync(fd); }
+  } catch (error) { console.error(`to-do exec log not written: ${error.message}`); }
+}
+// The PATH a command is found on. A tray app started by Finder or at login gets launchd's short PATH, so the login
+// shell's PATH comes first, then this process's. Relative and empty entries (".", "") are dropped: they would
+// resolve against the agent-chosen cwd.
+export async function commandSearchPath({ shell = process.env.SHELL, inherited = process.env.PATH || '' } = {}) {
+  let login = '';
+  if (process.platform !== 'win32' && shell && path.isAbsolute(shell)) {
+    try { login = (await execute(shell, ['-lc', 'printf %s "$PATH"'], { timeout: 5000, encoding: 'utf8' })).stdout; } catch { login = ''; }
+  }
+  return [...new Set([...login.split(path.delimiter), ...inherited.split(path.delimiter)].filter(entry => entry && path.isAbsolute(entry)))].join(path.delimiter);
+}
+const executable = file => { try { return fs.statSync(file).isFile() && (fs.accessSync(file, fs.constants.X_OK), true); } catch { return false; } };
+export const execSupported = (platform = process.platform) => platform !== 'win32';
+export function resolveCommand(name, searchPath) {
+  if (path.isAbsolute(name)) return executable(name) ? name : '';
+  for (const dir of searchPath.split(path.delimiter)) {
+    const candidate = path.join(dir, name);
+    if (executable(candidate)) return candidate;
+  }
+  return '';
+}
+// exitCode 127 = not found and 126 = could not start, as a shell reports them; error names the system code.
+function startFailure(error) {
+  const code = error.code || 'ERROR';
+  return { exitCode: code === 'ENOENT' ? 127 : 126, signal: null, error: code, message: error.message };
+}
+export function runArgv({ program, argv, cwd, env, timeout, killAfter = 5000, grace = 2000 }) {
+  return new Promise(resolve => {
+    const out = tailBuffer(), err = tailBuffer();
+    let child, timedOut = false, settled = false, exited = null, closed = false;
+    const timers = [];
+    const finish = result => {
+      if (settled) return;
+      settled = true;
+      for (const timer of timers) clearTimeout(timer);
+      resolve({ exitCode: result.exitCode, signal: result.signal || null, error: result.error || '', timedOut,
+        stdout: out.text(), stderr: err.text() || result.message || '' });
+    };
+    if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) return finish({ exitCode: 126, error: 'ENOTDIR', message: `cwd is not a directory: ${cwd}` });
+    try {
+      child = spawn(program, argv.slice(1), { cwd, env, argv0: argv[0], detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, shell: false });
+    } catch (error) { return finish(startFailure(error)); }
+    child.stdout.on('data', chunk => out.push(chunk));
+    child.stderr.on('data', chunk => err.push(chunk));
+    // Only a command that never started reports here; a failed kill of a running one changes nothing.
+    child.once('error', error => { if (child.pid === undefined) finish(startFailure(error)); });
+    const group = signal => {
+      try { if (process.platform === 'win32') child.kill(signal); else process.kill(-child.pid, signal); } catch { /* already gone */ }
+    };
+    // TERM to the whole group, then KILL to whatever ignored it; the KILL also reaches grandchildren after the leader exits.
+    timers.push(setTimeout(() => {
+      timedOut = true;
+      group('SIGTERM');
+      const kill = setTimeout(() => group('SIGKILL'), killAfter);
+      kill.unref?.();
+    }, timeout));
+    child.once('exit', (code, signal) => {
+      exited = { exitCode: code, signal };
+      if (closed) return finish(exited);
+      // A background process that inherited stdout keeps the pipes open: wait briefly for them, then stop reading.
+      timers.push(setTimeout(() => { child.stdout.destroy(); child.stderr.destroy(); finish(exited); }, grace));
+    });
+    child.once('close', () => { closed = true; if (exited) finish(exited); });
+  });
+}
+const lastLine = text => text.split(/\r?\n/).map(part => part.trim()).filter(Boolean).pop() || '';
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0, tooLarge = false;
@@ -154,7 +252,7 @@ export async function liveSession(file = core.sessionPath()) {
   } catch { return null; }
 }
 
-export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage, session = '', feed = feedPath(file), deferInitialSync = false } = {}) {
+export async function startWeb({ file = core.todoPath(), kit = defaultKit, port = 0, open = false, onUrl, statusRunner = execute, lang = defaultLanguage, session = '', feed = feedPath(file), deferInitialSync = false, runTimeout = 300000, killAfter = 5000, searchPath, finishRetryMs = 30000, platform = process.platform } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('invalid port');
   if (!isLanguage(lang)) throw new Error(`invalid language: ${lang}`);
   if (!onUrl && !open && !process.stdout.isTTY) throw new Error('web requires a terminal or --open');
@@ -165,7 +263,7 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   const payload = () => {
     const model = core.load(file);
     // The version hashes the item as loaded; the working marker is not part of it.
-    return { items: core.withWorking(model.items, file).map((item, i) => ({ ...item, version: core.itemVersion(model.items[i], model), turn: statusOf(item) })), file, lang,
+    return { items: core.withWorking(model.items, file).map((item, i) => ({ ...item, ...(item.exec ? { execPath: canExec ? resolveCommand(item.exec.argv[0], commandPath) : '', ...(canExec ? {} : { execUnsupported: true }) } : {}), version: core.itemVersion(model.items[i], model), turn: statusOf(item) })), file, lang,
       feed: feedState.feed, ...(feedState.error ? { feedError: feedState.error } : {}) };
   };
   const sendEvent = (res, value, event = '') => res.write(`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(value)}\n\n`);
@@ -178,8 +276,120 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   // (one per open card) would otherwise queue many multi-second syncs and time the app out.
   let syncing = null;
   const synced = () => (syncing ??= core.sync(file, { kit }).finally(() => { syncing = null; }));
+  const t = translator(lang);
+  // argv[0] is resolved once per request against a sane PATH; the dialog shows that program and the run spawns it.
+  // Windows has no POSIX shell, process groups or login-shell PATH: the board does not run commands there yet.
+  const canExec = execSupported(platform);
+  const commandPath = !canExec ? '' : searchPath ?? await (defaultSearchPath ??= commandSearchPath());
+  const childEnv = { ...process.env, PATH: commandPath };
+  // A run is recorded in todo.md before it starts and when it ends, so every server and tab sees it:
+  // "exec started run=<id> pid=<server pid> server=<server nonce> — <command>" and "exec finished run=<id> — <result>".
+  const serverId = randomBytes(4).toString('hex'), running = new Set();
+  const startOf = runId => event => event.who === 'human' && event.what.startsWith(`exec started run=${runId} `);
+  const unfinished = item => item.events.flatMap(event => {
+    const started = event.who === 'human' && event.what.match(/^exec started run=([0-9a-f]+) pid=(\d+)(?: server=([0-9a-f]+))? /);
+    if (!started || item.events.some(other => other.who === 'human' && other.what.startsWith(`exec finished run=${started[1]} `))) return [];
+    return [{ runId: started[1], pid: Number(started[2]), server: started[3] || '', at: Date.parse(event.at.replace(' ', 'T')) }];
+  });
+  const alive = pid => { try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };
+  // No run outlives its timeout, the KILL that follows, the pipe grace and a minute of slack: a start older than that
+  // is dead even if its pid now belongs to another process (a reboot can hand it to a root daemon, which answers EPERM).
+  const longestRun = runTimeout + killAfter + 2000 + 60000;
+  // This server knows its own runs; another server's run counts while its pid lives and it is not too old.
+  const live = run => run.server === serverId ? running.has(run.runId) :
+    run.pid !== process.pid && alive(run.pid) && !(Date.now() - run.at > longestRun);
+  // A run whose server stopped (or whose result could never be written) keeps its command for the human.
+  const markInterrupted = item => {
+    for (const run of unfinished(item)) {
+      if (live(run)) continue;
+      item.events.push({ at: core.stamp(), who: 'human', what: `exec finished run=${run.runId} — ${t('run.interrupted')}` });
+      logRun({ at: new Date().toISOString(), id: item.id, run: run.runId, event: 'interrupted' });
+    }
+  };
+  if (core.load(file).items.some(item => unfinished(item).some(run => !live(run)))) {
+    await core.mutate(file, model => { for (const item of model.items) markInterrupted(item); });
+  }
+  // A finish write that keeps failing (the lock stays busy under load) waits here and is written on the next request
+  // or keepalive tick; until then its run still counts as running, so nobody starts it twice.
+  const pendingFinish = new Map();
+  async function flushFinishes() {
+    for (const [runId, write] of pendingFinish) {
+      try { await core.mutate(file, write); pendingFinish.delete(runId); running.delete(runId); }
+      catch (error) { console.error(`to-do exec result still not written (run ${runId}): ${error.message}`); return; }
+    }
+  }
+  async function writeFinish(runId, write) {
+    const deadline = Date.now() + finishRetryMs;
+    for (let wait = 250; ; wait = Math.min(wait * 2, 8000)) {
+      try { await core.mutate(file, write); running.delete(runId); return; }
+      catch (error) {
+        if (Date.now() + wait > deadline) {
+          console.error(`to-do exec result not written yet (run ${runId}): ${error.message}`);
+          pendingFinish.set(runId, write);
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, wait));
+      }
+    }
+  }
+  async function runItem(id, version, shownPath) {
+    if (typeof id !== 'string' || !core.load(file).items.some(item => item.id === id)) fail(404, 'item not found');
+    if (!canExec) fail(409, 'Running a command from the board is not supported on Windows yet; run it yourself and reply.');
+    if (typeof shownPath !== 'string') fail(400, 'invalid path');
+    const runId = randomBytes(4).toString('hex');
+    let command, program, snapshot;
+    // Under the lock and bound to the shown version: the start event changes the version, so another tab or
+    // server holding the old one gets 409 instead of running the command a second time.
+    await core.update(file, id, item => {
+      if (item.done || !item.exec) fail(409, 'item has no command to run');
+      try { command = core.execValue(item.exec); } catch (error) { fail(400, error.message); }
+      if (unfinished(item).some(live)) fail(409, 'this command is already running');
+      markInterrupted(item);
+      program = resolveCommand(command.argv[0], commandPath);
+      if (!program) fail(409, `command not found: ${command.argv[0]}`);
+      if (program !== shownPath) fail(409, 'The command now resolves to a different program. Reload and try again.');
+      snapshot = { exec: JSON.stringify(item.exec), run: item.run, waiting: item.waiting, others: item.others, suggest: item.suggest };
+      item.events.push({ at: core.stamp(), who: 'human', what: `exec started run=${runId} pid=${process.pid} server=${serverId} — ${core.showExec(command)}` });
+      running.add(runId);
+    }, version);
+    const at = new Date();
+    logRun({ at: at.toISOString(), id, run: runId, event: 'start', argv: command.argv, cwd: command.cwd, path: program });
+    const result = await runArgv({ program, argv: command.argv, cwd: command.cwd, env: childEnv, timeout: runTimeout, killAfter });
+    const ms = Date.now() - at.getTime();
+    logRun({ at: at.toISOString(), id, run: runId, argv: command.argv, cwd: command.cwd, exitCode: result.exitCode, ms,
+      ...(result.signal ? { signal: result.signal } : {}), ...(result.error ? { error: result.error } : {}), ...(result.timedOut ? { timedOut: true } : {}) });
+    const vars = { command: core.shellQuote(command.argv), cwd: shellWord(command.cwd).text,
+      code: result.exitCode ?? '-', seconds: Math.round(runTimeout / 1000), signal: result.signal || '', error: result.error };
+    const head = t(result.error ? 'run.reply.spawn' : result.timedOut ? 'run.reply.timeout' : result.exitCode === null ? 'run.reply.signal' : 'run.reply', vars);
+    const last = visibleText(lastLine(result.stdout) || lastLine(result.stderr), { blanks: false }).text;
+    const words = head + (last ? t('run.reply.output', { text: last.length > 200 ? `${last.slice(0, 199)}…` : last }) : '');
+    // The result goes to the item that started it (found by its start event, not its id, which follows the title).
+    // Only fields still as they were at the start are cleared: an agent may have asked something new meanwhile.
+    await writeFinish(runId, model => {
+      const item = model.items.find(candidate => candidate.events.some(startOf(runId)));
+      if (!item) return;
+      const stamp = core.stamp();
+      item.events.push({ at: stamp, who: 'human', what: `exec finished run=${runId} — ${words}` });
+      // The structured outcome machines read; the reply text is for people and varies with locale and output.
+      item.execResult = { argv: command.argv, cwd: command.cwd, resolved: program, exitCode: result.exitCode, timedOut: result.timedOut,
+        signal: result.signal || null, at: new Date().toISOString(), run: runId };
+      // A failure keeps the wait and the command, so the human can retry or answer by hand; only exit 0 resolves it.
+      if (item.done || result.exitCode !== 0) return;
+      if (JSON.stringify(item.exec) === snapshot.exec) item.exec = null;
+      if (item.run === snapshot.run) item.run = '';
+      const from = item.events.findIndex(startOf(runId));
+      const askedSince = item.events.slice(from + 1).some(event => (event.who === 'agent' && /^waiting(?: on others)? — /.test(event.what)) ||
+        (event.who === 'sdlc' && event.what.startsWith('NEEDS-HUMAN — ')));
+      if (askedSince || item.waiting !== snapshot.waiting || item.others !== snapshot.others) return;
+      if (item.suggest === snapshot.suggest) item.suggest = '';
+      item.waiting = ''; item.others = '';
+      item.events.push({ at: stamp, who: 'human', what: `reply — ${words}` });
+    });
+    return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, timedOut: result.timedOut, signal: result.signal, error: result.error };
+  }
   let actualPort;
   const server = http.createServer(async (req, res) => {
+    if (pendingFinish.size) await flushFinishes();
     res.setHeader('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
@@ -230,6 +440,11 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
       const body = await readBody(req);
       if (req.method !== 'POST') { json(405, { error: 'method not allowed' }); return; }
       let launch;
+      if (url.pathname === '/api/exec') {
+        const result = await runItem(body.id, body.version ?? null, body.path);
+        json(200, { ...payload(), exec: result });
+        return;
+      }
       if (url.pathname === '/api/items') {
         await core.add(file, text(body.text, 'text'), { by: 'human' });
       } else if (url.pathname === '/api/item') {
@@ -285,7 +500,10 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   const stopWatch = core.watch(file, broadcast), stopWorking = core.watchWorking(file, broadcast);
   // Polling stat survives a feed that does not exist yet and one replaced by rename.
   const stopFeed = core.watch(feed, () => { feedState = readFeed(feed); broadcast(); });
-  const keepalive = setInterval(() => { for (const res of clients) res.write(': keepalive\n\n'); }, 15000);
+  const keepalive = setInterval(() => {
+    for (const res of clients) res.write(': keepalive\n\n');
+    if (pendingFinish.size) void flushFinishes();
+  }, 15000);
   keepalive.unref();
   let closing;
   const close = () => {
