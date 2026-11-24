@@ -22,6 +22,9 @@ Some waits need an action that agents are not allowed to take, such as deleting 
   - It records `execResult` (a structured outcome for machines) and logs to `~/.sdlc/todo-runs.log` (0600).
   - On exit 0 it adds a reply `실행함: … → exit 0 · 출력: "…"` and clears the wait. A failure keeps the wait.
 - **Event lines** escape CR, LF, U+0085, U+2028 and U+2029, so no command text can forge a todo.md line.
+- **Result write under load.** If the lock is busy when a run finishes, the server retries for up to 30 s, then keeps the result in memory and writes it on the next request or keepalive. A run counts as live only in this server's running set, or by the server nonce in its start event plus an age bound, so a reused pid never revives it.
+- **`execPath` in JSON.** `list`, `next`, `take --json` and `/api/items` expose the resolved program path; `''` means not runnable.
+- **Windows.** Board runs are not supported yet: the Run button is off, the reason is shown, `execPath` is `''` and `/api/exec` answers 409.
 
 ## Verification
 
@@ -35,3 +38,4 @@ Some waits need an action that agents are not allowed to take, such as deleting 
   - a newline command and a bidi command, both shown escaped with a warning;
   - a confirmed run that created its folder and wrote `execResult` and the reply.
 - Two independent security reviews ran; all findings are fixed.
+- CI on 7e82ff5: macOS and Ubuntu passed. The release did not wait for the Windows job.
