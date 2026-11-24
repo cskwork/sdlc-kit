@@ -760,6 +760,14 @@ $('reply-text').addEventListener('input', () => {
   if (!draft.reply) draft.replyVersion = items.find(item => item.id === detailId)?.version;
   draft.reply = $('reply-text').value;
 });
+// Enter sends, as on the board's panel; Shift+Enter is a new line, and an Enter that confirms a Hangul (IME)
+// syllable never sends (Safari reports it as keyCode 229 with isComposing already false).
+$('reply-text').addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || event.shiftKey) return;
+  event.preventDefault();
+  if (event.isComposing || event.keyCode === 229) return;
+  $('reply-form').requestSubmit();
+});
 $('artifact-reload').addEventListener('click', () => loadArtifact().then(() => $('artifact-title').focus()));
 $('artifact-title').tabIndex = -1;
 

@@ -18,7 +18,8 @@
     <p id="feed-status" class="feed-status" hidden></p>
   </div>
   <div class="strip-side">
-    <span id="board-tools"><button type="button" id="stale-toggle" class="stale-toggle" aria-pressed="false" hidden></button></span>
+    <span id="board-tools"><button type="button" id="stale-toggle" class="stale-toggle" aria-pressed="false" hidden></button>
+      <button type="button" id="keys-open" class="quiet keys-open" data-i18n="keys.button">Keys</button></span>
     <span class="live" id="live" data-state="connecting"><span class="dot" aria-hidden="true"></span><span id="live-text">Connecting</span></span>
     <span id="board-updated" class="updated"></span>
     <label for="lang" class="visually-hidden" data-i18n="page.language">Language</label>
@@ -43,7 +44,7 @@
     </details>
   </main>
   <div id="panel-resize" class="panel-resize" role="separator" aria-orientation="vertical" aria-controls="panel" tabindex="0" hidden
-    aria-label="Decision panel width" data-i18n-label="panel.resize" data-i18n-title="panel.resizeHelp"></div>
+    aria-label="Decision panel width" data-i18n-label="panel.resize" data-i18n-tip="panel.resizeHelp"></div>
   <aside id="panel" class="panel" hidden aria-labelledby="panel-title">
     <div class="panel-bar">
       <span id="panel-page" class="panel-page"></span>
@@ -77,9 +78,9 @@
       <button type="button" id="panel-fix" class="secondary fix" hidden data-i18n="fix.button">Fix it</button>
       <form id="panel-reply" class="reply" novalidate>
         <label for="panel-reply-text" data-i18n="panel.reply">Answer in your own words</label>
-        <textarea id="panel-reply-text" rows="2" maxlength="2000" aria-describedby="panel-reply-help"></textarea>
+        <textarea id="panel-reply-text" rows="2" maxlength="2000" enterkeyhint="send" aria-describedby="panel-reply-help"></textarea>
         <p id="panel-reply-help" class="hint" data-i18n="reply.help">A reply answers a question. It is not an approval.</p>
-        <div class="actions"><button type="submit" class="secondary" data-i18n="panel.send">Send</button></div>
+        <div class="actions"><button type="submit" id="panel-send" class="secondary" data-i18n="panel.send">Send</button></div>
       </form>
       <p id="panel-error" class="field-error" role="alert" hidden></p>
       <div class="panel-actions">
@@ -192,10 +193,10 @@
     <div id="reply-choices" class="choices" role="group" aria-label="Pick an answer" data-i18n-label="choices.label" hidden></div>
     <form id="reply-form" novalidate>
       <label for="reply-text" data-i18n="reply.label">Your answer</label>
-      <textarea id="reply-text" rows="3" maxlength="2000" aria-describedby="reply-help"></textarea>
+      <textarea id="reply-text" rows="3" maxlength="2000" enterkeyhint="send" aria-describedby="reply-help"></textarea>
       <p class="hint" id="reply-help" data-i18n="reply.help">A reply answers a question. It is not an approval.</p>
       <p id="reply-error" class="field-error" role="alert" hidden></p>
-      <div class="actions"><button type="submit" class="secondary" data-i18n="reply.send">Reply</button></div>
+      <div class="actions"><button type="submit" id="reply-send" class="secondary" data-i18n="reply.send">Reply</button></div>
     </form>
   </section>
 
@@ -216,6 +217,13 @@
   <p id="error-text"></p>
   <button type="button" id="error-dismiss" class="quiet" data-i18n="error.dismiss">Dismiss</button>
 </div>
+<dialog id="keys-help" class="keys-help" closedby="any" aria-labelledby="keys-title">
+  <h2 id="keys-title" data-i18n="keys.title">Keyboard</h2>
+  <p class="hint" data-i18n="keys.note">Single keys work when you are not typing in a box.</p>
+  <dl id="keys-list" class="keys-list"></dl>
+  <form method="dialog" class="actions"><button type="submit" class="secondary" data-i18n="keys.close">Close</button></form>
+</dialog>
+<div id="tip" class="tip" popover="manual" role="tooltip"></div>
 <div id="toast" class="toast ok" role="status" hidden></div>
 <div id="announce" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
 </body>
