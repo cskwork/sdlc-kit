@@ -37,14 +37,18 @@ pub fn default_chrome_pid(ps: &str) -> Option<u32> {
 /// A JavaScript string literal for `text`: JSON escapes quotes, backslashes and control characters.
 fn js_string(text: &str) -> String { serde_json::to_string(text).unwrap_or_else(|_| "\"\"".into()) }
 
-/// The script for Chrome `pid`: it finds the ticket window (`reuse`, the window the last ticket went to, else a window
-/// already showing `url`) and shows `url` there. Opening (`follow` false) makes the window when there is none, places
-/// it at `bounds` and puts it in front of Chrome's other windows; following only moves an open window to `url`, where
-/// the person left it. A window already showing `url` is not reloaded. It prints the window's id, or nothing when
-/// following found no window.
-pub fn script(pid: u32, url: &str, reuse: Option<i64>, bounds: [i64; 4], follow: bool) -> String {
+/// The script for Chrome `pid`: it finds the ticket window and shows `url` there. Opening (`follow` false) uses the
+/// window the last ticket went to (`reuse`), else, only while `recover`ing from a run of ours that timed out (it may
+/// have made a window it could not report), a window already showing `url`, else a new window; it places the window at
+/// `bounds` and puts it in front of Chrome's other windows. Following uses only `reuse`, left where the person put
+/// it, and makes none: a window of the person's own is never taken over. A window already showing `url` is not
+/// reloaded. It prints the window's id, or nothing when following found no window.
+pub fn script(pid: u32, url: &str, reuse: Option<i64>, bounds: [i64; 4], follow: bool, recover: bool) -> String {
     let [x, y, width, height] = bounds;
     let reuse = reuse.map_or("null".to_string(), |id| id.to_string());
+    let lookup = if recover && !follow {
+        "if (win === null) { for (const each of chrome.windows()) { try { if (each.activeTab.url() === url) { win = each; break; } } catch (e) {} } }\n"
+    } else { "" };
     format!(r#"(() => {{
 const chrome = Application({pid});
 const url = {url};
@@ -52,8 +56,7 @@ const reuse = {reuse};
 const follow = {follow};
 let win = null;
 if (reuse !== null) {{ try {{ const found = chrome.windows.byId(reuse); found.id(); win = found; }} catch (e) {{}} }}
-if (win === null) {{ for (const each of chrome.windows()) {{ try {{ if (each.activeTab.url() === url) {{ win = each; break; }} }} catch (e) {{}} }} }}
-if (win === null && follow) {{ return ""; }}
+{lookup}if (win === null && follow) {{ return ""; }}
 if (win === null) {{ win = chrome.Window().make(); }}
 if (win.activeTab.url() !== url) {{ win.activeTab.url = url; }}
 if (!follow) {{
@@ -65,11 +68,39 @@ return String(win.id());
 "#, url = js_string(url))
 }
 
+/// procNotFound: the permission check found no running Chrome (it was started a moment ago and is not up yet).
+pub const PROC_NOT_FOUND: i32 = -600;
+/// How long a just-started Chrome gets to answer the permission check, and how often it is asked.
+pub const PERMISSION_WAIT: (std::time::Duration, std::time::Duration) = (std::time::Duration::from_secs(5), std::time::Duration::from_millis(250));
+
+/// Whether to ask again after the permission check answered `status`, `waited` after the first try.
+pub fn ask_again(status: i32, waited: std::time::Duration) -> bool { status == PROC_NOT_FOUND && waited < PERMISSION_WAIT.0 }
+
+/// One worker runs the tickets: a request while it runs only waits in `pending`, and the worker takes requests until
+/// none waits. Returns whether this call was the worker. `run` gets each request; `running` says a worker is on it.
+pub fn drain(pending: &std::sync::Mutex<Pending>, running: &std::sync::atomic::AtomicBool, mut run: impl FnMut(String, bool)) -> bool {
+    use std::sync::atomic::Ordering::SeqCst;
+    if running.swap(true, SeqCst) { return false; }
+    loop {
+        let next = pending.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();
+        match next {
+            Some((url, follow)) => run(url, follow),
+            None => {
+                running.store(false, SeqCst);
+                // A request pushed between the take and the store found the flag still set and left it here: take it
+                // up, unless a new worker already has.
+                let waiting = pending.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).0.is_some();
+                if !waiting || running.swap(true, SeqCst) { return true; }
+            }
+        }
+    }
+}
+
 /// The ticket waiting for Chrome. Requests that arrive while one runs are merged: the newest address wins, and the
 /// merge opens (makes and brings forward the window) when any of them opened, so a click followed by a selection
 /// still shows a window.
 #[derive(Debug, Default, PartialEq)]
-pub struct Pending(Option<(String, bool)>);
+pub struct Pending(pub(crate) Option<(String, bool)>);
 
 impl Pending {
     pub fn push(&mut self, url: String, follow: bool) {
@@ -111,9 +142,10 @@ pub use mac::{ask_permission_early, open};
 
 #[cfg(target_os = "macos")]
 mod mac {
-    use super::{chrome_bounds, default_chrome_pid, output_within, script, Failure, Pending};
+    use super::{ask_again, chrome_bounds, default_chrome_pid, drain, output_within, script, Failure, Pending, PERMISSION_WAIT};
     use crate::board::Frame;
     use std::process::{Command, Stdio};
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
@@ -121,6 +153,13 @@ mod mac {
     /// one window, not two.
     static LAST: Mutex<Option<(u32, i64)>> = Mutex::new(None);
     static PENDING: Mutex<Pending> = Mutex::new(Pending(None));
+    /// The newest request's screen: the visible area of the board's screen and the main screen's height.
+    static PLACE: Mutex<Option<(Frame, f64)>> = Mutex::new(None);
+    /// Set while the ticket worker runs (see `drain`).
+    static RUNNING: AtomicBool = AtomicBool::new(false);
+    /// Set after a run of ours timed out (it may have made a window it never reported); the next opening looks for
+    /// a window on the ticket before making one, and a run that succeeds clears it.
+    static RECOVER: AtomicBool = AtomicBool::new(false);
     /// How long Chrome gets to answer. The permission question is asked before this clock starts.
     const SCRIPT_LIMIT: Duration = Duration::from_secs(8);
 
@@ -165,12 +204,19 @@ mod mac {
         let pid = pid as i32;
         let mut target = AeDesc { descriptor_type: 0, data_handle: std::ptr::null_mut() };
         // Safety: the descriptor is made from a pid that lives on the stack for the call and disposed of after.
-        let status = unsafe {
+        let mut check = || unsafe {
             let made = AECreateDesc(TYPE_KERNEL_PROCESS_ID, (&pid as *const i32).cast(), std::mem::size_of::<i32>() as isize, &mut target);
-            if made != 0 { return Err(format!("AECreateDesc: {made}")); }
+            if made != 0 { return Err::<i32, String>(format!("AECreateDesc: {made}")); }
             let status = AEDeterminePermissionToAutomateTarget(&target, TYPE_WILD_CARD, TYPE_WILD_CARD, 1);
             AEDisposeDesc(&mut target);
-            status
+            Ok(status)
+        };
+        // Chrome started a moment ago may not take questions yet: ask again for a few seconds.
+        let started = Instant::now();
+        let status = loop {
+            let status: i32 = check()?;
+            if !ask_again(status, started.elapsed()) { break status; }
+            std::thread::sleep(PERMISSION_WAIT.1);
         };
         match status {
             0 => Ok(()),
@@ -189,13 +235,17 @@ mod mac {
         });
     }
 
-    /// Runs the waiting ticket, if one still waits (an earlier run may have taken it with newer ones merged in).
-    fn run(visible: Frame, main_height: f64) {
+    /// Runs one ticket on the worker.
+    fn run(url: String, follow: bool) {
+        let place = *PLACE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let (visible, main_height) = place.unwrap_or((Frame { x: 0.0, y: 0.0, width: 1440.0, height: 900.0 }, 900.0));
         let mut last = LAST.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        let Some((url, follow)) = PENDING.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take() else { return };
         match show(&mut last, &url, follow, visible, main_height) {
-            Ok(()) => {}
-            Err(Failure::TimedOut) => eprintln!("sdlc-todo: Chrome did not answer in {} seconds for {url}; the next click tries again", SCRIPT_LIMIT.as_secs()),
+            Ok(()) => RECOVER.store(false, Ordering::SeqCst),
+            Err(Failure::TimedOut) => {
+                RECOVER.store(true, Ordering::SeqCst);
+                eprintln!("sdlc-todo: Chrome did not answer in {} seconds for {url}; the next click tries again", SCRIPT_LIMIT.as_secs());
+            }
             Err(Failure::Failed(error)) if follow => eprintln!("sdlc-todo: the ticket window did not follow to {url} ({error})"),
             Err(Failure::Failed(error)) => {
                 eprintln!("sdlc-todo: the ticket could not open in Chrome ({error}); opening it in the default browser");
@@ -209,8 +259,8 @@ mod mac {
         may_automate(pid).map_err(Failure::Failed)?;
         let reuse = last.filter(|(owner, _)| *owner == pid).map(|(_, id)| id);
         let mut command = Command::new("osascript");
-        command.args(["-l", "JavaScript", "-e", &script(pid, url, reuse, chrome_bounds(visible, main_height), follow)]);
-        // A run that times out records no window: the next one finds it by its address, if it was made.
+        command.args(["-l", "JavaScript", "-e", &script(pid, url, reuse, chrome_bounds(visible, main_height), follow, RECOVER.load(Ordering::SeqCst))]);
+        // A run that times out records no window: the next opening finds it by its address (RECOVER), if it was made.
         let output = output_within(command, SCRIPT_LIMIT)?;
         if !output.status.success() {
             return Err(Failure::Failed(format!("osascript: {}", String::from_utf8_lossy(&output.stderr).trim())));
@@ -236,8 +286,10 @@ mod mac {
     /// blocks the board. `visible` is the visible area of the board's screen and `main_height` the main screen's full
     /// height, both read on the main thread.
     pub fn open(url: String, follow: bool, visible: Frame, main_height: f64) {
+        *PLACE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some((visible, main_height));
         PENDING.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).push(url, follow);
-        std::thread::spawn(move || run(visible, main_height));
+        // One worker at a time: while one runs (a slow Chrome, the permission question) it picks this request up.
+        if !RUNNING.load(Ordering::SeqCst) { std::thread::spawn(|| drain(&PENDING, &RUNNING, run)); }
     }
 }
 
@@ -257,10 +309,10 @@ mod tests {
 
     #[test]
     fn the_url_is_a_quoted_string_whatever_it_holds() {
-        let text = script(4242, r#"https://x.atlassian.net/browse/A-1?q="a"\b"#, None, [0, 31, 864, 1049], false);
+        let text = script(4242, r#"https://x.atlassian.net/browse/A-1?q="a"\b"#, None, [0, 31, 864, 1049], false, false);
         assert!(text.contains(r#"const url = "https://x.atlassian.net/browse/A-1?q=\"a\"\\b";"#), "{text}");
         // A line break or a quote cannot end the string and start a statement.
-        let text = script(4242, "https://e.x/\");chrome.quit();(\"\n", None, [0, 0, 1, 1], false);
+        let text = script(4242, "https://e.x/\");chrome.quit();(\"\n", None, [0, 0, 1, 1], false, false);
         assert!(text.contains(r#"const url = "https://e.x/\");chrome.quit();(\"\n";"#), "{text}");
         // The URL appears only as that literal; the rest of the script refers to it by name.
         assert!(text.contains("if (win.activeTab.url() !== url) { win.activeTab.url = url; }"));
@@ -269,28 +321,65 @@ mod tests {
         assert!(text.contains("win.bounds = { x: 0, y: 0, width: 1, height: 1 };"));
     }
 
+    const LOOKUP: &str = "each.activeTab.url() === url";
+
     #[test]
-    fn opening_reuses_the_last_window_then_one_showing_the_ticket_then_makes_one() {
-        let new = script(1, "https://e.x/", None, [0, 0, 1, 1], false);
-        assert!(new.contains("const reuse = null;") && new.contains("const follow = false;"));
-        let reused = script(1, "https://e.x/", Some(1600315930), [0, 0, 1, 1], false);
+    fn opening_reuses_the_last_window_else_makes_one_and_looks_by_address_only_to_recover() {
+        let reused = script(1, "https://e.x/", Some(1600315930), [0, 0, 1, 1], false, false);
         assert!(reused.contains("const reuse = 1600315930;") && reused.contains("chrome.windows.byId(reuse)"));
-        // In that order: the remembered window, a window already on the ticket (one a timed-out run made), a new one.
-        let at = |needle: &str| reused.find(needle).unwrap_or_else(|| panic!("{needle} in {reused}"));
-        assert!(at("chrome.windows.byId(reuse)") < at("each.activeTab.url() === url"));
-        assert!(at("each.activeTab.url() === url") < at("win = chrome.Window().make()"));
         assert!(reused.contains("if (win === null) { win = chrome.Window().make(); }"));
-        assert!(reused.trim_end().ends_with("return String(win.id());\n})()"));
+        assert!(!reused.contains(LOOKUP), "no recovery: a window of the person's own on the ticket is not taken");
+        assert!(script(1, "https://e.x/", None, [0, 0, 1, 1], false, false).contains("const reuse = null;"));
+        // After a timed-out run: the remembered window, then one on the ticket (ours, made by that run), then a new one.
+        let recovering = script(1, "https://e.x/", Some(7), [0, 0, 1, 1], false, true);
+        let at = |needle: &str| recovering.find(needle).unwrap_or_else(|| panic!("{needle} in {recovering}"));
+        assert!(at("chrome.windows.byId(reuse)") < at(LOOKUP) && at(LOOKUP) < at("win = chrome.Window().make()"));
+        assert!(recovering.trim_end().ends_with("return String(win.id());\n})()"));
     }
 
     #[test]
-    fn following_moves_only_an_open_window_and_leaves_it_in_place() {
-        let follow = script(1, "https://e.x/", Some(7), [0, 0, 1, 1], true);
-        assert!(follow.contains("const follow = true;"));
-        // No window: nothing is made. Its place and order stay the person's.
-        let at = |needle: &str| follow.find(needle).unwrap_or_else(|| panic!("{needle}"));
-        assert!(at("if (win === null && follow) { return \"\"; }") < at("win = chrome.Window().make()"));
-        assert!(at("if (!follow) {") < at("win.bounds =") && at("win.bounds =") < at("win.index = 1;"));
+    fn following_uses_only_the_remembered_window_and_leaves_it_in_place() {
+        for recover in [false, true] {
+            let follow = script(1, "https://e.x/", Some(7), [0, 0, 1, 1], true, recover);
+            assert!(follow.contains("const follow = true;"));
+            assert!(!follow.contains(LOOKUP), "following never looks for a window by its address (recover {recover})");
+            let at = |needle: &str| follow.find(needle).unwrap_or_else(|| panic!("{needle}"));
+            assert!(at("chrome.windows.byId(reuse)") < at("if (win === null && follow) { return \"\"; }"));
+            assert!(at("if (win === null && follow) { return \"\"; }") < at("win = chrome.Window().make()"));
+            assert!(at("if (!follow) {") < at("win.bounds =") && at("win.bounds =") < at("win.index = 1;"));
+        }
+    }
+
+    #[test]
+    fn a_just_started_chrome_is_asked_again_for_five_seconds() {
+        use std::time::Duration;
+        assert!(ask_again(PROC_NOT_FOUND, Duration::ZERO));
+        assert!(ask_again(PROC_NOT_FOUND, Duration::from_millis(4750)));
+        assert!(!ask_again(PROC_NOT_FOUND, Duration::from_secs(5)), "then it gives up and the ticket falls back");
+        // Any other answer is final: allowed, not allowed (-1743), or another error.
+        for status in [0, -1743, -1744, -50] { assert!(!ask_again(status, Duration::ZERO), "{status}"); }
+        assert_eq!(PERMISSION_WAIT.1, Duration::from_millis(250));
+    }
+
+    #[test]
+    fn one_worker_drains_every_request_including_those_that_come_while_it_runs() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Mutex;
+        let (pending, running) = (Mutex::new(Pending::default()), AtomicBool::new(false));
+        pending.lock().unwrap().push("https://e.x/1".into(), false);
+        let mut ran = Vec::new();
+        let worked = drain(&pending, &running, |url, follow| {
+            // A second worker started now (a j while the permission question is up) leaves the request to this one.
+            assert!(!drain(&pending, &running, |_, _| panic!("a second worker ran")));
+            if url.ends_with("/1") { pending.lock().unwrap().push("https://e.x/2".into(), true); pending.lock().unwrap().push("https://e.x/3".into(), true); }
+            ran.push((url, follow));
+        });
+        assert!(worked);
+        assert_eq!(ran, [("https://e.x/1".to_string(), false), ("https://e.x/3".to_string(), true)], "the newest of those that waited");
+        assert!(!running.load(Ordering::SeqCst), "the flag is cleared once nothing waits");
+        assert_eq!(pending.lock().unwrap().take(), None);
+        // With nothing waiting it stops at once, and the next request starts a worker again.
+        assert!(drain(&pending, &running, |_, _| panic!("nothing waits")) && !running.load(Ordering::SeqCst));
     }
 
     #[test]

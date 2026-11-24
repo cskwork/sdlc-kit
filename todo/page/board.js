@@ -739,9 +739,16 @@ $('panel-fix').addEventListener('click', async () => {
 let ticketWindow = null, ticketUrl = '';
 const ticketMinWidth = 480, ticketGap = 16;
 const appTickets = () => (typeof window.ipc?.postMessage === 'function' ? window.ipc : null);
+// The app's ticket window takes http(s) pages off this machine only (the board's own server stays in the board).
+const loopback = new Set(['127.0.0.1', 'localhost', '[::1]']);
+const ticketPage = url => {
+  const host = isHttp(url) && /^https?:\/\/(?:[^@/?#\\]*@)?(\[[^\]]*\]|[^:/?#\\]*)/i.exec(url)?.[1].replace(/\.$/, '').toLowerCase();
+  return Boolean(host) && !loopback.has(host);
+};
 function openTicket(url) {
   if (!isHttp(url)) return;
   const app = appTickets();
+  if (app && !ticketPage(url)) { page.showError({ key: 'panel.notTicket' }); return; }
   if (app) { app.postMessage(JSON.stringify({ open: url })); ticketUrl = url; return; }
   if (ticketWindow && !ticketWindow.closed) {
     if (url !== ticketUrl) { ticketWindow.location.href = url; ticketUrl = url; }
@@ -762,7 +769,7 @@ function followTicket(card) {
   const url = card?.link?.url;
   const app = appTickets();
   if (app) {
-    if (ticketUrl && isHttp(url) && url !== ticketUrl) { app.postMessage(JSON.stringify({ follow: url })); ticketUrl = url; }
+    if (ticketUrl && ticketPage(url) && url !== ticketUrl) { app.postMessage(JSON.stringify({ follow: url })); ticketUrl = url; }
     return;
   }
   if (!ticketWindow || ticketWindow.closed || !isHttp(url) || url === ticketUrl) return;

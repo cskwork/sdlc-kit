@@ -840,6 +840,27 @@ test('ticket: in the tray app\'s window the page asks the app (window.ipc) and o
   assert.equal(b.opened.length, 0, 'never window.open in the app');
 });
 
+test('ticket: in the app a link to this machine is refused with a message, not sent to the app', () => {
+  const local = (id, url) => askItem(id, 'v1', '', { link: { label: id, url } });
+  const { p, b } = selectedBoard([local('aaaaaa', 'http://127.0.0.1:5173/x'), local('bbbbbb', 'http://LOCALHOST./y'),
+    local('cccccc', 'http://[::1]:8080/'), linked('dddddd'), local('eeeeee', 'http://127.0.0.1:9/z')]);
+  const posts = [], errors = [];
+  b.context.ipc = { postMessage(message) { posts.push(message); } };
+  const shown = p.context.todoPage.showError;
+  p.context.todoPage.showError = error => errors.push(error);
+  try {
+    b.key('t'); b.key('j'); b.key('t'); b.key('j'); b.key('t');
+    assert.deepEqual(posts, [], 'no loopback address reaches the app');
+    assert.deepEqual(errors.map(error => error.key), ['panel.notTicket', 'panel.notTicket', 'panel.notTicket']);
+    b.key('j'); b.key('t');
+    assert.deepEqual(posts, ['{"open":"https://tracker.invalid/browse/T-dddddd"}']);
+    b.key('j');
+    assert.equal(posts.length, 1, 'the selection does not follow to a loopback address');
+    assert.equal(errors.length, 3, 'and says nothing for a mere selection');
+  } finally { p.context.todoPage.showError = shown; }
+  assert.equal(p.context.todoPage.t('panel.notTicket'), p.context.todoPage.lang === 'ko' ? '이 링크는 티켓 창으로 열 수 없어요' : 'This link cannot open in the ticket window');
+});
+
 test('ticket: outside the app (no window.ipc, or one without postMessage) the popup opens as before', () => {
   const { b } = selectedBoard([linked('aaaaaa')]);
   b.context.ipc = {};
