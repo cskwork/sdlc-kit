@@ -398,33 +398,14 @@ document.addEventListener('keydown', event => {
 });
 
 // ---------- panel width ----------
-// The handle on the panel's inner edge sets --panel-size; CSS clamps it, so a smaller window never hides the board.
+// The handle on the panel's left edge sets --panel-size; CSS clamps it, so a smaller window never hides the board.
 // Drag it, click it to switch between wide and the default, or use ←/→ (Shift for bigger steps) and Home/End.
 // The width is kept in localStorage, which belongs to this server's port, so a server restart starts at the default.
-// While the ticket window is open the panel docks to the board's left edge (data-dock="start"), the handle moves
-// to its right edge, and the width is capped to the part of the screen the ticket window leaves free.
 const resizer = $('panel-resize'), widthKey = 'sdlc-todo.panelWidth';
 const remPx = () => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-const docked = () => $('board-view').dataset.dock === 'start';
-// The ticket window takes the right 45% of the screen; keep a 16px gap before it.
-const dockCap = () => Math.round(screen.availWidth * 0.55) - 16;
 function widthBounds() {
   const total = $('board-view').clientWidth, min = 20 * remPx();
-  const room = docked() ? Math.min(total - 24 * remPx(), dockCap()) : total - 24 * remPx();
-  return { total, min, max: Math.max(min, room) };
-}
-// Only the ticket window moves the panel: openTicket docks it, the ticket watch undocks it. Live updates never do.
-function dockPanel(start) {
-  if (docked() === start) return;
-  const view = $('board-view');
-  if (start) {
-    view.dataset.dock = 'start';
-    view.style.setProperty('--panel-cap', `${Math.max(20 * remPx(), dockCap())}px`);
-  } else {
-    delete view.dataset.dock;
-    view.style.removeProperty('--panel-cap');
-  }
-  updateSeparator();
+  return { total, min, max: Math.max(min, total - 24 * remPx()) };
 }
 function setPanelWidth(px) {
   const { min, max } = widthBounds();
@@ -438,8 +419,8 @@ function resetPanelWidth() {
 }
 // One click or Enter: wide (half the board) from anything narrower, else back to the default.
 function togglePanelWidth() {
-  const { total, max } = widthBounds(), wide = Math.min(total / 2, max);
-  if ($('panel').offsetWidth < wide - 8) setPanelWidth(wide); else resetPanelWidth();
+  const { total } = widthBounds();
+  if ($('panel').offsetWidth < total / 2 - 8) setPanelWidth(total / 2); else resetPanelWidth();
 }
 try { const kept = Number(localStorage.getItem(widthKey)); if (kept > 0) document.documentElement.style.setProperty('--panel-size', `${kept}px`); } catch { /* none */ }
 let drag = null;
@@ -450,7 +431,7 @@ resizer.addEventListener('pointerdown', event => {
 });
 resizer.addEventListener('pointermove', event => {
   if (!drag || !resizer.hasPointerCapture(event.pointerId)) return;
-  const dx = docked() ? event.clientX - drag.x : drag.x - event.clientX; // toward the board widens
+  const dx = drag.x - event.clientX;
   if (!drag.moved && Math.abs(dx) < 4) return; // a click, not a drag, until it moves 4px
   drag.moved = true;
   resizer.classList.add('dragging');
@@ -466,16 +447,14 @@ resizer.addEventListener('lostpointercapture', () => {
 resizer.addEventListener('keydown', event => {
   if (event.key === 'Enter') { event.preventDefault(); togglePanelWidth(); return; }
   const width = $('panel').offsetWidth, step = event.shiftKey ? 64 : 16, { min, max } = widthBounds();
-  // The arrow pointing at the board widens: ← when the panel is on the right, → when it is docked left.
-  const grow = docked() ? 'ArrowRight' : 'ArrowLeft', shrink = docked() ? 'ArrowLeft' : 'ArrowRight';
-  const next = { [grow]: width + step, [shrink]: width - step, Home: min, End: max }[event.key];
+  const next = { ArrowLeft: width + step, ArrowRight: width - step, Home: min, End: max }[event.key];
   if (next === undefined) return; // Escape still closes the panel
   event.preventDefault();
   event.stopPropagation(); // ←/→ here resize; they must not page to another card
   setPanelWidth(next);
 });
 // The separator reports the panel's share of the board, whatever moved it (handle, window or text size).
-function updateSeparator() {
+new ResizeObserver(() => {
   const { total, min, max } = widthBounds();
   if (!total) return;
   const share = width => String(Math.round(width / total * 100));
@@ -483,8 +462,7 @@ function updateSeparator() {
   resizer.setAttribute('aria-valuemin', share(min));
   resizer.setAttribute('aria-valuemax', share(max));
   resizer.setAttribute('aria-valuetext', t('panel.resizeValue', { share: share($('panel').offsetWidth) }));
-}
-new ResizeObserver(updateSeparator).observe($('panel'));
+}).observe($('panel'));
 
 const skeletonMs = 1500;
 const docKey = item => `${item.id}|${statusOf(item).kind}`;
@@ -748,13 +726,15 @@ $('panel-fix').addEventListener('click', async () => {
 });
 
 // ---------- ticket window ----------
-// Ticket sites refuse frames, so the ticket opens in one named popup docked to the screen's right edge, and that
+// Ticket sites refuse frames, so the ticket opens in one named popup docked to the screen's left edge, and that
 // window follows the selection. Trade-off (decided 2026-11-19): following needs the opener link, because Chromium
 // lets a page with a cut opener neither navigate nor close its popup. So a hostile http(s) ticket page could redirect
 // this board window. It gains nothing: the token lives only in this page's URL fragment and memory, a redirected
 // window loses both, and another origin can never read them, so a fake page cannot approve or answer anything.
-// While it is open the decision panel docks left, beside it; a light check notices when the person closes it.
-let ticketWindow = null, ticketUrl = '', ticketWatch = 0;
+// The decision panel never moves: it stays on the right, and the popup takes the left 45% of the screen beside it,
+// narrower (down to 480px) when a wide panel leaves less, so a full-screen board shows both.
+let ticketWindow = null, ticketUrl = '';
+const ticketMinWidth = 480, ticketGap = 16;
 function openTicket(url) {
   if (!isHttp(url)) return;
   if (ticketWindow && !ticketWindow.closed) {
@@ -762,28 +742,15 @@ function openTicket(url) {
     ticketWindow.focus();
     return;
   }
-  const width = Math.round(screen.availWidth * 0.45), height = screen.availHeight;
-  const left = (screen.availLeft || 0) + screen.availWidth - width, top = screen.availTop || 0;
+  const room = screen.availWidth - $('panel').offsetWidth - ticketGap;
+  const width = Math.round(Math.max(ticketMinWidth, Math.min(screen.availWidth * 0.45, room)));
+  const height = screen.availHeight, left = screen.availLeft || 0, top = screen.availTop || 0;
   const opened = window.open(url, 'sdlc-ticket', `popup=yes,width=${width},height=${height},left=${left},top=${top}`);
   if (!opened) { page.showError({ key: 'panel.popupBlocked' }); return; }
   ticketWindow = opened;
   ticketUrl = url;
-  dockPanel(true);
-  clearInterval(ticketWatch);
-  ticketWatch = setInterval(checkTicket, 1000);
   opened.focus();
 }
-function checkTicket() {
-  if (!ticketWindow || !ticketWindow.closed) return;
-  ticketWindow = null;
-  ticketUrl = '';
-  clearInterval(ticketWatch);
-  ticketWatch = 0;
-  dockPanel(false);
-}
-// Closing the ticket window usually hands focus back here: undock at once instead of on the next tick.
-globalThis.addEventListener?.('focus', checkTicket);
-document.addEventListener('visibilitychange', checkTicket);
 // Only a person's selection (a click or ←/→/j/k) moves the ticket window; live updates never call select().
 function followTicket(card) {
   const url = card?.link?.url;

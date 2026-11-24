@@ -327,8 +327,7 @@ Below about 900 px wide the page shows the list, and the List view keeps everyth
 A card opens the decision panel: the question, an **AI pick** badge on the suggested choice, the brief's Background and Why, the choice buttons, a free reply box, Approve intent/plan through the same SHA-bound `/api/approve`, and Fix by agent on a block.
 A choice sends the same ordinary reply as in the list, to the card's item whose turn is yours.
 "Your turn n/N" pages through your cards with ←/→ or j/k, and Esc closes the panel. While a request runs the buttons wait; a toast confirms it, and a failure shows its reason in the panel.
-**Open ticket** opens the link in one popup window docked to the right of the screen, not a tab, and points that window at the next card's ticket as you move on; ticket sites such as Jira refuse to be framed (X-Frame-Options).
-While the ticket window is open, the decision panel moves to the board's left edge, so you decide on the left while reading the ticket on the right. Its width handle moves to the panel's right edge (→ wider, ← narrower), and the panel stays within the 55% of the screen the ticket window leaves free. Closing the ticket window brings the panel back to the right; live updates never move it.
+**Open ticket** opens the link in one popup window docked to the left edge of the screen, not a tab, beside the decision panel, which stays on the right, so you read the ticket and decide at once. That window follows you to the next card's ticket as you move on. Ticket sites such as Jira refuse to be framed (X-Frame-Options).
 In the reply box, Enter sends and Shift+Enter starts a new line; an Enter that confirms Korean (IME) input never sends. The list's reply box works the same.
 Every button shows a tooltip with its action and key on hover or keyboard focus, such as "Open ticket (T)". **Keys** in the top strip, or `?`, opens the table below. Single keys work only outside a text box.
 
