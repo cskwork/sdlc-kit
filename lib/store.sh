@@ -1,60 +1,62 @@
 # Store upkeep for sdlc.sh, sourced by it (not run alone): the .state lock, the memory index, the
 # close-time memory decision and log pruning, and the dream brief. Uses sdlc.sh's helpers and globals.
-# A command that writes .state holds $F/.state.lock (mkdir is atomic everywhere) from load to save, so
-# two runs on one slug cannot both read the old state and the later write drop the earlier one. The lock's
-# pid file holds a token unique to its holder ("<pid>.<random>"; a bare pid from an older kit reads the same
-# way). A lock whose owner pid is gone, or that never got a token within a minute, is reclaimed.
+# A command that writes .state holds $F/.state.lock from load to save, so two runs on one slug cannot both
+# read the old state and the later write drop the earlier one. The lock is a file the shell creates with
+# noclobber (set -C: open with O_EXCL), holding a token unique to its holder ("<pid>.<random>"). Not mkdir:
+# the mkdir of uutils coreutils (Ubuntu 26.04) let several concurrent runs succeed on one path. A lock
+# directory from an older kit (its token in pid) still blocks the create and is read and reclaimed the same
+# way. A lock whose owner pid is gone, or that is still empty after a minute, is reclaimed.
 #
-# Why reclaiming cannot remove a live lock: reclaimers are serialized by $LOCK.reclaim (itself a mkdir lock
-# holding a token). Inside it a reclaimer reads token T, confirms T's pid is dead, then reads the token again
-# and removes the lock only if it is still T. If the owner it read had meanwhile exited and released, and
-# another run took the lock, the second read is that run's token (or nothing yet), never T, so it skips:
-# tokens are not reused, even when a pid is. While the token is still T after its pid died, nothing else can
-# change the dir: its dead owner never releases it, mkdir cannot take it, and other reclaimers wait. A holder
-# releases only a lock whose token is its own, so neither a reclaimed lock nor one in another process's
-# hands is ever removed by a wrong owner.
+# Why reclaiming cannot remove a live lock: reclaimers are serialized by $LOCK.reclaim (a lock of the same
+# kind). Inside it a reclaimer reads token T, confirms T's pid is dead, then reads the token again and
+# removes the lock only if it is still T. If the owner it read had meanwhile exited and released, and another
+# run took the lock, the second read is that run's token (or nothing yet), never T, so it skips: tokens are
+# not reused, even when a pid is. While the token is still T after its pid died, nothing else can change the
+# lock: its dead owner never releases it, a create cannot replace it, and other reclaimers wait. A holder
+# releases only a lock whose token is its own, so no run removes a lock another run holds.
 # Left: a reclaimer killed inside $LOCK.reclaim leaves it behind; another breaks it by the same token test,
-# and two mutex breakers racing could both enter the critical section only if one stalled between its
-# second read and rmdir while another reclaimer took the mutex: possible only after a reclaimer was killed.
-lock_token() { printf '%s.%s%s' "$$" "$RANDOM" "$RANDOM"; }
-# True when token $1's pid is gone, or ($1 empty) the dir $2 is over a minute old.
+# and two breakers racing could both enter the critical section only if one stalled between its second read
+# and the removal while another reclaimer took it: possible only after a reclaimer was killed.
+# Creates lock $1 holding token $2; fails when it exists (a file or an older kit's directory).
+lock_take() { ( set -C; printf '%s\n' "$2" > "$1" ) 2>/dev/null; }
+lock_read() { if [ -d "$1" ]; then cat "$1/pid"; else cat "$1"; fi 2>/dev/null || :; }
+lock_drop() { if [ -d "$1" ]; then rm -rf "$1"; else rm -f "$1"; fi; }
+# True when token $1's pid is gone, or ($1 empty) the lock $2 is over a minute old.
 lock_stale() {
   { [ -n "$1" ] && ! kill -0 "${1%%.*}" 2>/dev/null; } || { [ -z "$1" ] && [ -n "$(find "$2" -maxdepth 0 -mmin +1 2>/dev/null)" ]; }
 }
-# Removes lock dir $1 when its token is stale and unchanged across the liveness check.
+# Removes lock $1 when its token is stale and unchanged across the liveness check.
 remove_if_stale() {
   local t1 t2
-  t1=$(cat "$1/pid" 2>/dev/null) || t1=
-  [ -d "$1" ] && lock_stale "$t1" "$1" || return 1
-  t2=$(cat "$1/pid" 2>/dev/null) || t2=
-  [ "$t1" = "$t2" ] && [ -d "$1" ] || return 1
-  rm -rf "$1"
+  t1=$(lock_read "$1")
+  [ -e "$1" ] && lock_stale "$t1" "$1" || return 1
+  t2=$(lock_read "$1")
+  [ "$t1" = "$t2" ] && [ -e "$1" ] || return 1
+  lock_drop "$1"
 }
 # One reclaim attempt under $LOCK.reclaim. Sets reclaimwait when another reclaimer holds that lock.
 reclaim_lock() {
-  local mutex=$LOCK.reclaim mine
+  local mutex=$LOCK.reclaim mine=$$.$RANDOM$RANDOM
   reclaimwait=
-  mkdir "$mutex" 2>/dev/null || { remove_if_stale "$mutex" || reclaimwait=1; return 0; }
-  mine=$(lock_token); printf '%s\n' "$mine" > "$mutex/pid"
+  lock_take "$mutex" "$mine" || { remove_if_stale "$mutex" || reclaimwait=1; return 0; }
   remove_if_stale "$LOCK" || :
-  [ "$(cat "$mutex/pid" 2>/dev/null)" != "$mine" ] || rm -rf "$mutex"
+  [ "$(lock_read "$mutex")" != "$mine" ] || rm -f "$mutex"
 }
-# Releases lock dir $1 only while it holds this run's token (and, in bash 4+, only from the run itself).
-release_lock() { [ "${BASHPID:-$$}" = "$$" ] && [ -n "${locktoken:-}" ] && [ "$(cat "$1/pid" 2>/dev/null)" = "$locktoken" ] && rm -rf "$1" || :; }
+# Releases lock $1 only while it holds this run's token (and, in bash 4+, only from the run itself).
+release_lock() { [ "${BASHPID:-$$}" = "$$" ] && [ -n "${locktoken:-}" ] && [ -f "$1" ] && [ "$(lock_read "$1")" = "$locktoken" ] && rm -f "$1" || :; }
 lock_state() {
   local tries=0 owner limit=$(( ${SDLC_LOCK_WAIT:-30} * 10 ))
-  LOCK=$F/.state.lock; reclaimwait=
-  while ! mkdir "$LOCK" 2>/dev/null; do
+  LOCK=$F/.state.lock; reclaimwait=; locktoken=$$.$RANDOM$RANDOM
+  while ! lock_take "$LOCK" "$locktoken"; do
     [ -d "$F" ] || die "feature moved while waiting for its lock: $slug"
-    owner=$(cat "$LOCK/pid" 2>/dev/null) || owner=
-    if [ -d "$LOCK" ] && lock_stale "$owner" "$LOCK"; then reclaim_lock; [ -d "$LOCK" ] || continue; fi
+    owner=$(lock_read "$LOCK")
+    if [ -e "$LOCK" ] && lock_stale "$owner" "$LOCK"; then reclaim_lock; [ -e "$LOCK" ] || continue; fi
     if [ "$tries" -ge "$limit" ]; then
       [ -z "$reclaimwait" ] || die "$slug is locked: a stale lock cannot be reclaimed while $LOCK.reclaim is held${owner:+ (lock token $owner)}: retry, or remove $LOCK.reclaim if no sdlc.sh run is alive"
       die "$slug is locked by another sdlc.sh run${owner:+ (pid ${owner%%.*})}: retry when it ends, or remove $LOCK if no run is alive"
     fi
     sleep 0.1; tries=$((tries+1))
   done
-  locktoken=$(lock_token); printf '%s\n' "$locktoken" > "$LOCK/pid"
   trap 'release_lock "$LOCK"' EXIT
 }
 # A number from config.md key $1, else $2.

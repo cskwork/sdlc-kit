@@ -1358,25 +1358,34 @@ DOC
   cat > "$TMP/aba.sh" <<'ABA'
 die() { echo "die: $*"; exit 1; }
 . "$1/lib/store.sh"; LOCK=$2/.state.lock; mkdir -p "$2"
-( mkdir "$LOCK"; sh -c 'echo $PPID' > "$LOCK/pid"; sleep 0.3; rm -rf "$LOCK" ) &
+( lock_take "$LOCK" "$(sh -c 'echo $PPID').b"; sleep 0.3; rm -f "$LOCK" ) &
 sleep 0.1
-( while ! mkdir "$LOCK" 2>/dev/null; do sleep 0.01; done; printf 'C.live\n' > "$LOCK/pid"; sleep 2 ) &
+( while ! lock_take "$LOCK" C.live; do sleep 0.01; done; sleep 2 ) &
 kill() { sleep 1; builtin kill "$@"; }
 reclaim_lock; sleep 0.2
-cat "$LOCK/pid" 2>/dev/null || echo gone
+cat "$LOCK" 2>/dev/null || echo gone
 wait
 ABA
   [ "$(bash "$TMP/aba.sh" "$KIT" "$TMP/aba" | head -1)" = C.live ] || fail 'a reclaimer removed a live lock taken after the owner it judged dead'
   ok 'state lock: a reclaimer never removes a lock taken after the owner it read'
   SLUG=lock-race; F=$PWD/.sdlc/work/$SLUG
-  mkdir "$F/.state.lock"; printf '%s\n' "$$" > "$F/.state.lock/pid"
+  ( exit 0 ) & dead=$!; wait "$dead" || :
+  # The lock file: a live token blocks until the wait runs out, a dead one is reclaimed.
+  printf '%s.1\n' "$$" > "$F/.state.lock"
   printf 'VERDICT: FAIL\n' >> "$F/review.md"
   SDLC_LOCK_WAIT=1 expect 1 review "$SLUG" fail 'held lock'; contains 'is locked by another sdlc.sh run'
-  ( exit 0 ) & dead=$!; wait "$dead" || :
-  printf '%s\n' "$dead" > "$F/.state.lock/pid"
+  printf '%s.1\n' "$dead" > "$F/.state.lock"
   expect 0 review "$SLUG" fail 'stale lock'; contains 'review FAIL 2/3'
   [ ! -e "$F/.state.lock" ] || fail 'stale lock left behind'
   ok 'state lock: a live owner blocks until the wait runs out; a dead owner is reclaimed'
+  # An older kit's lock directory (bare pid in pid): the same, removed whole.
+  mkdir "$F/.state.lock"; printf '%s\n' "$$" > "$F/.state.lock/pid"
+  printf 'VERDICT: FAIL\n' >> "$F/review.md"
+  SDLC_LOCK_WAIT=1 expect 1 review "$SLUG" fail 'held old lock'; contains 'is locked by another sdlc.sh run'
+  printf '%s\n' "$dead" > "$F/.state.lock/pid"
+  expect 0 review "$SLUG" fail 'stale old lock'; contains 'review FAIL 3/3'
+  [ ! -e "$F/.state.lock" ] || fail 'stale old-style lock left behind'
+  ok 'state lock: an older kit lock directory with a live pid is waited for, with a dead pid reclaimed'
 }
 # Event log: one tab-separated line per state change, moved into archive/ with the folder.
 events_of() { awk -F'\t' '{print $2 ":" $3 ":" $4}' "$1" | tr '\n' ' '; }

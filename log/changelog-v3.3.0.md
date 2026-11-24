@@ -20,10 +20,10 @@
   - `status` and `next` show `deliver READY · at stg (2/3)` and name the next stage. `status --json` adds `stage` and `stages`.
   - `close <slug> shipped` needs the last stage for every repository, or `--at <stage> "<reason>"` naming a recorded one. The reason goes into the closed note.
   - Without `stages:`, every flow is unchanged, and `ship` and `--at` are refused.
-- **State lock (`lib/store.sh`):** fixes a race that predates v3.3.0, where two runs could both hold a slug's lock (seen on ubuntu CI).
-  - Before, a waiter read the owner's pid, the owner exited and released, a third run took the lock, and the waiter's `kill -0` on the old pid then failed, so it removed the new holder's lock.
-  - Now the lock holds a token unique to its holder. Reclaims are serialized by a second mkdir lock, and a reclaimer removes the lock only if the token is unchanged after it confirmed the token's pid is dead.
-  - A holder releases only a lock that holds its own token.
+- **State lock (`lib/store.sh`):** two runs could hold one slug's lock on Ubuntu 26.04 CI runners.
+  - Root cause: the `mkdir` of uutils coreutils 0.10 there is not atomic under concurrent creation. In 30 of 200 trials of 8 parallel `mkdir` calls on one path, several succeeded; bash noclobber (`O_EXCL`) had 0 of 200.
+  - The lock is now a file created with bash noclobber (`set -C`), holding a token unique to its holder (`<pid>.<random>`). An older kit's lock directory (bare pid in `pid`) still blocks the create, and is waited for or reclaimed the same way.
+  - Defense in depth: a reclaimer could remove a lock that another run took after the owner it read had exited (an ABA race). Reclaims are now serialized by `.state.lock.reclaim`, and the lock is removed only if its token is unchanged after the token's pid was confirmed dead. A holder releases only a lock that holds its own token.
 - **`status --json` cost:** the new per-feature fields fork at most an awk over `events.log` and, only when that log does not start at `new`, one `stat`. A feature with no stage records forks nothing more.
 - **`events.log` and `stats`:** every state-changing command appends `ts⇥command⇥phase-after⇥result⇥detail` to `work/<slug>/events.log`. The file moves into `archive/` with the folder. A failed write warns and the command continues.
   - `status --json` adds `ageDays` and `lastEventAt`. `ageDays` counts from the earlier of folder creation and the first event.
