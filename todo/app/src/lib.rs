@@ -7,6 +7,7 @@ mod i18n;
 mod links;
 mod model;
 mod prefs;
+mod quit;
 mod server;
 mod system;
 mod ticket;
@@ -21,6 +22,7 @@ use prefs::Prefs;
 use server::{Launcher, Server, Session};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, RunEvent};
@@ -41,6 +43,8 @@ struct Shared {
     /// The origin of the page that came up in the board window, if any did. Kept here because asking WKWebView for its
     /// address panics in wry while no page has come up.
     page: Option<String>,
+    /// Whether the page holds something unsent, as it last said.
+    unsent: bool,
     /// The server this app runs, and whether the app is on its way out.
     server: Option<Server>,
     leaving: bool,
@@ -59,6 +63,15 @@ impl Shared {
         (requested || replaced).then(|| (session.clone(), requested))
     }
 
+    /// Whether a call from the page at `url` with `proof` is the page this app loaded: its server's origin and the token
+    /// that page was opened with.
+    fn is_page(&self, url: &str, proof: &str) -> bool {
+        self.loaded.as_ref().is_some_and(|session| links::within(url, &session.origin()) && same(proof.as_bytes(), session.token.as_bytes()))
+    }
+
+    /// Whether that page's server still answers this app: once it is lost, its port may be anyone's.
+    fn is_granted(&self, url: &str, proof: &str) -> bool { self.is_page(url, proof) && self.session == self.loaded }
+
     /// Whether the window has to be sent to `session`: not there, and not on its way either.
     fn must_load(&self, session: &Session) -> bool {
         if self.loaded.as_ref() != Some(session) { return true; }
@@ -66,6 +79,9 @@ impl Shared {
         self.page.as_deref() != Some(session.origin().as_str()) && self.asked.elapsed() > Duration::from_secs(3)
     }
 }
+
+/// Compares without telling by its time how far two secrets agree.
+fn same(a: &[u8], b: &[u8]) -> bool { a.len() == b.len() && a.iter().zip(b).fold(0, |diff, (x, y)| diff | (x ^ y)) == 0 }
 
 struct Shell {
     shared: Mutex<Shared>,
@@ -76,6 +92,11 @@ struct Shell {
     start_lang: Lang,
     /// The server ports whose page may use the bridge.
     allowed: Mutex<HashSet<u16>>,
+    /// What the last page still held when it was replaced; the next one takes it.
+    carried: Mutex<Option<serde_json::Value>>,
+    /// A view picked on the tray while the page was loading; it takes it once it is up.
+    picked: Mutex<Option<View>>,
+    no_tray: AtomicBool,
 }
 
 impl Shell {
@@ -122,10 +143,21 @@ fn args(session: PathBuf, env: impl Fn(&str) -> Option<String>, list: impl Itera
     Ok(parsed)
 }
 
+/// The path with its folder's links resolved, whether or not the file (or the last folders) exist yet: a list reached
+/// through a link is the same list.
+fn real(path: &Path) -> PathBuf {
+    let path = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    let Some(folder) = path.parent() else { return path };
+    for base in folder.ancestors() {
+        if let (Ok(found), Ok(rest)) = (std::fs::canonicalize(base), path.strip_prefix(base)) { return found.join(rest); }
+    }
+    path
+}
+
 /// One app per list: the identifier that single-instance (and WebView2's data folder) go by, for the list whose
 /// session file this is. FNV-1a, so it stays the same from build to build.
 fn instance(identifier: &str, session: &Path) -> String {
-    let path = std::path::absolute(session).unwrap_or_else(|_| session.to_path_buf());
+    let path = real(session);
     let hash = path.to_string_lossy().bytes().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(0x100_0000_01b3));
     format!("{identifier}.l{hash:016x}")
 }
@@ -136,7 +168,11 @@ fn connect(app: AppHandle, launcher: Launcher, mut open_once: bool) {
     let mut before: Option<Model> = None;
     let shell = app.state::<Shell>();
     let offline = |reason: String| {
-        lock(&shell.shared).conn = Conn::Offline(reason);
+        {
+            let mut shared = lock(&shell.shared);
+            // Its page loses the right to ask for anything of the person's (see is_granted) and may not be reloaded.
+            (shared.conn, shared.session) = (Conn::Offline(reason), None);
+        }
         board::offline(&app);
     };
     loop {
@@ -225,10 +261,10 @@ fn start() -> Result<(), String> {
     let prefs_file = args.session.with_file_name("todo-app.json");
     let (prefs, prefs_error) = Prefs::load(&prefs_file);
     let shell = Shell {
-        shared: Mutex::new(Shared { model: Model::default(), conn: Conn::Connecting, session: None, loaded: None, asked: Instant::now(), page: None, server: None, leaving: false, starting: false }),
+        shared: Mutex::new(Shared { model: Model::default(), conn: Conn::Connecting, session: None, loaded: None, asked: Instant::now(), page: None, unsent: false, server: None, leaving: false, starting: false }),
         prefs: Mutex::new(prefs), prefs_error: Mutex::new(prefs_error),
         window_file: prefs_file.with_file_name("todo-app-window.json"), prefs_file,
-        start_lang: lang, allowed: Mutex::new(HashSet::new()),
+        start_lang: lang, allowed: Mutex::new(HashSet::new()), carried: Mutex::default(), picked: Mutex::default(), no_tray: AtomicBool::new(false),
     };
     let background = args.background;
     let launcher = Arc::new(Mutex::new(Some(Launcher { session_file: args.session.clone(), kit: args.kit, node: args.node, lang: args.lang })));
@@ -246,15 +282,23 @@ fn start() -> Result<(), String> {
     }
     let app = builder
         .manage(shell)
-        .invoke_handler(tauri::generate_handler![bridge::ticket, bridge::app_state, bridge::save_memo, bridge::save_view, bridge::open_terminal])
+        .invoke_handler(tauri::generate_handler![bridge::ticket, bridge::app_state, bridge::save_memo, bridge::save_view, bridge::open_terminal, bridge::unsent, bridge::quit])
         .setup(move |app| {
             let handle = app.handle().clone();
+            // Without a tray (a desktop that has none) the window is the only way in: it opens now, and closing it
+            // quits.
             #[cfg(desktop)]
-            tray::build(&handle, lang, |app, pick| match pick {
+            let tray = tray::build(&handle, lang, |app, pick| match pick {
                 tray::Pick::Board => board::later(app, |app| board::show(app, View::Board)),
                 tray::Pick::List => board::later(app, |app| board::show(app, View::List)),
-                tray::Pick::Quit => app.exit(0),
-            })?;
+                tray::Pick::Quit => quit::request(app),
+            });
+            #[cfg(desktop)]
+            if let Err(error) = tray {
+                eprintln!("sdlc-todo: no tray icon ({error}); the board stays in its window");
+                handle.state::<Shell>().no_tray.store(true, std::sync::atomic::Ordering::SeqCst);
+                board::later(&handle, |app| board::show(app, View::Board));
+            }
             if let Some(launcher) = lock(&launcher).take() { board::later(&handle, move |app| connect(app.clone(), launcher, !background)); }
             // macOS asks once whether the app may control Chrome (for the ticket window); ask now, not at the first ticket.
             #[cfg(target_os = "macos")]
@@ -268,6 +312,8 @@ fn start() -> Result<(), String> {
         RunEvent::ExitRequested { code: None, api, .. } => api.prevent_exit(),
         RunEvent::Exit => leave(app),
         #[cfg(target_os = "macos")]
+        RunEvent::Ready => quit::answer_terminate(app),
+        #[cfg(target_os = "macos")]
         RunEvent::Reopen { has_visible_windows, .. } => if !has_visible_windows { board::later(app, |app| board::show(app, View::Board)) },
         _ => {}
     });
@@ -280,7 +326,7 @@ mod tests {
 
     fn session(port: u16) -> Session { Session { port, token: "0123456789abcdef0123456789abcdef".into() } }
     fn shared(conn: Conn, session: Option<Session>, loaded: Option<Session>) -> Shared {
-        Shared { model: Model::default(), conn, session, loaded, asked: Instant::now(), page: None, server: None, leaving: false, starting: false }
+        Shared { model: Model::default(), conn, session, loaded, asked: Instant::now(), page: None, unsent: false, server: None, leaving: false, starting: false }
     }
 
     #[test]
@@ -309,6 +355,41 @@ mod tests {
         assert!(!there.must_load(&session(2)));
         there.page = Some(board::SHELL_ORIGIN.into());
         assert!(there.must_load(&session(2)));
+    }
+
+    #[test]
+    fn the_bridge_answers_only_the_page_it_loaded_while_its_server_lives() {
+        const TOKEN: &str = "0123456789abcdef0123456789abcdef";
+        let mut there = shared(Conn::Live, Some(session(2)), Some(session(2)));
+        assert!(there.is_granted("http://127.0.0.1:2/#t=x", TOKEN));
+        // Another origin, or a page that does not hold the token.
+        for (url, proof) in [("http://127.0.0.1:3/", TOKEN), ("http://localhost:2/", TOKEN), ("http://127.0.0.1:2/", ""), ("http://127.0.0.1:2/", "0123456789abcdef0123456789abcdee"), ("http://127.0.0.1:2/", "0123")] {
+            assert!(!there.is_page(url, proof) && !there.is_granted(url, proof), "{url} {proof}");
+        }
+        // The server is lost (its port may be another service's now), then replaced: the old page may still hand in
+        // its words, and is told nothing.
+        for now in [None, Some(session(3))] {
+            there.session = now;
+            assert!(there.is_page("http://127.0.0.1:2/", TOKEN) && !there.is_granted("http://127.0.0.1:2/", TOKEN));
+        }
+        there.loaded = Some(session(3));
+        assert!(there.is_granted("http://127.0.0.1:3/", TOKEN) && !there.is_page("http://127.0.0.1:2/", TOKEN));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_list_reached_through_a_link_is_the_same_list() {
+        let dir = std::env::temp_dir().join(format!("sdlc-todo-link-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("real")).unwrap();
+        std::os::unix::fs::symlink(dir.join("real"), dir.join("link")).unwrap();
+        let id = |path: &str| instance("x", &dir.join(path));
+        assert_eq!(id("real/todo-web.json"), id("link/todo-web.json"), "before the file exists");
+        assert_eq!(id("real/new/todo-web.json"), id("link/new/todo-web.json"), "before its folder exists");
+        let before = id("link/todo-web.json");
+        std::fs::write(dir.join("real/todo-web.json"), "{}").unwrap();
+        assert_eq!(id("link/todo-web.json"), before, "the file coming changes nothing");
+        assert_ne!(id("real/todo-web.json"), id("todo-web.json"));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

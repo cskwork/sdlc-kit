@@ -34,7 +34,8 @@ serde_json = "1"
 sdlc-todo-server = { path = "server" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-# Brings the Chrome ticket window forward (src/ticket.rs); already in the tree through tao.
+# The Chrome ticket window (src/ticket.rs) and the question before quitting (src/quit.rs); in the tree through tao.
+objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSRunningApplication", "libc"] }
 
 [profile.release]

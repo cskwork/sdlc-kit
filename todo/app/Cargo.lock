@@ -2849,6 +2849,7 @@ name = "sdlc-todo"
 version = "0.2.0"
 dependencies = [
  "notify-rust",
+ "objc2",
  "objc2-app-kit",
  "sdlc-todo-server",
  "serde",

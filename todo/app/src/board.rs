@@ -18,6 +18,10 @@ pub const LABEL: &str = "board";
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum View { Board, List }
 
+impl View {
+    pub fn name(self) -> &'static str { if self == View::List { "list" } else { "board" } }
+}
+
 /// The view last picked on the tray; a page the shell loads by itself opens on it.
 static VIEW: Mutex<View> = Mutex::new(View::Board);
 /// One change to the window at a time.
@@ -36,15 +40,30 @@ pub const SHELL_ORIGIN: &str = if cfg!(any(windows, target_os = "android")) { "h
 /// What the page finds as `todoApp`: the few things it may ask of the shell (bridge.rs). The page knows nothing else of
 /// the shell, and the shell answers only the board's own origin.
 const BRIDGE: &str = r#"(() => {
-  const ask = (name, args) => window.__TAURI_INTERNALS__.invoke(name, args);
+  // The token the page was opened with proves to the shell that it is that page.
+  const proof = new URLSearchParams(location.hash.slice(1)).get('t') || '';
+  const ask = (name, args) => window.__TAURI_INTERNALS__.invoke(name, { proof, ...args });
+  let view = '';
+  addEventListener('todo-view', event => { view = event.detail; });
   Object.defineProperty(window, 'todoApp', { value: Object.freeze({
     ticket: (url, follow) => ask('ticket', { url, follow }),
     state: () => ask('app_state'),
     saveMemo: (id, text) => ask('save_memo', { id, text }),
     saveView: (size, font) => ask('save_view', { size, font }),
-    openTerminal: id => ask('open_terminal', { id })
+    openTerminal: (id, command) => ask('open_terminal', { id, command }),
+    unsent: unsent => ask('unsent', { unsent }),
+    quit: () => ask('quit'),
+    // The view last picked on the tray, also before the page could listen.
+    view: () => view
   }) });
 })()"#;
+
+/// What the page holds that another page could take up (app.js), and how long the person has not typed.
+const CARRY: &str = "(() => { const page = globalThis.todoPage; return page && page.carry ? JSON.stringify(page.carry()) : ''; })()";
+/// Asks the person in the page whether to quit; true when the page did ask.
+const ASK_QUIT: &str = "!!(globalThis.todoPage && todoPage.askQuit && todoPage.askQuit())";
+/// How long a page that is being typed in is waited for before it is replaced, and what counts as still typing.
+const TYPING: (Duration, f64) = (Duration::from_secs(4), 1200.0);
 
 /// Whether the page holds something that closing would lose. A page without the question (an older one) is kept.
 const BUSY: &str = "(() => { const page = globalThis.todoPage; return page ? (typeof page.busy === 'function' ? page.busy() : true) : false; })()";
@@ -55,11 +74,45 @@ fn address(session: &Session, view: View) -> Result<Url, String> {
     Url::parse(&format!("{}{start}", session.board_url())).map_err(|_| "the server's address is not one".into())
 }
 
-fn view_script(view: View) -> &'static str {
-    match view {
-        View::Board => "window.dispatchEvent(new CustomEvent('todo-view', { detail: 'board' }))",
-        View::List => "window.dispatchEvent(new CustomEvent('todo-view', { detail: 'list' }))",
+fn view_script(view: View) -> String { format!("window.dispatchEvent(new CustomEvent('todo-view', {{ detail: '{}' }}))", view.name()) }
+
+/// Runs `script` in the page and waits for its answer (JSON). Off the main thread only: the answer comes through it.
+fn ask_page(window: &WebviewWindow, script: &str, limit: Duration) -> Option<serde_json::Value> {
+    let (send, answer) = std::sync::mpsc::channel();
+    window.eval_with_callback(script, move |text| { let _ = send.send(text); }).ok()?;
+    serde_json::from_str(&answer.recv_timeout(limit).ok()?).ok()
+}
+
+/// Reads a page's answer to CARRY: what it holds, and the milliseconds since the last key.
+fn carried(answer: serde_json::Value) -> Option<(serde_json::Value, f64)> {
+    let held: serde_json::Value = serde_json::from_str(answer.as_str()?).ok()?;
+    let idle = held.get("idle").and_then(serde_json::Value::as_f64).unwrap_or(f64::MAX);
+    held.is_object().then_some((held, idle))
+}
+
+/// Keeps what the page holds for the one that replaces it. Nothing typed is lost: a page in use is waited for briefly,
+/// and what could not be read leaves an earlier page's words in place.
+fn keep(app: &AppHandle, window: &WebviewWindow) {
+    let shell = app.state::<Shell>();
+    // Only a page of the server this window was sent to; the shell's own holds nothing.
+    let ours = { let shared = lock(&shell.shared); shared.loaded.as_ref().is_some_and(|session| shared.page.as_deref() == Some(session.origin().as_str())) };
+    if !ours { return; }
+    let started = Instant::now();
+    while let Some((held, idle)) = ask_page(window, CARRY, Duration::from_secs(2)).and_then(carried) {
+        *lock(&shell.carried) = Some(held);
+        if idle >= TYPING.1 || started.elapsed() >= TYPING.0 { break; }
+        std::thread::sleep(Duration::from_millis(300));
     }
+}
+
+/// Asks in the page before quitting. False when there is no page to ask.
+pub fn ask_quit(app: &AppHandle) -> bool {
+    let _one = lock(&WINDOW);
+    let Some(window) = app.get_webview_window(LABEL) else { return false };
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+    ask_page(&window, ASK_QUIT, Duration::from_secs(3)) == Some(true.into())
 }
 
 /// Brings the board forward on `view`; while no server answers, the shell's own page says so.
@@ -69,6 +122,7 @@ pub fn show(app: &AppHandle, view: View) {
     let shell = app.state::<Shell>();
     let window = app.get_webview_window(LABEL);
     let target = lock(&shell.shared).board_to_open(true, window.is_some()).map(|(session, _)| session);
+    let there = window.is_some() && target.as_ref().is_some_and(|session| !lock(&shell.shared).must_load(session));
     let window = match (window, &target) {
         (Some(window), Some(session)) => { load(app, &window, session, view); window }
         // The page that was loaded shows by itself that its server is away; its drafts stay.
@@ -85,7 +139,9 @@ pub fn show(app: &AppHandle, view: View) {
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
-    // A page already there switches; one that loads now opens on the view its address names.
+    // A page already there switches; one that loads now opens on the view its address names, and one that was still
+    // loading asks for this pick when it is up.
+    if there { *lock(&shell.picked) = Some(view); }
     let _ = window.eval(view_script(view));
 }
 
@@ -136,6 +192,8 @@ fn load(app: &AppHandle, window: &WebviewWindow, session: &Session, view: View) 
     let shell = app.state::<Shell>();
     if !lock(&shell.shared).must_load(session) { return; }
     let Ok(url) = address(session, view) else { return };
+    keep(app, window);
+    *lock(&shell.picked) = None;
     allow(app, session);
     match window.navigate(url) {
         Ok(()) => asked(&shell, Some(session)),
@@ -156,6 +214,7 @@ fn make(app: &AppHandle, session: Option<&Session>, view: View) -> Result<Webvie
     };
     asked(&shell, session);
     lock(&shell.shared).page = None;
+    *lock(&shell.picked) = None;
     let (nav, popup, pages) = (app.clone(), app.clone(), app.clone());
     let built = WebviewWindowBuilder::new(app, LABEL, page)
         .title(t(shell.lang(), "title"))
@@ -186,7 +245,11 @@ fn make(app: &AppHandle, session: Option<&Session>, view: View) -> Result<Webvie
     place(&shell, &window);
     let events = app.clone();
     window.on_window_event(move |event| match event {
-        WindowEvent::CloseRequested { api, .. } => { api.prevent_close(); close(&events); }
+        WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            // Without a tray nothing would bring a hidden window back.
+            if events.state::<Shell>().no_tray.load(std::sync::atomic::Ordering::SeqCst) { crate::quit::request(&events) } else { close(&events) }
+        }
         WindowEvent::Moved(_) | WindowEvent::Resized(_) => save_when_still(&events),
         _ => {}
     });
@@ -247,11 +310,14 @@ fn free(app: &AppHandle) {
     let Some(window) = app.get_webview_window(LABEL) else { return };
     // Asked for again meanwhile: keep it.
     if window.is_visible().unwrap_or(true) { return; }
+    // Words on their way to a page that has not taken them up yet wait for it.
+    if lock(&app.state::<Shell>().carried).is_some() { return; }
     if window.destroy().is_err() { return; }
     {
         let shell = app.state::<Shell>();
         asked(&shell, None);
-        lock(&shell.shared).page = None;
+        let mut shared = lock(&shell.shared);
+        (shared.page, shared.unsent) = (None, false);
     }
     // The label is free once the event loop has let the window go.
     for _ in 0..100 {
@@ -315,4 +381,20 @@ pub fn save_place(app: &AppHandle) {
     let unit = unit(scale);
     let frame = Frame { x: f64::from(position.x) / unit, y: f64::from(position.y) / unit, width: f64::from(size.width) / unit, height: f64::from(size.height) / unit };
     if let Err(error) = WindowState::of(frame).save(&app.state::<Shell>().window_file) { eprintln!("sdlc-todo: {error}"); }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn what_a_page_holds_is_read_from_its_answer() {
+        let answer = serde_json::Value::from(json!({ "idle": 40, "list": { "add": "한글 \"draft\"" } }).to_string());
+        let (held, idle) = carried(answer).unwrap();
+        assert_eq!((held["list"]["add"].as_str(), idle), (Some("한글 \"draft\""), 40.0));
+        // A page that never counted typing is not waited for; one that answers nothing sensible keeps the earlier words.
+        assert_eq!(carried(json!("{}")).unwrap().1, f64::MAX);
+        for answer in [json!(""), json!(null), json!("[]"), json!("{ broken"), json!(true)] { assert!(carried(answer.clone()).is_none(), "{answer}"); }
+    }
 }

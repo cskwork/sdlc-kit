@@ -369,6 +369,13 @@ export default {
     'decide.yours': '직접 정해 주세요',
     'decide.suggested': 'AI 권장 있음',
     'panel.ticketFailed': '티켓을 열지 못했어요: {message}',
-    'board.workingNow.other': '지금 작업 중 {count}건'
+    'board.workingNow.other': '지금 작업 중 {count}건',
+    'quit.title': '보내지 않은 내용이 있어요',
+    'quit.note': '지금 끝내면 쓰던 글이나 진행 중인 요청이 사라져요.',
+    'quit.confirm': '그래도 끝내기',
+    'quit.stay': '계속 쓰기',
+    'carry.lost': '항목이 사라져 보내지 못한 글이에요. 필요하면 복사하세요: {text}',
+    'run.changed': '명령이 바뀌었어요. 새 명령을 확인하고 다시 눌러 주세요.',
+    'run.terminalFailed': '터미널을 열지 못했어요. 명령을 직접 복사해 주세요.'
   }
 };

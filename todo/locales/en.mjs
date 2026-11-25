@@ -377,6 +377,13 @@ export default {
     'decide.suggested': 'AI suggestion ready',
     'panel.ticketFailed': 'The ticket could not be opened: {message}',
     'board.workingNow.one': '{count} working now',
-    'board.workingNow.other': '{count} working now'
+    'board.workingNow.other': '{count} working now',
+    'quit.title': 'Something is not sent yet',
+    'quit.note': 'If you quit now, what you were writing or a request in progress is lost.',
+    'quit.confirm': 'Quit anyway',
+    'quit.stay': 'Keep writing',
+    'carry.lost': 'The item is gone, so this was not sent. Copy it if you need it: {text}',
+    'run.changed': 'The command changed. Check the new one and press again.',
+    'run.terminalFailed': 'Terminal could not be opened. Copy the command yourself.'
   }
 };

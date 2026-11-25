@@ -83,7 +83,7 @@ function page(hash = '', options = {}) {
       createElementNS: () => node(`element-${++element}`), createTextNode: text => ({ textContent: text }) },
     sessionStorage: storage(), localStorage: storage(),
     history: { replaceState(_state, _title, url) { location.href = new URL(url, location).href; } },
-    location, URLSearchParams, setTimeout, clearTimeout, Node: class {}, scrollX: 0, scrollY: 0, scrollTo() {}, matchMedia: () => media,
+    location, URLSearchParams, setTimeout, clearTimeout, setInterval() {}, Node: class {}, scrollX: 0, scrollY: 0, scrollTo() {}, matchMedia: () => media,
     // The browser imports these modules; the VM runs app.js as a script with their exports as globals.
     ...i18n, ...status,
     EventSource: class {
@@ -936,6 +936,126 @@ test('fix: a request whose agent did not start shows one notice, on the board an
   }
 });
 
+// A page in the app's window: todoApp answers, and the board's part is there (a stand-in carrier).
+async function appPage(list, { state = {}, calls = [], board = null } = {}) {
+  const own = { memos: {}, size: 100, sizes: [80, 160], font: '', fonts: [], terminal: true, follows: true, error: null, carried: null, view: null, ...state };
+  const p = page('#t=test-token', { source: source.replace('const shell = globalThis.todoApp;', 'const shell = globalThis.shellStub;')
+    .replace('let token = ', 'globalThis.shellStub = globalThis.process ? null : makeShell();\nlet token = ').replace('makeShell()', `({
+      state: async () => JSON.parse(${JSON.stringify(JSON.stringify(own))}),
+      saveMemo: async (id, text) => { sink.push(['memo', id, text]); }, saveView: (size, font) => viewAnswer(size, font),
+      openTerminal: async (id, command) => openAnswer(id, command), unsent: async now => { sink.push(['unsent', now]); }, quit: async () => { sink.push(['quit']); } })`)
+    .replace("const $ = id =>", "const sink = []; let viewAnswer = async (...a) => { sink.push(['view', ...a]); }, openAnswer = () => true; const CustomEvent = class { constructor(type, init) { this.type = type; this.detail = init.detail; } }; const dispatchEvent = event => sink.push([event.type, event.detail]);\nconst $ = id =>") });
+  Object.assign(p.context, { getComputedStyle: () => ({ fontFamily: 'system-ui' }) });
+  p.context.document.documentElement.style = {};
+  p.context.document.body = {};
+  p.context.list = list;
+  p.context.boardStub = board || { take: () => ({}), put() {} };
+  const json = code => JSON.parse(vm.runInContext(`JSON.stringify(${code})`, p.context));
+  const snapshot = () => vm.runInContext('apply({ items: list })', p.context);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  return { p, json, snapshot, run: code => vm.runInContext(code, p.context), calls: () => json('sink'),
+    board: () => vm.runInContext("todoPage.addCarrier('board', boardStub)", p.context), tick: () => new Promise(resolve => setTimeout(resolve, 0)) };
+}
+const plain = (id, extra = {}) => askItem(id, 'v1', '', extra);
+
+test('app: what was typed goes to the next page: replies, approval words, a new item, a memo not yet written', async () => {
+  const items = [plain('aaaaaa'), plain('bbbbbb')];
+  const first = await appPage(items);
+  first.board();
+  first.snapshot();
+  first.run("drafts.set('aaaaaa', { reply: '답 쓰는 중', words: '승인 말', seed: '', replyVersion: 'v1' }); drafts.set('bbbbbb', { reply: 'suggested', words: '', seed: 'suggested' }); addText.value = '새 일'; own.memos.bbbbbb = '내 메모'; memoSaving.add('bbbbbb');");
+  const held = first.json('todoPage.carry()');
+  assert.deepEqual(held.list.drafts.map(([id]) => id), ['aaaaaa'], 'an unedited suggestion is not the person\'s words');
+  assert.equal(held.idle, 1e9, 'nobody typed here');
+  const taken = [];
+  const next = await appPage(items, { state: { carried: { ...held, board: { view: 'list' } } }, board: { take: () => ({}), put: held => taken.push(held) } });
+  next.snapshot();
+  assert.equal(next.run("drafts.has('aaaaaa')"), false, 'waits for the board\'s part');
+  next.board();
+  await next.tick();
+  assert.deepEqual(next.json("drafts.get('aaaaaa')"), { reply: '답 쓰는 중', words: '승인 말', seed: '', replyVersion: 'v1' });
+  assert.equal(next.run('addText.value'), '새 일');
+  assert.deepEqual(next.calls().filter(call => call[0] === 'memo'), [['memo', 'bbbbbb', '내 메모']]);
+  assert.deepEqual(JSON.parse(JSON.stringify(taken)), [{ view: 'list' }]);
+  assert.equal(next.run('todoPage.busy()'), true);
+  next.run('todoPage.addCarrier(\'other\', boardStub)');
+  assert.equal(taken.length, 1, 'taken up once');
+});
+
+test('app: words for an item that went away are shown, not dropped or kept out of sight', async () => {
+  const next = await appPage([plain('bbbbbb')], { state: { carried: { list: { drafts: [['aaaaaa', { reply: '긴 답', words: '', seed: '' }]] } } } });
+  next.board();
+  next.snapshot();
+  assert.match(next.p.nodes.get('error-text').textContent, /긴 답/);
+  assert.equal(next.run("drafts.has('aaaaaa')"), false);
+});
+
+test('app: the board takes its replies, note, selection and view along', () => {
+  const list = [askItem('aaaaaa', 'v1', ''), askItem('bbbbbb', 'v1', '')];
+  const p2 = page('#t=test-token');
+  boardItems(p2, list);
+  let mine;
+  p2.context.todoPage.addCarrier = (name, value) => { mine = value; };
+  const b2 = boardPage(p2);
+  const held = { drafts: [['aaaaaa', { reply: '보드 답', seed: '' }], ['gone00', { reply: '사라진 답', seed: '' }]], note: { id: 'aaaaaa', text: '승인 메모' }, selected: vm.runInContext("cards = boardCards(page.items, page.feed, Date.now()); cards.find(card => card.target.id === 'aaaaaa').key", b2.context), view: 'board' };
+  const shown = [];
+  p2.context.todoPage.lostWords = text => shown.push(text);
+  mine.put(held);
+  assert.equal(b2.nodes.get('panel-reply-text').value, '보드 답');
+  assert.equal(b2.nodes.get('panel-note').value, '승인 메모');
+  assert.deepEqual(shown, ['사라진 답']);
+  const again = JSON.parse(JSON.stringify(mine.take()));
+  assert.deepEqual([again.drafts.map(([id]) => id), again.note, again.view], [['aaaaaa'], { id: 'aaaaaa', text: '승인 메모' }, 'board']);
+});
+
+test('app: the shell is told when something is unsent; Quit then asks, and only Quit anyway quits', async () => {
+  const a = await appPage([plain('aaaaaa')]);
+  a.board();
+  a.snapshot();
+  a.run("drafts.set('aaaaaa', { reply: 'x', words: '', seed: '' }); tellUnsent(); tellUnsent(); drafts.clear(); tellUnsent();");
+  assert.deepEqual(a.calls().filter(call => call[0] === 'unsent'), [['unsent', false], ['unsent', true], ['unsent', false]], 'once per change');
+  const dialog = a.p.nodes.get('delete-confirm');
+  assert.equal(a.run('todoPage.askQuit()'), true);
+  await a.tick();
+  assert.equal(dialog.open, true);
+  assert.equal(a.run('todoPage.askQuit()'), true, 'asking twice shows one question');
+  dialog.close('');
+  await a.tick();
+  assert.equal(a.calls().some(call => call[0] === 'quit'), false);
+  a.run('todoPage.askQuit()');
+  await a.tick();
+  dialog.close('delete');
+  await a.tick();
+  assert.equal(a.calls().filter(call => call[0] === 'quit').length, 1);
+});
+
+test('app: quick size changes are saved one after another, the last one last', async () => {
+  const a = await appPage([]);
+  a.run("globalThis.waiting = []; viewAnswer = (size, font) => { sink.push(['view', size]); return new Promise(done => waiting.push(done)); }; sizeText(10); sizeText(10); sizeText(10);");
+  assert.deepEqual(a.calls().filter(call => call[0] === 'view'), [['view', 110]], 'the next waits');
+  a.run('waiting[0]()');
+  await a.tick();
+  assert.deepEqual(a.calls().filter(call => call[0] === 'view'), [['view', 110], ['view', 130]]);
+  a.run('waiting[1]()');
+  await a.tick();
+  assert.equal(a.calls().filter(call => call[0] === 'view').length, 2);
+});
+
+test('app: a terminal opens with the command on screen; a changed one is refused with a notice', async () => {
+  const a = await appPage([plain('aaaaaa', { run: 'vpn login' })]);
+  a.run("openAnswer = (id, command) => { sink.push(['open', id, command]); throw 'changed'; };");
+  const box = a.run("runCommandControl({ id: 'aaaaaa', run: 'vpn login' })");
+  await box.children.find(child => child.listeners?.click).listeners.click();
+  assert.deepEqual(a.calls().filter(call => call[0] === 'open'), [['open', 'aaaaaa', 'vpn login']]);
+  assert.equal(a.p.nodes.get('error-text').textContent, a.p.context.todoPage.t('run.changed'));
+});
+
+test('app: a view picked on the tray while the page loaded is taken up', async () => {
+  const a = await appPage([], { state: { view: 'list' } });
+  assert.deepEqual(a.calls().filter(call => call[0] === 'todo-view'), [['todo-view', 'list']]);
+  assert.match(boardSource, /globalThis\.todoApp\?\.view\?\.\(\)/, 'and one that came before the board could listen');
+});
+
 test('choices: what each does comes from the document\'s numbered Options list, matched by label', () => {
   const { b } = selectedBoard([askItem('aaaaaa', 'v1', '')]);
   const options = (markdown, choices) => [...vm.runInContext('optionsOf', b.context)(markdown, choices)];
@@ -982,7 +1102,8 @@ test('app: memos, text size and font live in the shell; a memo not yet written k
   field.listeners.input();
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.equal(vm.runInContext('memoSaving.size', inShell.context), 0);
-  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [['view', 110, ''], ['view', 110, '/f/N.ttf'], ['memo', 'aaaaaa', 'ask QA first'], ['memo', 'aaaaaa', 'ask QA first, then ship it']],
+  const kept = JSON.parse(JSON.stringify(calls)), of = kind => kept.filter(call => call[0] === kind);
+  assert.deepEqual([...of('view'), ...of('memo')], [['view', 110, ''], ['view', 110, '/f/N.ttf'], ['memo', 'aaaaaa', 'ask QA first'], ['memo', 'aaaaaa', 'ask QA first, then ship it']],
     'one save at a time; the newest words are written last');
   inShell.context.document.querySelector = selector => selector === 'li.row.editing' ? {} : null;
   assert.equal(vm.runInContext('inFlight = 0; todoPage.busy()', inShell.context), true, 'a rename being typed keeps the window');

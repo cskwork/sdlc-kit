@@ -107,7 +107,7 @@ const lastReply = item => [...item.events].reverse().find(event => event.who ===
 // ---------- view ----------
 const narrow = matchMedia('(max-width: 899px)');
 // The tray app's "Open list" makes a new window with view=list in the address.
-let chosenView = /(?:^#|&)view=list(?:&|$)/.test(globalThis.location?.hash || '') ? 'list' : 'board';
+let chosenView = globalThis.todoApp?.view?.() || (/(?:^#|&)view=list(?:&|$)/.test(globalThis.location?.hash || '') ? 'list' : 'board');
 function currentView() {
   if (narrow.matches) return 'list';
   if ((chosenView === 'runs' || chosenView === 'health') && !page.feed) return 'board';
@@ -1069,6 +1069,29 @@ function renderHealth() {
 // A page with an unsent answer or a request in flight is never closed for a newer window.
 // An unedited suggestion is not the person's words, as on the list.
 page.addBusyCheck(() => sending || [...drafts.values()].some(draft => draft.reply.trim() && draft.reply !== draft.seed) || !!$('panel-note').value.trim());
+// What goes along when the app's window loads a new server's page (app.js restoreCarry).
+page.addCarrier('board', {
+  take: () => ({
+    drafts: [...drafts].filter(([, draft]) => draft.reply.trim() && draft.reply !== draft.seed),
+    note: panelTarget && $('panel-note').value.trim() ? { id: panelTarget.id, text: $('panel-note').value } : null,
+    selected: selectedKey, view: chosenView
+  }),
+  put(held) {
+    if (!loaded) { loaded = true; render(); }
+    const open = id => page.items.some(item => item.id === id && !item.done);
+    for (const [id, draft] of held.drafts || []) {
+      if (!open(id)) { page.lostWords(draft.reply); continue; }
+      drafts.set(id, draft);
+      if (panelTarget?.id === id) $('panel-reply-text').value = draft.reply;
+    }
+    if (['board', 'list', 'runs', 'health'].includes(held.view)) chosenView = held.view;
+    // Not select(): opening what was open moves no ticket window.
+    if (held.selected && cards.some(card => card.key === held.selected)) selectedKey = held.selected;
+    render();
+    if (held.note && panelTarget?.id === held.note.id) $('panel-note').value = held.note.text;
+    else if (held.note) page.lostWords(held.note.text);
+  }
+});
 page.subscribe(() => { loaded = true; render(); });
 render();
 // Event times turn into "N days" and the clock moves on without a snapshot.
