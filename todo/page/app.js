@@ -1070,21 +1070,27 @@ async function executeRun({ id, version, command, path }) {
 // browser has none of these, so their controls stay hidden there.
 const shell = globalThis.todoApp;
 let own = null; // { memos, size, sizes, font, fonts, terminal, follows } once the shell answered
-const memoTimers = new Map(); // item id -> timer of a memo not yet written
+const memoDirty = new Set(), memoSaving = new Set(); // item ids whose memo is newer than the file, or on its way there
 let memoFailed = false;
 const baseFont = () => getComputedStyle(document.body).fontFamily;
 let pageFont = '';
+// Every edit is sent at once, one save per item at a time, so the newest words are always the last ones written.
 async function writeMemo(id) {
-  clearTimeout(memoTimers.get(id));
-  try {
-    await shell.saveMemo(id, own.memos[id] || '');
-    memoTimers.delete(id);
-    memoFailed = false;
-  } catch (error) {
-    // The words stay in the box and the window stays open (busy) until they are written.
-    if (!memoFailed) showError({ key: 'memo.failed', vars: { message: String(error?.message || error) } });
-    memoFailed = true;
+  memoDirty.add(id);
+  if (memoSaving.has(id)) return;
+  memoSaving.add(id);
+  while (memoDirty.has(id)) {
+    memoDirty.delete(id);
+    try { await shell.saveMemo(id, own.memos[id] || ''); memoFailed = false; }
+    catch (error) {
+      // The words stay in the box and the window stays open (busy) while they are tried again.
+      memoDirty.add(id);
+      if (!memoFailed) showError({ key: 'memo.failed', vars: { message: String(error?.message || error) } });
+      memoFailed = true;
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
   }
+  memoSaving.delete(id);
 }
 // Shows an item's memo in `box` (a <details> with a textarea), in the list's details or the board's panel.
 function renderMemo(box, item) {
@@ -1101,10 +1107,8 @@ function wireMemo(box) {
     const id = box.dataset.item;
     if (!own || !id) return;
     own.memos[id] = field.value;
-    clearTimeout(memoTimers.get(id));
-    memoTimers.set(id, setTimeout(() => writeMemo(id), 400));
+    writeMemo(id);
   });
-  field.addEventListener('blur', () => { for (const id of [...memoTimers.keys()]) writeMemo(id); });
 }
 const memoBoxes = [$('detail-memo'), $('panel-memo')];
 memoBoxes.forEach(wireMemo);
@@ -1179,7 +1183,7 @@ function runCommandControl(item) {
 }
 
 // The board (board.js, a separate module) reads state and acts through this; the list keeps its own code paths.
-const busyChecks = [() => inFlight > 0 || adding || memoTimers.size > 0 || !!$('add-text').value.trim() ||
+const busyChecks = [() => inFlight > 0 || adding || memoSaving.size > 0 || !!document.querySelector?.('li.row.editing') || !!$('add-text').value.trim() ||
   [...drafts.values()].some(draft => (draft.reply.trim() && draft.reply !== draft.seed) || draft.words.trim())];
 const busy = () => busyChecks.some(check => check());
 globalThis.todoPage = {

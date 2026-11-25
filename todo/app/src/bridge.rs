@@ -1,7 +1,7 @@
 //! What the board page may ask of the shell (`window.todoApp`, board.rs). The capability lets only the current
 //! server's origin in the board window call these; each call checks that again, because an earlier server's origin
 //! stays allowed for the life of the process.
-use crate::{board, fonts, links, lock, prefs, server::Session, system, Shell};
+use crate::{board, fonts, links, lock, prefs, system, Shell};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use tauri::{AppHandle, State, WebviewWindow};
@@ -12,9 +12,12 @@ pub const COMMANDS: [&str; 5] = ["ticket", "app_state", "save_memo", "save_view"
 const MEMO_LIMIT: usize = 64 * 1024;
 
 fn from_board(window: &WebviewWindow, shell: &Shell) -> Result<(), String> {
-    let origin = lock(&shell.shared).session.as_ref().map(Session::origin).unwrap_or_default();
+    // A page that asks has come up, so the window has an address.
     let here = window.url().map_err(|e| e.to_string())?;
-    if window.label() == board::LABEL && links::within(here.as_str(), &origin) { Ok(()) } else { Err("not the board".into()) }
+    let shared = lock(&shell.shared);
+    // The page of a server just replaced may still send its last words before it is sent to the new address.
+    let ours = [&shared.session, &shared.loaded].into_iter().flatten().any(|session| links::within(here.as_str(), &session.origin()));
+    if window.label() == board::LABEL && ours { Ok(()) } else { Err("not the board".into()) }
 }
 
 /// Shows a ticket beside the board (`follow`: moves only an open ticket window).
@@ -60,10 +63,12 @@ pub fn app_state(window: WebviewWindow, shell: State<'_, Shell>) -> Result<AppSt
 #[tauri::command(async)]
 pub fn save_memo(window: WebviewWindow, shell: State<'_, Shell>, id: String, text: String) -> Result<(), String> {
     from_board(&window, &shell)?;
-    if text.len() > MEMO_LIMIT || id.len() > 80 || id.is_empty() { return Err(format!("a memo may hold {MEMO_LIMIT} bytes")); }
+    if id.is_empty() || id.len() > 200 { return Err("not an item".into()); }
     let model = lock(&shell.shared).model.clone();
     let done: Vec<&str> = model.items.iter().filter(|item| item.done).map(|item| item.id.as_str()).collect();
     let mut prefs = lock(&shell.prefs);
+    // One written longer before there was a limit may still be edited down.
+    if text.len() > prefs.memos.get(&id).map_or(0, String::len).max(MEMO_LIMIT) { return Err(format!("a memo may hold {MEMO_LIMIT} bytes")); }
     let mut next = prefs.clone();
     next.set_memo(&id, &text, &done);
     next.save(&shell.prefs_file)?;

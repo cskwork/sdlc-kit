@@ -727,6 +727,7 @@ function toast(text) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { box.hidden = true; }, 4000);
 }
+// `done` is what a success says, or a function that reads it from the answer ('' says nothing).
 async function send(path, body, done) {
   sending = true;
   panelSig = '';
@@ -735,8 +736,8 @@ async function send(path, body, done) {
   try {
     const data = await page.api(path, body);
     if (data.items) page.apply(data);
-    page.announce(done);
-    toast(done);
+    const words = typeof done === 'function' ? done(data) : done;
+    if (words) { page.announce(words); toast(words); }
     return data;
   } catch (error) {
     const message = page.say(page.sourceOf(error));
@@ -790,10 +791,11 @@ $('panel-fix').addEventListener('click', async () => {
   const item = panelTarget;
   if (!item) return;
   try {
-    const data = await send('/api/item', { id: item.id, version: item.version, op: 'fix' }, t('fix.queued'));
-    const launch = data.launch || 'queued';
-    if (launch.startsWith('failed: ')) page.showError(t('fix.failed', { reason: launch.slice(8) }));
-    else if (launch === 'started') toast(t('fix.started'));
+    const failed = data => str(data.launch).startsWith('failed: ') ? data.launch.slice(8) : '';
+    // A request recorded without an agent started says only that: a success toast would sit over the notice.
+    const data = await send('/api/item', { id: item.id, version: item.version, op: 'fix' },
+      answer => failed(answer) ? '' : t(answer.launch === 'started' ? 'fix.started' : 'fix.queued'));
+    if (failed(data)) page.showError(t('fix.failed', { reason: failed(data) }));
   } catch { /* shown */ }
 });
 

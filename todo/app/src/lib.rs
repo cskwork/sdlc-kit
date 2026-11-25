@@ -22,7 +22,7 @@ use server::{Launcher, Server, Session};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, RunEvent};
 
 /// A poisoned lock still holds sound data here (every change is one assignment); a handler must not panic over it.
@@ -35,11 +35,16 @@ struct Shared {
     model: Model,
     conn: Conn,
     session: Option<Session>,
-    /// The server whose page the board window shows or loads.
+    /// The server whose page the board window shows or loads, and when that was asked for.
     loaded: Option<Session>,
+    asked: Instant,
+    /// The origin of the page that came up in the board window, if any did. Kept here because asking WKWebView for its
+    /// address panics in wry while no page has come up.
+    page: Option<String>,
     /// The server this app runs, and whether the app is on its way out.
     server: Option<Server>,
     leaving: bool,
+    starting: bool,
 }
 
 impl Shared {
@@ -52,6 +57,13 @@ impl Shared {
         // new address in place, open or hidden, without coming forward.
         let replaced = window && self.loaded.as_ref() != Some(session);
         (requested || replaced).then(|| (session.clone(), requested))
+    }
+
+    /// Whether the window has to be sent to `session`: not there, and not on its way either.
+    fn must_load(&self, session: &Session) -> bool {
+        if self.loaded.as_ref() != Some(session) { return true; }
+        // A page that did not come up (the server went away meanwhile) is loaded again.
+        self.page.as_deref() != Some(session.origin().as_str()) && self.asked.elapsed() > Duration::from_secs(3)
     }
 }
 
@@ -128,15 +140,26 @@ fn connect(app: AppHandle, launcher: Launcher, mut open_once: bool) {
         board::offline(&app);
     };
     loop {
-        let session = match launcher.find_or_start() {
-            Ok((session, None)) => session,
-            Ok((session, Some(server))) => {
-                // Quitting while this one started: `leave` has run and will not see it.
-                if lock(&shell.shared).leaving { return server.close(); }
-                let old = lock(&shell.shared).server.replace(server);
-                if let Some(old) = old { old.close(); }
-                session
+        {
+            let mut shared = lock(&shell.shared);
+            if shared.leaving { return; }
+            shared.starting = true;
+        }
+        let found = launcher.find_or_start();
+        let (found, old) = {
+            let mut shared = lock(&shell.shared);
+            shared.starting = false;
+            match found {
+                Ok((session, server)) => {
+                    let old = server.and_then(|server| shared.server.replace(server));
+                    (Ok(session), old)
+                }
+                Err(error) => (Err(error), None),
             }
+        };
+        if let Some(old) = old { old.close(); }
+        let session = match found {
+            Ok(session) => session,
             Err(error) => {
                 offline(error);
                 std::thread::sleep(Duration::from_secs(5));
@@ -170,12 +193,14 @@ fn connect(app: AppHandle, launcher: Launcher, mut open_once: bool) {
 /// On every way out (Quit, ⌘Q, logout): keeps the board's place and closes the server this app runs.
 fn leave(app: &AppHandle) {
     board::save_place(app);
-    let server = {
-        let shell = app.state::<Shell>();
-        let mut shared = lock(&shell.shared);
-        shared.leaving = true;
-        shared.server.take()
-    };
+    let shell = app.state::<Shell>();
+    lock(&shell.shared).leaving = true;
+    // A server that is starting right now is waited for, so that it is closed too.
+    for _ in 0..200 {
+        if !lock(&shell.shared).starting { break; }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let server = lock(&shell.shared).server.take();
     if let Some(server) = server { server.close(); }
 }
 
@@ -200,7 +225,7 @@ fn start() -> Result<(), String> {
     let prefs_file = args.session.with_file_name("todo-app.json");
     let (prefs, prefs_error) = Prefs::load(&prefs_file);
     let shell = Shell {
-        shared: Mutex::new(Shared { model: Model::default(), conn: Conn::Connecting, session: None, loaded: None, server: None, leaving: false }),
+        shared: Mutex::new(Shared { model: Model::default(), conn: Conn::Connecting, session: None, loaded: None, asked: Instant::now(), page: None, server: None, leaving: false, starting: false }),
         prefs: Mutex::new(prefs), prefs_error: Mutex::new(prefs_error),
         window_file: prefs_file.with_file_name("todo-app-window.json"), prefs_file,
         start_lang: lang, allowed: Mutex::new(HashSet::new()),
@@ -255,7 +280,7 @@ mod tests {
 
     fn session(port: u16) -> Session { Session { port, token: "0123456789abcdef0123456789abcdef".into() } }
     fn shared(conn: Conn, session: Option<Session>, loaded: Option<Session>) -> Shared {
-        Shared { model: Model::default(), conn, session, loaded, server: None, leaving: false }
+        Shared { model: Model::default(), conn, session, loaded, asked: Instant::now(), page: None, server: None, leaving: false, starting: false }
     }
 
     #[test]
@@ -272,6 +297,18 @@ mod tests {
         for conn in [Conn::Connecting, Conn::Offline("x".into())] {
             assert_eq!(opens(&shared(conn, Some(session(2)), None), true, true), None, "no dead address");
         }
+    }
+
+    #[test]
+    fn a_page_that_did_not_come_up_is_loaded_again() {
+        let mut there = shared(Conn::Live, Some(session(2)), Some(session(2)));
+        assert!(there.must_load(&session(3)) && !there.must_load(&session(2)), "on its way");
+        there.asked = Instant::now() - Duration::from_secs(4);
+        assert!(there.must_load(&session(2)), "nothing came up");
+        there.page = Some("http://127.0.0.1:2".into());
+        assert!(!there.must_load(&session(2)));
+        there.page = Some(board::SHELL_ORIGIN.into());
+        assert!(there.must_load(&session(2)));
     }
 
     #[test]

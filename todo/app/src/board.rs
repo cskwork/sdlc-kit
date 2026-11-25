@@ -8,8 +8,8 @@ use crate::links::{self, Navigation};
 use crate::window::{board_frame, Frame, Latest, WindowState, BOARD_MIN};
 use crate::{lock, server::Session, Conn, Shell};
 use std::sync::Mutex;
-use std::time::Duration;
-use tauri::webview::NewWindowResponse;
+use std::time::{Duration, Instant};
+use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{AppHandle, Manager, Monitor, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
 pub const LABEL: &str = "board";
@@ -18,6 +18,8 @@ pub const LABEL: &str = "board";
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum View { Board, List }
 
+/// The view last picked on the tray; a page the shell loads by itself opens on it.
+static VIEW: Mutex<View> = Mutex::new(View::Board);
 /// One change to the window at a time.
 static WINDOW: Mutex<()> = Mutex::new(());
 static MOVES: Latest = Latest::new();
@@ -63,6 +65,7 @@ fn view_script(view: View) -> &'static str {
 /// Brings the board forward on `view`; while no server answers, the shell's own page says so.
 pub fn show(app: &AppHandle, view: View) {
     let _one = lock(&WINDOW);
+    *lock(&VIEW) = view;
     let shell = app.state::<Shell>();
     let window = app.get_webview_window(LABEL);
     let target = lock(&shell.shared).board_to_open(true, window.is_some()).map(|(session, _)| session);
@@ -93,13 +96,13 @@ pub fn follow_server(app: &AppHandle, open: bool) {
     let _one = lock(&WINDOW);
     let Some(window) = app.get_webview_window(LABEL) else { return };
     let next = lock(&app.state::<Shell>().shared).board_to_open(false, true);
-    if let Some((session, _)) = next { load(app, &window, &session, View::Board); }
+    if let Some((session, _)) = next { load(app, &window, &session, *lock(&VIEW)); }
 }
 
 /// Tells the shell's own page how things stand; does nothing while the board's page is loaded.
 pub fn offline(app: &AppHandle) {
     let Some(window) = app.get_webview_window(LABEL) else { return };
-    if !window.url().is_ok_and(|url| links::within(url.as_str(), SHELL_ORIGIN)) { return; }
+    if lock(&app.state::<Shell>().shared).page.as_deref() != Some(SHELL_ORIGIN) { return; }
     let words = serde_json::Value::from(offline_words(app)).to_string();
     let _ = window.eval(format!("location.replace('#' + {words})"));
 }
@@ -129,15 +132,18 @@ fn allow(app: &AppHandle, session: &Session) {
 
 fn load(app: &AppHandle, window: &WebviewWindow, session: &Session, view: View) {
     let shell = app.state::<Shell>();
-    // A page that did not come up (the server went away meanwhile) is loaded again.
-    let there = window.url().is_ok_and(|url| links::within(url.as_str(), &session.origin()));
-    if there && lock(&shell.shared).loaded.as_ref() == Some(session) { return; }
+    if !lock(&shell.shared).must_load(session) { return; }
     let Ok(url) = address(session, view) else { return };
     allow(app, session);
     match window.navigate(url) {
-        Ok(()) => lock(&shell.shared).loaded = Some(session.clone()),
+        Ok(()) => asked(&shell, Some(session)),
         Err(_) => eprintln!("sdlc-todo: the board window could not load the server's page"),
     }
+}
+
+fn asked(shell: &Shell, session: Option<&Session>) {
+    let mut shared = lock(&shell.shared);
+    (shared.loaded, shared.asked) = (session.cloned(), Instant::now());
 }
 
 fn make(app: &AppHandle, session: Option<&Session>, view: View) -> Result<WebviewWindow, String> {
@@ -146,8 +152,9 @@ fn make(app: &AppHandle, session: Option<&Session>, view: View) -> Result<Webvie
         Some(session) => { allow(app, session); WebviewUrl::External(address(session, view)?) }
         None => WebviewUrl::App(format!("index.html#{}", offline_words(app)).into()),
     };
-    lock(&shell.shared).loaded = session.cloned();
-    let (nav, popup) = (app.clone(), app.clone());
+    asked(&shell, session);
+    lock(&shell.shared).page = None;
+    let (nav, popup, pages) = (app.clone(), app.clone(), app.clone());
     let built = WebviewWindowBuilder::new(app, LABEL, page)
         .title(t(shell.lang(), "title"))
         .visible(false).focused(false)
@@ -159,10 +166,20 @@ fn make(app: &AppHandle, session: Option<&Session>, view: View) -> Result<Webvie
         .on_navigation(move |url| navigate(&nav, url.as_str()))
         .on_new_window(move |url, _| { hand_off(&popup, url.as_str()); NewWindowResponse::Deny })
         .on_document_title_changed(|window, title| { if !title.is_empty() { let _ = window.set_title(&title); } })
+        .on_page_load(move |_, load| {
+            if load.event() != PageLoadEvent::Finished { return; }
+            let url = load.url();
+            let origin = match (url.host_str(), url.port()) {
+                (Some(host), Some(port)) => format!("{}://{host}:{port}", url.scheme()),
+                (Some(host), None) => format!("{}://{host}", url.scheme()),
+                _ => return,
+            };
+            lock(&pages.state::<Shell>().shared).page = Some(origin);
+        })
         .build();
     let window = match built {
         Ok(window) => window,
-        Err(error) => { lock(&shell.shared).loaded = None; return Err(error.to_string()); }
+        Err(error) => { asked(&shell, None); return Err(error.to_string()); }
     };
     place(&shell, &window);
     let events = app.clone();
@@ -216,24 +233,29 @@ fn close(app: &AppHandle) {
     save_place(app);
     let Some(window) = app.get_webview_window(LABEL) else { return };
     let _ = window.hide();
+    // No page came up: there is nothing to ask, and nothing to lose.
+    if lock(&app.state::<Shell>().shared).page.is_none() { return later(app, free); }
     let app = app.clone();
-    let _ = window.eval_with_callback(BUSY, move |answer| {
-        if answer.trim() != "false" { return; }
-        later(&app, |app| {
-            let _one = lock(&WINDOW);
-            let Some(window) = app.get_webview_window(LABEL) else { return };
-            // Asked for again meanwhile: keep it.
-            if window.is_visible().unwrap_or(true) { return; }
-            if window.destroy().is_ok() {
-                lock(&app.state::<Shell>().shared).loaded = None;
-                // The label is free once the event loop has let the window go.
-                for _ in 0..100 {
-                    if app.get_webview_window(LABEL).is_none() { break; }
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-            }
-        });
-    });
+    let _ = window.eval_with_callback(BUSY, move |answer| if answer.trim() == "false" { later(&app, free); });
+}
+
+/// Frees a hidden window's webview.
+fn free(app: &AppHandle) {
+    let _one = lock(&WINDOW);
+    let Some(window) = app.get_webview_window(LABEL) else { return };
+    // Asked for again meanwhile: keep it.
+    if window.is_visible().unwrap_or(true) { return; }
+    if window.destroy().is_err() { return; }
+    {
+        let shell = app.state::<Shell>();
+        asked(&shell, None);
+        lock(&shell.shared).page = None;
+    }
+    // The label is free once the event loop has let the window go.
+    for _ in 0..100 {
+        if app.get_webview_window(LABEL).is_none() { break; }
+        std::thread::sleep(Duration::from_millis(10));
+    }
 }
 
 // ---------- place ----------

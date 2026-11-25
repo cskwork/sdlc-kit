@@ -853,6 +853,33 @@ test('ticket: the app\'s shell (todoApp) is asked before window.ipc, and opens n
   assert.equal(b.opened.length, 0);
 });
 
+test('fix: a request whose agent did not start shows one notice, on the board and in the list', async () => {
+  const blocked = askItem('aaaaaa', 'v1', '', { status: 'blocked', waiting: '', sdlc: { slug: 's', phase: 'build', state: 'BLOCKED', action: 'broken' } });
+  for (const [launch, toast, notice] of [['failed: no such command', '', 'no such command'], ['started', 'fix.started', ''], ['queued', 'fix.queued', '']]) {
+    const { p, b } = selectedBoard([blocked]);
+    const words = key => p.context.todoPage.t(key);
+    const errors = [], said = [];
+    p.context.todoPage.api = async () => ({ launch });
+    p.context.todoPage.showError = error => errors.push(error);
+    p.context.todoPage.announce = text => said.push(text);
+    const box = b.context.document.getElementById('toast');
+    await b.nodes.get('panel-fix').listeners.click();
+    assert.equal(box.textContent, toast && words(toast), `${launch}: the board's toast`);
+    assert.deepEqual(said, toast ? [words(toast)] : []);
+    assert.equal(errors.length, notice ? 1 : 0);
+    if (notice) assert.match(errors[0], /no such command/);
+
+    const l = page('#t=test-token', { fetch: async url => url === '/api/items' ? new Promise(() => {}) : { ok: true, text: async () => JSON.stringify({ launch }) } });
+    const told = [];
+    l.context.told = told;
+    vm.runInContext('announce = text => told.push(text)', l.context);
+    l.context.blocked = blocked;
+    await vm.runInContext('fixButton(blocked)', l.context).listeners.click();
+    assert.deepEqual(told, toast ? [words(toast)] : []);
+    assert.equal(l.context.document.getElementById('error').hidden, !notice, `${launch}: the list's notice`);
+  }
+});
+
 test('choices: what each does comes from the document\'s numbered Options list, matched by label', () => {
   const { b } = selectedBoard([askItem('aaaaaa', 'v1', '')]);
   const options = (markdown, choices) => [...vm.runInContext('optionsOf', b.context)(markdown, choices)];
@@ -892,11 +919,19 @@ test('app: memos, text size and font live in the shell; a memo not yet written k
   field.value = 'ask QA first';
   field.listeners.input();
   assert.equal(inShell.context.todoPage.busy(), true);
-  assert.equal(vm.runInContext('memoTimers.size', inShell.context), 1);
-  field.listeners.blur();
+  assert.equal(vm.runInContext('memoSaving.size', inShell.context), 1);
+  field.value = 'ask QA first, then ship';
+  field.listeners.input();
+  field.value = 'ask QA first, then ship it';
+  field.listeners.input();
   await new Promise(resolve => setTimeout(resolve, 0));
-  assert.equal(vm.runInContext('memoTimers.size', inShell.context), 0);
-  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [['view', 110, ''], ['view', 110, '/f/N.ttf'], ['memo', 'aaaaaa', 'ask QA first']]);
+  assert.equal(vm.runInContext('memoSaving.size', inShell.context), 0);
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [['view', 110, ''], ['view', 110, '/f/N.ttf'], ['memo', 'aaaaaa', 'ask QA first'], ['memo', 'aaaaaa', 'ask QA first, then ship it']],
+    'one save at a time; the newest words are written last');
+  inShell.context.document.querySelector = selector => selector === 'li.row.editing' ? {} : null;
+  assert.equal(vm.runInContext('inFlight = 0; todoPage.busy()', inShell.context), true, 'a rename being typed keeps the window');
+  inShell.context.document.querySelector = () => null;
+  assert.equal(vm.runInContext('todoPage.busy()', inShell.context), false);
   inShell.context.todoPage.renderMemo(box, { id: 'bbbbbb', done: true });
   assert.equal(box.hidden, true, 'a done item has none');
   assert.equal(inShell.requests.filter(r => /memo|ask QA/.test(JSON.stringify(r))).length, 0, 'the server never sees a memo');
