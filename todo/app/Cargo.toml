@@ -28,6 +28,8 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSResponder", "NSWindow", "NSView", "NSScreen", "NSGraphics", "NSMenu", "NSMenuItem", "NSEvent", "NSRunningApplication", "libc"] }
 objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "WKWebView", "WKWebViewConfiguration"] }
 raw-window-handle = "0.6"
+# Maps the sealed system font instead of copying it (see src/theme.rs); in the lock file already, through winit on Linux.
+memmap2 = "=0.9.12"
 
 [profile.release]
 opt-level = "s"

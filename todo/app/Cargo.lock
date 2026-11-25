@@ -3139,6 +3139,7 @@ version = "0.1.0"
 dependencies = [
  "dispatch",
  "eframe",
+ "memmap2",
  "notify-rust",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
