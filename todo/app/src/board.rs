@@ -92,7 +92,9 @@ pub fn show(app: &AppHandle, view: View) {
 /// After a server came or was replaced: an open window loads the new address in place, hidden or not, without coming
 /// forward. `open` is the launch's own first showing.
 pub fn follow_server(app: &AppHandle, open: bool) {
-    if open { return show(app, View::Board); }
+    // The launch's own showing keeps a view picked on the tray while the server was away.
+    let view = *lock(&VIEW);
+    if open { return show(app, view); }
     let _one = lock(&WINDOW);
     let Some(window) = app.get_webview_window(LABEL) else { return };
     let next = lock(&app.state::<Shell>().shared).board_to_open(false, true);
