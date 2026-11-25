@@ -296,6 +296,10 @@ fn spawn(name: &str, work: impl FnOnce() + Send + 'static) -> Result<(), String>
 }
 
 // ---------- watching ----------
+const RETRY_FIRST: Duration = Duration::from_secs(1);
+const RETRY_MOST: Duration = Duration::from_secs(30);
+/// When the watcher next has something to do besides a changed file: a marker runs out, or a change not yet shown is tried again.
+struct View { expiry: Option<i64>, retry: Option<(Instant, Duration)>, flush_at: Instant }
 type Stat = Option<(Option<SystemTime>, i64, i64, u64, u64)>;
 fn stat(file: &str) -> Stat {
     let meta = std::fs::metadata(file).ok()?;
@@ -309,16 +313,16 @@ fn stat(file: &str) -> Stat {
 impl Server {
     /// Polls the list, the working markers and the feed four times a second, as fs.watchFile does.
     fn watch(&self, mut files: [(Stat, String); 3]) {
-        let mut expiry = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.next_expiry())).unwrap_or_default();
-        let mut flush_at = Instant::now() + KEEPALIVE;
+        // The first look works the expiry out, and repeats it until it can.
+        let mut view = View { expiry: None, retry: Some((Instant::now(), RETRY_FIRST)), flush_at: Instant::now() + KEEPALIVE };
         while !self.closing.load(Ordering::SeqCst) {
             std::thread::sleep(Duration::from_millis(250));
-            let round = std::panic::AssertUnwindSafe(|| self.look(&mut files, &mut expiry, &mut flush_at));
+            let round = std::panic::AssertUnwindSafe(|| self.look(&mut files, &mut view));
             // The next round goes on from the state this one left.
             if std::panic::catch_unwind(round).is_err() { eprintln!("to-do watcher: a round failed"); }
         }
     }
-    fn look(&self, files: &mut [(Stat, String); 3], expiry: &mut Option<i64>, flush_at: &mut Instant) {
+    fn look(&self, files: &mut [(Stat, String); 3], view: &mut View) {
         let mut changed = [false; 3];
         for (i, (known, file)) in files.iter_mut().enumerate() {
             let now = stat(file);
@@ -326,24 +330,38 @@ impl Server {
             *known = now;
         }
         if changed[2] { *locked(&self.feed) = read_feed(&files[2].1); }
-        let expired = expiry.is_some_and(|at| js::now_ms() >= at);
-        if changed[1] || expired { *expiry = self.next_expiry(); }
-        if changed.contains(&true) || expired { self.broadcast(); }
-        if Instant::now() >= *flush_at { *flush_at += KEEPALIVE; self.flush_finishes(); }
+        let news = changed.contains(&true) || view.expiry.is_some_and(|at| js::now_ms() >= at);
+        let due = view.retry.filter(|(at, _)| Instant::now() >= *at);
+        if news || due.is_some() {
+            // Until it is shown, a change stays pending: one that fails (a Node helper in trouble) or panics is tried again.
+            let wait = due.or(view.retry).map_or(RETRY_FIRST, |(_, wait)| wait);
+            view.retry = Some((Instant::now() + wait, (wait * 2).min(RETRY_MOST)));
+            let expiry = self.next_expiry();
+            let shown = self.broadcast(news);
+            if let (Ok(expiry), true) = (expiry, shown) { view.expiry = expiry; view.retry = None; }
+            // Waiting starts once the attempt ended: it may itself have taken long.
+            else { view.expiry = None; view.retry = Some((Instant::now() + wait, (wait * 2).min(RETRY_MOST))); }
+        }
+        if Instant::now() >= view.flush_at { view.flush_at += KEEPALIVE; self.flush_finishes(); }
         run::reap();
     }
     /// When the oldest live working marker runs out.
-    fn next_expiry(&self) -> Option<i64> {
-        core::read_working(&self.options.file, js::now_ms()).iter().filter_map(|(_, mark)| helper::date(&mark.beat.lossy())).min().map(|at| at + core::working_ttl() + 50)
+    fn next_expiry(&self) -> Result<Option<i64>, Fail> {
+        Ok(core::read_working(&self.options.file, js::now_ms())?.iter().map(|(_, mark)| mark.at).min().map(|at| at + core::working_ttl() + 50))
     }
-    fn broadcast(&self) {
+    /// Sends the list to every stream; false when it could not be built. `report` tells the streams why.
+    fn broadcast(&self, report: bool) -> bool {
         let _one = locked(&self.publishing);
-        if locked(&self.clients).is_empty() { return; }
-        let frame: Arc<str> = match self.frame() {
+        if locked(&self.clients).is_empty() { return true; }
+        let frame = self.frame();
+        let built = frame.is_ok();
+        let frame: Arc<str> = match frame {
             Ok(payload) => payload.into(),
+            Err(_) if !report => return false,
             Err(error) => format!("event: error\ndata: {}\n\n", error_json(&error.message)).into(),
         };
         locked(&self.clients).retain(|client| client.try_send(frame.clone()).is_ok());
+        built
     }
 
     // ---------- the list as every view shows it ----------
@@ -368,7 +386,7 @@ impl Server {
     fn payload_in(&self, before: &str, extra: impl FnOnce(&mut String)) -> Result<String, Fail> {
         let model = core::load(&self.options.file)?;
         let versions = core::versions(&model)?;
-        let working = core::read_working(&self.options.file, js::now_ms());
+        let working = core::read_working(&self.options.file, js::now_ms())?;
         let mut out = format!("{before}{{\"items\":[");
         for (i, item) in model.items.iter().enumerate() {
             if i > 0 { out.push(','); }
@@ -528,7 +546,9 @@ impl Server {
             let first: Arc<str> = self.frame()?.into();
             let _ = send.try_send(first);
             let mut clients = locked(&self.clients);
-            if !self.closing.load(Ordering::SeqCst) { clients.push(send); }
+            // close() sets the flag, then empties this list under the same lock: a stream is either ended by it or refused here.
+            if self.closing.load(Ordering::SeqCst) { return Fail::at(503, "the to-do server is closing"); }
+            clients.push(send);
         }
         let chunked = request.http11;
         let coding = if chunked { "Transfer-Encoding: chunked\r\n" } else { "" };
@@ -798,6 +818,20 @@ mod tests {
         assert_eq!(status(late), "503");
         assert_eq!(std::fs::read(dir.join("todo.md")).ok(), before);
         assert!(!dir.join("todo.md.lock").exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_stream_still_building_its_first_frame_is_refused_when_the_server_closes() {
+        let (dir, handle) = served("late-stream");
+        let building = locked(&handle.server.publishing);
+        let stream = ask(&handle, "GET", &format!("/events?t={}", handle.session().token), "\r\n");
+        std::thread::sleep(Duration::from_millis(300));
+        handle.close();
+        drop(building);
+        stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        assert_eq!(status(stream), "503");
+        assert!(locked(&handle.server.clients).is_empty());
         std::fs::remove_dir_all(dir).unwrap();
     }
 

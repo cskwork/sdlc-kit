@@ -328,3 +328,25 @@ test('rust: close returns while a Node helper hangs', posix, async t => {
   await server.close();
   assert.ok(Date.now() - began < 4000, `closed in ${Date.now() - began} ms`);
 });
+
+test('rust: a change that could not be shown while the Node helper failed is shown once it works, without another write', posix, async t => {
+  const dir = scratch(t), file = join(dir, 'todo.md'), node = join(dir, 'node'), works = join(dir, 'works'), asked = join(dir, 'asked');
+  writeFileSync(node, `#!/bin/sh\necho x >> '${asked}'\n[ -f '${works}' ] || exit 1\nexec '${process.execPath}' "$@"\n`, { mode: 0o755 });
+  const server = await startRustWeb({ file, kit, node, feed: join(dir, 'feed.json'), onUrl() {} });
+  t.after(() => server.close());
+  const at = new URL(server.url), token = new URLSearchParams(at.hash.slice(1)).get('t'), stop = new AbortController();
+  t.after(() => stop.abort());
+  const response = await fetch(`${at.origin}/events?t=${token}`, { signal: stop.signal });
+  let text = '';
+  (async () => { for await (const chunk of response.body) text += Buffer.from(chunk).toString(); })().catch(() => {});
+  const until = async (check, what) => { for (let i = 0; i < 300 && !check(); i++) await new Promise(done => setTimeout(done, 50)); assert.ok(check(), what); };
+  await until(() => text.includes('"items":[]'), 'the first frame');
+  writeFileSync(file, '## Open\n\n- [ ] odd link\n  - link: [a](https://한글.example/)\n');
+  await until(() => text.includes('event: error'), 'the failure is reported');
+  assert.ok(!text.includes('odd link'));
+  await new Promise(done => setTimeout(done, 2500));
+  assert.equal(text.split('event: error').length, 2, 'reported once');
+  assert.ok(readFileSync(asked, 'utf8').split('\n').length < 8, 'retries back off');
+  writeFileSync(works, '');
+  await until(() => text.includes('odd link'), 'shown after the helper works');
+});
