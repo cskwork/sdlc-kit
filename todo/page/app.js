@@ -109,10 +109,18 @@ function announce(text) {
   announceTimer = setTimeout(() => { box.textContent = text; }, 50);
 }
 function showError(message) {
+  // Words that could not go along stay on screen until dismissed; other notices wait behind them.
+  if (typeof lost !== 'undefined' && lost.length && message?.key !== 'carry.lost') { console.error(say(message)); return; }
   show($('error-text'), message);
   $('error').hidden = false;
 }
-$('error-dismiss').addEventListener('click', () => { $('error').hidden = true; $('add-text').focus(); });
+$('error-dismiss').addEventListener('click', () => {
+  // A dismissed notice of words that could not go along is read; another notice in its place is not.
+  if ($('error-text')._message?.key === 'carry.lost') lost.length = 0;
+  $('error').hidden = true;
+  showLost();
+  $('add-text').focus();
+});
 
 // ---------- words shown to people ----------
 const basename = project => project.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || project;
@@ -1208,8 +1216,11 @@ let pendingCarry = null, lastTyped = -Infinity;
 const carriers = { list: { take: takeList, put: putList } }; // board.js adds its own
 document.addEventListener('input', () => { lastTyped = Date.now(); tellUnsent(); });
 function carry() {
+  // Words handed to this page and not taken up yet go on as they came.
+  if (pendingCarry) return { ...pendingCarry, idle: 1e9 };
   const active = document.activeElement, held = { idle: Math.min(Date.now() - lastTyped, 1e9) };
   for (const [name, carrier] of Object.entries(carriers)) held[name] = carrier.take();
+  if (lost.length) held.list.lost = [...lost];
   held.memos = own ? Object.fromEntries([...memoSaving].map(id => [id, own.memos[id] || ''])) : {};
   if (active?.id && typeof active.selectionStart === 'number') held.focus = { id: active.id, at: active.selectionStart };
   return held;
@@ -1224,7 +1235,14 @@ function takeList() {
   };
 }
 // An item that went away takes its answer box with it: its words are shown once, so they can be copied.
-function lostWords(text) { if (text.trim()) showError({ key: 'carry.lost', vars: { text } }); }
+// All of them in one notice that stays, and keeps the window, until the person dismisses it.
+const lost = [];
+function lostWords(text) {
+  if (!text.trim()) return;
+  lost.push(text);
+  showError({ key: 'carry.lost', vars: { text: lost.join(' / ') } });
+}
+function showLost() { if (lost.length) showError({ key: 'carry.lost', vars: { text: lost.join(' / ') } }); }
 const openItem = id => items.find(item => item.id === id && !item.done);
 function putList(held) {
   for (const [id, draft] of held.drafts || []) {
@@ -1232,6 +1250,7 @@ function putList(held) {
     drafts.set(id, draft);
     if (detailId === id) { $('reply-text').value = draft.reply; $('approve-words').value = draft.words; updateCount(); }
   }
+  for (const text of held.lost || []) lostWords(text);
   if (held.add) addText.value = held.add;
   if (held.open && openItem(held.open)) openDetail(held.open, null, false);
   if (held.edit) {
@@ -1297,7 +1316,7 @@ function runCommandControl(item) {
 }
 
 // The board (board.js, a separate module) reads state and acts through this; the list keeps its own code paths.
-const busyChecks = [() => inFlight > 0 || adding || memoSaving.size > 0 || !!document.querySelector?.('li.row.editing') || !!$('add-text').value.trim() ||
+const busyChecks = [() => inFlight > 0 || adding || memoSaving.size > 0 || !!pendingCarry || lost.length > 0 || !!document.querySelector?.('li.row.editing') || !!$('add-text').value.trim() ||
   [...drafts.values()].some(draft => (draft.reply.trim() && draft.reply !== draft.seed) || draft.words.trim())];
 const busy = () => busyChecks.some(check => check());
 globalThis.todoPage = {

@@ -1084,7 +1084,8 @@ page.addCarrier('board', {
       drafts.set(id, draft);
       if (panelTarget?.id === id) $('panel-reply-text').value = draft.reply;
     }
-    if (['board', 'list', 'runs', 'health'].includes(held.view)) chosenView = held.view;
+    // A view picked on the tray meanwhile wins over the one the old page showed.
+    if (!globalThis.todoApp?.view?.() && ['board', 'list', 'runs', 'health'].includes(held.view)) chosenView = held.view;
     // Not select(): opening what was open moves no ticket window.
     if (held.selected && cards.some(card => card.key === held.selected)) selectedKey = held.selected;
     render();

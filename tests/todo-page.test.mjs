@@ -982,12 +982,26 @@ test('app: what was typed goes to the next page: replies, approval words, a new 
   assert.equal(taken.length, 1, 'taken up once');
 });
 
-test('app: words for an item that went away are shown, not dropped or kept out of sight', async () => {
-  const next = await appPage([plain('bbbbbb')], { state: { carried: { list: { drafts: [['aaaaaa', { reply: '긴 답', words: '', seed: '' }]] } } } });
+test('app: words for items that went away are all shown in one notice that stays and keeps the window', async () => {
+  const next = await appPage([plain('bbbbbb')], { state: { carried: { list: { drafts: [['aaaaaa', { reply: '첫 답', words: '', seed: '' }], ['cccccc', { reply: '둘째 답', words: '', seed: '' }]], edit: { id: 'dddddd', text: '새 이름' } } } } });
   next.board();
   next.snapshot();
-  assert.match(next.p.nodes.get('error-text').textContent, /긴 답/);
-  assert.equal(next.run("drafts.has('aaaaaa')"), false);
+  const text = () => next.p.nodes.get('error-text').textContent;
+  assert.match(text(), /첫 답 \/ 둘째 답 \/ 새 이름/);
+  next.run("showError('later failure')");
+  assert.match(text(), /첫 답/, 'a later notice does not cover them');
+  assert.equal(next.run('todoPage.busy()'), true, 'quitting or closing asks first');
+  assert.deepEqual(next.json('todoPage.carry().list.lost'), ['첫 답', '둘째 답', '새 이름'], 'and another replacement takes them along');
+  next.p.nodes.get('error-dismiss').listeners.click();
+  assert.equal(next.run('lost.length'), 0);
+  assert.equal(next.run('todoPage.busy()'), false);
+});
+
+test('app: words handed over and not yet taken up count as unsent and go on unchanged', async () => {
+  const held = { list: { add: '새 일', drafts: [] }, board: { view: 'board' } };
+  const next = await appPage([plain('aaaaaa')], { state: { carried: held } });
+  assert.equal(next.run('todoPage.busy()'), true, 'before the first list');
+  assert.deepEqual(next.json('todoPage.carry()'), { ...held, idle: 1e9 });
 });
 
 test('app: the board takes its replies, note, selection and view along', () => {
@@ -1054,6 +1068,7 @@ test('app: a view picked on the tray while the page loaded is taken up', async (
   const a = await appPage([], { state: { view: 'list' } });
   assert.deepEqual(a.calls().filter(call => call[0] === 'todo-view'), [['todo-view', 'list']]);
   assert.match(boardSource, /globalThis\.todoApp\?\.view\?\.\(\)/, 'and one that came before the board could listen');
+  assert.match(boardSource, /if \(!globalThis\.todoApp\?\.view\?\.\(\) && \[/, 'and the old page\'s view does not undo it');
 });
 
 test('choices: what each does comes from the document\'s numbered Options list, matched by label', () => {
