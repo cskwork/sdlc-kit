@@ -20,6 +20,9 @@ pub fn request(app: &AppHandle) {
 static UNASKED: std::sync::Mutex<Option<Instant>> = std::sync::Mutex::new(None);
 const AGAIN: Duration = Duration::from_secs(60);
 
+/// The page answered again: a later Quit asks it again, and keeps what was written since.
+pub fn answered() { *lock(&UNASKED) = None; }
+
 /// Whether a quit at `now` follows one the page could not ask about closely enough to end without asking.
 fn forced(now: Instant) -> bool { lock(&UNASKED).is_some_and(|at| now.saturating_duration_since(at) < AGAIN) }
 
@@ -84,6 +87,9 @@ mod tests {
         *lock(&UNASKED) = Some(now);
         assert!(forced(now + Duration::from_secs(5)));
         assert!(!forced(now + AGAIN), "a minute later the page is asked again");
+        *lock(&UNASKED) = Some(now);
+        answered();
+        assert!(!forced(now + Duration::from_secs(5)), "or as soon as the page answers again");
         *lock(&UNASKED) = None;
     }
 }

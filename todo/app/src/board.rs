@@ -136,18 +136,27 @@ fn keep(app: &AppHandle, window: &WebviewWindow) -> bool {
     let ours = { let shared = lock(&shell.shared); shared.loaded.as_ref().is_some_and(|session| shared.page.as_deref() == Some(session.origin().as_str())) };
     if !ours { return true; }
     let started = Instant::now();
+    let mut latest = Held::Nothing;
     loop {
         match carried(ask_page(window, CARRY, Duration::from_secs(2))) {
-            Held::Nothing => return true,
             Held::Unknown => return false,
+            Held::Nothing => break,
             Held::Words(held, idle) => {
-                // Only words are kept: an empty answer never replaces words still on their way, and never holds the app.
-                if holds_words(&held) { *lock(&shell.carried) = Some(held); }
-                if idle >= TYPING.1 || started.elapsed() >= TYPING.0 { return true; }
+                latest = Held::Words(held, idle);
+                if idle >= TYPING.1 || started.elapsed() >= TYPING.0 { break; }
             }
         }
         std::thread::sleep(Duration::from_millis(300));
     }
+    settle(&mut lock(&shell.carried), latest);
+    true
+}
+
+/// What goes on to the next page: only the last answer of this replacement, so words deleted meanwhile (Esc) stay gone.
+/// Words carried from earlier pages are in that answer once the page took them up; until then they stay as they are, and
+/// an answer without words never replaces or holds anything.
+fn settle(carried: &mut Option<serde_json::Value>, latest: Held) {
+    if let Held::Words(held, _) = latest { if holds_words(&held) { *carried = Some(held); } }
 }
 
 /// The view last picked on the tray.
@@ -435,6 +444,24 @@ pub fn save_place(app: &AppHandle) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn only_the_last_answer_of_a_replacement_goes_on() {
+        let words = |text: &str| json!({ "list": { "add": text } });
+        // The page said "draft", then the person pressed Esc: the last answer has nothing, so nothing goes on.
+        let mut carried = None;
+        let mut latest = Held::Nothing;
+        for answer in [words("draft"), words("")] { latest = Held::Words(answer, 0.0); }
+        settle(&mut carried, latest);
+        assert_eq!(carried, None);
+        // Words carried from an earlier page and not taken up yet stay when this page holds none.
+        let mut carried = Some(words("earlier"));
+        settle(&mut carried, Held::Words(words(""), 0.0));
+        settle(&mut carried, Held::Nothing);
+        assert_eq!(carried, Some(words("earlier")));
+        settle(&mut carried, Held::Words(words("now"), 0.0));
+        assert_eq!(carried, Some(words("now")));
+    }
 
     #[test]
     fn what_a_page_holds_is_read_from_its_answer() {

@@ -245,13 +245,24 @@ function readSession(file) {
 // What a server proves it holds the token with, for a fresh nonce (GET /proof?n=…): only the server that wrote the
 // session file can answer it, and the token never travels to a program that took the port of one that is gone.
 export const proofOf = (token, nonce) => createHmac('sha256', token).update(`sdlc-todo-proof:${nonce}`).digest('hex');
+// A body read up to `max` bytes; more is an error, so an unproven server cannot make this read without end.
+async function limited(body, max) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of body || []) {
+    size += chunk.length;
+    if (size > max) { await body.cancel?.().catch?.(() => {}); throw new Error('answer too large'); }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
 export async function liveSession(file = core.sessionPath()) {
   const session = readSession(file);
   if (!session) return null;
   try {
     const nonce = randomBytes(16).toString('hex');
     const response = await fetch(`http://127.0.0.1:${session.port}/proof?n=${nonce}`, { signal: AbortSignal.timeout(2000) });
-    const shown = response.ok ? String((await response.json())?.proof || '') : (await response.body?.cancel(), '');
+    const shown = response.ok ? String(JSON.parse(await limited(response.body, 4096))?.proof || '') : (await response.body?.cancel(), '');
     const expected = Buffer.from(proofOf(session.token, nonce));
     return shown.length === expected.length && timingSafeEqual(Buffer.from(shown), expected) ? { ...session, url: urlOf(session) } : null;
   } catch { return null; }

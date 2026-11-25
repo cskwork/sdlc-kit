@@ -125,6 +125,7 @@ pub fn open_terminal(window: WebviewWindow, shell: State<'_, Shell>, proof: Stri
 pub fn unsent(window: WebviewWindow, shell: State<'_, Shell>, proof: String, unsent: bool) -> Result<(), String> {
     check(&window, &shell, &proof, Trust::Page)?;
     lock(&shell.shared).unsent = unsent;
+    crate::quit::answered();
     Ok(())
 }
 
