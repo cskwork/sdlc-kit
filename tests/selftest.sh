@@ -721,11 +721,8 @@ regression_uncommitted() {
   plan 1; expect 0 approve plan "$SLUG" --agent reviewed
   printf 'reviewed change\n' >> README; printf 'new file\n' > added.txt
   reviewed "$SLUG" pass --uncommitted 'reviewed before the human commits'; review_output=$OUTPUT
-  git add README added.txt
-  [ "$(cat "$(git rev-parse --git-path pre-commit-gate-receipt)")" = "$(git rev-parse HEAD) $(git write-tree)" ] || fail 'the uncommitted PASS did not write a pre-commit-gate receipt for the staged change'
-  OUTPUT=$review_output; contains 'pre-commit-gate receipt written: 1 repository(s)'
-  ok 'an uncommitted review PASS writes a pre-commit-gate receipt holding the reviewed HEAD and the tree a full commit stages'
-  git commit -qm 'commit the reviewed change'; SHA=$(git rev-parse HEAD)
+  [ ! -e "$(git rev-parse --git-path pre-commit-gate-receipt)" ] || fail 'a review PASS wrote a pre-commit-gate receipt: only that skill, after verify and review, may'
+  git add README added.txt; git commit -qm 'commit the reviewed change'; SHA=$(git rev-parse HEAD)
   evidence; route deliver; delivery
   expect 0 close "$SLUG" shipped 'reviewed before commit, committed unchanged'
   OUTPUT=$review_output; contains 'Uncommitted changes are bound'

@@ -45,7 +45,27 @@ fn lighten(c: Color32) -> Color32 {
     Color32::from_rgb(up(c.r()), up(c.g()), up(c.b()))
 }
 
-fn system_fonts() -> Vec<(&'static str, Vec<u8>)> {
+/// The system fonts, loaded once. Owned by epaint, macOS's Hangul font alone held 106 MB: its 53 MB file plus the
+/// copy epaint makes of any owned data.
+fn system_fonts() -> &'static [(&'static str, &'static [u8])] {
+    static FONTS: std::sync::OnceLock<Vec<(&'static str, &'static [u8])>> = std::sync::OnceLock::new();
+    FONTS.get_or_init(load_system_fonts)
+}
+
+/// macOS keeps this font on its sealed system volume, so the file cannot change under the mapping.
+#[cfg(target_os = "macos")]
+fn shared_font(path: &str) -> Option<&'static [u8]> {
+    let file = std::fs::File::open(path).ok()?;
+    // SAFETY: the path is under /System/Library, on the read-only sealed volume: nothing writes or truncates it.
+    let map = unsafe { memmap2::Mmap::map(&file) }.ok()?;
+    Some(Box::leak(Box::new(map)))
+}
+
+/// Elsewhere a font file can be replaced while the app runs, so it is read: once, without epaint's second copy.
+#[cfg(not(target_os = "macos"))]
+fn shared_font(path: &str) -> Option<&'static [u8]> { Some(Box::leak(std::fs::read(path).ok()?.into_boxed_slice())) }
+
+fn load_system_fonts() -> Vec<(&'static str, &'static [u8])> {
     let candidates: &[&str] = if cfg!(target_os = "macos") {
         &["/System/Library/Fonts/AppleSDGothicNeo.ttc"]
     } else if cfg!(windows) {
@@ -54,7 +74,7 @@ fn system_fonts() -> Vec<(&'static str, Vec<u8>)> {
         &["/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
           "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc"]
     };
-    candidates.iter().filter_map(|path| std::fs::read(path).ok().map(|bytes| (*path, bytes))).collect()
+    candidates.iter().filter_map(|path| shared_font(path).map(|bytes| (*path, bytes))).collect()
 }
 
 /// The default text font, built in so every machine reads the same: Pretendard Regular (SIL OFL 1.1,
@@ -98,8 +118,12 @@ pub fn install(ctx: &egui::Context, font: &str) {
     // or replaced file would crash every launch, so it is checked first and skipped for the built-in one.
     let chosen = (!font.is_empty()).then(|| std::fs::read(font).ok().map(|bytes| (font, bytes))).flatten()
         .filter(|(_, bytes)| ttf_parser::Face::parse(bytes, 0).is_ok());
-    for (index, (path, bytes)) in chosen.into_iter().chain([("Pretendard", BUILT_IN.to_vec())]).chain(system_fonts()).enumerate() {
-        fonts.font_data.insert(path.to_string(), Arc::new(FontData::from_owned(bytes)));
+    let shared = [("Pretendard", BUILT_IN)].into_iter().chain(system_fonts().iter().copied());
+    let all = chosen.into_iter().map(|(path, bytes)| (path, FontData::from_owned(bytes)))
+        .chain(shared.map(|(path, bytes)| (path, FontData::from_static(bytes))));
+    for (index, (path, data)) in all.enumerate() {
+        // A picked font that is also a fallback keeps the data read just now.
+        fonts.font_data.entry(path.to_string()).or_insert_with(|| Arc::new(data));
         for family in [FontFamily::Proportional, FontFamily::Monospace] {
             let list = fonts.families.entry(family.clone()).or_default();
             // System fonts lead the proportional family; monospace keeps its own glyphs and falls back for Hangul.

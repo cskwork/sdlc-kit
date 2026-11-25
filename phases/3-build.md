@@ -67,8 +67,8 @@ many-repository root). `score` and `close` compare only repositories named
 on evidence `Commit` lines; each Commit must be that HEAD. For an uncommitted
 review, `sdlc.sh review <slug> pass --uncommitted "<one line>"` also binds the
 working tree of each repository with uncommitted changes (non-ignored files,
-tracked or not); the PASS output says what a Commit must then hold, and writes
-the pre-commit-gate receipt that hook checks. Reverting or
+tracked or not); the PASS output says what a Commit must then hold. The
+pre-commit-gate skill, not a PASS, writes that hook's receipt. Reverting or
 stashing the change, amending or rebasing the reviewed HEAD, or changing code
 after a PASS needs a new round; rewording a commit made on top does not.
 Recording hashes those files into the object store (not the index): ignore
