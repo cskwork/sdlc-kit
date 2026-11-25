@@ -333,6 +333,14 @@ heads_unchanged() {
     [ "$(git -C "$top" rev-parse -q --verify HEAD 2>/dev/null)" = "$rhead" ] || return 1
   done < <(printf '%s' "$heads" | awk -F'\t' '{for(j=1;j<NF;j+=2)print $j "\t" $(j+1)}')
 }
+# Each head+tree a PASS bound becomes that repository's pre-commit-gate receipt ("HEAD tree"), which
+# cskwork/pre-commit-gate-skill's hook checks before a commit. Prints one line per repository written.
+write_receipts() {
+  local rhead top path; while IFS=$'\t' read -r rhead top; do case "$rhead" in *+*) :;; *) continue;; esac
+    path=$(git -C "$top" rev-parse --path-format=absolute --git-path pre-commit-gate-receipt) || die "cannot locate the git folder: $top"
+    printf '%s %s\n' "${rhead%%+*}" "${rhead#*+}" > "$path" || die "cannot write the pre-commit-gate receipt: $path"; printf '%s\n' "$top"
+  done < <(printf '%s' "$heads" | awk -F'\t' '{for(j=1;j<NF;j+=2)print $j "\t" $(j+1)}')
+}
 # PLAN.md without its Scenarios section, hashed: what a diff review judged the code against.
 plan_body() { awk "$UNCOMMENT"'{if(uncomment())next;l=tolower($0);sub(/^[ \t]+/,"",l);gsub(/[`*]/,"",l)} l~/^## /{skip=(substr(l,4)~/^[ \t]*scenarios/)} !skip' "$F/PLAN.md" | sha; }
 # The tree id that git add -A would commit in repository $1, store and untracked nested repositories
@@ -544,7 +552,8 @@ case "$command" in
     event; review="$2 $entry $seq $vsha $note"; rounds=$nrounds
     if [ "$2" = fail ]; then fails=$((fails+1)); printf 'review FAIL %s/3\n' "$fails"; [ "$fails" -lt 3 ] || printf '3 review FAILs this build: stop, the human decides\n'
     else printf 'review PASS. Phase 4: run QA, fill evidence.md, score.\n'; if printf '%s' "$heads" | awk -F'\t' '{for(j=1;j<NF;j+=2)if($j~/^[0-9a-f]+\+[0-9a-f]+$/)f=1}END{exit !f}'; then printf 'Uncommitted changes are bound, untracked unignored files included: a Commit must hold exactly those inside its path, on top of the reviewed HEAD. Amending or rebasing the reviewed HEAD itself needs a new review; a commit made on top of it may be reworded.\n'; fi; fi
-    save_state; log_event review "$2" "round $nrounds: $note";;
+    save_state; log_event review "$2" "round $nrounds: $note"
+    if [ "$2" = pass ]; then written=$(write_receipts) || exit 1; [ -z "$written" ] || printf 'pre-commit-gate receipt written: %s repository(s)\n' "$(printf '%s\n' "$written" | wc -l | tr -d ' ')"; fi;;
   score)
     [ "$#" -eq 1 ] || die 'score <slug>' 2; feature "$1"; mutable; gate_plan || die "$greason"
     read_intent; read_plan; read_evidence
