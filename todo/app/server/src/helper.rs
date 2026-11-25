@@ -4,10 +4,14 @@ use super::core::Fail;
 use super::json::{self, object, Json};
 use std::collections::HashMap;
 use std::process::Command;
+use super::locked;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 struct Config { node: String, core: String }
 static CONFIG: Mutex<Option<Config>> = Mutex::new(None);
+/// After a question that ran out of time, the next ones fail at once for a while: several would add up to minutes.
+static HANGS: Mutex<Option<Instant>> = Mutex::new(None);
 static ANSWERS: Mutex<Option<HashMap<String, Json>>> = Mutex::new(None);
 
 /// The node program and the kit's core.mjs.
@@ -48,13 +52,14 @@ fn ask(kind: &str, value: &str, extra: &str) -> Result<Json, Fail> {
         None => return Err(Fail::new("no node configured")),
     };
     let failed = |why: String| Fail::new(format!("{node} could not check a {kind} in the to-do list: {why}"));
+    if locked(&HANGS).is_some_and(|until| Instant::now() < until) { return Err(failed("it did not answer a moment ago".into())); }
     let mut command = Command::new(super::run::on_path(&node));
     command.arg("-e").arg(SCRIPT).arg(&core);
     super::no_window(&mut command);
     let input = object(vec![("kind", Json::str(kind)), ("value", Json::str(value)), ("extra", Json::str(extra))]).stringify();
     // A list lock or a connection may be waiting on the answer.
-    let output = super::run::capture(&mut command, Some(input.into_bytes()), Some(std::time::Duration::from_secs(10))).map_err(|e| failed(e.to_string()))?;
-    match output.status { Some(status) if status.success() && output.over.is_none() => {} Some(status) => return Err(failed(status.to_string())), None => return Err(failed("no answer in 10 s".into())) }
+    let output = super::run::capture(&mut command, Some(input.into_bytes()), Some(Duration::from_secs(10))).map_err(|e| failed(e.to_string()))?;
+    match output.status { Some(status) if status.success() && output.over.is_none() => {} Some(status) => return Err(failed(status.to_string())), None => { *locked(&HANGS) = Some(Instant::now() + Duration::from_secs(5)); return Err(failed("no answer in 10 s".into())); } }
     let answer = json::parse(&String::from_utf8_lossy(&output.out)).ok_or_else(|| failed("no answer".into()))?;
     if cached {
         let mut answers = ANSWERS.lock().unwrap_or_else(|e| e.into_inner());

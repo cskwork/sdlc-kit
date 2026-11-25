@@ -130,6 +130,8 @@ struct Server {
     /// This server's nonce: it knows its own runs, whatever process id they carry.
     run_server: String,
     closing: AtomicBool,
+    /// Something was left out of a frame or an answer; the watcher sends the whole list when it can.
+    incomplete: AtomicBool,
     connections: AtomicUsize,
     strangers: Mutex<std::collections::VecDeque<Arc<TcpStream>>>,
 }
@@ -251,7 +253,7 @@ pub fn start(options: Options) -> Result<Handle, String> {
     let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     let server = Arc::new(Server { options, port, token, list, publishing: Mutex::default(), clients: Mutex::default(), feed, syncing: Mutex::default(), search_path: OnceLock::new(), run_server,
-        closing: AtomicBool::new(false), connections: AtomicUsize::new(0), strangers: Mutex::default() });
+        closing: AtomicBool::new(false), incomplete: AtomicBool::new(false), connections: AtomicUsize::new(0), strangers: Mutex::default() });
     server.mark_dead_runs().map_err(|e| e.message)?;
     let handle = Handle { server };
     match begin(&handle.server, listener, watched) {
@@ -331,33 +333,36 @@ impl Server {
         }
         if changed[2] { *locked(&self.feed) = read_feed(&files[2].1); }
         let news = changed.contains(&true) || view.expiry.is_some_and(|at| js::now_ms() >= at);
+        // A frame or answer that had to leave something out asks for the whole list later.
+        if self.incomplete.swap(false, Ordering::SeqCst) && view.retry.is_none() { view.retry = Some((Instant::now() + RETRY_FIRST, RETRY_FIRST)); }
         let due = view.retry.filter(|(at, _)| Instant::now() >= *at);
         if news || due.is_some() {
             // Until it is shown, a change stays pending: one that fails (a Node helper in trouble) or panics is tried again.
             let wait = due.or(view.retry).map_or(RETRY_FIRST, |(_, wait)| wait);
             view.retry = Some((Instant::now() + wait, (wait * 2).min(RETRY_MOST)));
-            let expiry = self.next_expiry();
-            let shown = self.broadcast(news);
-            if let (Ok(expiry), true) = (expiry, shown) { view.expiry = expiry; view.retry = None; }
+            view.expiry = self.next_expiry();
+            if self.broadcast(news) { view.retry = None; }
             // Waiting starts once the attempt ended: it may itself have taken long.
-            else { view.expiry = None; view.retry = Some((Instant::now() + wait, (wait * 2).min(RETRY_MOST))); }
+            else { view.retry = Some((Instant::now() + wait, (wait * 2).min(RETRY_MOST))); }
         }
         if Instant::now() >= view.flush_at { view.flush_at += KEEPALIVE; self.flush_finishes(); }
         run::reap();
     }
     /// When the oldest live working marker runs out.
-    fn next_expiry(&self) -> Result<Option<i64>, Fail> {
-        Ok(core::read_working(&self.options.file, js::now_ms())?.iter().map(|(_, mark)| mark.at).min().map(|at| at + core::working_ttl() + 50))
+    fn next_expiry(&self) -> Option<i64> {
+        core::read_working(&self.options.file, js::now_ms()).live.iter().map(|(_, mark)| mark.at).min().map(|at| at + core::working_ttl() + 50)
     }
-    /// Sends the list to every stream; false when it could not be built. `report` tells the streams why.
+    /// Sends the list to every stream; false when it could not be built whole. `report`: the streams get what there is,
+    /// or why there is nothing; a later try stays silent until it has the whole list.
     fn broadcast(&self, report: bool) -> bool {
         let _one = locked(&self.publishing);
         if locked(&self.clients).is_empty() { return true; }
+        self.incomplete.store(false, Ordering::SeqCst);
         let frame = self.frame();
-        let built = frame.is_ok();
+        let built = frame.is_ok() && !self.incomplete.swap(false, Ordering::SeqCst);
+        if !built && !report { return false; }
         let frame: Arc<str> = match frame {
             Ok(payload) => payload.into(),
-            Err(_) if !report => return false,
             Err(error) => format!("event: error\ndata: {}\n\n", error_json(&error.message)).into(),
         };
         locked(&self.clients).retain(|client| client.try_send(frame.clone()).is_ok());
@@ -383,10 +388,23 @@ impl Server {
         Ok(out)
     }
     fn payload_with(&self, extra: impl FnOnce(&mut String)) -> Result<String, Fail> { self.payload_in("", extra) }
+    /// The answer to a stored change. The list shows it; one that cannot be built now is left out (the page then waits
+    /// for its stream) and never turns the answer into an error, or the person would send the change again.
+    fn stored(&self, extra: impl Fn(&mut String)) -> Reply {
+        let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.payload_with(&extra)));
+        if let Ok(Ok(text)) = built { return Reply::Json(text); }
+        self.incomplete.store(true, Ordering::SeqCst);
+        let mut out = String::from("{\"file\":");
+        json::quote(&self.options.file, &mut out);
+        extra(&mut out);
+        out.push('}');
+        Reply::Json(out)
+    }
     fn payload_in(&self, before: &str, extra: impl FnOnce(&mut String)) -> Result<String, Fail> {
         let model = core::load(&self.options.file)?;
         let versions = core::versions(&model)?;
-        let working = core::read_working(&self.options.file, js::now_ms())?;
+        let core::Working { live: working, unread } = core::read_working(&self.options.file, js::now_ms());
+        if unread { self.incomplete.store(true, Ordering::SeqCst); }
         let mut out = format!("{before}{{\"items\":[");
         for (i, item) in model.items.iter().enumerate() {
             if i > 0 { out.push(','); }
@@ -650,7 +668,7 @@ impl Server {
         match path {
             "/api/exec" => {
                 let result = self.run_item(id, version, body.get("path").and_then(Json::text).as_deref())?;
-                return self.payload_with(|out| { out.push_str(",\"exec\":"); result.write(out); }).map(Reply::Json);
+                return Ok(self.stored(|out| { out.push_str(",\"exec\":"); result.write(out); }));
             }
             "/api/items" => core::add(list, &line(body.get("text"), "text", usize::MAX)?)?,
             "/api/item" => match body.get("op").and_then(Json::text).as_deref() {
@@ -669,7 +687,7 @@ impl Server {
             "/api/approve" => self.approve(&body, id, version)?,
             _ => return Ok(Reply::Error(404, "not found".into())),
         }
-        self.payload_with(|out| if let Some(launch) = launch { out.push_str(",\"launch\":"); json::quote(&launch, out); }).map(Reply::Json)
+        Ok(self.stored(|out| if let Some(launch) = &launch { out.push_str(",\"launch\":"); json::quote(launch, out); }))
     }
 
     /// Records the fix request and starts the agent todo-agent.json names, if it names one.
@@ -693,7 +711,8 @@ impl Server {
         let kit = format!("{}{}", self.options.kit, if self.options.kit.ends_with(['/', '\\']) { "" } else { std::path::MAIN_SEPARATOR_STR });
         let argv: Vec<String> = argv.iter().map(|arg| fill(arg, &[("id", &id), ("kit", &kit), ("project", &project)])).collect();
         let cwd = if js::is_absolute(&project) && Path::new(&project).exists() { project } else { js::home() };
-        run::launch(&argv, &cwd)
+        // The request is recorded: a program that cannot start is the launch's result, not the request's.
+        run::launch(&argv, &cwd).or_else(|error| Ok(format!("failed: {}", error.message.trim_start_matches("spawn "))))
     }
 
     // ---------- documents and approvals ----------
@@ -752,7 +771,9 @@ impl Server {
             item.events.push(core::Event { at: js::stamp(), who: "human".into(), what: format!("approved {gate} — \"{words}\"") });
             Ok(())
         })?;
-        sync::sync(&self.list, kit, "")
+        // The approval is recorded; a status refresh that fails now is done by the next sync.
+        if let Err(error) = sync::sync(&self.list, kit, "") { eprintln!("to-do sync: {}", error.message); }
+        Ok(())
     }
 }
 
@@ -832,6 +853,20 @@ mod tests {
         stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
         assert_eq!(status(stream), "503");
         assert!(locked(&handle.server.clients).is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn the_answer_to_a_stored_change_is_success_when_the_list_cannot_be_read_back() {
+        let (dir, handle) = served("read-back");
+        let _ = handle.server.synced();
+        std::fs::remove_file(dir.join("todo.md")).unwrap();
+        std::fs::create_dir(dir.join("todo.md")).unwrap();
+        assert!(handle.server.payload().is_err());
+        let Reply::Json(text) = handle.server.stored(|out| out.push_str(",\"launch\":\"queued\"")) else { panic!("an error") };
+        let answer = json::parse(&text).unwrap();
+        assert!(answer.get("items").is_none() && answer.get("launch") == Some(&Json::str("queued")));
+        handle.close();
         std::fs::remove_dir_all(dir).unwrap();
     }
 

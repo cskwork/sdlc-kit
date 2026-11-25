@@ -135,6 +135,9 @@ test('rust: the same requests give the same answers and leave the same files as 
       const answer = await call(side.server.url, pathname, body);
       out[name] = { status: answer.status, text: same(answer.text).replace(/"(since|beat)":"[^"]*"/g, '"$1":""') };
     }
+    // A recorded fix whose program cannot start: Node throws for some codes after the write; here it is the launch's result.
+    const thrown = make && out.node.status === 400 && JSON.parse(out.node.text).error.match(/^spawn (ENOEXEC|ENOTDIR)$/);
+    if (thrown) { assert.deepEqual([out.rust.status, JSON.parse(out.rust.text).launch], [200, `failed: ${thrown[1]}`]); return out.rust; }
     assert.deepEqual(out.rust, out.node, `${pathname} ${JSON.stringify(make?.([{ id: 'x' }], () => 'v') ?? null)}`.slice(0, 200));
     return out.node;
   };
@@ -349,4 +352,34 @@ test('rust: a change that could not be shown while the Node helper failed is sho
   assert.ok(readFileSync(asked, 'utf8').split('\n').length < 8, 'retries back off');
   writeFileSync(works, '');
   await until(() => text.includes('odd link'), 'shown after the helper works');
+});
+
+test('rust: a marker whose time cannot be read is left out of the list alone, fails no stored change, and shows later', posix, async t => {
+  const dir = scratch(t), file = join(dir, 'todo.md'), node = join(dir, 'node'), works = join(dir, 'works');
+  writeFileSync(node, `#!/bin/sh\n[ -f '${works}' ] || exit 1\nexec '${process.execPath}' "$@"\n`, { mode: 0o755 });
+  writeFileSync(file, '## Open\n\n- [ ] fine\n\n- [ ] odd\n');
+  const id = title => core.load(file).items.find(item => item.title === title).id, now = new Date().toISOString();
+  writeFileSync(join(dir, 'todo-working.json'), JSON.stringify({ [id('fine')]: { what: 'ok', since: now, beat: now }, [id('odd')]: { what: 'odd', since: now, beat: new Date().toString() } }));
+  const server = await startRustWeb({ file, kit, node, feed: join(dir, 'feed.json'), onUrl() {} });
+  t.after(() => server.close());
+  const what = (items, title) => items.find(item => item.title === title)?.working?.what;
+  const listed = JSON.parse((await call(server.url, '/api/items')).text).items;
+  assert.deepEqual([what(listed, 'fine'), what(listed, 'odd')], ['ok', undefined]);
+  const at = new URL(server.url), token = new URLSearchParams(at.hash.slice(1)).get('t'), stop = new AbortController();
+  t.after(() => stop.abort());
+  const response = await fetch(`${at.origin}/events?t=${token}`, { signal: stop.signal });
+  assert.equal(response.status, 200);
+  let text = '';
+  (async () => { for await (const chunk of response.body) text += Buffer.from(chunk).toString(); })().catch(() => {});
+  const added = await call(server.url, '/api/items', { text: 'stored once' });
+  assert.equal(added.status, 200, added.text);
+  assert.equal(JSON.parse(added.text).items.filter(item => item.title === 'stored once').length, 1);
+  const model = core.load(file), item = model.items.find(other => other.title === 'fine');
+  const edited = await call(server.url, '/api/item', { op: 'edit', id: item.id, version: core.itemVersion(item, model), title: 'renamed' });
+  assert.equal(what(JSON.parse(edited.text).items, 'renamed'), 'ok', 'the readable marker followed its item');
+  assert.ok(!text.includes('event: error'));
+  writeFileSync(works, '');
+  for (let i = 0; i < 300 && !text.includes('"what":"odd"'); i++) await new Promise(done => setTimeout(done, 50));
+  assert.ok(text.includes('"what":"odd"'), 'sent without another write once the time can be read');
+  assert.equal(core.load(file).items.filter(other => other.title === 'stored once').length, 1);
 });
