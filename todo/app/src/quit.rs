@@ -5,14 +5,18 @@ use tauri::{AppHandle, Manager};
 /// Quit, from the tray, the menu (⌘Q) or the Dock.
 pub fn request(app: &AppHandle) {
     if may_end(app) { return end(app); }
-    board::later(app, |app| if !board::ask_quit(app) { end(app) });
+    // A question that could not be shown is not a yes: the app stays, with the page and what it carries.
+    board::later(app, |app| if !board::ask_quit(app) {
+        eprintln!("sdlc-todo: could not ask before quitting; staying open");
+        board::show(app, board::current_view());
+    });
 }
 
 /// Whether nothing unsent would be lost, as the page last said.
 fn may_end(app: &AppHandle) -> bool {
     let shell = app.state::<Shell>();
     let shared = lock(&shell.shared);
-    shared.leaving || !shared.unsent
+    shared.leaving || (!shared.unsent && lock(&shell.carried).is_none())
 }
 
 pub fn end(app: &AppHandle) {

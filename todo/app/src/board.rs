@@ -83,27 +83,52 @@ fn ask_page(window: &WebviewWindow, script: &str, limit: Duration) -> Option<ser
     serde_json::from_str(&answer.recv_timeout(limit).ok()?).ok()
 }
 
-/// Reads a page's answer to CARRY: what it holds, and the milliseconds since the last key.
-fn carried(answer: serde_json::Value) -> Option<(serde_json::Value, f64)> {
-    let held: serde_json::Value = serde_json::from_str(answer.as_str()?).ok()?;
-    let idle = held.get("idle").and_then(serde_json::Value::as_f64).unwrap_or(f64::MAX);
-    held.is_object().then_some((held, idle))
+/// A page's answer to CARRY.
+#[derive(Debug, PartialEq)]
+enum Held {
+    /// What it holds, and the milliseconds since the last key.
+    Words(serde_json::Value, f64),
+    /// A page that keeps nothing (an older one, or none of ours).
+    Nothing,
+    /// No answer, or one that is not one: what it holds is not known.
+    Unknown,
+}
+
+fn carried(answer: Option<serde_json::Value>) -> Held {
+    let Some(text) = answer.as_ref().and_then(serde_json::Value::as_str) else { return Held::Unknown };
+    if text.is_empty() { return Held::Nothing; }
+    match serde_json::from_str::<serde_json::Value>(text) {
+        Ok(held) if held.is_object() => {
+            let idle = held.get("idle").and_then(serde_json::Value::as_f64).unwrap_or(f64::MAX);
+            Held::Words(held, idle)
+        }
+        _ => Held::Unknown,
+    }
 }
 
 /// Keeps what the page holds for the one that replaces it. Nothing typed is lost: a page in use is waited for briefly,
-/// and what could not be read leaves an earlier page's words in place.
-fn keep(app: &AppHandle, window: &WebviewWindow) {
+/// and a page that could not be read is not replaced (false); the next change of the list tries again.
+fn keep(app: &AppHandle, window: &WebviewWindow) -> bool {
     let shell = app.state::<Shell>();
     // Only a page of the server this window was sent to; the shell's own holds nothing.
     let ours = { let shared = lock(&shell.shared); shared.loaded.as_ref().is_some_and(|session| shared.page.as_deref() == Some(session.origin().as_str())) };
-    if !ours { return; }
+    if !ours { return true; }
     let started = Instant::now();
-    while let Some((held, idle)) = ask_page(window, CARRY, Duration::from_secs(2)).and_then(carried) {
-        *lock(&shell.carried) = Some(held);
-        if idle >= TYPING.1 || started.elapsed() >= TYPING.0 { break; }
+    loop {
+        match carried(ask_page(window, CARRY, Duration::from_secs(2))) {
+            Held::Nothing => return true,
+            Held::Unknown => return false,
+            Held::Words(held, idle) => {
+                *lock(&shell.carried) = Some(held);
+                if idle >= TYPING.1 || started.elapsed() >= TYPING.0 { return true; }
+            }
+        }
         std::thread::sleep(Duration::from_millis(300));
     }
 }
+
+/// The view last picked on the tray.
+pub fn current_view() -> View { *lock(&VIEW) }
 
 /// Asks in the page before quitting. False when there is no page to ask.
 pub fn ask_quit(app: &AppHandle) -> bool {
@@ -192,7 +217,7 @@ fn load(app: &AppHandle, window: &WebviewWindow, session: &Session, view: View) 
     let shell = app.state::<Shell>();
     if !lock(&shell.shared).must_load(session) { return; }
     let Ok(url) = address(session, view) else { return };
-    keep(app, window);
+    if !keep(app, window) { return eprintln!("sdlc-todo: the page did not say what it holds; it stays until it does"); }
     *lock(&shell.picked) = None;
     allow(app, session);
     match window.navigate(url) {
@@ -391,10 +416,12 @@ mod tests {
     #[test]
     fn what_a_page_holds_is_read_from_its_answer() {
         let answer = serde_json::Value::from(json!({ "idle": 40, "list": { "add": "한글 \"draft\"" } }).to_string());
-        let (held, idle) = carried(answer).unwrap();
+        let Held::Words(held, idle) = carried(Some(answer)) else { panic!("words") };
         assert_eq!((held["list"]["add"].as_str(), idle), (Some("한글 \"draft\""), 40.0));
-        // A page that never counted typing is not waited for; one that answers nothing sensible keeps the earlier words.
-        assert_eq!(carried(json!("{}")).unwrap().1, f64::MAX);
-        for answer in [json!(""), json!(null), json!("[]"), json!("{ broken"), json!(true)] { assert!(carried(answer.clone()).is_none(), "{answer}"); }
+        // A page that never counted typing is not waited for.
+        assert_eq!(carried(Some(json!("{}"))), Held::Words(json!({}), f64::MAX));
+        // A page without anything to keep says so; silence or nonsense is not "nothing", and the page is not replaced.
+        assert_eq!(carried(Some(json!(""))), Held::Nothing);
+        for answer in [None, Some(json!(null)), Some(json!("[]")), Some(json!("{ broken")), Some(json!(true))] { assert_eq!(carried(answer.clone()), Held::Unknown, "{answer:?}"); }
     }
 }

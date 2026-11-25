@@ -926,7 +926,7 @@ function connect() {
   clearTimeout(retryTimer);
   source?.close();
   source = new EventSource(`/events?t=${encodeURIComponent(token)}`);
-  source.addEventListener('open', () => { retry = 0; setLive('live', 'live.live'); $('error').hidden = true; });
+  source.addEventListener('open', () => { retry = 0; setLive('live', 'live.live'); if (!lost.length) $('error').hidden = true; });
   source.addEventListener('message', event => {
     try { received(JSON.parse(event.data)); } catch { /* ignore a malformed message */ }
   });
@@ -1226,11 +1226,11 @@ function carry() {
   return held;
 }
 function takeList() {
-  const editing = document.querySelector?.('li.row.editing');
+  const editing = [...(document.querySelectorAll?.('li.row.editing') || [])];
   return {
     drafts: [...drafts].filter(([, draft]) => (draft.reply.trim() && draft.reply !== draft.seed) || draft.words.trim()),
     add: addText.value,
-    edit: editing ? { id: editing.dataset.id, text: editing.querySelector('input.edit').value } : null,
+    edits: editing.map(li => ({ id: li.dataset.id, text: li.querySelector('input.edit').value })),
     open: dialog.open ? detailId : ''
   };
 }
@@ -1253,10 +1253,10 @@ function putList(held) {
   for (const text of held.lost || []) lostWords(text);
   if (held.add) addText.value = held.add;
   if (held.open && openItem(held.open)) openDetail(held.open, null, false);
-  if (held.edit) {
-    const li = rows.get(held.edit.id);
-    if (li && openItem(held.edit.id)) { startEdit(li); li.querySelector('input.edit').value = held.edit.text; }
-    else lostWords(held.edit.text);
+  for (const edit of [...(held.edits || []), ...(held.edit ? [held.edit] : [])]) {
+    const li = rows.get(edit.id);
+    if (li && openItem(edit.id)) { startEdit(li); li.querySelector('input.edit').value = edit.text; }
+    else lostWords(edit.text);
   }
 }
 // Needs the list, the shell's answer and the board's own part; whichever comes last calls it.

@@ -87,8 +87,9 @@ function page(hash = '', options = {}) {
     // The browser imports these modules; the VM runs app.js as a script with their exports as globals.
     ...i18n, ...status,
     EventSource: class {
-      constructor(url) { streams.push(url); }
-      addEventListener() {}
+      constructor(url) { streams.push(url); this.listeners = {}; context.lastStream = this; }
+      addEventListener(type, fn) { this.listeners[type] = fn; }
+      close() {}
     },
     fetch: async (url, options) => {
       requests.push({ url, options });
@@ -983,18 +984,42 @@ test('app: what was typed goes to the next page: replies, approval words, a new 
 });
 
 test('app: words for items that went away are all shown in one notice that stays and keeps the window', async () => {
-  const next = await appPage([plain('bbbbbb')], { state: { carried: { list: { drafts: [['aaaaaa', { reply: '첫 답', words: '', seed: '' }], ['cccccc', { reply: '둘째 답', words: '', seed: '' }]], edit: { id: 'dddddd', text: '새 이름' } } } } });
+  const next = await appPage([plain('bbbbbb')], { state: { carried: { list: { drafts: [['aaaaaa', { reply: '첫 답', words: '', seed: '' }], ['cccccc', { reply: '둘째 답', words: '', seed: '' }]], edits: [{ id: 'dddddd', text: '새 이름' }, { id: 'eeeeee', text: '또 다른 이름' }] } } } });
   next.board();
   next.snapshot();
   const text = () => next.p.nodes.get('error-text').textContent;
-  assert.match(text(), /첫 답 \/ 둘째 답 \/ 새 이름/);
+  assert.match(text(), /첫 답 \/ 둘째 답 \/ 새 이름 \/ 또 다른 이름/);
+  next.run("source = null; connect()");
+  next.run('for (const [type, fn] of Object.entries(lastStream.listeners)) if (type === "open") fn()');
+  assert.equal(next.p.nodes.get('error').hidden, false, 'the stream opening keeps the notice');
   next.run("showError('later failure')");
   assert.match(text(), /첫 답/, 'a later notice does not cover them');
   assert.equal(next.run('todoPage.busy()'), true, 'quitting or closing asks first');
-  assert.deepEqual(next.json('todoPage.carry().list.lost'), ['첫 답', '둘째 답', '새 이름'], 'and another replacement takes them along');
+  assert.deepEqual(next.json('todoPage.carry().list.lost'), ['첫 답', '둘째 답', '새 이름', '또 다른 이름'], 'and another replacement takes them along');
   next.p.nodes.get('error-dismiss').listeners.click();
   assert.equal(next.run('lost.length'), 0);
   assert.equal(next.run('todoPage.busy()'), false);
+});
+
+test('app: every rename being typed goes along', async () => {
+  const first = await appPage([plain('aaaaaa'), plain('bbbbbb')]);
+  first.board();
+  first.snapshot();
+  const editing = id => ({ dataset: { id }, querySelector: () => ({ value: `name of ${id}` }) });
+  first.p.context.document.querySelectorAll = selector => selector === 'li.row.editing' ? [editing('aaaaaa'), editing('bbbbbb')] : [];
+  assert.deepEqual(first.json('todoPage.carry().list.edits'), [{ id: 'aaaaaa', text: 'name of aaaaaa' }, { id: 'bbbbbb', text: 'name of bbbbbb' }]);
+});
+
+test('board: no key acts behind a dialog, the quit and delete questions included', () => {
+  const { b, sent } = selectedBoard([askItem('aaaaaa', 'v1', '', { choices: ['yes', 'no'] })]);
+  for (const id of ['delete-confirm', 'keys-help', 'view-settings', 'run-confirm']) {
+    b.context.document.getElementById(id).open = true;
+    assert.equal(b.key('1').prevented, false, id);
+    b.context.document.getElementById(id).open = false;
+  }
+  assert.equal(sent().length, 0);
+  b.key('1');
+  assert.deepEqual(sent().map(body => body.text), ['yes'], 'and acts once none is open');
 });
 
 test('app: words handed over and not yet taken up count as unsent and go on unchanged', async () => {

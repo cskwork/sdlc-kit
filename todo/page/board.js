@@ -423,10 +423,12 @@ function shortcut(key) {
   else return false;
   return true;
 }
+// No board key acts behind a dialog (deleting, quitting, a command, the key list, text settings).
+const modalOpen = () => ['keys-help', 'view-settings', 'run-confirm', 'delete-confirm'].some(id => $(id)?.open);
 document.addEventListener('keydown', event => {
   // A shown tooltip is dismissed first, without moving focus (WCAG 1.4.13); the next Escape closes the panel.
   if (event.key === 'Escape' && hideTip()) { event.preventDefault(); return; }
-  if (currentView() !== 'board' || event.altKey || event.ctrlKey || event.metaKey || $('keys-help').open || $('view-settings').open || $('run-confirm').open) return;
+  if (currentView() !== 'board' || event.altKey || event.ctrlKey || event.metaKey || modalOpen()) return;
   if (event.key === 'Escape') {
     if (selectedKey) { event.preventDefault(); closePanel(); }
     return;
