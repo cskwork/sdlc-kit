@@ -47,7 +47,7 @@ function page(hash = '', options = {}) {
   const nodes = new Map(), requests = [], streams = [];
   const node = id => {
     if (!nodes.has(id)) nodes.set(id, {
-      dataset: {}, value: '', hidden: true, elements: [], children: [],
+      id, dataset: {}, value: '', hidden: true, elements: [], children: [],
       attributes: {}, listeners: {}, classList: { contains() { return false; }, toggle() {}, add() {}, remove() {} },
       addEventListener(type, fn) { this.listeners[type] = fn; },
       focus() { context.document.activeElement = this; },
@@ -839,6 +839,67 @@ test('ticket: in the tray app\'s window the page asks the app (window.ipc) and o
   b.nodes.get('panel-ticket').click();
   assert.equal(posts.length, 3, 'the button on an item without a ticket does nothing');
   assert.equal(b.opened.length, 0, 'never window.open in the app');
+});
+
+test('ticket: the app\'s shell (todoApp) is asked before window.ipc, and opens no popup', () => {
+  const { b } = selectedBoard([linked('aaaaaa', { waiting: 'see https://tracker.invalid/browse/T-9, then pick' }), linked('bbbbbb')]);
+  const asks = [];
+  b.context.todoApp = { ticket: async (url, follow) => { asks.push([url.split('/').pop(), follow]); } };
+  b.context.ipc = { postMessage() { throw new Error('the shell\'s own channel is not for tickets'); } };
+  b.key('t');
+  b.nodes.get('panel-tickets').children[0].click();
+  b.key('j');
+  assert.deepEqual(asks, [['T-aaaaaa', false], ['T-9', false], ['T-bbbbbb', true]], 'the link, another ticket in the question, then the selection');
+  assert.equal(b.opened.length, 0);
+});
+
+test('choices: what each does comes from the document\'s numbered Options list, matched by label', () => {
+  const { b } = selectedBoard([askItem('aaaaaa', 'v1', '')]);
+  const options = (markdown, choices) => [...vm.runInContext('optionsOf', b.context)(markdown, choices)];
+  const brief = '# D\n\n## At a glance\n- **Your call:** go?\n\n## 선택지 (번호로 답)\n1. **승인** (AI 권장) — 계획대로 `build`.\n2. **보류** — 진행하지 않고 대기.\n\n## Next\n1. unrelated — no\n';
+  assert.deepEqual(options(brief, ['승인', '보류']), ['계획대로 build.', '진행하지 않고 대기.']);
+  assert.deepEqual(options('## Options\n1. **a** - first\n2. **b**\n', ['a', 'b']), ['first', '']);
+  // A list in another order: labels match after trimming, collapsing spaces and ignoring case.
+  const swapped = '## Options\n1. **Hold  it** — wait for QA.\n2. **Ship** (AI pick) — merge now.\n';
+  assert.deepEqual(options(swapped, ['ship', ' Hold it ']), ['merge now.', 'wait for QA.']);
+  // A list that does not match the choices one to one says nothing rather than mislabel them.
+  assert.deepEqual(options(brief, ['승인', '보류', '취소']), []);
+  assert.deepEqual(options(swapped, ['Ship', 'Cancel']), []);
+  assert.deepEqual(options('## Summary\n1. a — b\n', ['a']), []);
+});
+
+test('app: memos, text size and font live in the shell; a memo not yet written keeps the window', async () => {
+  const calls = [];
+  const own = { memos: { aaaaaa: 'ask QA' }, size: 100, sizes: [80, 160], font: '', fonts: [{ name: 'NanumGothic', file: '/f/N.ttf' }], terminal: true, follows: true, error: null };
+  assert.equal(vm.runInContext('own', page('#t=test-token').context), null, 'a browser has none');
+  const inShell = page('#t=test-token', { source: source
+    .replace('const shell = globalThis.todoApp;', `const shell = { state: async () => (${JSON.stringify(own)}), saveMemo: async (id, text) => { calls.push(['memo', id, text]); }, saveView: async (size, font) => { calls.push(['view', size, font]); } };`) });
+  Object.assign(inShell.context, { calls, getComputedStyle: () => ({ fontFamily: 'system-ui' }) });
+  const root = inShell.context.document.documentElement;
+  root.style = {};
+  inShell.context.document.body = {};
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(inShell.nodes.get('view-open').hidden, false);
+  inShell.nodes.get('view-larger').listeners.click();
+  inShell.nodes.get('view-font').value = '/f/N.ttf';
+  inShell.nodes.get('view-font').listeners.change();
+  assert.equal(root.style.fontSize, '110%');
+  assert.equal(root.style.fontFamily, '"NanumGothic", system-ui');
+  const box = inShell.nodes.get('panel-memo'), field = inShell.nodes.get('panel-memo-text');
+  const item = { id: 'aaaaaa', done: false };
+  inShell.context.todoPage.renderMemo(box, item);
+  assert.deepEqual([box.hidden, box.open, field.value], [false, true, 'ask QA']);
+  field.value = 'ask QA first';
+  field.listeners.input();
+  assert.equal(inShell.context.todoPage.busy(), true);
+  assert.equal(vm.runInContext('memoTimers.size', inShell.context), 1);
+  field.listeners.blur();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(vm.runInContext('memoTimers.size', inShell.context), 0);
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [['view', 110, ''], ['view', 110, '/f/N.ttf'], ['memo', 'aaaaaa', 'ask QA first']]);
+  inShell.context.todoPage.renderMemo(box, { id: 'bbbbbb', done: true });
+  assert.equal(box.hidden, true, 'a done item has none');
+  assert.equal(inShell.requests.filter(r => /memo|ask QA/.test(JSON.stringify(r))).length, 0, 'the server never sees a memo');
 });
 
 test('ticket: in the app a link to this machine is refused with a message, not sent to the app', () => {

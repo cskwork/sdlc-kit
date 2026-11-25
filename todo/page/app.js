@@ -523,7 +523,7 @@ document.addEventListener('keydown', event => {
   const t = event.target;
   // The list's add shortcut; the board has its own keys.
   if (document.body?.dataset?.view && document.body.dataset.view !== 'list') return;
-  if (($('detail').open && !isWide) || $('run-confirm').open || t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
+  if (($('detail').open && !isWide) || $('run-confirm').open || $('view-settings').open || t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
   event.preventDefault();
   addText.focus();
 });
@@ -649,6 +649,7 @@ function renderDetail() {
   $('detail-gone').hidden = !!item;
   for (const form of [$('approve-form'), $('reply-form')]) for (const c of form.elements) c.disabled = !item;
   if (!item) {
+    $('detail-memo').hidden = true;
     artifact = null;
     $('artifact-box').hidden = $('decide').hidden = $('detail-agent-next').hidden = true;
     return;
@@ -666,7 +667,7 @@ function renderDetail() {
   next.hidden = !kit.length;
   $('detail-agent-next-list').replaceChildren(...kit.map(line => el('li', '', line)));
   if (actor === 'others') field(dl, t('field.others'), item.others);
-  if (!item.done && item.run) field(dl, t('field.run'), el('code', '', item.run));
+  if (!item.done && item.run) field(dl, t('field.run'), runCommandControl(item));
   if (actor === 'blocked') field(dl, t('field.problem'), item.error || item.sdlc?.action || t('field.unknown'));
   if (actor === 'blocked' && !item.error) field(dl, t('field.next'), fixButton(item));
   field(dl, t('field.project'), item.project);
@@ -679,6 +680,7 @@ function renderDetail() {
   if (item.sdlc) field(dl, t('field.work'), `${item.sdlc.slug}${item.sdlc.phase ? ` · ${phaseLabel(t, item.sdlc.phase)}` : ''}`);
   $('reply-box').hidden = item.done;
   seedReply(item);
+  renderMemo($('detail-memo'), item);
   renderChoices(item);
   const history = $('history');
   history.replaceChildren(...item.events.map(e => {
@@ -1062,14 +1064,129 @@ async function executeRun({ id, version, command, path }) {
   refreshRuns();
 }
 
+// ---------- the tray app ----------
+// In the tray app's window the shell offers window.todoApp (todo/app/src/board.rs): the person's own memos, text size
+// and font, kept in todo-app.json and never sent to the server or an agent, and a terminal for a typed command. A
+// browser has none of these, so their controls stay hidden there.
+const shell = globalThis.todoApp;
+let own = null; // { memos, size, sizes, font, fonts, terminal, follows } once the shell answered
+const memoTimers = new Map(); // item id -> timer of a memo not yet written
+let memoFailed = false;
+const baseFont = () => getComputedStyle(document.body).fontFamily;
+let pageFont = '';
+async function writeMemo(id) {
+  clearTimeout(memoTimers.get(id));
+  try {
+    await shell.saveMemo(id, own.memos[id] || '');
+    memoTimers.delete(id);
+    memoFailed = false;
+  } catch (error) {
+    // The words stay in the box and the window stays open (busy) until they are written.
+    if (!memoFailed) showError({ key: 'memo.failed', vars: { message: String(error?.message || error) } });
+    memoFailed = true;
+  }
+}
+// Shows an item's memo in `box` (a <details> with a textarea), in the list's details or the board's panel.
+function renderMemo(box, item) {
+  const field = $(`${box.id}-text`);
+  box.hidden = !own || !item || item.done;
+  if (box.hidden) { box.dataset.item = ''; return; }
+  const memo = own.memos[item.id] || '';
+  if (box.dataset.item !== item.id) { box.dataset.item = item.id; box.open = !!memo.trim(); field.value = memo; }
+  else if (document.activeElement !== field && field.value !== memo) field.value = memo;
+}
+function wireMemo(box) {
+  const field = $(`${box.id}-text`);
+  field.addEventListener('input', () => {
+    const id = box.dataset.item;
+    if (!own || !id) return;
+    own.memos[id] = field.value;
+    clearTimeout(memoTimers.get(id));
+    memoTimers.set(id, setTimeout(() => writeMemo(id), 400));
+  });
+  field.addEventListener('blur', () => { for (const id of [...memoTimers.keys()]) writeMemo(id); });
+}
+const memoBoxes = [$('detail-memo'), $('panel-memo')];
+memoBoxes.forEach(wireMemo);
+function showView() {
+  const root = document.documentElement;
+  // The page is sized in rem, so the root's size is the text size.
+  root.style.fontSize = own.size === 100 ? '' : `${own.size}%`;
+  const name = own.fonts.find(font => font.file === own.font)?.name;
+  root.style.fontFamily = name ? `"${name.replace(/["\\]/g, '')}", ${pageFont}` : '';
+  $('view-size').textContent = `${own.size}%`;
+  $('view-smaller').disabled = own.size <= own.sizes[0];
+  $('view-larger').disabled = own.size >= own.sizes[1];
+  $('view-font').value = own.font;
+}
+async function saveView() {
+  showView();
+  try { await shell.saveView(own.size, own.font); }
+  catch (error) { showError({ key: 'view.failed', vars: { message: String(error?.message || error) } }); }
+}
+function sizeText(step) {
+  if (!own) return;
+  const next = step ? Math.min(own.sizes[1], Math.max(own.sizes[0], own.size + step)) : 100;
+  if (next === own.size) return;
+  own.size = next;
+  saveView();
+  announce(t('announce.textSize', { percent: next }));
+}
+async function connectShell() {
+  if (!shell) return;
+  try { own = await shell.state(); }
+  catch (error) { showError({ key: 'view.unavailable', vars: { message: String(error?.message || error) } }); return; }
+  if (own.error) showError({ key: 'view.setAside', vars: { message: own.error } });
+  pageFont = baseFont();
+  $('view-open').hidden = false;
+  const first = el('option', '');
+  first.value = '';
+  first.dataset.i18n = 'view.fontDefault';
+  first.textContent = t('view.fontDefault');
+  $('view-font').replaceChildren(first, ...own.fonts.map(font => { const option = el('option', '', font.name); option.value = font.file; return option; }));
+  showView();
+  if (detailId) { detailVersion = ''; renderDetail(); }
+  for (const listener of listeners) listener();
+}
+$('view-open').addEventListener('click', () => $('view-settings').showModal());
+$('view-smaller').addEventListener('click', () => sizeText(-10));
+$('view-larger').addEventListener('click', () => sizeText(10));
+$('view-font').addEventListener('change', () => { own.font = $('view-font').value; saveView(); });
+// ⌘/Ctrl with +, − and 0, as in a browser.
+document.addEventListener('keydown', event => {
+  if (!own || !(event.metaKey || event.ctrlKey) || event.altKey) return;
+  const step = { '+': 10, '=': 10, '-': -10, 0: 0 }[event.key];
+  if (step === undefined) return;
+  event.preventDefault();
+  sizeText(step);
+});
+// The button beside an item's `run` command: the app opens a terminal with it typed, not run; elsewhere it is copied.
+function runCommandControl(item) {
+  const box = el('div', 'run-typed'), terminal = !!own?.terminal;
+  const b = el('button', 'secondary', t(terminal ? 'run.openTerminal' : 'run.copy'));
+  b.type = 'button';
+  b.addEventListener('click', async () => {
+    try {
+      if (terminal) { if (await shell.openTerminal(item.id)) return; }
+      await navigator.clipboard.writeText(item.run);
+      announce(t('run.copied'));
+      b.textContent = t('run.copied');
+    } catch { showError({ key: 'copy.failed' }); }
+  });
+  box.append(el('code', '', item.run), b);
+  if (terminal) box.append(el('p', 'hint', t('run.openTerminalHelp')));
+  return box;
+}
+
 // The board (board.js, a separate module) reads state and acts through this; the list keeps its own code paths.
-const busyChecks = [() => inFlight > 0 || adding || !!$('add-text').value.trim() ||
+const busyChecks = [() => inFlight > 0 || adding || memoTimers.size > 0 || !!$('add-text').value.trim() ||
   [...drafts.values()].some(draft => (draft.reply.trim() && draft.reply !== draft.seed) || draft.words.trim())];
 const busy = () => busyChecks.some(check => check());
 globalThis.todoPage = {
   get items() { return items; }, get feed() { return feed; }, get feedError() { return feedError; },
   get lang() { return lang; }, get t() { return t; }, get token() { return token; },
-  api, apply, announce, showError, sourceOf, oneLine, say, seedDraft, renderRun, confirmRun,
+  api, apply, announce, showError, sourceOf, oneLine, say, seedDraft, renderRun, confirmRun, renderMemo, runCommandControl, busy,
+  get shell() { return shell; }, get own() { return own; },
   subscribe(listener) { listeners.push(listener); if (seenSnapshot) listener(); },
   addBusyCheck(check) { busyChecks.push(check); }
 };
@@ -1087,6 +1204,7 @@ function singleWindow(Channel = globalThis.BroadcastChannel, app = appWindow) {
   return channel;
 }
 singleWindow();
+connectShell();
 
 if (!token) {
   setLive('off', 'live.off');

@@ -347,6 +347,25 @@ export default {
     'runs.costPartial': '일부 비용 모름',
     'runs.tokens': '{tokens} 토큰',
     'health.alerts': '알림',
-    'health.empty': '자동 작업이 보낸 건강 정보가 없어요.'
+    'health.empty': '자동 작업이 보낸 건강 정보가 없어요.',
+    'memo.title': '내 메모',
+    'memo.help': '나만 봐요. 에이전트에게 가지 않아요.',
+    'memo.failed': '내 메모를 저장하지 못했어요: {message}',
+    'view.button': '글자',
+    'view.title': '글자 크기와 글꼴',
+    'view.size': '글자 크기',
+    'view.font': '글꼴',
+    'view.fontDefault': '기본',
+    'view.failed': '글자 설정을 저장하지 못했어요: {message}',
+    'view.unavailable': '내 메모와 글자 설정을 불러오지 못했어요: {message}',
+    'view.setAside': '설정 파일을 읽지 못해 따로 옮겨 두었어요: {message}',
+    'run.openTerminal': '터미널에서 열기',
+    'run.openTerminalHelp': '명령이 입력된 채로 열려요. 확인하고 Enter를 누르세요.',
+    'run.copy': '명령 복사',
+    'run.copied': '명령을 복사했어요',
+    'decide.yours': '직접 정해 주세요',
+    'decide.suggested': 'AI 권장 있음',
+    'panel.ticketFailed': '티켓을 열지 못했어요: {message}',
+    'board.workingNow.other': '지금 작업 중 {count}건'
   }
 };

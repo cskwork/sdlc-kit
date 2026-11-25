@@ -354,6 +354,26 @@ export default {
     'runs.costPartial': 'some cost unknown',
     'runs.tokens': '{tokens} tokens',
     'health.alerts': 'Alerts',
-    'health.empty': 'The automation sent no health information.'
+    'health.empty': 'The automation sent no health information.',
+    'memo.title': 'My memo',
+    'memo.help': 'Only you see this; it is not sent to agents.',
+    'memo.failed': 'Your memo could not be saved: {message}',
+    'view.button': 'Text',
+    'view.title': 'Text size and font',
+    'view.size': 'Text size',
+    'view.font': 'Font',
+    'view.fontDefault': 'Default',
+    'view.failed': 'The text settings could not be saved: {message}',
+    'view.unavailable': 'Your memos and text settings could not be loaded: {message}',
+    'view.setAside': 'The settings file could not be read and was set aside: {message}',
+    'run.openTerminal': 'Open in Terminal',
+    'run.openTerminalHelp': 'Typed, not run: check it and press Enter.',
+    'run.copy': 'Copy command',
+    'run.copied': 'Command copied',
+    'decide.yours': 'Yours to decide',
+    'decide.suggested': 'AI suggestion ready',
+    'panel.ticketFailed': 'The ticket could not be opened: {message}',
+    'board.workingNow.one': '{count} working now',
+    'board.workingNow.other': '{count} working now'
   }
 };

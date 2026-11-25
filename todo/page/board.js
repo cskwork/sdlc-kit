@@ -52,6 +52,32 @@ function glanceOf(markdown) {
 }
 const tagOf = title => title.match(/^\[([^\]]+)\]\s*/);
 // Line 1 names the ticket (or the [tag] of a title); line 2 is the title without it.
+// What each offered answer does, from the document's numbered Options list (`1. **label** — what it does`), matched to
+// the choices by the bold label, not by place. Empty unless every choice has its own line and the list has no others.
+function optionsOf(markdown, choices) {
+  const lines = str(markdown).split(/\r?\n/), start = lines.findIndex(line => /^##\s+(?:options|선택지)/i.test(line));
+  if (start < 0) return [];
+  const norm = text => text.trim().replace(/\s+/g, ' ').toLowerCase(), found = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^#{1,2}\s/.test(line)) break;
+    const option = line.match(/^\s*\d+\.\s+(?:\*\*(.+?)\*\*)?(.*)$/);
+    if (option) found.push([option[1] ? norm(option[1]) : null, option[2].split(/ [—-] /).slice(1).join(' — ').replace(/\*\*|`/g, '').trim()]);
+  }
+  if (found.length !== choices.length) return [];
+  const about = choices.map(choice => found.find(([label]) => label === norm(choice))?.[1]);
+  return about.includes(undefined) ? [] : about;
+}
+// A decision the agent recommends no answer for: a gate, a block or an open question.
+const mustDecide = (item, status) => status.actor === 'blocked' || (status.actor === 'you' && (status.kind !== 'answer' || (!item.pick && !str(item.suggest).trim())));
+// Ticket addresses in what is asked, beside the card's own link.
+function moreTickets(card) {
+  const found = new Map(), text = [card.target.waiting, card.target.sdlc?.action].map(str).join(' ');
+  for (const [raw] of text.matchAll(/https?:\/\/[^\s()<>"']+/gi)) {
+    const url = raw.replace(/[.,;)]+$/, '');
+    if (url.includes('/browse/') && url !== card.link?.url) found.set(url, url.split('/').pop());
+  }
+  return [...found].map(([url, label]) => ({ url, label }));
+}
 function cardWords(card) {
   const main = card.work || card.target;
   const tag = tagOf(main.title);
@@ -80,7 +106,8 @@ const lastReply = item => [...item.events].reverse().find(event => event.who ===
 
 // ---------- view ----------
 const narrow = matchMedia('(max-width: 899px)');
-let chosenView = 'board';
+// The tray app's "Open list" makes a new window with view=list in the address.
+let chosenView = /(?:^#|&)view=list(?:&|$)/.test(globalThis.location?.hash || '') ? 'list' : 'board';
 function currentView() {
   if (narrow.matches) return 'list';
   if ((chosenView === 'runs' || chosenView === 'health') && !page.feed) return 'board';
@@ -109,6 +136,12 @@ $('views').addEventListener('click', event => {
   render();
 });
 narrow.addEventListener('change', () => render());
+// The tray's menu picks a view (Open board, Open list).
+window.addEventListener('todo-view', event => {
+  if (!['board', 'list'].includes(event.detail)) return;
+  chosenView = event.detail;
+  render();
+});
 
 // ---------- render ----------
 let cards = [], selectedKey = '', showStale = false, doneOpen = false, updatedAt = 0, loaded = false;
@@ -139,6 +172,8 @@ function renderStrip() {
       part.append(el('span', '', t(key)), el('b', '', String(n)));
       return part;
     });
+  const working = cards.filter(card => card.working).length;
+  if (working) parts.push(el('span', 'working-now', t('board.workingNow', { count: working })));
   counts.replaceChildren(...parts);
   const feed = record(page.feed), status = record(feed?.status), box = $('feed-status');
   box.hidden = !feed && !page.feedError;
@@ -391,7 +426,7 @@ function shortcut(key) {
 document.addEventListener('keydown', event => {
   // A shown tooltip is dismissed first, without moving focus (WCAG 1.4.13); the next Escape closes the panel.
   if (event.key === 'Escape' && hideTip()) { event.preventDefault(); return; }
-  if (currentView() !== 'board' || event.altKey || event.ctrlKey || event.metaKey || $('keys-help').open || $('run-confirm').open) return;
+  if (currentView() !== 'board' || event.altKey || event.ctrlKey || event.metaKey || $('keys-help').open || $('view-settings').open || $('run-confirm').open) return;
   if (event.key === 'Escape') {
     if (selectedKey) { event.preventDefault(); closePanel(); }
     return;
@@ -500,7 +535,7 @@ function renderPanel(now) {
   // The command box keeps its own state (running, result), so it is drawn on every pass, not only on a new signature.
   page.renderRun($('panel-run'), item, 'X');
   const loading = !!doc?.pending && !!item.brief && Date.now() - doc.started < skeletonMs;
-  const sig = JSON.stringify([page.lang, card.key, card.members.map(m => [m.id, m.version, m.working?.what]), card.lane, card.entry, doc, loading, sending, showDetails]);
+  const sig = JSON.stringify([page.lang, !!page.own, card.key, card.members.map(m => [m.id, m.version, m.working?.what]), card.lane, card.entry, doc, loading, sending, showDetails]);
   if (sig === panelSig) return;
   panelSig = sig;
   // The agent's suggested answer fills the reply field until the person edits it; a new suggestion replaces an unedited one.
@@ -517,7 +552,7 @@ function renderPanel(now) {
   $('panel-title').textContent = words.key ? words.title : (card.work || item).title;
   // The ticket and project sit with the status under the title, not as a label above it.
   const tags = [[words.key, 'tag key-tag'], [projectChip(card), 'tag'], [t(`board.lane.${card.lane}`), `tag tone-${toneOf(card)}`],
-    [t(`board.column.${card.column}`), 'tag'], [card.chip, 'tag'], [ageOf(card, now), 'tag']];
+    [t(`board.column.${card.column}`), 'tag'], [item.done || item.pin ? '' : mustDecide(item, status) ? t('decide.yours') : status.actor === 'you' ? t('decide.suggested') : '', 'tag'], [card.chip, 'tag'], [ageOf(card, now), 'tag']];
   $('panel-tags').replaceChildren(...tags.filter(([text]) => text).map(([text, className]) => el('span', className, text)));
 
   // What the human is asked, from the brief's At a glance when there is one.
@@ -545,14 +580,22 @@ function renderPanel(now) {
   target.hidden = card.members.length < 2 || item.done;
   target.textContent = t('panel.target', { title: item.title });
 
-  renderChoices(card, item);
+  renderChoices(card, item, doc);
   renderGate(item, doc, status);
   renderProblem(item, status);
   renderAgentNext(card, item, asks);
+  renderTyped(item);
+  page.renderMemo($('panel-memo'), item);
   $('panel-reply').hidden = item.done;
   for (const control of $('panel-reply').elements) control.disabled = sending;
   const url = card.link?.url;
   $('panel-ticket').hidden = !isHttp(url);
+  $('panel-tickets').replaceChildren(...moreTickets(card).map(ticket => {
+    const button = el('button', 'secondary', `↗ ${ticket.label}`);
+    button.type = 'button';
+    button.addEventListener('click', () => openTicket(ticket.url));
+    return button;
+  }));
   renderDetails(card, item, doc);
 }
 // The brief's "your call" when it asks something; otherwise the item's own words for whoever acts next.
@@ -564,15 +607,24 @@ function questionOf(card, item, status, fields, now) {
   if (status.actor === 'others') return plain(item.others || str(card.entry?.waitingText)) || statusLabel(t, item, now);
   return [statusLabel(t, item, now), plain(str(card.entry?.waitingText))].filter(Boolean).join(' · ');
 }
-function renderChoices(card, item) {
+// A command the person runs in a terminal (`run`), apart from one the board runs (`exec`).
+function renderTyped(item) {
+  const box = $('panel-typed');
+  box.hidden = item.done || !item.run;
+  $('panel-typed-body').replaceChildren(...(box.hidden ? [] : [page.runCommandControl(item)]));
+}
+function renderChoices(card, item, doc) {
   const box = $('panel-choices'), labels = item.done ? [] : item.choices || [];
+  const about = labels.length && doc?.markdown ? optionsOf(doc.markdown, labels) : [];
   box.hidden = !labels.length;
   box.replaceChildren(...labels.map((label, index) => {
     const recommended = item.pick ? item.pick === index + 1 : item.suggest === label;
     const button = el('button', recommended ? 'choice primary' : 'choice secondary');
     button.type = 'button';
     button.disabled = sending;
-    button.append(el('span', 'choice-number', String(index + 1)), el('span', 'choice-label', label));
+    const words = el('span', 'choice-label', label);
+    if (about[index]) words.append(el('span', 'choice-about', about[index]));
+    button.append(el('span', 'choice-number', String(index + 1)), words);
     if (index < 9) {
       button.setAttribute('aria-keyshortcuts', String(index + 1));
       button.dataset.tip = t('tip.choice', { n: index + 1, label });
@@ -636,7 +688,6 @@ function renderDetails(card, item, doc) {
   if (card.work) field(t('field.work'), `${card.work.sdlc.slug} · ${phaseLabel(t, card.work.sdlc.phase)} · ${card.work.sdlc.state}`);
   // Moved into the closed "what the agent does next" when an agent asked.
   if (!agentAsks(item)) field(t('panel.nextStep'), str(card.entry?.nextStep));
-  if (!item.done && item.run) field(t('field.run'), item.run);
   const members = $('panel-members');
   $('panel-members-box').hidden = card.members.length < 2;
   members.replaceChildren(...card.members.map(member => {
@@ -754,12 +805,17 @@ $('panel-fix').addEventListener('click', async () => {
 // window loses both, and another origin can never read them, so a fake page cannot approve or answer anything.
 // The decision panel never moves: it stays on the right, and the popup takes the left 45% of the screen beside it,
 // narrower (down to 480px) when a wide panel leaves less, so a full-screen board shows both.
-// In the tray app's own window (WKWebView, where the app adds window.ipc) the app shows tickets in the person's Chrome,
-// where their login lives, docked at the screen's left edge: the page only tells the app which ticket. `open` brings
-// that window forward (and makes it again when it was closed); `follow` moves an open one, behind the board.
+// In the tray app's own window the page only tells the app which ticket. On macOS the app shows it in the person's
+// Chrome, where their login lives, docked at the screen's left edge: opening brings that window forward (and makes it
+// again when it was closed), following moves an open one, behind the board. Elsewhere it opens in the default browser.
 let ticketWindow = null, ticketUrl = '';
 const ticketMinWidth = 480, ticketGap = 16;
-const appTickets = () => (typeof window.ipc?.postMessage === 'function' ? window.ipc : null);
+// The app's shell offers todoApp; an app built before v3.8 (its board window lacks todoApp) listens on window.ipc.
+function appTickets() {
+  const { todoApp: shell, ipc } = window;
+  if (shell) return (url, follow) => shell.ticket(url, follow).catch(error => page.showError({ key: 'panel.ticketFailed', vars: { message: String(error?.message || error) } }));
+  return typeof ipc?.postMessage === 'function' ? (url, follow) => ipc.postMessage(JSON.stringify(follow ? { follow: url } : { open: url })) : null;
+}
 // The app's ticket window takes http(s) pages off this machine only (the board's own server stays in the board).
 const loopback = new Set(['127.0.0.1', 'localhost', '[::1]']);
 const ticketPage = url => {
@@ -770,7 +826,7 @@ function openTicket(url) {
   if (!isHttp(url)) return;
   const app = appTickets();
   if (app && !ticketPage(url)) { page.showError({ key: 'panel.notTicket' }); return; }
-  if (app) { app.postMessage(JSON.stringify({ open: url })); ticketUrl = url; return; }
+  if (app) { app(url, false); ticketUrl = url; return; }
   if (ticketWindow && !ticketWindow.closed) {
     if (url !== ticketUrl) { ticketWindow.location.href = url; ticketUrl = url; }
     ticketWindow.focus();
@@ -790,7 +846,7 @@ function followTicket(card) {
   const url = card?.link?.url;
   const app = appTickets();
   if (app) {
-    if (ticketUrl && ticketPage(url) && url !== ticketUrl) { app.postMessage(JSON.stringify({ follow: url })); ticketUrl = url; }
+    if (ticketUrl && ticketPage(url) && url !== ticketUrl) { app(url, true); ticketUrl = url; }
     return;
   }
   if (!ticketWindow || ticketWindow.closed || !isHttp(url) || url === ticketUrl) return;
