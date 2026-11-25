@@ -185,8 +185,17 @@ pub fn live(file: &Path) -> Option<Session> {
     stream.set_read_timeout(limit).ok()?;
     stream.set_write_timeout(limit).ok()?;
     stream.write_all(format!("GET /proof?n={nonce} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n", session.port).as_bytes()).ok()?;
-    let mut answer = Vec::new();
-    stream.take(4096).read_to_end(&mut answer).ok()?;
+    // The whole answer within its two seconds: a program trickling bytes on the port must not hold the caller.
+    let (deadline, mut answer, mut chunk) = (Instant::now() + Duration::from_secs(2), Vec::new(), [0u8; 1024]);
+    loop {
+        let left = deadline.checked_duration_since(Instant::now()).filter(|left| !left.is_zero())?;
+        stream.set_read_timeout(Some(left)).ok()?;
+        match stream.read(&mut chunk).ok()? {
+            0 => break,
+            n if answer.len() + n > 4096 => return None,
+            n => answer.extend_from_slice(&chunk[..n]),
+        }
+    }
     let shown = proof_in(std::str::from_utf8(&answer).ok()?)?;
     js::same(shown.as_bytes(), proof(&session.token, &nonce).as_bytes()).then_some(session)
 }
@@ -964,6 +973,19 @@ mod tests {
         assert!(live(&file).is_none(), "a plain 200");
         assert!(live(&file).is_none(), "a wrong proof");
         let seen = stranger.join().unwrap();
+        // One that trickles a byte at a time is given two seconds in all, not two seconds a byte.
+        let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
+        let trickle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            for byte in b"HTTP/1.1 200 OK\r\n\r\n".iter().cycle().take(60) {
+                if stream.write_all(&[*byte]).is_err() { break; }
+                std::thread::sleep(Duration::from_millis(400));
+            }
+        });
+        let started = Instant::now();
+        assert!(live(&file).is_none());
+        assert!(started.elapsed() < Duration::from_secs(4), "{:?}", started.elapsed());
+        trickle.join().unwrap();
         assert!(seen.iter().all(|request| !request.contains(token) && request.starts_with("GET /proof?n=")), "{seen:?}");
         assert_ne!(seen[0], seen[1], "a fresh nonce each time");
         // The real server proves it, and refuses a nonce that is not one.

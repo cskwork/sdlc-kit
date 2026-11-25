@@ -236,7 +236,12 @@ fn leave(app: &AppHandle) {
         if !lock(&shell.shared).starting { break; }
         std::thread::sleep(Duration::from_millis(10));
     }
-    let server = lock(&shell.shared).server.take();
+    close_server(app);
+}
+
+/// Closes the server this app runs, once.
+fn close_server(app: &AppHandle) {
+    let server = lock(&app.state::<Shell>().shared).server.take();
     if let Some(server) = server { server.close(); }
 }
 

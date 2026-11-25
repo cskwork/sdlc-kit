@@ -94,6 +94,28 @@ enum Held {
     Unknown,
 }
 
+/// Whether a CARRY answer holds anything a person typed (not only a view, a selection or a cursor).
+fn holds_words(held: &serde_json::Value) -> bool {
+    fn typed(value: &serde_json::Value) -> bool {
+        match value {
+            serde_json::Value::String(text) => !text.trim().is_empty(),
+            serde_json::Value::Array(list) => list.iter().any(typed),
+            // Only what was written counts: not the item's id, the suggestion it started from or its version.
+            serde_json::Value::Object(map) => map.iter().any(|(key, value)| !["id", "seed", "replyVersion"].contains(&key.as_str()) && typed(value)),
+            _ => false,
+        }
+    }
+    // Drafts are [id, { reply, words, … }] pairs.
+    let drafts = |part: &serde_json::Value| part.get("drafts").and_then(serde_json::Value::as_array)
+        .is_some_and(|list| list.iter().any(|pair| pair.get(1).is_some_and(typed)));
+    ["list", "board", "memos"].iter().any(|part| match (*part, held.get(part)) {
+        ("list", Some(list)) => drafts(list) || ["add", "edits", "edit", "lost"].iter().any(|key| list.get(key).is_some_and(typed)),
+        ("board", Some(board)) => drafts(board) || board.get("note").is_some_and(typed),
+        ("memos", Some(memos)) => memos.as_object().is_some_and(|memos| !memos.is_empty()),
+        _ => false,
+    })
+}
+
 fn carried(answer: Option<serde_json::Value>) -> Held {
     let Some(text) = answer.as_ref().and_then(serde_json::Value::as_str) else { return Held::Unknown };
     if text.is_empty() { return Held::Nothing; }
@@ -119,7 +141,8 @@ fn keep(app: &AppHandle, window: &WebviewWindow) -> bool {
             Held::Nothing => return true,
             Held::Unknown => return false,
             Held::Words(held, idle) => {
-                *lock(&shell.carried) = Some(held);
+                // Only words are kept: an empty answer never replaces words still on their way, and never holds the app.
+                if holds_words(&held) { *lock(&shell.carried) = Some(held); }
                 if idle >= TYPING.1 || started.elapsed() >= TYPING.0 { return true; }
             }
         }
@@ -422,6 +445,13 @@ mod tests {
         assert_eq!(carried(Some(json!("{}"))), Held::Words(json!({}), f64::MAX));
         // A page without anything to keep says so; silence or nonsense is not "nothing", and the page is not replaced.
         assert_eq!(carried(Some(json!(""))), Held::Nothing);
+        // An empty page holds no words; a view, selection or cursor alone is not worth keeping the app for.
+        assert!(!holds_words(&json!({ "idle": 5, "list": { "drafts": [], "add": "", "edits": [], "open": "x" }, "board": { "drafts": [], "note": null, "selected": "k", "view": "list" }, "memos": {}, "focus": { "id": "a", "at": 1 } })));
+        assert!(!holds_words(&json!({ "list": { "drafts": [["a", { "reply": " ", "words": "", "seed": "suggested" }]] } })));
+        for held in [json!({ "list": { "add": "x" } }), json!({ "list": { "drafts": [["a", { "reply": "", "words": "note" }]] } }), json!({ "list": { "edits": [{ "id": "a", "text": "n" }] } }),
+            json!({ "list": { "lost": ["w"] } }), json!({ "board": { "note": { "id": "a", "text": "t" } } }), json!({ "memos": { "a": "" } })] {
+            assert!(holds_words(&held), "{held}");
+        }
         for answer in [None, Some(json!(null)), Some(json!("[]")), Some(json!("{ broken")), Some(json!(true))] { assert_eq!(carried(answer.clone()), Held::Unknown, "{answer:?}"); }
     }
 }

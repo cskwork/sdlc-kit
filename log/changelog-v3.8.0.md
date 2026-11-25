@@ -21,6 +21,7 @@
   - **It ends with the app:** a browser tab on it goes offline on Quit.
   - **Node 18+ is still needed** for the CLI, the TUI, `web` and `serve`, and by the app for the few inputs JavaScript alone answers exactly (unusual links or dates, broken status output).
   - Both servers use the same file, lock and version hashes. `sdlc-todo-serve` runs the Rust one without a window, for tests.
+- **A server is trusted only after it proves it holds the session's token** (`GET /proof?n=…`, an HMAC of a fresh nonce; the token is never sent). A program that took the port of a server that is gone gets neither the token nor the board. **Upgrading:** a `todo.mjs serve` or app from v3.7 does not answer the proof, so a v3.8 launch starts its own server beside it; quit the old one first.
 - **Security.** The page may call five commands of the app, from its own server's origin only. The window never leaves that origin; only http(s) and `mailto:` links go out. The session token is cut from errors and logs.
 - **Moved from the old list window to the page:**
   - your memo, text size and font (in the app only; nothing reaches the list or an agent);
