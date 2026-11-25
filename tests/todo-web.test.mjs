@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, renameSync
 import { tmpdir, networkInterfaces } from 'node:os';
 import { dirname, join, resolve, relative as pathRelative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startWeb as startNodeWeb, liveSession, runArgv, resolveCommand, commandSearchPath } from '../todo/web.mjs';
+import { startWeb as startNodeWeb, liveSession, proofOf, runArgv, resolveCommand, commandSearchPath } from '../todo/web.mjs';
 import * as core from '../todo/core.mjs';
 import { rustServer, startRustWeb } from './rust-server.mjs';
 
@@ -759,6 +759,34 @@ test('session file shares the running server with the owner only and goes away o
   assert.equal(await liveSession(session), null);
   writeFileSync(session, JSON.stringify({ port: Number(url.port), token: stored.token, pid: 1 }));
   assert.equal(await liveSession(session), null, 'a stale file whose server is gone is not live');
+});
+
+test('a session is live only when its server proves it holds the token, which never travels', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'sdlc-todo-proof-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = join(root, 'todo.md'), session = join(root, 'todo-web.json');
+  await core.add(file, 'One');
+  const server = await startWeb({ file, kit, port: 0, open: false, onUrl() {}, session, feed: join(root, 'feed.json') });
+  const { port, token } = JSON.parse(readFileSync(session, 'utf8'));
+  const nonce = 'ab'.repeat(16);
+  const ask = async path => { const response = await fetch(`http://127.0.0.1:${port}${path}`); return { status: response.status, body: await response.text() }; };
+  assert.deepEqual(JSON.parse((await ask(`/proof?n=${nonce}`)).body), { proof: proofOf(token, nonce) });
+  for (const path of ['/proof', '/proof?n=xyz', `/proof?n=${'AB'.repeat(16)}`]) assert.equal((await ask(path)).status, 400, path);
+  assert.ok(await liveSession(session));
+  await server.close();
+  // Another program on the port answers 200 to anything, or a made-up proof.
+  const http = await import('node:http');
+  const seen = [];
+  for (const answer of ['{"ok":true}', JSON.stringify({ proof: '0'.repeat(64) })]) {
+    const stranger = http.createServer((req, res) => { seen.push([req.url, JSON.stringify(req.headers)]); res.end(answer); });
+    await new Promise(resolve => stranger.listen(port, '127.0.0.1', resolve));
+    writeFileSync(session, JSON.stringify({ port, token, pid: 1 }));
+    assert.equal(await liveSession(session), null, answer);
+    await new Promise(resolve => stranger.close(resolve));
+  }
+  assert.equal(seen.length, 2);
+  assert.ok(seen.every(([url, headers]) => url.startsWith('/proof?n=') && !url.includes(token) && !headers.includes(token)));
+  assert.notEqual(seen[0][0], seen[1][0], 'a fresh nonce each time');
 });
 
 test('tray server streams the saved board before slow project status refresh', async t => {

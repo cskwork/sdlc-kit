@@ -135,6 +135,16 @@ pub fn uuid() -> Result<String, String> {
     let h = hex(&b);
     Ok(format!("{}-{}-{}-{}-{}", &h[..8], &h[8..12], &h[12..16], &h[16..20], &h[20..]))
 }
+/// HMAC-SHA256 (RFC 2104) of `message` under `key`, in hex.
+pub fn hmac(key: &[u8], message: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut block = [0u8; 64];
+    if key.len() > 64 { block[..32].copy_from_slice(&Sha256::digest(key)); } else { block[..key.len()].copy_from_slice(key); }
+    let inner = Sha256::new().chain_update(block.map(|b| b ^ 0x36)).chain_update(message).finalize();
+    hex(&Sha256::new().chain_update(block.map(|b| b ^ 0x5c)).chain_update(inner).finalize())
+}
+/// Whether two secrets are equal, in a time that does not tell how far they agree.
+pub fn same(a: &[u8], b: &[u8]) -> bool { a.len() == b.len() && a.iter().zip(b).fold(0, |diff, (x, y)| diff | (x ^ y)) == 0 }
 pub fn sha256(bytes: &[u8]) -> String { use sha2::Digest; hex(&sha2::Sha256::digest(bytes)) }
 /// SHA-1, only for item ids (no SHA-1 crate is in the lock file).
 pub fn sha1(bytes: &[u8]) -> String {
@@ -438,4 +448,12 @@ mod tests {
         assert_eq!((gate("x approve  plan now", false), gate("approve  plan", true), gate("preapprove plan", false), gate("approve plans", false)), ("plan", "", "", ""));
         assert_eq!((slice("a😀b", 2), slice("a😀b", 3)), ("a\u{fffd}".into(), "a😀".into()));
     }
+    #[test]
+    fn hmac_matches_rfc_4231() {
+        assert_eq!(hmac(b"Jefe", b"what do ya want for nothing?"), "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
+        // A key longer than a block is hashed first (RFC 4231 test case 6).
+        assert_eq!(hmac(&[0xaa; 131], b"Test Using Larger Than Block-Size Key - Hash Key First"), "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54");
+        assert!(same(b"abc", b"abc") && !same(b"abc", b"abd") && !same(b"abc", b"ab"));
+    }
+
 }

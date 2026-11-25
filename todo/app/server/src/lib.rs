@@ -165,18 +165,30 @@ fn read_session(file: &Path) -> Option<Session> {
     let token = value.get("token")?.text().filter(|t| t.len() == 32 && t.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))?;
     (port.fract() == 0.0 && (1.0..65536.0).contains(port)).then_some(Session { port: *port as u16, token })
 }
-/// The server a session file names, when it answers.
+/// What a server proves it holds `token` with, for the fresh `nonce` (GET /proof?n=…): only the server that wrote the
+/// session file can answer it, and the token never travels.
+pub fn proof(token: &str, nonce: &str) -> String { js::hmac(token.as_bytes(), format!("sdlc-todo-proof:{nonce}").as_bytes()) }
+/// The proof in a /proof answer: the 64 hex digits after `"proof":"`, whatever framing the body has.
+fn proof_in(response: &str) -> Option<&str> {
+    if !response.starts_with("HTTP/1.1 200 ") { return None; }
+    let at = response.find("\"proof\":\"")? + 9;
+    response.get(at..at + 64).filter(|value| value.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+/// The server a session file names, when it answers and proves it is that file's server. Any other program that took
+/// the port of a server that is gone sees a random nonce, never the token.
 pub fn live(file: &Path) -> Option<Session> {
     use std::io::{Read, Write};
     let session = read_session(file)?;
+    let nonce = js::hex(&js::random::<16>().ok()?);
     let limit = Some(Duration::from_secs(2));
     let mut stream = TcpStream::connect_timeout(&([127, 0, 0, 1], session.port).into(), Duration::from_secs(2)).ok()?;
     stream.set_read_timeout(limit).ok()?;
     stream.set_write_timeout(limit).ok()?;
-    stream.write_all(format!("GET /api/live HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nX-Todo-Token: {}\r\nConnection: close\r\n\r\n", session.port, session.token).as_bytes()).ok()?;
-    let mut status = [0; 12];
-    stream.read_exact(&mut status).ok()?;
-    (&status == b"HTTP/1.1 200").then_some(session)
+    stream.write_all(format!("GET /proof?n={nonce} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n", session.port).as_bytes()).ok()?;
+    let mut answer = Vec::new();
+    stream.take(4096).read_to_end(&mut answer).ok()?;
+    let shown = proof_in(std::str::from_utf8(&answer).ok()?)?;
+    js::same(shown.as_bytes(), proof(&session.token, &nonce).as_bytes()).then_some(session)
 }
 /// The running server of the session file, or one started here with its handle.
 pub fn find_or_start(options: Options) -> Result<(Session, Option<Handle>), String> {
@@ -563,6 +575,10 @@ impl Server {
         }
         match path.as_str() {
             "/api/live" => Ok(Reply::Json("{\"ok\":true}".into())),
+            "/proof" => match request.param("n").filter(|n| n.len() == 32 && n.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))) {
+                Some(nonce) => Ok(Reply::Json(format!("{{\"proof\":\"{}\"}}", proof(&self.token, &nonce)))),
+                None => Ok(Reply::Error(400, "invalid nonce".into())),
+            },
             "/api/feed" => {
                 let feed = locked(&self.feed).clone();
                 let mut out = format!("{{\"feed\":{},\"error\":", feed.json);
@@ -922,4 +938,43 @@ mod tests {
         handle.close();
         std::fs::remove_dir_all(dir).unwrap();
     }
+    /// A program that took the port of a server that is gone answers 200 to anything: it is not that server, and it
+    /// never sees the token.
+    #[test]
+    fn a_session_is_live_only_when_its_server_proves_it() {
+        use std::io::{Read, Write};
+        let dir = std::env::temp_dir().join(format!("sdlc-todo-proof-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("todo-web.json");
+        let token = "0123456789abcdef0123456789abcdef";
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::fs::write(&file, format!("{{\"port\":{port},\"token\":\"{token}\",\"pid\":1}}")).unwrap();
+        let stranger = std::thread::spawn(move || {
+            let mut seen = Vec::new();
+            for answer in ["{\"ok\":true}", "{\"proof\":\"0000000000000000000000000000000000000000000000000000000000000000\"}"] {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = [0; 2048];
+                let n = stream.read(&mut request).unwrap();
+                seen.push(String::from_utf8_lossy(&request[..n]).to_string());
+                stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{answer}", answer.len()).as_bytes()).unwrap();
+            }
+            seen
+        });
+        assert!(live(&file).is_none(), "a plain 200");
+        assert!(live(&file).is_none(), "a wrong proof");
+        let seen = stranger.join().unwrap();
+        assert!(seen.iter().all(|request| !request.contains(token) && request.starts_with("GET /proof?n=")), "{seen:?}");
+        assert_ne!(seen[0], seen[1], "a fresh nonce each time");
+        // The real server proves it, and refuses a nonce that is not one.
+        let mut options = Options::for_kit(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").as_path(), &file, "node", "en");
+        options.file = dir.join("todo.md").to_string_lossy().into_owned();
+        options.feed = dir.join("feed.json").to_string_lossy().into_owned();
+        let handle = start(options).unwrap();
+        assert!(live(&file).is_some_and(|session| session == handle.session()));
+        for path in ["/proof", "/proof?n=xyz", "/proof?n=0123456789ABCDEF0123456789ABCDEF"] { assert_eq!(status(ask(&handle, "GET", path, "\r\n")), "400", "{path}"); }
+        handle.close();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
 }
