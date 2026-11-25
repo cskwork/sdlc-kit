@@ -4,7 +4,7 @@ To-do only; the sdlc loop is unchanged. The to-do file gains one optional field;
 
 ## Problem
 
-An item said which project and ticket it belonged to, but not which repositories the work changed. In a multi-repository workspace (for example `aidt-lms-api` and `aidt-viewer-api` in one ticket) the human had to open the plan or the branch to see where the change landed.
+An item said which project and ticket it belonged to, but not which repositories the work changed. In a multi-repository workspace (for example `shop-api` and `search-api` in one ticket) the human had to open the plan or the branch to see where the change landed.
 
 ## Changes
 

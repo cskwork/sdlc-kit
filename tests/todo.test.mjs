@@ -146,7 +146,7 @@ test('S1/S4/S12: CLI writes readable fields, Jira labels, and ordered agent hist
 
 test('repos: CLI records the changed repositories once, JSON shows them, a bad hand edit still loads', async t => {
   const { file } = scratch(t);
-  const id = checkCode(await cli(file, ['add', 'A20-1 fix', '--by', 'factory']), 0).stdout.trim();
+  const id = checkCode(await cli(file, ['add', 'PROJ-1 fix', '--by', 'factory']), 0).stdout.trim();
   checkCode(await cli(file, ['repos', id, 'web-api,admin-api']), 0);
   checkCode(await cli(file, ['repos', id, 'web-api, admin-api']), 0);
   let text = readFileSync(file, 'utf8');
@@ -346,7 +346,7 @@ test('pin: CLI keeps a setting at the top of the app, lists it, survives replies
 
 test('suggest: CLI stores the recommended answer, lists it, adds one event per change; a reply or no text clears it', async t => {
   const { file } = scratch(t);
-  const id = checkCode(await cli(file, ['add', 'A20-1438 secure file url', '--by', 'factory']), 0).stdout.trim();
+  const id = checkCode(await cli(file, ['add', 'PROJ-1438 secure file url', '--by', 'factory']), 0).stdout.trim();
   checkCode(await cli(file, ['wait', id, 'LCMS 미리보기 인증을 어떻게 할까요?']), 0);
   checkCode(await cli(file, ['suggest', id, '두 줄\n답']), 2);
   checkCode(await cli(file, ['suggest', id, ' 미리보기는 지금처럼 두고 HLS는 뺀다 ']), 0);
@@ -371,7 +371,7 @@ test('suggest: CLI stores the recommended answer, lists it, adds one event per c
 
 test('choices: CLI stores one-click answers and a pick, adds one event per change, clears, refuses bad input', async t => {
   const { file } = scratch(t);
-  const id = checkCode(await cli(file, ['add', '[결정 D35] A20-1462 · how to proceed', '--by', 'factory']), 0).stdout.trim();
+  const id = checkCode(await cli(file, ['add', '[결정 D35] PROJ-1462 · how to proceed', '--by', 'factory']), 0).stdout.trim();
   const untouched = readFileSync(file, 'utf8');
   assert.equal(core.serialize(core.load(file)), untouched, 'a file without choices round-trips byte for byte');
   checkCode(await cli(file, ['choices', id, ' 원래 있던 실패로 보고 진행 | 심사 시험부터 고친 뒤 진행 |보류 ', '--pick', '1']), 0);
@@ -404,7 +404,7 @@ test('choices: CLI stores one-click answers and a pick, adds one event per chang
 
 test('working: CLI marks, refreshes and clears an item beside todo.md; statusOf shows it unless a human turn wins; it expires', async t => {
   const { root, file } = scratch(t);
-  const a = await core.add(file, 'A20-1 build');
+  const a = await core.add(file, 'PROJ-1 build');
   const b = await core.add(file, 'B');
   const todo = readFileSync(file, 'utf8');
   checkCode(await cli(file, ['working', a.id, 'build']), 0);
@@ -475,7 +475,7 @@ test('working: a marker follows its item when start --slug or a retitle changes 
 test('others: an agent waiting on someone else outranks an sdlc NEEDS-HUMAN; its own wait and a reply still win', t => {
   const { file } = scratch(t);
   const status = text => { writeFileSync(file, text); return core.load(file).items[0].status; };
-  const block = extra => `## Open\n\n- [ ] A20-1449 chat authz\n  - sdlc: ws-chat · deliver · NEEDS-HUMAN — authorize deploy\n${extra}`;
+  const block = extra => `## Open\n\n- [ ] PROJ-1449 chat authz\n  - sdlc: ws-chat · deliver · NEEDS-HUMAN — authorize deploy\n${extra}`;
   assert.equal(status(block('')), 'waiting', 'sdlc alone asks the human');
   assert.equal(status(block('  - others: 기획·QA 회신 대기\n')), 'others');
   assert.equal(status(block('  - waiting: 어느 쪽?\n  - others: 기획·QA 회신 대기\n')), 'waiting', 'an explicit wait still asks the human');
@@ -484,7 +484,7 @@ test('others: an agent waiting on someone else outranks an sdlc NEEDS-HUMAN; its
 
 test('others: waiting on someone else leaves Needs you, next passes it by, a reply or wait clears it', async t => {
   const { file } = scratch(t);
-  const a = await core.add(file, 'A20-1 QA answers first');
+  const a = await core.add(file, 'PROJ-1 QA answers first');
   const b = await core.add(file, 'B');
   await core.wait(file, a.id, 'which endpoint?');
   checkCode(await cli(file, ['others', a.id, '기획·QA 회신 대기']), 0);
@@ -1348,7 +1348,7 @@ test('a fix request hands a block to the next agent once, unlike a plain reply',
 
 test('an agent wait for the human outranks an sdlc BLOCKED; a reply hands the block back', async t => {
   const { file, item } = await blockedItem(t);
-  await core.wait(file, item.id, '이 티켓은 A20-1455에 합칠까요?');
+  await core.wait(file, item.id, '이 티켓은 PROJ-1455에 합칠까요?');
   assert.equal(core.load(file).items.find(i => i.id === item.id).status, 'waiting');
   assert.equal((await next(file, 10)).id, item.id, 'the question stops the queue as Needs you');
   await core.reply(file, item.id, '합친다');

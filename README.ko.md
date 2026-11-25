@@ -146,7 +146,10 @@ propose: keep in <페이지>, remove from peer` 줄로 보고해 사람이 처�
 config.md에 선택해 넣을 키와 기본값: `transcripts:`·`peers:`(비우면 없음), `transcripts_max: 20`,
 `memory_core_kb: 2`, `memory_page_kb: 16`, `memory_top_kb: 64`, `memory_total_kb: 256`(색인 경고),
 `dream_every: 3`, `dream_max_days: 14`, `stages:`(비우면 한 번에 반영, 아래 단계별 반영), `prune: gradle-home .gradle node_modules build .m2 target`(비우면
-지우지 않음), `archive_warn_mb: 50`.
+지우지 않음), `archive_warn_mb: 50`, `artifacts:`(비우면 없음). `artifacts:`에는 score·check ship의 작업 트리 검사와
+review --uncommitted가 묶는 변경에서 뺄 추적 안 된 빌드 결과물을 git status가 보여 주는 대로 저장소 최상위 기준 glob으로 적습니다
+(`artifacts: dist-dev/, coverage/`, 추적 안 된 폴더는 경로 하나로 맞춤). 뺀 경로는 경고 한 줄로 알리고, 추적 중이거나 수정된 파일은 언제나 셉니다.
+빌드 폴더를 정확히 적으세요. `*`나 `*.js`처럼 넓은 glob은 커밋을 잊은 새 소스 파일까지 숨겨, 그 파일 없이 score가 통과합니다.
 
 ## 설정
 

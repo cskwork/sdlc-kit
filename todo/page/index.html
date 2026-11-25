@@ -84,6 +84,10 @@
         <div class="actions"><button type="submit" id="panel-send" class="secondary" data-i18n="panel.send">Send</button></div>
       </form>
       <p id="panel-error" class="field-error" role="alert" hidden></p>
+      <details id="panel-agent-next" class="agent-next" hidden>
+        <summary data-i18n="panel.agentNext">What the agent does next</summary>
+        <ul id="panel-agent-next-list"></ul>
+      </details>
       <div class="panel-actions">
         <button type="button" id="panel-ticket" class="secondary" data-i18n="panel.ticket">Open ticket</button>
         <button type="button" id="panel-more" class="quiet" aria-expanded="false" aria-controls="panel-details">More</button>
@@ -165,6 +169,10 @@
   </div>
   <p id="detail-gone" class="notice" hidden data-i18n="detail.gone">This item changed or was removed. Close and open it again from the list.</p>
   <dl id="detail-fields" class="fields"></dl>
+  <details id="detail-agent-next" class="agent-next" hidden>
+    <summary data-i18n="panel.agentNext">What the agent does next</summary>
+    <ul id="detail-agent-next-list"></ul>
+  </details>
 
   <div class="detail-body">
   <div class="detail-main">

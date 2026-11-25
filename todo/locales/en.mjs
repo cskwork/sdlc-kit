@@ -318,6 +318,7 @@ export default {
     'panel.members': 'Items on this ticket',
     'panel.noDocument': 'No work document.',
     'panel.nextStep': 'Next step',
+    'panel.agentNext': 'What the agent does next',
     'keys.button': 'Keys',
     'keys.title': 'Keyboard',
     'keys.note': 'Single keys work only when you are not typing in a box.',

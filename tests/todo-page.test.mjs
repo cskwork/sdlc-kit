@@ -295,7 +295,7 @@ test('B1: a reply draft keeps the version it was written for when a duplicate re
 test('suggest: the reply field starts with the suggested answer; an edit stays, a new suggestion replaces an unedited one', async () => {
   const p = page('#t=test-token', { fetch: async url => url === '/api/items' ? new Promise(() => {}) : { ok: true, text: async () => '{}' } });
   vm.runInContext(`
-    items = [{ id: 'abcdef', title: 'A20-1438', version: 'shown-A', done: false, status: 'waiting', waiting: 'q', suggest: 'HLS는 뺀다', events: [], notes: [] }];
+    items = [{ id: 'abcdef', title: 'PROJ-1438', version: 'shown-A', done: false, status: 'waiting', waiting: 'q', suggest: 'HLS는 뺀다', events: [], notes: [] }];
     openDetail('abcdef');
   `, p.context);
   const field = p.nodes.get('reply-text');
@@ -315,7 +315,7 @@ test('suggest: the reply field starts with the suggested answer; an edit stays, 
 test('choices: an open item offers one button per label, the pick first; a click posts the label as a reply', async () => {
   const p = page('#t=test-token', { fetch: async url => url === '/api/items' ? new Promise(() => {}) : { ok: true, text: async () => '{}' } });
   vm.runInContext(`
-    items = [{ id: 'abcdef', title: '[결정 D35] A20-1462 · q', version: 'shown-A', done: false, status: 'waiting', waiting: '1) a · 2) b',
+    items = [{ id: 'abcdef', title: '[결정 D35] PROJ-1462 · q', version: 'shown-A', done: false, status: 'waiting', waiting: '1) a · 2) b',
       choices: ['원래 있던 실패로 보고 진행', '심사 시험부터 고친 뒤 진행', '보류'], pick: 2, events: [], notes: [] }];
     openDetail('abcdef');
   `, p.context);
@@ -334,12 +334,12 @@ test('choices: an open item offers one button per label, the pick first; a click
 test('choices: open items that need you and share a ticket link list together under its heading', () => {
   const p = page();
   const order = vm.runInContext(`
-    const link = { label: 'A20-1462', url: 'https://jira/browse/A20-1462' };
+    const link = { label: 'PROJ-1462', url: 'https://jira/browse/PROJ-1462' };
     const ask = (id, extra = {}) => ({ id, title: id, done: false, status: 'waiting', waiting: 'q', events: [], notes: [], ...extra });
     apply({ items: [ask('d35', { link }), ask('other'), ask('busy', { link, status: 'workable' }), ask('d36', { link })] });
     document.getElementById('open').children.map(li => li._head ? 'head:' + li._heading.textContent : li.dataset.id);
   `, p.context);
-  assert.deepEqual(order, ['head:A20-1462', 'd35', 'd36', 'other', 'busy']);
+  assert.deepEqual(order, ['head:PROJ-1462', 'd35', 'd36', 'other', 'busy']);
 });
 
 test('B1: approval sends the version of the item whose artifact was shown', async () => {
@@ -1232,4 +1232,122 @@ test('copy buttons: without the async clipboard the selection copy runs; when bo
   assert.match(said[0], /^Couldn't copy/);
   t.mock.timers.tick(4000);
   assert.equal(button.textContent, 'Copy');
+});
+
+// B-32: a card that is your turn because an agent asked shows that one ask; the kit's own instructions wait closed.
+const kitAction = 'ship to stg, then sdlc.sh ship chat-fix stg <sha> [repo]';
+const projLink = { label: 'PROJ-7', url: 'https://example.atlassian.net/browse/PROJ-7' };
+function askBoard(list, feed) {
+  // Requests never answer: the work document stays loading, so More renders no markdown.
+  const p = page('#t=test-token', { fetch: () => new Promise(() => {}) });
+  boardItems(p, list);
+  if (feed) { p.context.boardFeed = feed; vm.runInContext('feed = boardFeed', p.context); }
+  const b = boardPage(p);
+  const key = vm.runInContext(`render(); cards.find(card => card.target.id === '${list[0].id}').key`, b.context);
+  vm.runInContext(`select('${key}', false)`, b.context);
+  const more = () => { b.nodes.get('panel-more').click(); return b.nodes.get('panel-fields').children.map(n => n.textContent); };
+  return { question: b.nodes.get('panel-question').textContent, next: b.nodes.get('panel-agent-next'),
+    lines: b.nodes.get('panel-agent-next-list').children.map(li => li.textContent), more };
+}
+
+test('B-32 board: an agent\'s waiting is the one ask; the kit action and feed next step sit in a closed disclosure', () => {
+  const view = askBoard([askItem('aaaaaa', 'v1', '', { waiting: 'stg 배포를 지금 진행해도 될까요?', link: projLink,
+    sdlc: { slug: 'chat-fix', phase: 'deliver', state: 'NEEDS-HUMAN', action: kitAction } })],
+  { items: { 'PROJ-7': { nextStep: 'then close the ticket' } } });
+  assert.equal(view.question, 'stg 배포를 지금 진행해도 될까요?');
+  assert.doesNotMatch(view.question, /sdlc\.sh/);
+  assert.equal(view.next.hidden, false);
+  assert.notEqual(view.next.open, true, 'closed by default');
+  assert.deepEqual(view.lines, [kitAction, 'then close the ticket']);
+  assert.ok(!view.more().includes('Next step'), 'the next step is not repeated under More');
+});
+
+test('B-32 board: a pure sdlc NEEDS-HUMAN card is unchanged: the action is the ask, no disclosure, next step under More', () => {
+  const view = askBoard([askItem('bbbbbb', 'v1', '', { waiting: '', link: projLink,
+    sdlc: { slug: 'pure', phase: 'evidence', state: 'NEEDS-HUMAN', action: 'run QA on S1, fill evidence.md, sdlc.sh score' } })],
+  { items: { 'PROJ-7': { nextStep: 'run QA on S1' } } });
+  assert.equal(view.question, 'run QA on S1, fill evidence.md, sdlc.sh score');
+  assert.equal(view.next.hidden, true);
+  assert.deepEqual(view.lines, []);
+  assert.ok(view.more().includes('Next step'));
+});
+
+// The list's waiting rows as plain data: main text, folded text (null when the disclosure is hidden), open state.
+function listRows(items) {
+  const p = page();
+  p.context.listItems = items;
+  return JSON.parse(vm.runInContext(`
+    apply({ items: listItems });
+    JSON.stringify(Object.fromEntries(listItems.map(({ id }) => { const r = rows.get(id)._refs;
+      return [id, { what: r.waitWhat.textContent, whatHidden: r.waitWhat.hidden, next: r.waitNext.hidden ? null : r.waitNextText.textContent, open: !!r.waitNext.open }]; })));
+  `, p.context));
+}
+const listLink = { label: 'PROJ-8', url: 'https://example.atlassian.net/browse/PROJ-8' };
+const listItem = (id, extra) => ({ id, title: id, done: false, status: 'waiting', waiting: '', events: [], notes: [], ...extra });
+const qaCheck = 'How sure we are table missing in intent.md: run QA on S1 S2 S3, fill evidence.md, sdlc.sh score';
+
+test('B-32 list: beside an agent\'s question about the same work, a kit-only row folds its instruction; elsewhere rows are unchanged', () => {
+  const rows = listRows([
+    listItem('ask001', { link: listLink, waiting: 'QA 계정 비밀번호를 알려 주세요', sdlc: { slug: 'qa-run', phase: 'evidence', state: '', action: '' } }),
+    listItem('kit001', { link: listLink, sdlc: { slug: 'qa-run', phase: 'evidence', state: 'NEEDS-HUMAN', action: qaCheck } }),
+    listItem('pure01', { sdlc: { slug: 'pure', phase: 'evidence', state: 'NEEDS-HUMAN', action: 'run QA on S1' } })]);
+  assert.deepEqual(rows.ask001, { what: 'QA 계정 비밀번호를 알려 주세요', whatHidden: false, next: null, open: false });
+  assert.deepEqual(rows.kit001, { what: '', whatHidden: true, next: qaCheck, open: false }, 'folded, closed by default');
+  assert.deepEqual(rows.pure01, { what: 'run QA on S1', whatHidden: false, next: null, open: false }, 'no agent question: unchanged');
+});
+
+test('B-32 list: a sibling for other work keeps its own NEEDS-HUMAN step as a task of the person\'s', () => {
+  const rows = listRows([
+    listItem('ask002', { link: listLink, waiting: 'QA 계정 비밀번호를 알려 주세요' }),
+    listItem('own002', { link: listLink, sdlc: { slug: 'deploy-auth', phase: 'deliver', state: 'NEEDS-HUMAN', action: 'authorize the deploy' } })]);
+  assert.deepEqual(rows.own002, { what: 'authorize the deploy', whatHidden: false, next: null, open: false });
+});
+
+test('B-32 list: an item asking only with a command shows the run ask; its kit action folds', () => {
+  const rows = listRows([listItem('exec01', { exec: { argv: ['make', 'deploy'], cwd: '/tmp', why: 'deploy' },
+    sdlc: { slug: 'ship', phase: 'deliver', state: 'NEEDS-HUMAN', action: 'ship to stg, then sdlc.sh ship ship stg <sha>' } })]);
+  const runAsk = vm.runInContext(`t('run.ask')`, page().context);
+  assert.deepEqual(rows.exec01, { what: runAsk, whatHidden: false, next: 'ship to stg, then sdlc.sh ship ship stg <sha>', open: false });
+});
+
+// A board whose work document request answers with the given markdown.
+async function documentBoard(item, markdown) {
+  const p = page('#t=test-token', { fetch: async url => url.startsWith('/api/artifact') ?
+    { ok: true, text: async () => JSON.stringify({ markdown, gate: '', sha: 'x' }) } : new Promise(() => {}) });
+  boardItems(p, [item]);
+  const b = boardPage(p);
+  const key = vm.runInContext(`render(); cards.find(card => card.target.id === '${item.id}').key`, b.context);
+  vm.runInContext(`select('${key}', false)`, b.context);
+  for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.ok(p.requests.some(r => r.url.startsWith('/api/artifact')), 'the document was fetched');
+  return b.nodes.get('panel-question').textContent;
+}
+const glanceDoc = '# Intent\n## At a glance\n- **Your call:** approve the old scope?\n';
+
+test('B-32 board: a work document\'s Your call does not replace an agent\'s waiting', async () => {
+  const question = await documentBoard(askItem('dddddd', 'v1', '', { waiting: 'stg 배포를 지금 진행해도 될까요?', project: '/tmp/p',
+    sdlc: { slug: 'chat-fix', phase: 'deliver', state: 'NEEDS-HUMAN', action: kitAction } }), glanceDoc);
+  assert.equal(question, 'stg 배포를 지금 진행해도 될까요?');
+});
+
+test('B-32 board: a brief\'s Your call is the agent\'s own words and still leads', async () => {
+  const question = await documentBoard(askItem('eeeeee', 'v1', '', { waiting: 'see the brief', brief: '/tmp/brief.md' }), glanceDoc);
+  assert.equal(question, 'approve the old scope?');
+});
+
+test('B-32 detail: your next step is the agent\'s question; the item\'s kit action sits closed below it', () => {
+  const p = page();
+  vm.runInContext(`
+    items = [{ id: 'abcdef', title: 'PROJ-7 deploy', done: false, status: 'waiting', waiting: 'stg 배포를 지금 진행해도 될까요?',
+      sdlc: { slug: 'chat-fix', phase: 'deliver', state: 'NEEDS-HUMAN', action: '${kitAction}' }, events: [], notes: [] }];
+    openDetail('abcdef');
+  `, p.context);
+  const fields = p.nodes.get('detail-fields').children.map(n => n.textContent);
+  assert.equal(fields[fields.indexOf('Your next step') + 1], 'stg 배포를 지금 진행해도 될까요?');
+  assert.ok(!fields.some(text => /sdlc\.sh/.test(text)), 'the kit action is not a field');
+  assert.equal(p.nodes.get('detail-agent-next').hidden, false);
+  assert.notEqual(p.nodes.get('detail-agent-next').open, true);
+  assert.deepEqual(p.nodes.get('detail-agent-next-list').children.map(li => li.textContent), [kitAction]);
+  vm.runInContext(`items = [{ ...items[0], id: 'abcdef', waiting: '', version: 'v2' }]; renderDetail();`, p.context);
+  assert.equal(p.nodes.get('detail-agent-next').hidden, true, 'a pure sdlc ask shows no disclosure');
 });

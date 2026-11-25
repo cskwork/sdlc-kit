@@ -213,6 +213,28 @@ dream_due() {
 }
 # config.md key $1 as written (value() drops `, * and # comments, which a shell command needs).
 raw_setting() { awk -v key="$1" "$UNCOMMENT"'{if(uncomment())next;if(tolower($0)~"^[ \t]*" key "[ \t]*:"){sub(/^[^:]*:[ \t]*/,"");sub(/[ \t]+$/,"");print;exit}}' "$STORE/config.md"; }
+# Drops from dirty (git status --porcelain in repository $1) the untracked entries that match config.md
+# artifacts: (build outputs such as dist-dev/ or coverage/; globs relative to the repository's top, comma- or
+# space-separated, "dir/" also covering what is under it), named in one warning so none is silent. Only ??
+# lines are dropped: a tracked or modified file always counts. Each dropped path joins nested, so the
+# review --uncommitted fingerprint leaves it out too. No artifacts: changes nothing.
+skip_artifacts() {
+  local raw g line path kept= skipped= globs=()
+  [ -n "$dirty" ] || return 0
+  raw=$(raw_setting artifacts | sed -E 's/(^|[[:space:]])#.*//'); [ -n "${raw//[[:space:],]/}" ] || return 0
+  read -r -a globs < <(printf '%s\n' "${raw//,/ }")
+  while IFS= read -r line; do
+    if [ "${line:0:3}" = '?? ' ]; then path=${line:3}; path=${path%/}
+      for g in "${globs[@]}"; do g=${g%/}
+        # shellcheck disable=SC2053 # $g is a glob on purpose
+        if [ -n "$g" ] && [[ $path == $g || $path == $g/* ]]; then skipped="$skipped ${line:3}"; nested[${#nested[@]}]=$path; continue 2; fi
+      done
+    fi
+    kept="$kept${kept:+$'\n'}$line"
+  done < <(printf '%s\n' "$dirty")
+  dirty=$kept
+  [ -z "$skipped" ] || err "ignoring untracked build artifacts in $1 (config.md artifacts:):$skipped"
+}
 # The transcripts: command for slug $1 ({slug}, and {since} = the last dream's UTC time), run in the project
 # root. Each output line is a path or a path:line hit; anything after path:line is dropped, so no transcript
 # text reaches the brief. Prints at most $2 distinct hits, each cut to 300 bytes, under a count line.

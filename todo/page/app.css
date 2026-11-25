@@ -566,6 +566,12 @@ body.resizing { cursor: col-resize; -webkit-user-select: none; user-select: none
 .reply .hint { margin-top: 0.35rem; font-size: 0.75rem; }
 .panel-actions { display: flex; gap: 0.5rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 .panel-details { margin-top: 0.5rem; }
+/* The kit's own instructions on a card an agent asked about: closed by default, under the one ask. */
+.agent-next { margin-top: 1rem; font-size: 0.875rem; }
+.agent-next summary { min-height: 36px; padding: 0.4rem 0; color: var(--control); cursor: pointer; }
+.agent-next ul { margin: 0.25rem 0 0; padding-left: 1.25rem; color: var(--muted); overflow-wrap: anywhere; }
+.wait-line .agent-next { margin-top: 0; }
+.wait-line .agent-next summary { min-height: 24px; padding: 0; }
 .panel-details h3 { margin: 1.5rem 0 0.5rem; font-size: 1rem; font-weight: 600; }
 .panel .fields { grid-template-columns: max-content minmax(0, 1fr); font-size: 0.875rem; }
 .panel .artifact { max-height: none; overflow: visible; padding: 0; border-bottom: 0; font-size: 0.9375rem; }

@@ -484,7 +484,7 @@ mod tests {
         for url in ["http://127.0.0.1:51234/#t=abc&app=1", "http://localhost:3000/x", "http://[::1]:8080/", "HTTP://127.0.0.1/"] {
             assert_eq!(classify(url), Target::Board, "{url}");
         }
-        for url in ["https://donga.atlassian.net/browse/A20-1528", "http://127.0.0.1.evil.example/", "https://127.0.0.1@evil.example/",
+        for url in ["https://example.atlassian.net/browse/PROJ-1528", "http://127.0.0.1.evil.example/", "https://127.0.0.1@evil.example/",
             "https://example.com:8443/a?b#c"] {
             assert_eq!(classify(url), Target::External, "{url}");
         }
@@ -498,11 +498,11 @@ mod tests {
     #[test]
     fn the_board_page_may_ask_for_a_ticket_and_nothing_else() {
         let from = "http://127.0.0.1:51860/";
-        let ticket = "https://dong-a.atlassian.net/browse/A20-1383";
+        let ticket = "https://example.atlassian.net/browse/PROJ-1383";
         assert_eq!(ask(from, BOARD, &format!(r#"{{"open":"{ticket}"}}"#)), Ok(Ask::Open(ticket.into())));
         assert_eq!(ask(BOARD, BOARD, &format!(r#"{{"follow":"{ticket}"}}"#)), Ok(Ask::Follow(ticket.into())));
         // Only the board's own page: another port, another host, a lookalike host.
-        for other in ["http://127.0.0.1:51861/", "http://localhost:51860/", "https://dong-a.atlassian.net/", "http://127.0.0.1:518600/",
+        for other in ["http://127.0.0.1:51861/", "http://localhost:51860/", "https://example.atlassian.net/", "http://127.0.0.1:518600/",
             "http://127.0.0.1:51860.evil.example/", ""] {
             assert!(ask(other, BOARD, &format!(r#"{{"open":"{ticket}"}}"#)).is_err(), "{other}");
         }

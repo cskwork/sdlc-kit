@@ -4,7 +4,7 @@ To-do only; the sdlc loop is unchanged. The to-do file gains two optional fields
 
 ## Problem
 
-A factory puts decisions on the to-do as items like `[결정 D35] A20-1462 · <question>` with a `waiting:` line listing numbered options. The human had to type the number or the label as a reply, although 81% of recent decisions picked the recommended option. Several decisions for one ticket also sat apart in the list.
+A factory puts decisions on the to-do as items like `[결정 D35] PROJ-1462 · <question>` with a `waiting:` line listing numbered options. The human had to type the number or the label as a reply, although 81% of recent decisions picked the recommended option. Several decisions for one ticket also sat apart in the list.
 
 ## Changes
 

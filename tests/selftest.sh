@@ -1713,6 +1713,36 @@ regression_rootcommit() {
   grep -q "^repo: $(cd .git && pwd -P)"$'\t\t'".$" "$F/.state" || fail "old git identity: $(grep '^repo:' "$F/.state")"
   ok 'identity: a git that echoes --path-format back falls back to the relative common dir'
 }
+# config.md artifacts: untracked build outputs the dirty check leaves out, each named in a warning. A tracked
+# or modified file under the same path still counts, and without the key an untracked output is dirty.
+regression_artifacts() {
+  repo regression-artifacts
+  mkdir -p dist-dev; printf 'kept\n' > dist-dev/tracked.txt; git add dist-dev; git commit -qm 'tracked file under an artifact path'; SHA=$(git rev-parse HEAD)
+  printf 'artifacts: dist-dev/, *.lcov # build outputs\n' >> .sdlc/config.md
+  ready artifacts 1; evidence
+  printf 'bundle\n' > dist-dev/app.js; printf 'y\n' > top.lcov
+  route deliver; contains 'ignoring untracked build artifacts in'; contains 'dist-dev/app.js'; contains 'top.lcov'
+  case "$OUTPUT" in *'dirty tree'*) fail "artifacts counted as dirty: $OUTPUT";; esac
+  ok 'artifacts: untracked outputs matching it are left out of the dirty check, named in one warning'
+  printf 'changed\n' >> dist-dev/tracked.txt
+  expect 1 score "$SLUG"; contains 'dirty tree'; contains 'dist-dev/tracked.txt'
+  git checkout -q dist-dev/tracked.txt; printf 'source\n' > new.txt
+  expect 1 score "$SLUG"; contains 'dirty tree'; contains 'new.txt'
+  rm new.txt
+  ok 'artifacts: a modified tracked file under it and an untracked source file stay dirty'
+  feature artifacts-uncommitted
+  expect 0 approve intent "$SLUG" --human 'approved scope'
+  plan 1; expect 0 approve plan "$SLUG" --agent reviewed
+  printf 'reviewed change\n' >> README
+  reviewed "$SLUG" pass --uncommitted 'reviewed beside build outputs'; contains 'Uncommitted changes are bound'
+  git commit -qam 'commit the reviewed change'; SHA=$(git rev-parse HEAD)
+  evidence; route deliver
+  ok 'artifacts: review --uncommitted leaves them out of the bound change, so the reviewed commit matches'
+  replace '!/^artifacts:/' .sdlc/config.md
+  expect 1 score "$SLUG"; contains 'dirty tree'; contains 'dist-dev/app.js'
+  case "$OUTPUT" in *'ignoring untracked'*) fail "warned without artifacts: $OUTPUT";; esac
+  ok 'artifacts: without the key an untracked build output is dirty, as before'
+}
 run_regressions() {
   case "$1" in
     stop) regression_stop;; scenarios) regression_scenarios;; delivery) regression_delivery;; review) regression_review;; other) regression_other;;
@@ -1720,12 +1750,12 @@ run_regressions() {
     repos) regression_repos;; cells) regression_cells;; paths) regression_paths;; uncommitted) regression_uncommitted;;
     nested) regression_nested;; interrupt) regression_interrupt;; scoped) regression_scoped;; fingerprint) regression_fingerprint;; optin) regression_optin;;
     reposflag) regression_reposflag;; carry) regression_carry;; target) regression_target;; clarity) regression_clarity;; labels) regression_labels;; sha) regression_sha;; ship) regression_ship;; memory) regression_memory;;
-    events) regression_events;; stats) regression_stats;; stages) regression_stages;; stagerepos) regression_stagerepos;; contains) regression_contains;; rootcommit) regression_rootcommit;; undo) regression_undo;;
+    events) regression_events;; stats) regression_stats;; stages) regression_stages;; stagerepos) regression_stagerepos;; contains) regression_contains;; rootcommit) regression_rootcommit;; undo) regression_undo;; artifacts) regression_artifacts;;
     all) regression_stop; regression_scenarios; regression_delivery; regression_review; regression_other; regression_init; regression_ultra
       for round2 in a b c d e; do regression_round2 "$round2"; done; regression_round3
       regression_repos; regression_cells; regression_paths; regression_uncommitted; regression_nested; regression_interrupt; regression_scoped; regression_fingerprint; regression_optin
       regression_reposflag; regression_carry; regression_target; regression_clarity; regression_labels; regression_sha; regression_ship; regression_memory
-      regression_events; regression_stats; regression_stages; regression_stagerepos; regression_contains; regression_rootcommit; regression_undo;;
+      regression_events; regression_stats; regression_stages; regression_stagerepos; regression_contains; regression_rootcommit; regression_undo; regression_artifacts;;
     *) fail "unknown regression group: $1";;
   esac
 }
@@ -1785,6 +1815,17 @@ done
 assert_file "$SDLC"
 [ "$(wc -l < "$SDLC")" -le 600 ] || fail 'sdlc.sh exceeds 600 lines'
 ok 'all prompts <= 6000 words; sdlc.sh <= 600 lines'
+# The public-trace guard: a match fails (1), no match passes (0), a bad pattern is an error (2), never a silent pass.
+if git -C "$KIT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  printf 'a(\n' > "$TMP/trace-bad"; printf 'zz-never-%s\n' 'there-q9' > "$TMP/trace-miss"; printf 'sdlc-kit\n' > "$TMP/trace-hit"
+  for case in bad:2 miss:0 hit:1; do
+    rc=0; bash tests/public-trace.sh "$TMP/trace-${case%%:*}" >/dev/null 2>&1 || rc=$?
+    [ "$rc" -eq "${case#*:}" ] || fail "public-trace with a ${case%%:*} pattern exited $rc, expected ${case#*:}"
+  done
+  ok 'public-trace: a match fails, no match passes, a bad pattern is an error'
+else
+  printf 'skip: public-trace needs a git checkout of the kit\n'
+fi
 # bash 3.2 (macOS /bin/bash) writes each here-string to a temp file and deletes it; where file deletion is slow
 # that costs seconds each, and `status` ran eight of them. Feed read from `< <(printf ...)` instead.
 if grep -n '<<<' "$SDLC"; then fail 'sdlc.sh uses a here-string'; fi

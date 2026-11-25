@@ -311,6 +311,7 @@ export default {
     'panel.members': '같은 티켓의 항목',
     'panel.noDocument': '작업 문서가 없어요.',
     'panel.nextStep': '다음 단계',
+    'panel.agentNext': '에이전트가 이어서 할 일',
     'keys.button': '단축키',
     'keys.title': '키보드',
     'keys.note': '한 글자 키는 입력 칸 밖에서만 작동해요.',
