@@ -1,574 +1,484 @@
-//! The board window: the web board in a native window of the app, drawn by the system webview (WKWebView through
-//! wry). Tickets it opens go to the person's Chrome, docked at the screen's left edge (see ticket.rs).
+//! The board window: the server's web page in the system webview. It is made when first asked for, and closing it
+//! frees its webview unless the page holds something unsent.
 //!
-//! Event loop: eframe 0.31 owns the winit loop and offers no hook to add windows of our own, and tao would want to
-//! own NSApplication too. On macOS every window of a process shares the one NSApplication run loop, so the board
-//! window is a plain AppKit NSWindow made on the main thread, with wry attached through a raw window handle.
-//! winit keeps running the loop and the egui list window as before. Elsewhere the board opens in Chrome or the
-//! default browser, as it did before (see `main.rs`).
-//!
-//! The pure parts (window frames, which window a URL belongs to, the saved-window file) build and test everywhere.
-// Only the macOS board window uses these yet; the tests run them everywhere.
-#![cfg_attr(not(target_os = "macos"), allow(dead_code))]
-use serde::{Deserialize, Serialize};
-use std::path::Path;
+//! Every function that makes or changes the window runs off the main thread (`later`): on Windows, making a webview
+//! inside an event handler of the main thread deadlocks.
+use crate::i18n::t;
+use crate::links::{self, Navigation};
+use crate::window::{board_frame, Frame, Latest, WindowState, BOARD_MIN};
+use crate::{lock, server::Session, Conn, Shell};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+use tauri::webview::{NewWindowResponse, PageLoadEvent};
+use tauri::{AppHandle, Manager, Monitor, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
-/// A window frame in AppKit screen points: origin at the bottom left of the main screen, y growing upwards.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Frame {
-    pub x: f64,
-    pub y: f64,
-    pub width: f64,
-    pub height: f64,
+pub const LABEL: &str = "board";
+
+/// The page's view to show.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum View { Board, List }
+
+impl View {
+    pub fn name(self) -> &'static str { if self == View::List { "list" } else { "board" } }
 }
 
-impl Frame {
-    fn overlap(&self, other: &Frame) -> (f64, f64) {
-        let width = (self.x + self.width).min(other.x + other.width) - self.x.max(other.x);
-        let height = (self.y + self.height).min(other.y + other.height) - self.y.max(other.y);
-        (width.max(0.0), height.max(0.0))
-    }
+/// The view last picked on the tray; a page the shell loads by itself opens on it.
+static VIEW: Mutex<View> = Mutex::new(View::Board);
+/// One change to the window at a time.
+static WINDOW: Mutex<()> = Mutex::new(());
+static MOVES: Latest = Latest::new();
+
+/// Runs `job` off the main thread.
+pub fn later(app: &AppHandle, job: impl FnOnce(&AppHandle) + Send + 'static) {
+    let app = app.clone();
+    std::thread::spawn(move || job(&app));
 }
 
-/// The smallest board window: the board's narrow layout still fits.
-pub const BOARD_MIN: (f64, f64) = (640.0, 480.0);
+/// The origin of the shell's own pages, as the webview shows it.
+pub const SHELL_ORIGIN: &str = if cfg!(any(windows, target_os = "android")) { "http://tauri.localhost" } else { "tauri://localhost" };
 
-/// Part of the screen the ticket window takes at its left edge, as board.js asks of its popup (v3.3.4).
-const TICKET_SHARE: f64 = 0.45;
+/// What the page finds as `todoApp`: the few things it may ask of the shell (bridge.rs). The page knows nothing else of
+/// the shell, and the shell answers only the board's own origin.
+const BRIDGE: &str = r#"(() => {
+  // The token the page was opened with proves to the shell that it is that page.
+  const proof = new URLSearchParams(location.hash.slice(1)).get('t') || '';
+  const ask = (name, args) => window.__TAURI_INTERNALS__.invoke(name, { proof, ...args });
+  let view = '';
+  addEventListener('todo-view', event => { view = event.detail; });
+  Object.defineProperty(window, 'todoApp', { value: Object.freeze({
+    ticket: (url, follow) => ask('ticket', { url, follow }),
+    state: () => ask('app_state'),
+    saveMemo: (id, text) => ask('save_memo', { id, text }),
+    saveView: (size, font) => ask('save_view', { size, font }),
+    openTerminal: (id, command) => ask('open_terminal', { id, command }),
+    unsent: unsent => ask('unsent', { unsent }),
+    quit: () => ask('quit'),
+    // The view last picked on the tray, also before the page could listen.
+    view: () => view
+  }) });
+})()"#;
 
-/// The ticket window: the left edge of the screen's visible area, 45% of its width, its full height.
-pub fn ticket_frame(screen: Frame) -> Frame {
-    Frame { x: screen.x, y: screen.y, width: (screen.width * TICKET_SHARE).round(), height: screen.height }
+/// What the page holds that another page could take up (app.js), and how long the person has not typed.
+const CARRY: &str = "(() => { const page = globalThis.todoPage; return page && page.carry ? JSON.stringify(page.carry()) : ''; })()";
+/// Asks the person in the page whether to quit; true when the page did ask.
+const ASK_QUIT: &str = "!!(globalThis.todoPage && todoPage.askQuit && todoPage.askQuit())";
+/// How long a page that is being typed in is waited for before it is replaced, and what counts as still typing.
+const TYPING: (Duration, f64) = (Duration::from_secs(4), 1200.0);
+
+/// Whether the page holds something that closing would lose. A page without the question (an older one) is kept.
+const BUSY: &str = "(() => { const page = globalThis.todoPage; return page ? (typeof page.busy === 'function' ? page.busy() : true) : false; })()";
+
+/// The board's address opening on `view`.
+fn address(session: &Session, view: View) -> Result<Url, String> {
+    let start = if view == View::List { "&view=list" } else { "" };
+    Url::parse(&format!("{}{start}", session.board_url())).map_err(|_| "the server's address is not one".into())
 }
 
-/// The board window: the saved frame, held inside the visible area of the screen it overlaps most (no bigger than
-/// that area, its title bar below the top edge), while it is big enough and still touches a screen (a display may
-/// have gone since); otherwise the rest of the main screen beside the ticket window. `screens` are the visible
-/// frames, the main screen first.
-pub fn board_frame(saved: Option<Frame>, screens: &[Frame]) -> Frame {
-    let sound = |frame: &Frame| [frame.x, frame.y, frame.width, frame.height].iter().all(|v| v.is_finite())
-        && frame.width >= BOARD_MIN.0 && frame.height >= BOARD_MIN.1;
-    let area = |frame: &Frame, screen: &Frame| { let (w, h) = frame.overlap(screen); w * h };
-    if let Some(frame) = saved.filter(sound) {
-        let best = screens.iter().filter(|screen| area(&frame, screen) > 0.0)
-            .max_by(|a, b| area(&frame, a).total_cmp(&area(&frame, b)));
-        if let Some(screen) = best { return clamp(frame, *screen); }
-    }
-    let main = screens.first().copied().unwrap_or(Frame { x: 0.0, y: 0.0, width: 1440.0, height: 900.0 });
-    let ticket = ticket_frame(main);
-    let width = (main.width - ticket.width).max(BOARD_MIN.0.min(main.width));
-    Frame { x: main.x + main.width - width, y: main.y, width, height: main.height }
+fn view_script(view: View) -> String { format!("window.dispatchEvent(new CustomEvent('todo-view', {{ detail: '{}' }}))", view.name()) }
+
+/// Runs `script` in the page and waits for its answer (JSON). Off the main thread only: the answer comes through it.
+fn ask_page(window: &WebviewWindow, script: &str, limit: Duration) -> Option<serde_json::Value> {
+    let (send, answer) = std::sync::mpsc::channel();
+    window.eval_with_callback(script, move |text| { let _ = send.send(text); }).ok()?;
+    serde_json::from_str(&answer.recv_timeout(limit).ok()?).ok()
 }
 
-/// `frame` moved and shrunk to fit inside `screen` (AppKit: its top edge, where the title bar is, at most the top).
-fn clamp(frame: Frame, screen: Frame) -> Frame {
-    let (width, height) = (frame.width.min(screen.width), frame.height.min(screen.height));
-    Frame {
-        x: frame.x.clamp(screen.x, screen.x + screen.width - width),
-        y: frame.y.clamp(screen.y, screen.y + screen.height - height),
-        width,
-        height,
-    }
-}
-
-/// Where a link from the board belongs.
+/// A page's answer to CARRY.
 #[derive(Debug, PartialEq)]
-pub enum Target {
-    /// The board's own server on this machine (127.0.0.1, localhost, ::1).
-    Board,
-    /// Any other http(s) page, such as a Jira ticket: the ticket window.
-    External,
-    /// Anything else (about:, mailto:, javascript:, file:, …).
-    Other,
+enum Held {
+    /// What it holds, and the milliseconds since the last key.
+    Words(serde_json::Value, f64),
+    /// A page that keeps nothing (an older one, or none of ours).
+    Nothing,
+    /// No answer, or one that is not one: what it holds is not known.
+    Unknown,
 }
 
-/// Whether a non-web link may go to the system's handler (`open`): only mail. Anything else (`file:` to an app,
-/// `vscode:`, `x-apple.systempreferences:` …) would launch through LaunchServices, so it is refused.
-pub fn system_may_open(url: &str) -> bool { url.trim_start().get(..7).is_some_and(|scheme| scheme.eq_ignore_ascii_case("mailto:")) }
-
-pub fn classify(url: &str) -> Target {
-    let url = url.trim();
-    let scheme_end = url.find("://").unwrap_or(0);
-    if !matches!(url[..scheme_end].to_ascii_lowercase().as_str(), "http" | "https") { return Target::Other; }
-    let authority = url[scheme_end + 3..].split(['/', '?', '#', '\\']).next().unwrap_or("");
-    // A user part (`127.0.0.1@evil.example`) does not name the host.
-    let host_port = authority.rsplit('@').next().unwrap_or("");
-    let host = match host_port.strip_prefix('[') {
-        Some(rest) => rest.split(']').next().unwrap_or(""),
-        None => host_port.split(':').next().unwrap_or(""),
-    }.to_ascii_lowercase();
-    match host.trim_end_matches('.') {
-        "" => Target::Other,
-        "127.0.0.1" | "localhost" | "::1" => Target::Board,
-        _ => Target::External,
-    }
-}
-
-/// The saved windows, in `todo-app-window.json` beside the app's `todo-app.json`.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct WindowState {
-    #[serde(default)]
-    pub board: Option<Frame>,
-}
-
-impl WindowState {
-    /// Only window places live here, nothing anyone wrote: a missing or broken file means the default places.
-    pub fn load(file: &Path) -> WindowState {
-        match std::fs::read_to_string(file) {
-            Ok(text) => serde_json::from_str(&text).unwrap_or_else(|error| {
-                eprintln!("sdlc-todo: {}: {error}; using the default window place", file.display());
-                WindowState::default()
-            }),
-            Err(_) => WindowState::default(),
+/// Whether a CARRY answer holds anything a person typed (not only a view, a selection or a cursor).
+fn holds_words(held: &serde_json::Value) -> bool {
+    fn typed(value: &serde_json::Value) -> bool {
+        match value {
+            serde_json::Value::String(text) => !text.trim().is_empty(),
+            serde_json::Value::Array(list) => list.iter().any(typed),
+            // Only what was written counts: not the item's id, the suggestion it started from or its version.
+            serde_json::Value::Object(map) => map.iter().any(|(key, value)| !["id", "seed", "replyVersion"].contains(&key.as_str()) && typed(value)),
+            _ => false,
         }
     }
+    // Drafts are [id, { reply, words, … }] pairs.
+    let drafts = |part: &serde_json::Value| part.get("drafts").and_then(serde_json::Value::as_array)
+        .is_some_and(|list| list.iter().any(|pair| pair.get(1).is_some_and(typed)));
+    ["list", "board", "memos"].iter().any(|part| match (*part, held.get(part)) {
+        ("list", Some(list)) => drafts(list) || ["add", "edits", "edit", "lost"].iter().any(|key| list.get(key).is_some_and(typed)),
+        ("board", Some(board)) => drafts(board) || board.get("note").is_some_and(typed),
+        ("memos", Some(memos)) => memos.as_object().is_some_and(|memos| !memos.is_empty()),
+        _ => false,
+    })
+}
 
-    /// Written beside and renamed over, like the settings file, so a crash never leaves half a file.
-    pub fn save(&self, file: &Path) -> Result<(), String> {
-        let text = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        let mut name = file.as_os_str().to_owned();
-        name.push(".tmp");
-        let temp = std::path::PathBuf::from(name);
-        std::fs::write(&temp, text).map_err(|e| format!("{}: {e}", temp.display()))?;
-        std::fs::rename(&temp, file).map_err(|e| format!("{}: {e}", file.display()))
+fn carried(answer: Option<serde_json::Value>) -> Held {
+    let Some(text) = answer.as_ref().and_then(serde_json::Value::as_str) else { return Held::Unknown };
+    if text.is_empty() { return Held::Nothing; }
+    match serde_json::from_str::<serde_json::Value>(text) {
+        Ok(held) if held.is_object() => {
+            let idle = held.get("idle").and_then(serde_json::Value::as_f64).unwrap_or(f64::MAX);
+            Held::Words(held, idle)
+        }
+        _ => Held::Unknown,
     }
 }
 
-/// What the board page asks of the app through `window.ipc.postMessage` (board.js, in the app's own window).
-#[derive(Debug, PartialEq)]
-pub enum Ask {
-    /// The person opened a ticket (its button or **T**): show it in the Chrome ticket window and bring that forward,
-    /// making the window again when it was closed.
-    Open(String),
-    /// The selection moved to another ticket: move an open ticket window to it, leaving it behind the board, and make
-    /// none when there is none.
-    Follow(String),
-}
-
-/// Numbers events so a delayed action can tell whether a newer one came since (the board's moves: only the last one
-/// saves the place).
-pub struct Latest(std::sync::atomic::AtomicU64);
-
-impl Latest {
-    pub const fn new() -> Latest { Latest(std::sync::atomic::AtomicU64::new(0)) }
-    pub fn take(&self) -> u64 { self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1 }
-    pub fn is_newest(&self, ticket: u64) -> bool { self.0.load(std::sync::atomic::Ordering::SeqCst) == ticket }
-}
-
-/// The longest message the board sends: a ticket address with room to spare.
-const ASK_LIMIT: usize = 8 * 1024;
-
-/// Reads one message from the page at `from` (the sending frame's address). Only the board's own page (`board`, its
-/// `http://127.0.0.1:<port>` origin) is heard, and only `{"open": url}` or `{"follow": url}` with an http(s) address
-/// off this machine.
-pub fn ask(from: &str, board: &str, body: &str) -> Result<Ask, String> {
-    if from != board && !from.starts_with(&format!("{board}/")) { return Err(format!("not from the board: {from}")); }
-    if body.len() > ASK_LIMIT { return Err(format!("message of {} bytes, over {ASK_LIMIT}", body.len())); }
-    let value: serde_json::Value = serde_json::from_str(body).map_err(|e| format!("not JSON: {e}"))?;
-    let object = value.as_object().filter(|object| object.len() == 1).ok_or("not a one-field object")?;
-    let (kind, url) = object.iter().next().expect("one field");
-    let url = url.as_str().ok_or("the address is not a string")?.to_string();
-    if classify(&url) != Target::External { return Err(format!("not a ticket address: {url}")); }
-    match kind.as_str() {
-        "open" => Ok(Ask::Open(url)),
-        "follow" => Ok(Ask::Follow(url)),
-        other => Err(format!("unknown request: {other}")),
-    }
-}
-
-#[cfg(target_os = "macos")]
-pub use mac::{open_board, save_now, set_state_file};
-
-#[cfg(target_os = "macos")]
-mod mac {
-    use super::{ask, board_frame, classify, system_may_open, Ask, Frame, Target, WindowState, BOARD_MIN};
-    use super::Latest;
-    use objc2::rc::{Retained, Weak};
-    use objc2::runtime::{NSObject, ProtocolObject};
-    use objc2::{define_class, msg_send, sel, MainThreadMarker, MainThreadOnly};
-    use objc2_app_kit::{NSApplication, NSBackingStoreType, NSEventModifierFlags, NSMenu, NSMenuItem, NSScreen, NSWindow,
-        NSWindowDelegate, NSWindowStyleMask};
-    use objc2_foundation::{NSNotification, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString};
-    use raw_window_handle::{AppKitWindowHandle, HandleError, HasWindowHandle, RawWindowHandle, WindowHandle};
-    use std::cell::RefCell;
-    use std::path::PathBuf;
-    use std::ptr::NonNull;
-    use std::rc::Rc;
-    use std::sync::OnceLock;
-    use std::time::Duration;
-    use wry::{NewWindowResponse, WebView, WebViewBuilder};
-
-    static STATE_FILE: OnceLock<PathBuf> = OnceLock::new();
-
-    /// Where the board window's place is kept: `todo-app-window.json` beside the app's settings file.
-    pub fn set_state_file(file: PathBuf) { let _ = STATE_FILE.set(file); }
-
-    struct Board { window: Retained<NSWindow>, _delegate: Retained<Delegate>, webview: Rc<WebView>, url: String }
-
-    #[derive(Default)]
-    struct Windows { board: Option<Board> }
-
-    thread_local! {
-        /// The windows live on the main thread, as AppKit wants. No borrow is held across a call into AppKit or
-        /// WebKit: those can call back into the delegate below.
-        static WINDOWS: RefCell<Windows> = RefCell::new(Windows::default());
-    }
-
-    define_class!(
-        #[unsafe(super(NSObject))]
-        #[thread_kind = MainThreadOnly]
-        struct Delegate;
-
-        unsafe impl NSObjectProtocol for Delegate {}
-
-        unsafe impl NSWindowDelegate for Delegate {
-            /// A drag sends many of these; the place is kept once the window has stood still for half a second.
-            #[unsafe(method(windowDidMove:))]
-            fn did_move(&self, _notification: &NSNotification) { save_when_still(); }
-
-            #[unsafe(method(windowDidEndLiveResize:))]
-            fn did_resize(&self, notification: &NSNotification) { self.placed(notification); }
-
-            /// Closing only hides the board: its page, drafts and live stream stay for the next click on the tray.
-            #[unsafe(method(windowWillClose:))]
-            fn will_close(&self, notification: &NSNotification) { self.placed(notification); }
-        }
-    );
-
-    static MOVES: Latest = Latest::new();
-
-    fn save_when_still() {
-        let moved = MOVES.take();
-        dispatch::Queue::main().exec_after(Duration::from_millis(500), move || {
-            if !MOVES.is_newest(moved) { return; }
-            let frame = WINDOWS.with_borrow(|windows| windows.board.as_ref().map(|board| board.window.frame()));
-            if let Some(frame) = frame { save_place(frame); }
-        });
-    }
-
-    /// Keeps the board's place now: a quit skips the half second `save_when_still` waits. Main thread only.
-    pub fn save_now() {
-        if MainThreadMarker::new().is_none() { return; }
-        let frame = WINDOWS.with_borrow(|windows| windows.board.as_ref().map(|board| board.window.frame()));
-        if let Some(frame) = frame { save_place(frame); }
-    }
-
-    fn save_place(frame: NSRect) {
-        let Some(file) = STATE_FILE.get() else { return };
-        if let Err(error) = (WindowState { board: Some(frame_of(frame)) }).save(file) { eprintln!("sdlc-todo: {error}"); }
-    }
-
-    impl Delegate {
-        fn new(mtm: MainThreadMarker) -> Retained<Delegate> {
-            let this = mtm.alloc::<Delegate>().set_ivars(());
-            unsafe { msg_send![super(this), init] }
-        }
-
-        /// Keeps the board's place for the next run.
-        fn placed(&self, notification: &NSNotification) {
-            let Some(window) = notification.object().and_then(|object| object.downcast::<NSWindow>().ok()) else { return };
-            save_place(window.frame());
-        }
-    }
-
-    /// The window's content view as the raw handle wry attaches to; wry then sets its own view as the content.
-    #[derive(Clone, Copy)]
-    struct Host(NonNull<std::ffi::c_void>);
-
-    impl Host {
-        fn of(window: &NSWindow) -> Result<Host, String> {
-            let view = window.contentView().ok_or("the window has no content view")?;
-            Ok(Host(NonNull::from(&*view).cast()))
-        }
-    }
-
-    impl HasWindowHandle for Host {
-        fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
-            // Safety: the view belongs to a window that outlives this call (the caller holds it).
-            Ok(unsafe { WindowHandle::borrow_raw(RawWindowHandle::AppKit(AppKitWindowHandle::new(self.0))) })
-        }
-    }
-
-    fn rect(frame: Frame) -> NSRect { NSRect::new(NSPoint::new(frame.x, frame.y), NSSize::new(frame.width, frame.height)) }
-    fn frame_of(rect: NSRect) -> Frame { Frame { x: rect.origin.x, y: rect.origin.y, width: rect.size.width, height: rect.size.height } }
-
-    /// The visible frames of the screens, the main one (with the menu bar) first.
-    fn screens(mtm: MainThreadMarker) -> Vec<Frame> {
-        NSScreen::screens(mtm).iter().map(|screen| frame_of(screen.visibleFrame())).collect()
-    }
-
-    fn new_window(mtm: MainThreadMarker, frame: Frame, title: &str) -> Retained<NSWindow> {
-        let style = NSWindowStyleMask::Titled | NSWindowStyleMask::Closable | NSWindowStyleMask::Miniaturizable | NSWindowStyleMask::Resizable;
-        // initWithContentRect takes the content size; the frame wanted includes the title bar.
-        let window = unsafe { NSWindow::initWithContentRect_styleMask_backing_defer(mtm.alloc(), rect(frame), style, NSBackingStoreType::Buffered, false) };
-        // Made outside a window controller: closing must not free the window under the Retained that holds it.
-        unsafe { window.setReleasedWhenClosed(false) };
-        window.setFrame_display(rect(frame), false);
-        window.setTitle(&NSString::from_str(title));
-        window
-    }
-
-    fn bring_forward(mtm: MainThreadMarker, window: &NSWindow) {
-        window.makeKeyAndOrderFront(None);
-        #[allow(deprecated)]
-        NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
-    }
-
-    /// The page's title on the window; a weak link, so a page never keeps its own window alive.
-    fn title_follower(window: &NSWindow) -> impl Fn(String) + 'static {
-        let window = Weak::from(window);
-        move |title: String| {
-            if let Some(window) = window.load() { if !title.is_empty() { window.setTitle(&NSString::from_str(&title)); } }
-        }
-    }
-
-    /// winit's menu has no Edit menu, and a web page gets copy, paste and undo from the menu's key equivalents
-    /// (⌘C, ⌘V, …), so the board's text fields need one. ⌘W closes the window in front.
-    fn add_edit_menu(mtm: MainThreadMarker) {
-        thread_local! { static ADDED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
-        if ADDED.replace(true) { return; }
-        let Some(main) = NSApplication::sharedApplication(mtm).mainMenu() else { return };
-        // An item without an action is a separator.
-        let submenu = |title: &str, items: &[(&str, Option<objc2::runtime::Sel>, &str)]| {
-            let menu = NSMenu::initWithTitle(mtm.alloc(), &NSString::from_str(title));
-            for (name, action, key) in items {
-                if action.is_none() { menu.addItem(&NSMenuItem::separatorItem(mtm)); continue; }
-                let item = unsafe { NSMenuItem::initWithTitle_action_keyEquivalent(mtm.alloc(), &NSString::from_str(name), *action, &NSString::from_str(key)) };
-                item.setKeyEquivalentModifierMask(NSEventModifierFlags::Command);
-                menu.addItem(&item);
+/// Keeps what the page holds for the one that replaces it. Nothing typed is lost: a page in use is waited for briefly,
+/// and a page that could not be read is not replaced (false); the next change of the list tries again.
+fn keep(app: &AppHandle, window: &WebviewWindow) -> bool {
+    let shell = app.state::<Shell>();
+    // Only a page of the server this window was sent to; the shell's own holds nothing.
+    let ours = { let shared = lock(&shell.shared); shared.loaded.as_ref().is_some_and(|session| shared.page.as_deref() == Some(session.origin().as_str())) };
+    if !ours { return true; }
+    let started = Instant::now();
+    let mut latest = Held::Nothing;
+    loop {
+        match carried(ask_page(window, CARRY, Duration::from_secs(2))) {
+            Held::Unknown => return false,
+            Held::Nothing => break,
+            Held::Words(held, idle) => {
+                latest = Held::Words(held, idle);
+                if idle >= TYPING.1 || started.elapsed() >= TYPING.0 { break; }
             }
-            let holder = NSMenuItem::new(mtm);
-            holder.setSubmenu(Some(&menu));
-            main.addItem(&holder);
-        };
-        submenu("Edit", &[("Undo", Some(sel!(undo:)), "z"), ("Redo", Some(sel!(redo:)), "Z"), ("", None, ""), ("Cut", Some(sel!(cut:)), "x"),
-            ("Copy", Some(sel!(copy:)), "c"), ("Paste", Some(sel!(paste:)), "v"), ("Select All", Some(sel!(selectAll:)), "a")]);
-        submenu("Window", &[("Minimize", Some(sel!(performMiniaturize:)), "m"), ("Close", Some(sel!(performClose:)), "w")]);
+        }
+        std::thread::sleep(Duration::from_millis(300));
     }
+    settle(&mut lock(&shell.carried), latest);
+    true
+}
 
-    /// Opens the board at `url`, or brings the open one forward and, when the server was replaced, loads its new
-    /// address. With `show` false the board only follows the new address, hidden or not. Main thread only. An error
-    /// means the webview could not start; the caller falls back to a browser.
-    pub fn open_board(url: &str, title: &str, show: bool) -> Result<(), String> {
-        let mtm = MainThreadMarker::new().ok_or("the board window opens on the main thread only")?;
-        let open = WINDOWS.with_borrow(|windows| windows.board.as_ref().map(|board| (board.window.clone(), board.webview.clone(), board.url == url)));
-        if let Some((window, webview, same)) = open {
-            if !same {
-                webview.load_url(url).map_err(|e| e.to_string())?;
-                WINDOWS.with_borrow_mut(|windows| if let Some(board) = windows.board.as_mut() { board.url = url.to_string(); });
+/// What goes on to the next page: only the last answer of this replacement, so words deleted meanwhile (Esc) stay gone.
+/// Words carried from earlier pages are in that answer once the page took them up; until then they stay as they are, and
+/// an answer without words never replaces or holds anything.
+fn settle(carried: &mut Option<serde_json::Value>, latest: Held) {
+    if let Held::Words(held, _) = latest { if holds_words(&held) { *carried = Some(held); } }
+}
+
+/// The view last picked on the tray.
+pub fn current_view() -> View { *lock(&VIEW) }
+
+/// Asks in the page before quitting. False when there is no page to ask.
+pub fn ask_quit(app: &AppHandle) -> bool {
+    let _one = lock(&WINDOW);
+    let Some(window) = app.get_webview_window(LABEL) else { return false };
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+    ask_page(&window, ASK_QUIT, Duration::from_secs(3)) == Some(true.into())
+}
+
+/// Brings the board forward on `view`; while no server answers, the shell's own page says so.
+pub fn show(app: &AppHandle, view: View) {
+    let _one = lock(&WINDOW);
+    *lock(&VIEW) = view;
+    let shell = app.state::<Shell>();
+    let window = app.get_webview_window(LABEL);
+    let target = lock(&shell.shared).board_to_open(true, window.is_some()).map(|(session, _)| session);
+    let there = window.is_some() && target.as_ref().is_some_and(|session| !lock(&shell.shared).must_load(session));
+    let window = match (window, &target) {
+        (Some(window), Some(session)) => { load(app, &window, session, view); window }
+        // The page that was loaded shows by itself that its server is away; its drafts stay.
+        (Some(window), None) => { offline(app); window }
+        (None, _) => match make(app, target.as_ref(), view) {
+            Ok(window) => window,
+            Err(error) => {
+                eprintln!("sdlc-todo: the board window could not start ({error}); opening the board in the browser");
+                if let Some(session) = &target { crate::system::open_url(&session.board_url()); }
+                return;
             }
-            if show { bring_forward(mtm, &window); }
-            return Ok(());
+        },
+    };
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+    // A page already there switches; one that loads now opens on the view its address names, and one that was still
+    // loading asks for this pick when it is up.
+    if there { *lock(&shell.picked) = Some(view); }
+    let _ = window.eval(view_script(view));
+}
+
+/// After a server came or was replaced: an open window loads the new address in place, hidden or not, without coming
+/// forward. `open` is the launch's own first showing.
+pub fn follow_server(app: &AppHandle, open: bool) {
+    // The launch's own showing keeps a view picked on the tray while the server was away.
+    let view = *lock(&VIEW);
+    if open { return show(app, view); }
+    let _one = lock(&WINDOW);
+    let Some(window) = app.get_webview_window(LABEL) else { return };
+    let next = lock(&app.state::<Shell>().shared).board_to_open(false, true);
+    if let Some((session, _)) = next { load(app, &window, &session, *lock(&VIEW)); }
+}
+
+/// Tells the shell's own page how things stand; does nothing while the board's page is loaded.
+pub fn offline(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(LABEL) else { return };
+    if lock(&app.state::<Shell>().shared).page.as_deref() != Some(SHELL_ORIGIN) { return; }
+    let words = serde_json::Value::from(offline_words(app)).to_string();
+    let _ = window.eval(format!("location.replace('#' + {words})"));
+}
+
+/// The words of the shell's own page, as its address's fragment.
+fn offline_words(app: &AppHandle) -> String {
+    let shell = app.state::<Shell>();
+    let (title, reason, hint) = match &lock(&shell.shared).conn {
+        Conn::Offline(reason) => ("offline", reason.clone(), "offline.hint"),
+        _ => ("connecting", String::new(), ""),
+    };
+    let mut url = Url::parse("tauri://localhost/").expect("a fixed address");
+    url.query_pairs_mut().append_pair("lang", shell.lang().code()).append_pair("title", t(shell.lang(), title))
+        .append_pair("reason", &reason).append_pair("hint", t(shell.lang(), hint));
+    url.query().unwrap_or("").to_string()
+}
+
+/// Lets the server's origin, and no other, use the bridge, once per origin.
+fn allow(app: &AppHandle, session: &Session) {
+    let shell = app.state::<Shell>();
+    if !lock(&shell.allowed).insert(session.port) { return; }
+    let capability = crate::bridge::COMMANDS.iter().fold(
+        tauri::ipc::CapabilityBuilder::new(format!("board-{}", session.port)).local(false).remote(session.origin()).window(LABEL),
+        |capability, command| capability.permission(format!("allow-{}", command.replace('_', "-"))));
+    if let Err(error) = app.add_capability(capability) { eprintln!("sdlc-todo: the board may not ask the app for anything: {error}"); }
+}
+
+fn load(app: &AppHandle, window: &WebviewWindow, session: &Session, view: View) {
+    let shell = app.state::<Shell>();
+    if !lock(&shell.shared).must_load(session) { return; }
+    let Ok(url) = address(session, view) else { return };
+    if !keep(app, window) { return eprintln!("sdlc-todo: the page did not say what it holds; it stays until it does"); }
+    *lock(&shell.picked) = None;
+    allow(app, session);
+    match window.navigate(url) {
+        Ok(()) => asked(&shell, Some(session)),
+        Err(_) => eprintln!("sdlc-todo: the board window could not load the server's page"),
+    }
+}
+
+fn asked(shell: &Shell, session: Option<&Session>) {
+    let mut shared = lock(&shell.shared);
+    (shared.loaded, shared.asked) = (session.cloned(), Instant::now());
+}
+
+fn make(app: &AppHandle, session: Option<&Session>, view: View) -> Result<WebviewWindow, String> {
+    let shell = app.state::<Shell>();
+    let page = match session {
+        Some(session) => { allow(app, session); WebviewUrl::External(address(session, view)?) }
+        None => WebviewUrl::App(format!("index.html#{}", offline_words(app)).into()),
+    };
+    asked(&shell, session);
+    lock(&shell.shared).page = None;
+    *lock(&shell.picked) = None;
+    let (nav, popup, pages) = (app.clone(), app.clone(), app.clone());
+    let built = WebviewWindowBuilder::new(app, LABEL, page)
+        .title(t(shell.lang(), "title"))
+        .visible(false).focused(false)
+        .inner_size(1000.0, 700.0).min_inner_size(BOARD_MIN.0, BOARD_MIN.1)
+        .initialization_script(BRIDGE)
+        // The page's own rem-based size (bridge.rs) is the one text size; the webview's zoom keys stay off.
+        .zoom_hotkeys_enabled(false)
+        .devtools(cfg!(debug_assertions))
+        .on_navigation(move |url| navigate(&nav, url.as_str()))
+        .on_new_window(move |url, _| { hand_off(&popup, url.as_str()); NewWindowResponse::Deny })
+        .on_document_title_changed(|window, title| { if !title.is_empty() { let _ = window.set_title(&title); } })
+        .on_page_load(move |_, load| {
+            if load.event() != PageLoadEvent::Finished { return; }
+            let url = load.url();
+            let origin = match (url.host_str(), url.port()) {
+                (Some(host), Some(port)) => format!("{}://{host}:{port}", url.scheme()),
+                (Some(host), None) => format!("{}://{host}", url.scheme()),
+                _ => return,
+            };
+            lock(&pages.state::<Shell>().shared).page = Some(origin);
+        })
+        .build();
+    let window = match built {
+        Ok(window) => window,
+        Err(error) => { asked(&shell, None); return Err(error.to_string()); }
+    };
+    place(&shell, &window);
+    let events = app.clone();
+    window.on_window_event(move |event| match event {
+        WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            // Without a tray nothing would bring a hidden window back.
+            if events.state::<Shell>().no_tray.load(std::sync::atomic::Ordering::SeqCst) { crate::quit::request(&events) } else { close(&events) }
         }
-        // A replaced server for a board that never opened here (it fell back to a browser): nothing to follow.
-        if !show { return Ok(()); }
-        add_edit_menu(mtm);
-        let saved = STATE_FILE.get().map(|file| WindowState::load(file)).unwrap_or_default();
-        let window = new_window(mtm, board_frame(saved.board, &screens(mtm)), title);
-        let delegate = Delegate::new(mtm);
-        window.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
-        window.setMinSize(NSSize::new(BOARD_MIN.0, BOARD_MIN.1));
-        let built = WebViewBuilder::new()
-            .with_url(url)
-            .with_ipc_handler(|request| { guarded(|| board_message(&request.uri().to_string(), request.body())); })
-            .with_new_window_req_handler(|to, _| guarded(|| { hand_off(&to); NewWindowResponse::Deny }).unwrap_or(NewWindowResponse::Deny))
-            .with_navigation_handler(|to: String| guarded(|| board_navigation(&to)).unwrap_or(false))
-            .with_document_title_changed_handler(title_follower(&window))
-            .build(&Host::of(&window)?);
-        let webview = match built {
-            Ok(webview) => webview,
-            Err(error) => { window.setDelegate(None); window.close(); return Err(error.to_string()); }
-        };
-        WINDOWS.with_borrow_mut(|windows| windows.board = Some(Board { window: window.clone(), _delegate: delegate, webview: Rc::new(webview), url: url.to_string() }));
-        bring_forward(mtm, &window);
-        Ok(())
-    }
+        WindowEvent::Moved(_) | WindowEvent::Resized(_) => save_when_still(&events),
+        _ => {}
+    });
+    Ok(window)
+}
 
-    /// The ticket window takes the left side of the screen the board is on; Chrome needs the main screen's height to
-    /// turn AppKit's bottom-left coordinates into its own.
-    fn open_ticket(url: &str, follow: bool) {
-        let Some(mtm) = MainThreadMarker::new() else { return };
-        let all = NSScreen::screens(mtm);
-        let main_height = all.iter().next().map(|screen| screen.frame().size.height).unwrap_or(900.0);
-        let visible = WINDOWS.with_borrow(|windows| windows.board.as_ref().and_then(|board| board.window.screen()))
-            .or_else(|| NSScreen::mainScreen(mtm))
-            .map(|screen| frame_of(screen.visibleFrame()))
-            .unwrap_or(Frame { x: 0.0, y: 0.0, width: 1440.0, height: main_height });
-        crate::ticket::open(url.to_string(), follow, visible, main_height);
+fn navigate(app: &AppHandle, to: &str) -> bool {
+    let board = lock(&app.state::<Shell>().shared).session.as_ref().map(Session::origin).unwrap_or_default();
+    match links::navigation(to, &board, SHELL_ORIGIN) {
+        Navigation::Stay => return true,
+        Navigation::HandOff => hand_off(app, to),
+        Navigation::Refuse => eprintln!("sdlc-todo: the board may not go to {}", links::loggable(to)),
     }
+    false
+}
 
-    /// A link the board does not show itself: http(s) to the Chrome ticket window, `mailto:` to the mail app; anything
-    /// else is refused, since the system's handler would launch it.
-    fn hand_off(url: &str) {
-        match classify(url) {
-            Target::External => open_ticket(url, false),
-            Target::Board => crate::open_url(url),
-            Target::Other if system_may_open(url) => crate::open_url(url),
-            Target::Other => eprintln!("sdlc-todo: refused to open {url}: only http(s) and mailto: links leave the board"),
-        }
-    }
+/// A link the board does not show itself: a web page to the ticket window, mail to the mail app; anything else is
+/// refused, since the system's handler would launch it.
+fn hand_off(app: &AppHandle, url: &str) {
+    if links::ticket(url).is_ok() { return open_ticket(app, url, false); }
+    if links::system_may_open(url) { return crate::system::open_url(url); }
+    eprintln!("sdlc-todo: refused to open {}: only http(s) and mailto: links leave the board", links::loggable(url));
+}
 
-    /// The board page stays on this machine's server (a replaced server has a new port); every other address is
-    /// handed off and cancelled, so the board keeps its page, token and drafts.
-    fn board_navigation(to: &str) -> bool {
-        if classify(to) == Target::Board || to.starts_with("about:") { return true; }
-        hand_off(to);
-        false
+/// Shows a ticket: on macOS in the person's Chrome beside the board, elsewhere in the default browser. Following the
+/// selection moves only a ticket window that is open, which a default browser does not offer.
+pub fn open_ticket(app: &AppHandle, url: &str, follow: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        let screen = app.get_webview_window(LABEL).and_then(|window| window.current_monitor().ok().flatten())
+            .or_else(|| app.primary_monitor().ok().flatten()).map(|monitor| free_area(&monitor));
+        crate::ticket::open(url.to_string(), follow, screen.unwrap_or(Frame { x: 0.0, y: 0.0, width: 1440.0, height: 900.0 }));
     }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        if !follow { crate::system::open_url(url); }
+    }
+}
 
-    /// Runs a handler WebKit calls: a panic must not unwind into Objective-C, so it is logged and the call answers
-    /// None.
-    fn guarded<T>(body: impl FnOnce() -> T) -> Option<T> {
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
-            .map_err(|_| eprintln!("sdlc-todo: a board window handler panicked"))
-            .ok()
-    }
+// ---------- closing ----------
 
-    /// A message from the board page (see `ask`): a ticket to open or follow in the Chrome ticket window.
-    fn board_message(from: &str, body: &str) {
-        let board = WINDOWS.with_borrow(|windows| windows.board.as_ref().map(|board| board.url.split("/#").next().unwrap_or("").to_string()));
-        match ask(from, &board.unwrap_or_default(), body) {
-            Ok(Ask::Open(url)) => open_ticket(&url, false),
-            Ok(Ask::Follow(url)) => open_ticket(&url, true),
-            Err(error) => eprintln!("sdlc-todo: ignored a message from the board: {error}"),
-        }
+/// Hides the window, then frees its webview (the largest part of the app's memory) unless the page holds a draft or
+/// a request; then it stays hidden and comes back as it was.
+fn close(app: &AppHandle) {
+    save_place(app);
+    let Some(window) = app.get_webview_window(LABEL) else { return };
+    let _ = window.hide();
+    // No page came up: there is nothing to ask, and nothing to lose.
+    if lock(&app.state::<Shell>().shared).page.is_none() { return later(app, free); }
+    let app = app.clone();
+    let _ = window.eval_with_callback(BUSY, move |answer| if answer.trim() == "false" { later(&app, free); });
+}
+
+/// Frees a hidden window's webview.
+fn free(app: &AppHandle) {
+    let _one = lock(&WINDOW);
+    let Some(window) = app.get_webview_window(LABEL) else { return };
+    // Asked for again meanwhile: keep it.
+    if window.is_visible().unwrap_or(true) { return; }
+    // Words on their way to a page that has not taken them up yet wait for it.
+    if lock(&app.state::<Shell>().carried).is_some() { return; }
+    if window.destroy().is_err() { return; }
+    {
+        let shell = app.state::<Shell>();
+        asked(&shell, None);
+        let mut shared = lock(&shell.shared);
+        (shared.page, shared.unsent) = (None, false);
     }
+    // The label is free once the event loop has let the window go.
+    for _ in 0..100 {
+        if app.get_webview_window(LABEL).is_none() { break; }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+// ---------- place ----------
+
+/// `Frame` counts points on macOS and pixels elsewhere: this is what a pixel count there is divided by.
+fn unit(scale: f64) -> f64 { if cfg!(target_os = "macos") { scale } else { 1.0 } }
+
+fn free_area(monitor: &Monitor) -> Frame {
+    let (area, unit) = (monitor.work_area(), unit(monitor.scale_factor()));
+    Frame { x: f64::from(area.position.x) / unit, y: f64::from(area.position.y) / unit, width: f64::from(area.size.width) / unit, height: f64::from(area.size.height) / unit }
+}
+
+/// Puts a new window at its saved place, or beside the ticket window.
+fn place(shell: &Shell, window: &WebviewWindow) {
+    let primary = window.primary_monitor().ok().flatten();
+    let mut screens: Vec<Frame> = primary.iter().map(free_area).collect();
+    for monitor in window.available_monitors().unwrap_or_default() {
+        let area = free_area(&monitor);
+        if !screens.contains(&area) { screens.push(area); }
+    }
+    let main_height = primary.as_ref().map(|m| f64::from(m.size().height) / unit(m.scale_factor())).unwrap_or(900.0);
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let least = if cfg!(target_os = "macos") { 1.0 } else { scale };
+    let saved = WindowState::load(&shell.window_file).place(main_height);
+    let frame = board_frame(saved, &screens, (BOARD_MIN.0 * least, BOARD_MIN.1 * least));
+    // The frame includes the title bar and edges; the window is sized by its content.
+    let edges = match (window.outer_size(), window.inner_size()) {
+        (Ok(outer), Ok(inner)) => (f64::from(outer.width.saturating_sub(inner.width)) / unit(scale), f64::from(outer.height.saturating_sub(inner.height)) / unit(scale)),
+        _ => (0.0, 0.0),
+    };
+    let (width, height) = (frame.width - edges.0, frame.height - edges.1);
+    if cfg!(target_os = "macos") {
+        let _ = window.set_size(tauri::LogicalSize::new(width, height));
+        let _ = window.set_position(tauri::LogicalPosition::new(frame.x, frame.y));
+    } else {
+        let _ = window.set_position(tauri::PhysicalPosition::new(frame.x.round() as i32, frame.y.round() as i32));
+        let _ = window.set_size(tauri::PhysicalSize::new(width.round().max(1.0) as u32, height.round().max(1.0) as u32));
+    }
+}
+
+/// A drag sends many moves; the place is kept once the window has stood still for half a second.
+fn save_when_still(app: &AppHandle) {
+    let moved = MOVES.take();
+    later(app, move |app| {
+        std::thread::sleep(Duration::from_millis(500));
+        if MOVES.is_newest(moved) { save_place(app); }
+    });
+}
+
+/// Keeps the window's place now; a hidden, minimised or full-screen window has none to keep.
+pub fn save_place(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(LABEL) else { return };
+    if !window.is_visible().unwrap_or(false) || window.is_minimized().unwrap_or(false) || window.is_fullscreen().unwrap_or(false) { return; }
+    let (Ok(position), Ok(size), Ok(scale)) = (window.outer_position(), window.outer_size(), window.scale_factor()) else { return };
+    let unit = unit(scale);
+    let frame = Frame { x: f64::from(position.x) / unit, y: f64::from(position.y) / unit, width: f64::from(size.width) / unit, height: f64::from(size.height) / unit };
+    if let Err(error) = WindowState::of(frame).save(&app.state::<Shell>().window_file) { eprintln!("sdlc-todo: {error}"); }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const SCREEN: Frame = Frame { x: 0.0, y: 0.0, width: 1512.0, height: 944.0 };
+    use serde_json::json;
 
     #[test]
-    fn the_ticket_window_takes_the_left_45_percent_at_full_height() {
-        assert_eq!(ticket_frame(SCREEN), Frame { x: 0.0, y: 0.0, width: 680.0, height: 944.0 });
-        // A second display to the left, below the menu bar's line: its own origin.
-        let left = Frame { x: -1920.0, y: 25.0, width: 1920.0, height: 1055.0 };
-        assert_eq!(ticket_frame(left), Frame { x: -1920.0, y: 25.0, width: 864.0, height: 1055.0 });
+    fn only_the_last_answer_of_a_replacement_goes_on() {
+        let words = |text: &str| json!({ "list": { "add": text } });
+        // The page said "draft", then the person pressed Esc: the last answer has nothing, so nothing goes on.
+        let mut carried = None;
+        let mut latest = Held::Nothing;
+        for answer in [words("draft"), words("")] { latest = Held::Words(answer, 0.0); }
+        settle(&mut carried, latest);
+        assert_eq!(carried, None);
+        // Words carried from an earlier page and not taken up yet stay when this page holds none.
+        let mut carried = Some(words("earlier"));
+        settle(&mut carried, Held::Words(words(""), 0.0));
+        settle(&mut carried, Held::Nothing);
+        assert_eq!(carried, Some(words("earlier")));
+        settle(&mut carried, Held::Words(words("now"), 0.0));
+        assert_eq!(carried, Some(words("now")));
     }
 
     #[test]
-    fn the_board_keeps_its_saved_place_while_it_is_on_a_screen() {
-        let saved = Frame { x: 100.0, y: 50.0, width: 1000.0, height: 700.0 };
-        assert_eq!(board_frame(Some(saved), &[SCREEN]), saved);
-        // Without a saved place, or with one on a display that is gone or too small to use, it takes the rest of
-        // the main screen beside the ticket window.
-        let beside = Frame { x: 680.0, y: 0.0, width: 832.0, height: 944.0 };
-        assert_eq!(board_frame(None, &[SCREEN]), beside);
-        assert_eq!(board_frame(Some(Frame { x: 4000.0, ..saved }), &[SCREEN]), beside);
-        assert_eq!(board_frame(Some(Frame { width: 200.0, ..saved }), &[SCREEN]), beside);
-        assert_eq!(board_frame(Some(Frame { x: f64::NAN, ..saved }), &[SCREEN]), beside);
-        // On the second display it was moved to, it stays.
-        let other = Frame { x: 1512.0, y: 0.0, width: 1920.0, height: 1080.0 };
-        let there = Frame { x: 1700.0, ..saved };
-        assert_eq!(board_frame(Some(there), &[SCREEN, other]), there);
-    }
-
-    #[test]
-    fn a_saved_place_is_held_inside_its_screen() {
-        // Huge: no bigger than the screen's visible area, and inside it.
-        let huge = Frame { x: 100.0, y: 50.0, width: 1e9, height: 1e9 };
-        assert_eq!(board_frame(Some(huge), &[SCREEN]), SCREEN);
-        // Off the top: the title bar comes back below the top edge (AppKit's y grows upwards); x is kept.
-        let high = Frame { x: 300.0, y: 600.0, width: 1000.0, height: 700.0 };
-        assert_eq!(board_frame(Some(high), &[SCREEN]), Frame { x: 300.0, y: 244.0, width: 1000.0, height: 700.0 });
-        // Hanging off the right and bottom edges: pulled in on the screen it overlaps most.
-        let low = Frame { x: 1000.0, y: -300.0, width: 1000.0, height: 700.0 };
-        assert_eq!(board_frame(Some(low), &[SCREEN]), Frame { x: 512.0, y: 0.0, width: 1000.0, height: 700.0 });
-    }
-
-    #[test]
-    fn board_links_and_ticket_links_are_told_apart() {
-        for url in ["http://127.0.0.1:51234/#t=abc&app=1", "http://localhost:3000/x", "http://[::1]:8080/", "HTTP://127.0.0.1/"] {
-            assert_eq!(classify(url), Target::Board, "{url}");
+    fn what_a_page_holds_is_read_from_its_answer() {
+        let answer = serde_json::Value::from(json!({ "idle": 40, "list": { "add": "한글 \"draft\"" } }).to_string());
+        let Held::Words(held, idle) = carried(Some(answer)) else { panic!("words") };
+        assert_eq!((held["list"]["add"].as_str(), idle), (Some("한글 \"draft\""), 40.0));
+        // A page that never counted typing is not waited for.
+        assert_eq!(carried(Some(json!("{}"))), Held::Words(json!({}), f64::MAX));
+        // A page without anything to keep says so; silence or nonsense is not "nothing", and the page is not replaced.
+        assert_eq!(carried(Some(json!(""))), Held::Nothing);
+        // An empty page holds no words; a view, selection or cursor alone is not worth keeping the app for.
+        assert!(!holds_words(&json!({ "idle": 5, "list": { "drafts": [], "add": "", "edits": [], "open": "x" }, "board": { "drafts": [], "note": null, "selected": "k", "view": "list" }, "memos": {}, "focus": { "id": "a", "at": 1 } })));
+        assert!(!holds_words(&json!({ "list": { "drafts": [["a", { "reply": " ", "words": "", "seed": "suggested" }]] } })));
+        for held in [json!({ "list": { "add": "x" } }), json!({ "list": { "drafts": [["a", { "reply": "", "words": "note" }]] } }), json!({ "list": { "edits": [{ "id": "a", "text": "n" }] } }),
+            json!({ "list": { "lost": ["w"] } }), json!({ "board": { "note": { "id": "a", "text": "t" } } }), json!({ "memos": { "a": "" } })] {
+            assert!(holds_words(&held), "{held}");
         }
-        for url in ["https://example.atlassian.net/browse/PROJ-1528", "http://127.0.0.1.evil.example/", "https://127.0.0.1@evil.example/",
-            "https://example.com:8443/a?b#c"] {
-            assert_eq!(classify(url), Target::External, "{url}");
-        }
-        for url in ["about:blank", "mailto:a@b.c", "javascript:alert(1)", "file:///etc/hosts", "", "https://", "data:text/html,x"] {
-            assert_eq!(classify(url), Target::Other, "{url}");
-        }
-    }
-
-    const BOARD: &str = "http://127.0.0.1:51860";
-
-    #[test]
-    fn the_board_page_may_ask_for_a_ticket_and_nothing_else() {
-        let from = "http://127.0.0.1:51860/";
-        let ticket = "https://example.atlassian.net/browse/PROJ-1383";
-        assert_eq!(ask(from, BOARD, &format!(r#"{{"open":"{ticket}"}}"#)), Ok(Ask::Open(ticket.into())));
-        assert_eq!(ask(BOARD, BOARD, &format!(r#"{{"follow":"{ticket}"}}"#)), Ok(Ask::Follow(ticket.into())));
-        // Only the board's own page: another port, another host, a lookalike host.
-        for other in ["http://127.0.0.1:51861/", "http://localhost:51860/", "https://example.atlassian.net/", "http://127.0.0.1:518600/",
-            "http://127.0.0.1:51860.evil.example/", ""] {
-            assert!(ask(other, BOARD, &format!(r#"{{"open":"{ticket}"}}"#)).is_err(), "{other}");
-        }
-        // Not JSON, not one field, an unknown request, a non-string address.
-        for body in ["", "open", r#"["open"]"#, "{}", r#"{"open":"https://e.x/","follow":"https://e.x/"}"#, r#"{"close":"https://e.x/"}"#,
-            r#"{"open":42}"#, r#"{"open":null}"#] {
-            assert!(ask(from, BOARD, body).is_err(), "{body}");
-        }
-        // Only an http(s) address off this machine: never the board's own server, a file, a scheme handler.
-        for url in ["http://127.0.0.1:51860/#t=x", "http://localhost/", "file:///Applications/Calculator.app", "javascript:alert(1)",
-            "vscode://file/etc/hosts", "data:text/html,x", "mailto:a@b.c"] {
-            assert!(ask(from, BOARD, &serde_json::json!({ "open": url }).to_string()).is_err(), "{url}");
-        }
-        // A huge message is refused before it is parsed.
-        let huge = serde_json::json!({ "open": format!("https://e.x/{}", "a".repeat(9000)) }).to_string();
-        assert!(ask(from, BOARD, &huge).unwrap_err().contains("over 8192"));
-    }
-
-    /// The sender's address reaches the handler through http::Uri, which drops the token fragment; the board's page
-    /// must still be recognised.
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn the_board_pages_address_survives_the_ipc_request() {
-        let uri: wry::http::Uri = "http://127.0.0.1:51860/#t=0123456789abcdef0123456789abcdef&app=1".parse().unwrap();
-        assert!(ask(&uri.to_string(), BOARD, r#"{"open":"https://e.x/browse/A-1"}"#).is_ok(), "{uri}");
-    }
-
-    #[test]
-    fn only_the_newest_move_saves() {
-        let latest = Latest::new();
-        let (first, second, third) = (latest.take(), latest.take(), latest.take());
-        assert!(!latest.is_newest(first) && !latest.is_newest(second) && latest.is_newest(third));
-    }
-
-    #[test]
-    fn only_mail_links_go_to_the_system_handler() {
-        // Never to Chrome, never to `open`: these could launch an app through LaunchServices.
-        for url in ["file:///Applications/Calculator.app", "FILE:///tmp/evil.app", "data:text/html,<script>x</script>",
-            "chrome://settings", "blob:http://127.0.0.1:5000/0b9c", "javascript:alert(1)", "javascript://%0aalert(1)",
-            "vscode://file/etc/hosts", "x-apple.systempreferences:com.apple.preference.security", "ftp://e.x/a", "mailto"] {
-            assert_eq!(classify(url), Target::Other, "{url}");
-            assert!(!system_may_open(url), "{url}");
-        }
-        for url in ["mailto:qa@example.com", "MAILTO:qa@example.com?subject=A20"] {
-            assert!(system_may_open(url), "{url}");
-        }
-    }
-
-    #[test]
-    fn the_window_state_file_round_trips_and_tolerates_breakage() {
-        let dir = std::env::temp_dir().join(format!("sdlc-todo-window-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let file = dir.join("todo-app-window.json");
-        assert_eq!(WindowState::load(&file), WindowState::default());
-        let state = WindowState { board: Some(Frame { x: 680.0, y: 0.0, width: 832.0, height: 944.0 }) };
-        state.save(&file).unwrap();
-        assert!(!dir.join("todo-app-window.json.tmp").exists());
-        assert_eq!(WindowState::load(&file), state);
-        // The format the file keeps, so a person or a later version can read it.
-        let json: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
-        assert_eq!(json, serde_json::json!({ "board": { "x": 680.0, "y": 0.0, "width": 832.0, "height": 944.0 } }));
-        // Fields it does not know and a missing board are fine; broken JSON means the default place.
-        std::fs::write(&file, r#"{ "ticket": 1 }"#).unwrap();
-        assert_eq!(WindowState::load(&file), WindowState::default());
-        std::fs::write(&file, "{ not json").unwrap();
-        assert_eq!(WindowState::load(&file), WindowState::default());
-        std::fs::remove_dir_all(&dir).unwrap();
+        for answer in [None, Some(json!(null)), Some(json!("[]")), Some(json!("{ broken")), Some(json!(true))] { assert_eq!(carried(answer.clone()), Held::Unknown, "{answer:?}"); }
     }
 }

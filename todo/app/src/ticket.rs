@@ -11,15 +11,13 @@
 //! then nothing else opens; the next click finds that window by its address.
 // Only the macOS board window uses these yet; the tests run them everywhere.
 #![cfg_attr(not(target_os = "macos"), allow(dead_code))]
-use crate::board::{ticket_frame, Frame};
+use crate::window::{ticket_frame, Frame};
 
-/// Chrome's window bounds for a ticket on the screen whose visible area is `visible` (AppKit points: origin at the
-/// main screen's bottom left, y up). Chrome's scripting uses the top-left origin of the main screen, y down, so
-/// `main_height` (the main screen's full height) flips it. Returns x, y, width, height in whole points.
-pub fn chrome_bounds(visible: Frame, main_height: f64) -> [i64; 4] {
+/// Chrome's window bounds for a ticket on the screen whose free area is `visible`: x, y, width, height in whole points.
+/// Chrome's scripting and `Frame` share the top-left origin of the main screen.
+pub fn chrome_bounds(visible: Frame) -> [i64; 4] {
     let frame = ticket_frame(visible);
-    let top = main_height - (frame.y + frame.height);
-    [frame.x.round() as i64, top.round() as i64, frame.width.round() as i64, frame.height.round() as i64]
+    [frame.x.round() as i64, frame.y.round() as i64, frame.width.round() as i64, frame.height.round() as i64]
 }
 
 /// The process id of Chrome's default-profile instance in `ps -xww -o pid=,args=` output (this user's processes only): the main Chrome binary
@@ -143,7 +141,7 @@ pub use mac::{ask_permission_early, open};
 #[cfg(target_os = "macos")]
 mod mac {
     use super::{ask_again, chrome_bounds, default_chrome_pid, drain, output_within, script, Failure, Pending, PERMISSION_WAIT};
-    use crate::board::Frame;
+    use crate::window::Frame;
     use std::process::{Command, Stdio};
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Mutex;
@@ -153,8 +151,8 @@ mod mac {
     /// one window, not two.
     static LAST: Mutex<Option<(u32, i64)>> = Mutex::new(None);
     static PENDING: Mutex<Pending> = Mutex::new(Pending(None));
-    /// The newest request's screen: the visible area of the board's screen and the main screen's height.
-    static PLACE: Mutex<Option<(Frame, f64)>> = Mutex::new(None);
+    /// The newest request's screen: the free area of the board's screen.
+    static PLACE: Mutex<Option<Frame>> = Mutex::new(None);
     /// Set while the ticket worker runs (see `drain`).
     static RUNNING: AtomicBool = AtomicBool::new(false);
     /// Set after a run of ours timed out (it may have made a window it never reported); the next opening looks for
@@ -171,7 +169,7 @@ mod mac {
     /// The default-profile Chrome, started (without a window of its own) when it is not running.
     fn running_chrome() -> Result<u32, String> {
         if let Some(pid) = chrome_pid() { return Ok(pid); }
-        if !crate::chrome_installed() { return Err("Google Chrome is not installed".into()); }
+        if !crate::system::chrome_installed() { return Err("Google Chrome is not installed".into()); }
         let started = Command::new("open").args(["-na", "Google Chrome", "--args", "--no-startup-window"])
             .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|status| status.success());
         if !started { return Err("Google Chrome did not start".into()); }
@@ -238,9 +236,9 @@ mod mac {
     /// Runs one ticket on the worker.
     fn run(url: String, follow: bool) {
         let place = *PLACE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        let (visible, main_height) = place.unwrap_or((Frame { x: 0.0, y: 0.0, width: 1440.0, height: 900.0 }, 900.0));
+        let visible = place.unwrap_or(Frame { x: 0.0, y: 0.0, width: 1440.0, height: 900.0 });
         let mut last = LAST.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        match show(&mut last, &url, follow, visible, main_height) {
+        match show(&mut last, &url, follow, visible) {
             Ok(()) => RECOVER.store(false, Ordering::SeqCst),
             Err(Failure::TimedOut) => {
                 RECOVER.store(true, Ordering::SeqCst);
@@ -249,17 +247,17 @@ mod mac {
             Err(Failure::Failed(error)) if follow => eprintln!("sdlc-todo: the ticket window did not follow to {url} ({error})"),
             Err(Failure::Failed(error)) => {
                 eprintln!("sdlc-todo: the ticket could not open in Chrome ({error}); opening it in the default browser");
-                crate::open_url(&url);
+                crate::system::open_url(&url);
             }
         }
     }
 
-    fn show(last: &mut Option<(u32, i64)>, url: &str, follow: bool, visible: Frame, main_height: f64) -> Result<(), Failure> {
+    fn show(last: &mut Option<(u32, i64)>, url: &str, follow: bool, visible: Frame) -> Result<(), Failure> {
         let pid = running_chrome().map_err(Failure::Failed)?;
         may_automate(pid).map_err(Failure::Failed)?;
         let reuse = last.filter(|(owner, _)| *owner == pid).map(|(_, id)| id);
         let mut command = Command::new("osascript");
-        command.args(["-l", "JavaScript", "-e", &script(pid, url, reuse, chrome_bounds(visible, main_height), follow, RECOVER.load(Ordering::SeqCst))]);
+        command.args(["-l", "JavaScript", "-e", &script(pid, url, reuse, chrome_bounds(visible), follow, RECOVER.load(Ordering::SeqCst))]);
         // A run that times out records no window: the next opening finds it by its address (RECOVER), if it was made.
         let output = output_within(command, SCRIPT_LIMIT)?;
         if !output.status.success() {
@@ -272,21 +270,18 @@ mod mac {
         if follow { return Ok(()); }
         // Only Chrome's ticket window comes forward (no NSApplicationActivateAllWindows): the person's other Chrome
         // windows stay behind the board. Following never takes the keys away from the board.
-        dispatch::Queue::main().exec_async(move || {
-            use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
-            if let Some(chrome) = NSRunningApplication::runningApplicationWithProcessIdentifier(pid as i32) {
-                #[allow(deprecated)]
-                chrome.activateWithOptions(NSApplicationActivationOptions::empty());
-            }
-        });
+        use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
+        if let Some(chrome) = NSRunningApplication::runningApplicationWithProcessIdentifier(pid as i32) {
+            #[allow(deprecated)]
+            chrome.activateWithOptions(NSApplicationActivationOptions::empty());
+        }
         Ok(())
     }
 
     /// Shows `url` in the ticket window (`follow`: only an open one, left in place), off the calling thread; never
-    /// blocks the board. `visible` is the visible area of the board's screen and `main_height` the main screen's full
-    /// height, both read on the main thread.
-    pub fn open(url: String, follow: bool, visible: Frame, main_height: f64) {
-        *PLACE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some((visible, main_height));
+    /// blocks the board. `visible` is the free area of the board's screen.
+    pub fn open(url: String, follow: bool, visible: Frame) {
+        *PLACE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(visible);
         PENDING.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).push(url, follow);
         // One worker at a time: while one runs (a slow Chrome, the permission question) it picks this request up.
         if !RUNNING.load(Ordering::SeqCst) { std::thread::spawn(|| drain(&PENDING, &RUNNING, run)); }
@@ -298,13 +293,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bounds_dock_left_at_45_percent_in_chromes_top_left_coordinates() {
-        // A 1920×1080 main screen whose menu bar takes 31 points: the visible area is 0,0 1920×1049 in AppKit.
-        let main = Frame { x: 0.0, y: 0.0, width: 1920.0, height: 1049.0 };
-        assert_eq!(chrome_bounds(main, 1080.0), [0, 31, 864, 1049]);
-        // A display to the left of the main one, its top 148 points lower: AppKit y = 1080 - 148 - 1080 = -148.
-        let left = Frame { x: -1920.0, y: -148.0, width: 1920.0, height: 1080.0 };
-        assert_eq!(chrome_bounds(left, 1080.0), [-1920, 148, 864, 1080]);
+    fn bounds_dock_left_at_45_percent_in_top_left_coordinates() {
+        // A 1920×1080 main screen whose menu bar takes 31 points.
+        assert_eq!(chrome_bounds(Frame { x: 0.0, y: 31.0, width: 1920.0, height: 1049.0 }), [0, 31, 864, 1049]);
+        // A display to the left of the main one, its top 148 points lower.
+        assert_eq!(chrome_bounds(Frame { x: -1920.0, y: 148.0, width: 1920.0, height: 1080.0 }), [-1920, 148, 864, 1080]);
     }
 
     #[test]

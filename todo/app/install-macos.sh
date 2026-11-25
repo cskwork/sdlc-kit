@@ -16,7 +16,7 @@ cargo build --release --manifest-path "$here/Cargo.toml"
 xml() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' <<<"$1"; }
 env_entry() { printf '    <key>%s</key><string>%s</string>\n' "$1" "$(xml "$2")"; }
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-cp "$here/target/release/sdlc-todo" "$app/Contents/MacOS/sdlc-todo"
+cp "${CARGO_TARGET_DIR:-$here/target}/release/sdlc-todo" "$app/Contents/MacOS/sdlc-todo"
 cp "$here/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
 {
   cat <<PLIST

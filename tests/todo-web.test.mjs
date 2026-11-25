@@ -7,10 +7,14 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, renameSync
 import { tmpdir, networkInterfaces } from 'node:os';
 import { dirname, join, resolve, relative as pathRelative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startWeb, liveSession, runArgv, resolveCommand, commandSearchPath } from '../todo/web.mjs';
+import { startWeb as startNodeWeb, liveSession, proofOf, runArgv, resolveCommand, commandSearchPath } from '../todo/web.mjs';
 import * as core from '../todo/core.mjs';
+import { rustServer, startRustWeb } from './rust-server.mjs';
 
 const kit = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// SDLC_TODO_RUST_SERVE=<binary> runs these tests against the Rust server (todo/app/server).
+const startWeb = rustServer ? startRustWeb : startNodeWeb;
+const nodeOnly = { skip: rustServer && 'replaces the status runner inside the Node process' };
 const intent = `# Intent
 ## Understood as
 - O1: operator observes requested behavior.
@@ -473,7 +477,7 @@ test('B3: symlinked project reads and approves the reported status store with a 
   gateClosed(other, 'intent', slug);
 });
 
-test('N: artifact and approval use the status runner store instead of the realpath ancestor', async t => {
+test('N: artifact and approval use the status runner store instead of the realpath ancestor', nodeOnly, async t => {
   let store;
   const calls = [];
   const ctx = await web(t, { statusRunner: async (...args) => {
@@ -498,7 +502,7 @@ test('N: artifact and approval use the status runner store instead of the realpa
   assert.deepEqual(calls, Array(2).fill(['bash', [join(kit, 'sdlc.sh'), 'status', slug, '--json'], { cwd: dir }]));
 });
 
-for (const missing of [true, false]) test(`N: store lookup ${missing ? 'without a reported store' : 'failure'} never falls back to a project ancestor`, async t => {
+for (const missing of [true, false]) test(`N: store lookup ${missing ? 'without a reported store' : 'failure'} never falls back to a project ancestor`, nodeOnly, async t => {
   const ctx = await web(t, { statusRunner: async () => {
     if (missing) return { stdout: '{}' };
     throw new Error('status runner failed');
@@ -755,6 +759,51 @@ test('session file shares the running server with the owner only and goes away o
   assert.equal(await liveSession(session), null);
   writeFileSync(session, JSON.stringify({ port: Number(url.port), token: stored.token, pid: 1 }));
   assert.equal(await liveSession(session), null, 'a stale file whose server is gone is not live');
+});
+
+test('a session is live only when its server proves it holds the token, which never travels', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'sdlc-todo-proof-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = join(root, 'todo.md'), session = join(root, 'todo-web.json');
+  await core.add(file, 'One');
+  const server = await startWeb({ file, kit, port: 0, open: false, onUrl() {}, session, feed: join(root, 'feed.json') });
+  const { port, token } = JSON.parse(readFileSync(session, 'utf8'));
+  const nonce = 'ab'.repeat(16);
+  const ask = async path => { const response = await fetch(`http://127.0.0.1:${port}${path}`); return { status: response.status, body: await response.text() }; };
+  assert.deepEqual(JSON.parse((await ask(`/proof?n=${nonce}`)).body), { proof: proofOf(token, nonce) });
+  for (const path of ['/proof', '/proof?n=xyz', `/proof?n=${'AB'.repeat(16)}`]) assert.equal((await ask(path)).status, 400, path);
+  assert.ok(await liveSession(session));
+  await server.close();
+  // Another program on the port answers 200 to anything, or a made-up proof.
+  const http = await import('node:http');
+  const seen = [];
+  for (const answer of ['{"ok":true}', JSON.stringify({ proof: '0'.repeat(64) })]) {
+    const stranger = http.createServer((req, res) => { seen.push([req.url, JSON.stringify(req.headers)]); res.end(answer); });
+    await new Promise(resolve => stranger.listen(port, '127.0.0.1', resolve));
+    writeFileSync(session, JSON.stringify({ port, token, pid: 1 }));
+    assert.equal(await liveSession(session), null, answer);
+    await new Promise(resolve => stranger.close(resolve));
+  }
+  assert.equal(seen.length, 2);
+  // One that answers without end is cut off after 4 KiB, before anything is parsed, and is not live.
+  // 64 MiB is far more than the loopback buffers of any OS take (Linux took the whole 1 MiB a reader never asked for).
+  let sent = 0; const flood64 = 64 << 20;
+  const flood = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    const more = () => { while (sent < flood64 && res.write('{"proof":"' + 'a'.repeat(4096))) sent += 4106; if (sent < flood64) res.once('drain', more); else res.end(); };
+    more();
+  });
+  await new Promise(resolve => flood.listen(port, '127.0.0.1', resolve));
+  writeFileSync(session, JSON.stringify({ port, token, pid: 1 }));
+  // The size limit, not the 2 s timeout, is what stops it.
+  const started = performance.now();
+  assert.equal(await liveSession(session), null);
+  assert.ok(performance.now() - started < 1800, 'the byte limit stopped the read before the timeout');
+  flood.closeAllConnections?.();
+  await new Promise(resolve => flood.close(resolve));
+  assert.ok(sent < flood64, `stopped reading after ${sent} bytes were offered`);
+  assert.ok(seen.every(([url, headers]) => url.startsWith('/proof?n=') && !url.includes(token) && !headers.includes(token)));
+  assert.notEqual(seen[0][0], seen[1][0], 'a fresh nonce each time');
 });
 
 test('tray server streams the saved board before slow project status refresh', async t => {

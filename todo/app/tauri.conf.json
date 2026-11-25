@@ -1,0 +1,14 @@
+{
+  "productName": "To-do",
+  "identifier": "dev.sdlc-kit.todo",
+  "build": { "frontendDist": "ui" },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "capabilities": [],
+      "csp": "default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    }
+  },
+  "bundle": { "active": false, "icon": ["AppIcon.png", "AppIcon.icns", "AppIcon.ico"] }
+}

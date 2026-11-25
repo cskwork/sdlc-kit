@@ -1,38 +1,47 @@
+[workspace]
+members = ["server"]
+
 [package]
 name = "sdlc-todo"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.88"
 resolver = "3"
-description = "Tray app for the sdlc-kit personal to-do: a badge, notifications, replies, approvals and agent fixes"
+description = "Tray app for the sdlc-kit personal to-do: a badge, notifications and the web board in a window"
 license = "MIT"
 publish = false
 
+# A library with a mobile entry point and a thin desktop binary, as Tauri 2 lays an app out; only desktop is built.
+[lib]
+name = "sdlc_todo_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "sdlc-todo"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.6", default-features = false }
+
 [dependencies]
-eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
-tray-icon = "0.20"
+# Tauri 2.12 needs Rust 1.90; 2.11 is the newest line that builds with the kit's Rust 1.88.
+tauri = { version = "~2.11.6", default-features = false, features = ["wry", "tray-icon", "dynamic-acl", "common-controls-v6", "custom-protocol"] }
+tauri-plugin-single-instance = { version = "2.4", default-features = false }
 notify-rust = "4"
 ureq = { version = "2", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-ttf-parser = { version = "=0.25.1", default-features = false }
+sdlc-todo-server = { path = "server" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-# Already in the tree through winit; runs badge updates on the main thread while the window is hidden.
-dispatch = "0.2"
-# The board window: the web board in WKWebView (see src/board.rs). objc2 0.6 and objc2-app-kit 0.3 are already in the
-# tree through tray-icon; wry uses the same versions.
-wry = { version = "0.55", default-features = false }
+# The Chrome ticket window (src/ticket.rs) and the question before quitting (src/quit.rs); in the tree through tao.
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSGeometry", "NSNotification", "NSObject", "NSArray", "NSEnumerator"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSResponder", "NSWindow", "NSView", "NSScreen", "NSGraphics", "NSMenu", "NSMenuItem", "NSEvent", "NSRunningApplication", "libc"] }
-objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "WKWebView", "WKWebViewConfiguration"] }
-raw-window-handle = "0.6"
-# Maps the sealed system font instead of copying it (see src/theme.rs); in the lock file already, through winit on Linux.
-memmap2 = "=0.9.12"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSRunningApplication", "libc"] }
 
 [profile.release]
 opt-level = "s"
 lto = true
 codegen-units = 1
 strip = true
+# The server keeps a panic inside its thread; it refuses to build with "abort".
+panic = "unwind"

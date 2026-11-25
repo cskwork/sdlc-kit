@@ -564,7 +564,7 @@ body.resizing { cursor: col-resize; -webkit-user-select: none; user-select: none
 .reply label { font-size: 0.875rem; color: var(--muted); }
 .reply .actions { justify-content: flex-end; margin-top: 0.4rem; }
 .reply .hint { margin-top: 0.35rem; font-size: 0.75rem; }
-.panel-actions { display: flex; gap: 0.5rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.panel-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 .panel-details { margin-top: 0.5rem; }
 /* The kit's own instructions on a card an agent asked about: closed by default, under the one ask. */
 .agent-next { margin-top: 1rem; font-size: 0.875rem; }
@@ -668,6 +668,22 @@ body.resizing { cursor: col-resize; -webkit-user-select: none; user-select: none
 .keys-list dt { white-space: nowrap; }
 .keys-list dd { margin: 0; word-break: keep-all; overflow-wrap: break-word; }
 .keys-help .actions { justify-content: flex-end; }
+/* the tray app's own: text size and font, memos, a command for a terminal */
+.view-open { min-height: 2.25rem; padding: 0 0.75rem; }
+.view-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; }
+.view-row label, .view-row > span:first-child { margin: 0; font-size: 0.875rem; font-weight: 600; }
+.view-row select { max-inline-size: 16rem; background: var(--open-bg); color: var(--ink); }
+.view-size { display: inline-flex; align-items: center; gap: 0.5rem; }
+.view-size output { min-inline-size: 3.5rem; text-align: center; font-variant-numeric: tabular-nums; }
+.memo { margin-top: 1rem; font-size: 0.875rem; }
+.memo summary { min-height: 36px; padding: 0.4rem 0; color: var(--control); cursor: pointer; }
+.memo .hint { margin-top: 0.35rem; font-size: 0.75rem; }
+.run-typed code { display: block; margin-bottom: 0.5rem; font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 0.8125rem; overflow-wrap: anywhere; }
+.run-box .run-typed { margin-top: 0.5rem; }
+.choice-about { display: block; color: var(--muted); font-size: 0.875rem; font-weight: 400; }
+.choice.primary .choice-about { color: inherit; }
+.more-tickets { display: contents; }
+.working-now { color: var(--live); font-weight: 600; white-space: nowrap; }
 kbd {
   padding: 0.05rem 0.4rem; border-radius: 6px; background: var(--open-bg); color: var(--ink);
   font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 0.8125rem; font-variant-numeric: tabular-nums;
@@ -698,5 +714,8 @@ kbd {
 .run-confirm::backdrop { background: rgb(0 0 0 / 0.2); overflow: hidden; overscroll-behavior: contain; }
 .run-confirm h1 { margin: 0; font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; }
 .run-confirm .hint { margin-top: 0.35rem; }
+.delete-item { margin-top: 0.75rem; font-weight: 600; max-block-size: 40dvh; overflow-y: auto; overflow-wrap: anywhere; }
+.danger { background: var(--bad); color: var(--paper); font-weight: 600; padding: 0 1rem; }
+.danger:hover { background: color-mix(in oklab, var(--bad) 88%, var(--ink)); }
 .run-confirm .run-command { margin-top: 1rem; }
 .run-confirm .actions { justify-content: flex-end; margin-top: 1.25rem; }

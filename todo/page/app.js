@@ -59,6 +59,8 @@ class RequestError extends Error {
 }
 let inFlight = 0;
 async function api(path, body) {
+  // A change on its way would be lost with the page; a read would not.
+  if (!body) return request(path);
   inFlight++;
   try { return await request(path, body); } finally { inFlight--; }
 }
@@ -107,10 +109,18 @@ function announce(text) {
   announceTimer = setTimeout(() => { box.textContent = text; }, 50);
 }
 function showError(message) {
+  // Words that could not go along stay on screen until dismissed; other notices wait behind them.
+  if (typeof lost !== 'undefined' && lost.length && message?.key !== 'carry.lost') { console.error(say(message)); return; }
   show($('error-text'), message);
   $('error').hidden = false;
 }
-$('error-dismiss').addEventListener('click', () => { $('error').hidden = true; $('add-text').focus(); });
+$('error-dismiss').addEventListener('click', () => {
+  // A dismissed notice of words that could not go along is read; another notice in its place is not.
+  if ($('error-text')._message?.key === 'carry.lost') lost.length = 0;
+  $('error').hidden = true;
+  showLost();
+  $('add-text').focus();
+});
 
 // ---------- words shown to people ----------
 const basename = project => project.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || project;
@@ -371,6 +381,7 @@ function apply(data) {
   syncPane();
   if (detailId) renderDetail();
   for (const listener of listeners) listener();
+  restoreCarry();
   return before;
 }
 
@@ -393,9 +404,41 @@ function rowOf(node) { return node.closest('li.row'); }
 async function move(li, delta) {
   try { await op(li._item, 'move', { delta }, t(delta < 0 ? 'announce.movedUp' : 'announce.movedDown')); } catch { /* shown */ }
 }
-async function remove(li) {
-  const item = li._item;
-  if (!confirm(t('row.confirmDelete', { title: item.title }))) return;
+// A question before something that cannot be undone, in the page's own dialog: a webview window may show no confirm()
+// at all and answer it with no.
+const deleteDialog = $('delete-confirm');
+let deleteOpened = 0, deleteAnswer = null;
+// Resolves true only when the action was pressed; focus starts on the safe choice, so Enter changes nothing.
+function askFirst(kind, text) {
+  if (deleteDialog.open) return Promise.resolve(false);
+  for (const [part, key] of [['title', `${kind}.title`], ['note', `${kind}.note`], ['delete', `${kind}.confirm`], ['cancel', kind === 'quit' ? 'quit.stay' : 'run.cancel']]) {
+    const node = $(`delete-confirm-${part}`);
+    node.dataset.i18n = key;
+    node.textContent = t(key);
+  }
+  $('delete-confirm-item').textContent = text;
+  $('delete-confirm-item').hidden = !text;
+  deleteDialog.dataset.kind = kind;
+  deleteDialog.returnValue = '';
+  deleteOpened = Date.now();
+  deleteDialog.showModal();
+  $('delete-confirm-cancel').focus();
+  return new Promise(resolve => { deleteAnswer = resolve; });
+}
+// A key held or pressed as the dialog opens is meant for the row, not for its buttons.
+deleteDialog.addEventListener('keydown', event => {
+  if ((event.key === 'Enter' || event.key === ' ') && (event.repeat || event.isComposing || Date.now() - deleteOpened < 400)) event.preventDefault();
+});
+deleteDialog.addEventListener('close', () => {
+  const answer = deleteAnswer;
+  deleteAnswer = null;
+  answer?.(deleteDialog.returnValue === 'delete');
+});
+async function remove(li, from) {
+  const item = li._item, confirmed = await askFirst('delete', item.title);
+  // Closing gives focus back to the button; a row redrawn or a button hidden meanwhile cannot take it.
+  if (!from?.isConnected || !from.getClientRects().length) (rows.get(item.id) || addText).focus({ preventScroll: true });
+  if (!confirmed) return;
   try { await op(item, 'delete', {}, t('announce.deleted', { title: item.title })); } catch { /* shown */ }
 }
 
@@ -473,7 +516,7 @@ function wireList(list) {
     }
     else if (role === 'up') move(li, -1);
     else if (role === 'down') move(li, 1);
-    else if (role === 'delete') remove(li);
+    else if (role === 'delete') remove(li, target);
   });
   list.addEventListener('dblclick', event => {
     if (event.target.dataset.role === 'title' && event.target.tagName === 'SPAN') startEdit(rowOf(event.target));
@@ -523,7 +566,7 @@ document.addEventListener('keydown', event => {
   const t = event.target;
   // The list's add shortcut; the board has its own keys.
   if (document.body?.dataset?.view && document.body.dataset.view !== 'list') return;
-  if (($('detail').open && !isWide) || $('run-confirm').open || t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
+  if (($('detail').open && !isWide) || $('run-confirm').open || $('view-settings').open || deleteDialog.open || t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
   event.preventDefault();
   addText.focus();
 });
@@ -649,6 +692,7 @@ function renderDetail() {
   $('detail-gone').hidden = !!item;
   for (const form of [$('approve-form'), $('reply-form')]) for (const c of form.elements) c.disabled = !item;
   if (!item) {
+    $('detail-memo').hidden = true;
     artifact = null;
     $('artifact-box').hidden = $('decide').hidden = $('detail-agent-next').hidden = true;
     return;
@@ -666,7 +710,7 @@ function renderDetail() {
   next.hidden = !kit.length;
   $('detail-agent-next-list').replaceChildren(...kit.map(line => el('li', '', line)));
   if (actor === 'others') field(dl, t('field.others'), item.others);
-  if (!item.done && item.run) field(dl, t('field.run'), el('code', '', item.run));
+  if (!item.done && item.run) field(dl, t('field.run'), runCommandControl(item));
   if (actor === 'blocked') field(dl, t('field.problem'), item.error || item.sdlc?.action || t('field.unknown'));
   if (actor === 'blocked' && !item.error) field(dl, t('field.next'), fixButton(item));
   field(dl, t('field.project'), item.project);
@@ -679,6 +723,7 @@ function renderDetail() {
   if (item.sdlc) field(dl, t('field.work'), `${item.sdlc.slug}${item.sdlc.phase ? ` · ${phaseLabel(t, item.sdlc.phase)}` : ''}`);
   $('reply-box').hidden = item.done;
   seedReply(item);
+  renderMemo($('detail-memo'), item);
   renderChoices(item);
   const history = $('history');
   history.replaceChildren(...item.events.map(e => {
@@ -881,7 +926,7 @@ function connect() {
   clearTimeout(retryTimer);
   source?.close();
   source = new EventSource(`/events?t=${encodeURIComponent(token)}`);
-  source.addEventListener('open', () => { retry = 0; setLive('live', 'live.live'); $('error').hidden = true; });
+  source.addEventListener('open', () => { retry = 0; setLive('live', 'live.live'); if (!lost.length) $('error').hidden = true; });
   source.addEventListener('message', event => {
     try { received(JSON.parse(event.data)); } catch { /* ignore a malformed message */ }
   });
@@ -1062,16 +1107,226 @@ async function executeRun({ id, version, command, path }) {
   refreshRuns();
 }
 
+// ---------- the tray app ----------
+// In the tray app's window the shell offers window.todoApp (todo/app/src/board.rs): the person's own memos, text size
+// and font, kept in todo-app.json and never sent to the server or an agent, and a terminal for a typed command. A
+// browser has none of these, so their controls stay hidden there.
+const shell = globalThis.todoApp;
+let own = null; // { memos, size, sizes, font, fonts, terminal, follows } once the shell answered
+const memoDirty = new Set(), memoSaving = new Set(); // item ids whose memo is newer than the file, or on its way there
+let memoFailures = 0;
+const baseFont = () => getComputedStyle(document.body).fontFamily;
+let pageFont = '';
+// Every edit is sent at once, one save per item at a time, so the newest words are always the last ones written.
+async function writeMemo(id) {
+  memoDirty.add(id);
+  if (memoSaving.has(id)) return;
+  memoSaving.add(id);
+  while (memoDirty.has(id)) {
+    memoDirty.delete(id);
+    try { await shell.saveMemo(id, own.memos[id] || ''); memoFailures = 0; }
+    catch (error) {
+      // The words stay in the box and the window stays open (busy) while they are tried again.
+      memoDirty.add(id);
+      // A server being replaced refuses for a moment; only a lasting failure is worth a notice.
+      if (++memoFailures === 3) showError({ key: 'memo.failed', vars: { message: String(error?.message || error) } });
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+  memoSaving.delete(id);
+}
+// Shows an item's memo in `box` (a <details> with a textarea), in the list's details or the board's panel.
+function renderMemo(box, item) {
+  const field = $(`${box.id}-text`);
+  box.hidden = !own || !item || item.done;
+  if (box.hidden) { box.dataset.item = ''; return; }
+  const memo = own.memos[item.id] || '';
+  if (box.dataset.item !== item.id) { box.dataset.item = item.id; box.open = !!memo.trim(); field.value = memo; }
+  else if (document.activeElement !== field && field.value !== memo) field.value = memo;
+}
+function wireMemo(box) {
+  const field = $(`${box.id}-text`);
+  field.addEventListener('input', () => {
+    const id = box.dataset.item;
+    if (!own || !id) return;
+    own.memos[id] = field.value;
+    writeMemo(id);
+  });
+}
+const memoBoxes = [$('detail-memo'), $('panel-memo')];
+memoBoxes.forEach(wireMemo);
+function showView() {
+  const root = document.documentElement;
+  // The page is sized in rem, so the root's size is the text size.
+  root.style.fontSize = own.size === 100 ? '' : `${own.size}%`;
+  const name = own.fonts.find(font => font.file === own.font)?.name;
+  root.style.fontFamily = name ? `"${name.replace(/["\\]/g, '')}", ${pageFont}` : '';
+  $('view-size').textContent = `${own.size}%`;
+  $('view-smaller').disabled = own.size <= own.sizes[0];
+  $('view-larger').disabled = own.size >= own.sizes[1];
+  $('view-font').value = own.font;
+}
+// One save at a time, so the last choice is the one kept.
+let viewDirty = false, viewSaving = false;
+async function saveView() {
+  showView();
+  viewDirty = true;
+  if (viewSaving) return;
+  viewSaving = true;
+  while (viewDirty) {
+    viewDirty = false;
+    try { await shell.saveView(own.size, own.font); }
+    catch (error) { showError({ key: 'view.failed', vars: { message: String(error?.message || error) } }); }
+  }
+  viewSaving = false;
+}
+function sizeText(step) {
+  if (!own) return;
+  const next = step ? Math.min(own.sizes[1], Math.max(own.sizes[0], own.size + step)) : 100;
+  if (next === own.size) return;
+  own.size = next;
+  saveView();
+  announce(t('announce.textSize', { percent: next }));
+}
+async function connectShell() {
+  if (!shell) return;
+  try { own = await shell.state(); }
+  catch (error) { showError({ key: 'view.unavailable', vars: { message: String(error?.message || error) } }); return; }
+  if (own.error) showError({ key: 'view.setAside', vars: { message: own.error } });
+  pageFont = baseFont();
+  $('view-open').hidden = false;
+  const first = el('option', '');
+  first.value = '';
+  first.dataset.i18n = 'view.fontDefault';
+  first.textContent = t('view.fontDefault');
+  $('view-font').replaceChildren(first, ...own.fonts.map(font => { const option = el('option', '', font.name); option.value = font.file; return option; }));
+  showView();
+  if (detailId) { detailVersion = ''; renderDetail(); }
+  for (const listener of listeners) listener();
+  if (own.view) dispatchEvent(new CustomEvent('todo-view', { detail: own.view }));
+  pendingCarry = own.carried || null;
+  restoreCarry();
+  tellUnsent();
+  setInterval(tellUnsent, 1000);
+}
+// ---------- what outlives the page ----------
+// When its server is replaced the app's window loads the new server's page; what was typed here goes along: the shell
+// asks for it (carry), keeps it in memory, and the next page takes it up (restoreCarry). Nothing of it is stored.
+let pendingCarry = null, lastTyped = -Infinity;
+const carriers = { list: { take: takeList, put: putList } }; // board.js adds its own
+document.addEventListener('input', () => { lastTyped = Date.now(); tellUnsent(); });
+function carry() {
+  // Words handed to this page and not taken up yet go on as they came.
+  if (pendingCarry) return { ...pendingCarry, idle: 1e9 };
+  const active = document.activeElement, held = { idle: Math.min(Date.now() - lastTyped, 1e9) };
+  for (const [name, carrier] of Object.entries(carriers)) held[name] = carrier.take();
+  if (lost.length) held.list.lost = [...lost];
+  held.memos = own ? Object.fromEntries([...memoSaving].map(id => [id, own.memos[id] || ''])) : {};
+  if (active?.id && typeof active.selectionStart === 'number') held.focus = { id: active.id, at: active.selectionStart };
+  return held;
+}
+function takeList() {
+  const editing = [...(document.querySelectorAll?.('li.row.editing') || [])];
+  return {
+    drafts: [...drafts].filter(([, draft]) => (draft.reply.trim() && draft.reply !== draft.seed) || draft.words.trim()),
+    add: addText.value,
+    edits: editing.map(li => ({ id: li.dataset.id, text: li.querySelector('input.edit').value })),
+    open: dialog.open ? detailId : ''
+  };
+}
+// An item that went away takes its answer box with it: its words are shown once, so they can be copied.
+// All of them in one notice that stays, and keeps the window, until the person dismisses it.
+const lost = [];
+function lostWords(text) {
+  if (!text.trim()) return;
+  lost.push(text);
+  showError({ key: 'carry.lost', vars: { text: lost.join(' / ') } });
+}
+function showLost() { if (lost.length) showError({ key: 'carry.lost', vars: { text: lost.join(' / ') } }); }
+const openItem = id => items.find(item => item.id === id && !item.done);
+function putList(held) {
+  for (const [id, draft] of held.drafts || []) {
+    if (!openItem(id)) { lostWords([draft.reply, draft.words].filter(Boolean).join(' / ')); continue; }
+    drafts.set(id, draft);
+    if (detailId === id) { $('reply-text').value = draft.reply; $('approve-words').value = draft.words; updateCount(); }
+  }
+  for (const text of held.lost || []) lostWords(text);
+  if (held.add) addText.value = held.add;
+  if (held.open && openItem(held.open)) openDetail(held.open, null, false);
+  for (const edit of [...(held.edits || []), ...(held.edit ? [held.edit] : [])]) {
+    const li = rows.get(edit.id);
+    if (li && openItem(edit.id)) { startEdit(li); li.querySelector('input.edit').value = edit.text; }
+    else lostWords(edit.text);
+  }
+}
+// Needs the list, the shell's answer and the board's own part; whichever comes last calls it.
+function restoreCarry() {
+  if (!pendingCarry || !seenSnapshot || !own || !carriers.board) return;
+  const held = pendingCarry;
+  pendingCarry = null;
+  for (const [name, carrier] of Object.entries(carriers)) if (held[name]) carrier.put(held[name]);
+  for (const [id, text] of Object.entries(held.memos || {})) { own.memos[id] = text; writeMemo(id); }
+  for (const listener of listeners) listener();
+  if (detailId) { detailVersion = ''; renderDetail(); }
+  const field = held.focus && $(held.focus.id);
+  if (field && field.getClientRects().length) { field.focus({ preventScroll: true }); try { field.setSelectionRange(held.focus.at, held.focus.at); } catch { /* not a text field */ } }
+}
+// The shell must know before it quits whether something would be lost; an answer that did not arrive is sent again.
+let toldUnsent = null;
+function tellUnsent() {
+  if (!own || !shell.unsent || toldUnsent === busy()) return;
+  const now = toldUnsent = busy();
+  shell.unsent(now).catch(() => { toldUnsent = null; });
+}
+// Quit was asked for while something is unsent: true says the page asked the person.
+function askQuit() {
+  if (deleteDialog.open && deleteDialog.dataset.kind === 'quit') return true;
+  if (deleteDialog.open) deleteDialog.close('');
+  setTimeout(() => askFirst('quit', '').then(yes => { if (yes) shell.quit(); }), 0);
+  return true;
+}
+$('view-open').addEventListener('click', () => $('view-settings').showModal());
+$('view-smaller').addEventListener('click', () => sizeText(-10));
+$('view-larger').addEventListener('click', () => sizeText(10));
+$('view-font').addEventListener('change', () => { own.font = $('view-font').value; saveView(); });
+// ⌘/Ctrl with +, − and 0, as in a browser.
+document.addEventListener('keydown', event => {
+  if (!own || !(event.metaKey || event.ctrlKey) || event.altKey) return;
+  const step = { '+': 10, '=': 10, '-': -10, 0: 0 }[event.key];
+  if (step === undefined) return;
+  event.preventDefault();
+  sizeText(step);
+});
+// The button beside an item's `run` command: the app opens a terminal with it typed, not run; elsewhere it is copied.
+function runCommandControl(item) {
+  const box = el('div', 'run-typed'), terminal = !!own?.terminal;
+  const b = el('button', 'secondary', t(terminal ? 'run.openTerminal' : 'run.copy'));
+  b.type = 'button';
+  b.addEventListener('click', async () => {
+    try {
+      if (terminal) { if (await shell.openTerminal(item.id, item.run)) return; }
+      await navigator.clipboard.writeText(item.run);
+      announce(t('run.copied'));
+      b.textContent = t('run.copied');
+    } catch (error) { showError({ key: String(error?.message || error) === 'changed' ? 'run.changed' : terminal ? 'run.terminalFailed' : 'copy.failed' }); }
+  });
+  box.append(el('code', '', item.run), b);
+  if (terminal) box.append(el('p', 'hint', t('run.openTerminalHelp')));
+  return box;
+}
+
 // The board (board.js, a separate module) reads state and acts through this; the list keeps its own code paths.
-const busyChecks = [() => inFlight > 0 || adding || !!$('add-text').value.trim() ||
+const busyChecks = [() => inFlight > 0 || adding || memoSaving.size > 0 || !!pendingCarry || lost.length > 0 || !!document.querySelector?.('li.row.editing') || !!$('add-text').value.trim() ||
   [...drafts.values()].some(draft => (draft.reply.trim() && draft.reply !== draft.seed) || draft.words.trim())];
 const busy = () => busyChecks.some(check => check());
 globalThis.todoPage = {
   get items() { return items; }, get feed() { return feed; }, get feedError() { return feedError; },
   get lang() { return lang; }, get t() { return t; }, get token() { return token; },
-  api, apply, announce, showError, sourceOf, oneLine, say, seedDraft, renderRun, confirmRun,
+  api, apply, announce, showError, sourceOf, oneLine, say, seedDraft, renderRun, confirmRun, renderMemo, runCommandControl, busy, carry, askQuit, lostWords,
+  get shell() { return shell; }, get own() { return own; },
   subscribe(listener) { listeners.push(listener); if (seenSnapshot) listener(); },
-  addBusyCheck(check) { busyChecks.push(check); }
+  addBusyCheck(check) { busyChecks.push(check); },
+  addCarrier(name, carrier) { carriers[name] = carrier; restoreCarry(); }
 };
 
 // One board window: the tray opens a new app window (#…&app=1) on every click, so a newer one asks older ones to
@@ -1087,6 +1342,7 @@ function singleWindow(Channel = globalThis.BroadcastChannel, app = appWindow) {
   return channel;
 }
 singleWindow();
+connectShell();
 
 if (!token) {
   setLive('off', 'live.off');

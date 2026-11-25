@@ -22,6 +22,7 @@
       <button type="button" id="keys-open" class="quiet keys-open" data-i18n="keys.button">Keys</button></span>
     <span class="live" id="live" data-state="connecting"><span class="dot" aria-hidden="true"></span><span id="live-text">Connecting</span></span>
     <span id="board-updated" class="updated"></span>
+    <button type="button" id="view-open" class="quiet view-open" hidden data-i18n="view.button">Text</button>
     <label for="lang" class="visually-hidden" data-i18n="page.language">Language</label>
     <select id="lang" class="lang"></select>
     <div id="views" class="seg" role="group" aria-label="View" data-i18n-label="board.views">
@@ -65,10 +66,12 @@
           <p id="panel-ai-text"></p>
         </div>
         <p id="panel-background" class="why" hidden></p>
+        <p id="panel-changes" class="why" hidden></p>
         <p id="panel-why" class="why" hidden></p>
       </section>
       <p id="panel-target" class="target" hidden></p>
       <div id="panel-choices" class="choices board-choices" role="group" aria-label="Pick an answer" data-i18n-label="choices.label" hidden></div>
+      <section id="panel-typed" class="run-box" hidden aria-labelledby="panel-typed-title"><h3 id="panel-typed-title" data-i18n="field.run">Run in a terminal</h3><div id="panel-typed-body"></div></section>
       <section id="panel-run" class="run-box" hidden aria-labelledby="panel-run-title"></section>
       <section id="panel-gate" class="gate" hidden>
         <div id="panel-glance" class="artifact glance"></div>
@@ -88,8 +91,15 @@
         <summary data-i18n="panel.agentNext">What the agent does next</summary>
         <ul id="panel-agent-next-list"></ul>
       </details>
+      <details id="panel-memo" class="memo" hidden>
+        <summary data-i18n="memo.title">My memo</summary>
+        <label for="panel-memo-text" class="visually-hidden" data-i18n="memo.title">My memo</label>
+        <textarea id="panel-memo-text" rows="2" aria-describedby="panel-memo-help"></textarea>
+        <p id="panel-memo-help" class="hint" data-i18n="memo.help">Only you see this; it is not sent to agents.</p>
+      </details>
       <div class="panel-actions">
         <button type="button" id="panel-ticket" class="secondary" data-i18n="panel.ticket">Open ticket</button>
+        <span id="panel-tickets" class="more-tickets"></span>
         <button type="button" id="panel-more" class="quiet" aria-expanded="false" aria-controls="panel-details">More</button>
       </div>
       <div id="panel-details" class="panel-details" hidden>
@@ -210,6 +220,12 @@
     </form>
   </section>
 
+  <details id="detail-memo" class="memo" hidden>
+    <summary data-i18n="memo.title">My memo</summary>
+    <label for="detail-memo-text" class="visually-hidden" data-i18n="memo.title">My memo</label>
+    <textarea id="detail-memo-text" rows="2" aria-describedby="detail-memo-help"></textarea>
+    <p id="detail-memo-help" class="hint" data-i18n="memo.help">Only you see this; it is not sent to agents.</p>
+  </details>
   <section aria-labelledby="history-title">
     <h3 id="history-title" data-i18n="history.title">History</h3>
     <ol id="history" class="history"></ol>
@@ -250,6 +266,32 @@
   <form method="dialog" class="actions">
     <button type="submit" value="cancel" class="secondary" data-i18n="run.cancel">Cancel</button>
     <button type="submit" value="run" id="run-confirm-run" class="primary" data-i18n="run.confirm">Run</button>
+  </form>
+</dialog>
+<dialog id="view-settings" class="keys-help" closedby="any" aria-labelledby="view-title">
+  <h2 id="view-title" data-i18n="view.title">Text size and font</h2>
+  <div class="view-row">
+    <span id="view-size-label" data-i18n="view.size">Text size</span>
+    <span class="view-size" role="group" aria-labelledby="view-size-label">
+      <button type="button" id="view-smaller" class="secondary" aria-label="Smaller text" data-i18n-label="detail.smaller">−</button>
+      <output id="view-size">100%</output>
+      <button type="button" id="view-larger" class="secondary" aria-label="Larger text" data-i18n-label="detail.larger">+</button>
+    </span>
+  </div>
+  <div class="view-row">
+    <label for="view-font" data-i18n="view.font">Font</label>
+    <select id="view-font" class="lang"></select>
+  </div>
+  <form method="dialog" class="actions"><button type="submit" class="secondary" data-i18n="keys.close">Close</button></form>
+</dialog>
+<!-- app.js writes the words: deleting an item, or quitting the app with something unsent. -->
+<dialog id="delete-confirm" class="run-confirm" role="alertdialog" aria-labelledby="delete-confirm-title" aria-describedby="delete-confirm-item delete-confirm-note">
+  <h1 id="delete-confirm-title" ></h1>
+  <p id="delete-confirm-item" class="delete-item"></p>
+  <p id="delete-confirm-note" class="hint" ></p>
+  <form method="dialog" class="actions">
+    <button type="submit" value="cancel" id="delete-confirm-cancel" class="secondary" autofocus></button>
+    <button type="submit" value="delete" id="delete-confirm-delete" class="danger"></button>
   </form>
 </dialog>
 <div id="tip" class="tip" popover="manual" role="tooltip"></div>

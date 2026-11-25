@@ -1408,13 +1408,13 @@ test('brief: an item carries a markdown brief that round-trips and reaches the J
 
 test('brief template: every At a glance label is one the app reads, so agents and the app share one format', () => {
   const template = readFileSync(join(kit, 'todo', 'brief.md'), 'utf8');
-  const app = readFileSync(join(kit, 'todo', 'app', 'src', 'main.rs'), 'utf8');
+  const app = readFileSync(join(kit, 'todo', 'page', 'board.js'), 'utf8');
   const glance = template.split('## At a glance')[1].split('\n## ')[0];
   const labels = [...glance.matchAll(/^- \*\*([^*]+):\*\* /gm)].map(match => match[1]);
   assert.deepEqual(labels, ['Your call', 'What changes', 'AI pick', 'Phase', 'Background', 'Why']);
   for (const label of labels) {
-    const read = label === 'Phase' ? 'labeled(&glance.1, "Phase")' : `field("${label}")`;
-    assert.ok(app.includes(read), `the app reads ${label}`);
+    const name = label.toLowerCase(), read = [`fields['${name}']`, `fields.${name}`, `['panel-${name.split(' ').pop()}', '${name}']`];
+    assert.ok(read.some(text => app.includes(text)), `the board reads ${label}`);
   }
 });
 
