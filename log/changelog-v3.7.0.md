@@ -14,3 +14,4 @@
 
 - New selftest assertion in `regression_uncommitted`: after an uncommitted PASS, the receipt equals `$(git rev-parse HEAD) $(git write-tree)` once the reviewed files are staged, and the PASS prints the receipt line.
 - The nested-repository review still prints under 400 bytes.
+- `sdlc.sh` stays within 600 lines (599) and the phase prompts within 6000 words (5992).

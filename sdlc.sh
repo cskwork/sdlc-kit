@@ -333,16 +333,12 @@ heads_unchanged() {
     [ "$(git -C "$top" rev-parse -q --verify HEAD 2>/dev/null)" = "$rhead" ] || return 1
   done < <(printf '%s' "$heads" | awk -F'\t' '{for(j=1;j<NF;j+=2)print $j "\t" $(j+1)}')
 }
-# A PASS bound to uncommitted changes writes a pre-commit-gate receipt ("HEAD tree") into each such
-# repository's git folder, so a pre-commit hook that requires one accepts the commit of exactly the
-# reviewed change (https://github.com/cskwork/pre-commit-gate-skill). Prints each repository written.
+# Each head+tree a PASS bound becomes that repository's pre-commit-gate receipt ("HEAD tree"), which
+# cskwork/pre-commit-gate-skill's hook checks before a commit. Prints one line per repository written.
 write_receipts() {
-  local rhead top path
-  while IFS=$'\t' read -r rhead top; do
-    case "$rhead" in *+*) :;; *) continue;; esac
+  local rhead top path; while IFS=$'\t' read -r rhead top; do case "$rhead" in *+*) :;; *) continue;; esac
     path=$(git -C "$top" rev-parse --path-format=absolute --git-path pre-commit-gate-receipt) || die "cannot locate the git folder: $top"
-    printf '%s %s\n' "${rhead%%+*}" "${rhead#*+}" > "$path" || die "cannot write the pre-commit-gate receipt: $path"
-    printf '%s\n' "$top"
+    printf '%s %s\n' "${rhead%%+*}" "${rhead#*+}" > "$path" || die "cannot write the pre-commit-gate receipt: $path"; printf '%s\n' "$top"
   done < <(printf '%s' "$heads" | awk -F'\t' '{for(j=1;j<NF;j+=2)print $j "\t" $(j+1)}')
 }
 # PLAN.md without its Scenarios section, hashed: what a diff review judged the code against.
