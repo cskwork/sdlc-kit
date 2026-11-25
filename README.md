@@ -192,7 +192,14 @@ Optional config.md keys, with their defaults: `transcripts:` and `peers:`
 `dream_every: 3` and `dream_max_days: 14`, `stages:` (empty: one-step
 shipping; see Shipping in stages),
 `prune: gradle-home .gradle node_modules build .m2 target` (empty prunes
-nothing) and `archive_warn_mb: 50`.
+nothing), `archive_warn_mb: 50`, and `artifacts:` (empty: none): untracked
+build outputs that the dirty-tree check of score and check ship, and the
+change review --uncommitted binds, leave out. Write globs relative to each
+repository's top, as git status lists them (`artifacts: dist-dev/, coverage/`;
+an untracked folder is matched as one path). A warning names each path left
+out; tracked or modified files always count. Name the build folders
+explicitly: a broad glob such as `*` or `*.js` would also hide a new source
+file you forgot to commit, and score would pass without it.
 
 ## Config
 

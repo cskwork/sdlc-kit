@@ -1,0 +1,8 @@
+# Extended regexes (grep -E, case-insensitive) that must not appear in any tracked file.
+# sdlc-kit is public: no company domains, internal ticket keys or product names.
+# One pattern per line; lines starting with # and blank lines are ignored.
+A20-[0-9]
+dong-?a
+d-aidt
+aidt
+동아

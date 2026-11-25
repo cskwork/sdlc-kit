@@ -14,6 +14,25 @@ export function statusOf(item) {
   if (item.unread) return { actor: 'agent', kind: 'handoff' };
   return { actor: 'agent', kind: item.sdlc ? 'agent' : 'new' };
 }
+// The person's turn comes from an agent's own question (waiting) or command (exec), not from the kit alone.
+// Then that ask is the one thing shown first; the kit's own instructions wait behind a disclosure.
+export function agentAsks(item) {
+  const status = statusOf(item);
+  return status.actor === 'you' && !status.gate && !!(item.waiting || item.exec);
+}
+// The same work as the item that asks: the same sdlc slug. Only its kit instructions fold behind the ask; an item
+// for other work with its own NEEDS-HUMAN step stays a task of the person's.
+export const sameWork = (asker, member) => !!asker.sdlc?.slug && member.sdlc?.slug === asker.sdlc.slug;
+// What the agent does next on the item that asks: its own sdlc action (an instruction, or check and error text
+// from sdlc status), the actions of other items on the card for the same work whose turn is the person's, then a
+// feed entry's next step. Lines that repeat an agent's waiting text, or each other, are left out.
+export function agentNextOf(asker, members = [asker], entry = null) {
+  const waits = new Set(members.map(member => (member.waiting || '').trim()).filter(Boolean));
+  const kin = members.filter(member => member !== asker && !member.done && statusOf(member).actor === 'you' && sameWork(asker, member));
+  const lines = [asker, ...kin].map(member => member.sdlc?.action);
+  if (entry && typeof entry.nextStep === 'string') lines.push(entry.nextStep);
+  return [...new Set(lines.map(line => typeof line === 'string' ? line.trim() : '').filter(line => line && !waits.has(line)))];
+}
 // The status words, with how long an agent has been working and on what: "Working now · 12 min · build".
 export function statusLabel(t, item, now = Date.now()) {
   const { kind } = statusOf(item), label = t(`status.${kind}`);
@@ -75,7 +94,7 @@ export function doneAtOf(item) {
   return timeOf(([...events].reverse().find(event => /^(done|DONE)\b/.test(event.what)) || events.at(-1))?.at);
 }
 const isEntry = value => !!value && typeof value === 'object' && !Array.isArray(value);
-// A feed entry matches a card by its ticket label (A20-1531), else by a member's sdlc slug (as key or `slug`).
+// A feed entry matches a card by its ticket label (PROJ-123), else by a member's sdlc slug (as key or `slug`).
 export function feedEntryOf(feed, members) {
   const entries = isEntry(feed) && isEntry(feed.items) ? feed.items : null;
   if (!entries) return null;

@@ -26,6 +26,9 @@ jobs:
           git config --global core.symlinks true
           git config --global core.autocrlf false
         shell: bash
+      - name: no company names, domains or internal ticket keys in tracked files
+        run: bash tests/public-trace.sh
+        shell: bash
       - name: selftest
         run: bash tests/selftest.sh
         shell: bash

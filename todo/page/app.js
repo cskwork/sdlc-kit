@@ -1,6 +1,6 @@
 // To-do page. Rows are patched by id so drafts, focus and scroll survive live updates.
 import { defaultLanguage, isLanguage, languages, locales, phaseLabel, translator } from './i18n.mjs';
-import { countsOf, displayCommand, queueOf, shellWord, statusLabel, statusOf, ticketGroups, visibleText } from './status.mjs';
+import { agentAsks, agentNextOf, countsOf, displayCommand, queueOf, sameWork, shellWord, statusLabel, statusOf, ticketGroups, visibleText } from './status.mjs';
 const $ = id => document.getElementById(id);
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -162,9 +162,15 @@ function buildRow(item) {
     refs.waitLine = el('div', 'wait-line');
     refs.waitLabel = el('span', 'wait-label');
     refs.waitWhat = el('span');
+    refs.waitNext = el('details', 'agent-next');
+    refs.waitNextSummary = el('summary');
+    refs.waitNextSummary.dataset.i18n = 'panel.agentNext';
+    refs.waitNextText = el('span');
+    refs.waitNext.append(refs.waitNextSummary, refs.waitNextText);
+    refs.waitNext.hidden = true;
     refs.review = button('', 'review');
     refs.review.className = 'text-button';
-    refs.waitLine.append(refs.waitLabel, refs.waitWhat, refs.review);
+    refs.waitLine.append(refs.waitLabel, refs.waitWhat, refs.waitNext, refs.review);
     main.append(refs.waitLine);
   }
   const tools = el('div', 'tools');
@@ -199,7 +205,10 @@ function buildRow(item) {
   return li;
 }
 function chip(text, className = 'chip') { return el('span', className, text); }
-function updateRow(li, item) {
+// An agent's question (or command) is the row's one ask; its own kit action waits in a closed "what the agent
+// does next". behind: another item on the ticket asks about the same work, so this row's kit instruction is not
+// a second ask and folds the same way.
+function updateRow(li, item, behind = false) {
   const r = li._refs;
   li._item = item;
   if (!li.classList.contains('editing') && r.title.textContent !== item.title) r.title.textContent = item.title;
@@ -220,8 +229,15 @@ function updateRow(li, item) {
     r.waitLabel.hidden = !stop;
     r.waitLabel.dataset.actor = status.actor;
     r.waitLabel.textContent = stop ? t(`stop.${status.actor}`) : '';
-    r.waitWhat.textContent = yours ? item.waiting || (status.gate ? '' : item.sdlc?.action || '') : '';
+    const asks = yours && agentAsks(item);
+    const folded = asks ? agentNextOf(item)[0] || '' : yours && behind && !status.gate ? item.sdlc?.action || '' : '';
+    const what = !yours ? '' : asks ? item.waiting || t('run.ask') : folded ? '' : item.waiting || (status.gate ? '' : item.sdlc?.action || '');
+    r.waitWhat.textContent = what;
     r.waitWhat.hidden = !r.waitWhat.textContent;
+    r.waitNext.hidden = !folded;
+    if (!folded) r.waitNext.open = false;
+    r.waitNextSummary.textContent = t('panel.agentNext');
+    r.waitNextText.textContent = folded;
     r.review.hidden = !yours;
     r.review.textContent = yours ? t(`action.${status.kind}`) : '';
     r.review.setAttribute('aria-label', yours ? t('row.actionFor', { action: t(`action.${status.kind}`), title }) : '');
@@ -295,17 +311,21 @@ function headRow(ticket) {
 }
 function patchList(list, wanted, groups = false) {
   const entries = groups ? ticketGroups(wanted) : wanted.map(item => ({ item }));
-  const want = entries.flatMap(entry => entry.ticket ? [headRow(entry.ticket), ...entry.items.map(item => rowFor(list, item, true))] : [rowFor(list, entry.item, false)]);
+  const want = entries.flatMap(entry => {
+    if (!entry.ticket) return [rowFor(list, entry.item, false)];
+    const askers = entry.items.filter(agentAsks);
+    return [headRow(entry.ticket), ...entry.items.map(item => rowFor(list, item, true, askers.some(asker => asker !== item && sameWork(asker, item))))];
+  });
   const keep = new Set(want);
   for (const li of [...list.children]) if (!keep.has(li)) { if (li._head) heads.delete(li._head); else rows.delete(li.dataset.id); li.remove(); }
   want.forEach((li, i) => { if (list.children[i] !== li) list.insertBefore(li, list.children[i] || null); });
 }
 
-function rowFor(list, item, grouped) {
+function rowFor(list, item, grouped, asked = false) {
   let li = rows.get(item.id);
   if (li && li.parentElement !== list) { li.remove(); rows.delete(item.id); li = null; }
   if (!li) { li = buildRow(item); rows.set(item.id, li); }
-  updateRow(li, item);
+  updateRow(li, item, asked);
   li.classList.toggle('in-ticket', grouped);
   return li;
 }
@@ -441,7 +461,7 @@ function wireList(list) {
     // Anywhere else on a row, including its title, shows it in the side pane; links and the rename box keep their own job.
     if (!target || target.dataset.role === 'title') {
       const li = event.target.closest('li.row');
-      if (li && isWide && !event.target.closest('a, input')) openDetail(li.dataset.id, li, event.detail === 0);
+      if (li && isWide && !event.target.closest('a, input, details')) openDetail(li.dataset.id, li, event.detail === 0);
       return;
     }
     const li = rowOf(target);
@@ -630,7 +650,7 @@ function renderDetail() {
   for (const form of [$('approve-form'), $('reply-form')]) for (const c of form.elements) c.disabled = !item;
   if (!item) {
     artifact = null;
-    $('artifact-box').hidden = $('decide').hidden = true;
+    $('artifact-box').hidden = $('decide').hidden = $('detail-agent-next').hidden = true;
     return;
   }
   $('approve-submit').disabled = !artifact;
@@ -641,6 +661,10 @@ function renderDetail() {
   detailPill = pill(item);
   field(dl, t('field.status'), detailPill);
   if (actor === 'you') field(dl, t('field.next'), whatWaits(item));
+  const kit = agentAsks(item) ? agentNextOf(item) : [], next = $('detail-agent-next');
+  if (next.dataset.id !== item.id) { next.open = false; next.dataset.id = item.id; }
+  next.hidden = !kit.length;
+  $('detail-agent-next-list').replaceChildren(...kit.map(line => el('li', '', line)));
   if (actor === 'others') field(dl, t('field.others'), item.others);
   if (!item.done && item.run) field(dl, t('field.run'), el('code', '', item.run));
   if (actor === 'blocked') field(dl, t('field.problem'), item.error || item.sdlc?.action || t('field.unknown'));

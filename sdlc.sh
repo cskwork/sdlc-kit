@@ -367,7 +367,7 @@ worktree_tree() {
 # Uncommitted changes in repository $1, as git status run in $2 lists them, into dirty. The store is left
 # out, and so is every untracked nested repository (a worktree or clone inside it, listed by ls-files
 # with a trailing slash): it is never part of a commit, and git add would stage it as a gitlink. Its
-# path goes to nested and excludes. Tracked gitlinks are not untracked and stay in.
+# path goes to nested and excludes. Tracked gitlinks are not untracked and stay in. skip_artifacts drops config.md artifacts:.
 changes() {
   local path
   store_excludes "$1"; nested=()
@@ -377,6 +377,7 @@ changes() {
     case "$path" in */) nested[${#nested[@]}]=${path%/}; excludes[${#excludes[@]}]=":(top,exclude,literal)${path%/}";; esac
   done < <(git -C "$1" ls-files -o --exclude-standard -z)
   [ "${#nested[@]}" -eq 0 ] || dirty=$(git -C "$2" status --porcelain -- . "${excludes[@]}") || die "cannot inspect working tree: $2"
+  skip_artifacts "$1"
 }
 root_repo() {
   roottop=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null) || roottop=

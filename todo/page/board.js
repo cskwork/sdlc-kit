@@ -2,7 +2,7 @@
 // answers and approves in place. State and requests come from app.js (globalThis.todoPage); every item and feed
 // string is shown with textContent, never as HTML. Only renderMarkdown output (it escapes first) uses innerHTML.
 import { phaseLabel } from './i18n.mjs';
-import { boardCards, boardColumns, boardLanes, statusLabel, statusOf, timeOf, DAY_MS, STALE_DAYS } from './status.mjs';
+import { agentAsks, agentNextOf, boardCards, boardColumns, boardLanes, statusLabel, statusOf, timeOf, DAY_MS, STALE_DAYS } from './status.mjs';
 
 const page = globalThis.todoPage;
 const $ = id => document.getElementById(id);
@@ -509,6 +509,7 @@ function renderPanel(now) {
     $('panel-reply-text').value = draft.reply;
     $('panel-error').hidden = true;
     $('panel-note').value = '';
+    $('panel-agent-next').open = false;
   } else if (seeded !== null) $('panel-reply-text').value = seeded;
   panelTarget = item;
   panelCard = card;
@@ -526,7 +527,9 @@ function renderPanel(now) {
   const fields = glance?.fields || {};
   const label = { you: 'panel.ask', blocked: 'panel.problem', others: 'panel.waitingOn', agent: 'panel.state', done: 'panel.state' }[statusOf(item).actor];
   $('panel-ask-label').textContent = t(label);
-  const question = questionOf(card, item, status, fields, now);
+  // An agent's own question is the ask: a work document's older "your call" does not replace it (a brief does).
+  const asks = agentAsks(item);
+  const question = questionOf(card, item, status, asks && !item.brief ? {} : fields, now);
   const ask = $('panel-question');
   ask.textContent = loading ? '' : question;
   ask.classList.toggle('skeleton', loading);
@@ -545,6 +548,7 @@ function renderPanel(now) {
   renderChoices(card, item);
   renderGate(item, doc, status);
   renderProblem(item, status);
+  renderAgentNext(card, item, asks);
   $('panel-reply').hidden = item.done;
   for (const control of $('panel-reply').elements) control.disabled = sending;
   const url = card.link?.url;
@@ -577,6 +581,12 @@ function renderChoices(card, item) {
     button.addEventListener('click', () => answer(card, item, label));
     return button;
   }));
+}
+// On a card an agent asked about, the kit's instructions and the feed's next step sit closed under the ask.
+function renderAgentNext(card, item, asks) {
+  const lines = asks ? agentNextOf(item, card.members, card.entry) : [];
+  $('panel-agent-next').hidden = !lines.length;
+  $('panel-agent-next-list').replaceChildren(...lines.map(line => el('li', '', line)));
 }
 function renderGate(item, doc, status) {
   const box = $('panel-gate');
@@ -624,7 +634,8 @@ function renderDetails(card, item, doc) {
   const repos = [...new Set(card.members.flatMap(member => member.repos || []))];
   if (repos.length) field(t('field.repos'), repos.join(', '));
   if (card.work) field(t('field.work'), `${card.work.sdlc.slug} · ${phaseLabel(t, card.work.sdlc.phase)} · ${card.work.sdlc.state}`);
-  field(t('panel.nextStep'), str(card.entry?.nextStep));
+  // Moved into the closed "what the agent does next" when an agent asked.
+  if (!agentAsks(item)) field(t('panel.nextStep'), str(card.entry?.nextStep));
   if (!item.done && item.run) field(t('field.run'), item.run);
   const members = $('panel-members');
   $('panel-members-box').hidden = card.members.length < 2;
