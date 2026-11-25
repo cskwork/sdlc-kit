@@ -57,7 +57,9 @@ Changes:
 
 Commit locally (the project's rules decide the message) and dispatch the
 reviewer (`roles/reviewer.md`, diff mode); where every commit needs the
-human's approval, review the uncommitted change instead. Record its verdict
+human's approval, or a pre-commit hook asks for a
+[pre-commit-gate](https://github.com/cskwork/pre-commit-gate-skill) receipt, review
+the uncommitted change instead. Record its verdict
 with `sdlc.sh review <slug> pass|fail "<one line>"`: the script reads the
 newest `review.md` round (each recording needs a new one) and binds a PASS to
 the HEAD of every repository in `--repos "<path> ..."` (before the note), else
@@ -66,7 +68,9 @@ many-repository root). `score` and `close` compare only repositories named
 on evidence `Commit` lines; each Commit must be that HEAD. For an uncommitted
 review, `sdlc.sh review <slug> pass --uncommitted "<one line>"` also binds the
 working tree of each repository with uncommitted changes (non-ignored files,
-tracked or not); the PASS output says what a Commit must then hold. Reverting or
+tracked or not); the PASS output says what a Commit must then hold, and the
+PASS writes each such repository's pre-commit-gate receipt, so `git add -A` and a
+commit of exactly that change pass the hook. Reverting or
 stashing the change, amending or rebasing the reviewed HEAD, or changing code
 after a PASS needs a new round; rewording a commit made on top does not.
 Recording hashes those files into the object store (not the index): ignore
