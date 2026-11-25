@@ -7,10 +7,14 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, renameSync
 import { tmpdir, networkInterfaces } from 'node:os';
 import { dirname, join, resolve, relative as pathRelative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startWeb, liveSession, runArgv, resolveCommand, commandSearchPath } from '../todo/web.mjs';
+import { startWeb as startNodeWeb, liveSession, runArgv, resolveCommand, commandSearchPath } from '../todo/web.mjs';
 import * as core from '../todo/core.mjs';
+import { rustServer, startRustWeb } from './rust-server.mjs';
 
 const kit = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// SDLC_TODO_RUST_SERVE=<binary> runs these tests against the Rust server (todo/app/server).
+const startWeb = rustServer ? startRustWeb : startNodeWeb;
+const nodeOnly = { skip: rustServer && 'replaces the status runner inside the Node process' };
 const intent = `# Intent
 ## Understood as
 - O1: operator observes requested behavior.
@@ -473,7 +477,7 @@ test('B3: symlinked project reads and approves the reported status store with a 
   gateClosed(other, 'intent', slug);
 });
 
-test('N: artifact and approval use the status runner store instead of the realpath ancestor', async t => {
+test('N: artifact and approval use the status runner store instead of the realpath ancestor', nodeOnly, async t => {
   let store;
   const calls = [];
   const ctx = await web(t, { statusRunner: async (...args) => {
@@ -498,7 +502,7 @@ test('N: artifact and approval use the status runner store instead of the realpa
   assert.deepEqual(calls, Array(2).fill(['bash', [join(kit, 'sdlc.sh'), 'status', slug, '--json'], { cwd: dir }]));
 });
 
-for (const missing of [true, false]) test(`N: store lookup ${missing ? 'without a reported store' : 'failure'} never falls back to a project ancestor`, async t => {
+for (const missing of [true, false]) test(`N: store lookup ${missing ? 'without a reported store' : 'failure'} never falls back to a project ancestor`, nodeOnly, async t => {
   const ctx = await web(t, { statusRunner: async () => {
     if (missing) return { stdout: '{}' };
     throw new Error('status runner failed');

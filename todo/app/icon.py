@@ -2,8 +2,7 @@
 """Draws the app icon: the tray glyph (a rounded check box) in white on an accent tile.
 
 Run on macOS with Pillow: python3 todo/app/icon.py. It writes AppIcon.icns, which install-macos.sh
-copies into the bundle, and AppIcon.png, which the app sets as its window and Dock icon at runtime
-(without it eframe shows its own default icon over the bundle's).
+copies into the bundle, AppIcon.ico, which the Windows program carries, and AppIcon.png, the board's favicon.
 """
 import pathlib
 import subprocess
@@ -46,6 +45,7 @@ def master(size=1024):
 def main():
     art = master()
     art.resize((256, 256), Image.Resampling.LANCZOS).save(HERE / "AppIcon.png")
+    art.resize((256, 256), Image.Resampling.LANCZOS).save(HERE / "AppIcon.ico", sizes=[(256, 256)])
     with tempfile.TemporaryDirectory() as tmp:
         iconset = pathlib.Path(tmp, "AppIcon.iconset")
         iconset.mkdir()

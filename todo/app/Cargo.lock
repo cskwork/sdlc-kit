@@ -2850,12 +2850,22 @@ version = "0.2.0"
 dependencies = [
  "notify-rust",
  "objc2-app-kit",
+ "sdlc-todo-server",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",
  "ureq",
+]
+
+[[package]]
+name = "sdlc-todo-server"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.3.4",
+ "libc",
+ "sha2",
 ]
 
 [[package]]

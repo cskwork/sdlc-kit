@@ -1,14 +1,11 @@
-//! The to-do server this app shows: find the running one, start one, stop the one it started, follow its events.
-//! The rest of the app knows the server only through `Launcher` and `Server`, so another server can take its place
-//! here.
+//! The to-do server this app shows: the one that already answers, else one it runs itself (the sdlc-todo-server
+//! crate). The rest of the app knows the server only through `Launcher`, `Server` and HTTP.
 use crate::model::Model;
-use serde::Deserialize;
 use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant};
+use std::path::PathBuf;
+use std::time::Duration;
 
-#[derive(Clone, Deserialize, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Session {
     pub port: u16,
     pub token: String,
@@ -25,7 +22,7 @@ impl Session {
     fn redact(&self, text: &str) -> String { text.replace(&self.token, "…") }
 }
 
-/// Where the server is found and how one is started.
+/// Where the server is found and what one started here serves.
 pub struct Launcher {
     pub session_file: PathBuf,
     pub kit: PathBuf,
@@ -33,61 +30,22 @@ pub struct Launcher {
     pub lang: String,
 }
 
-/// A server this app started.
-pub struct Server { child: Child }
+/// A server this app runs. `close` before the process ends: nothing does it on Windows otherwise.
+pub struct Server(sdlc_todo_server::Handle);
 
-impl Server {
-    /// Reaps it when it has exited by itself: its successor checks the file-lock owner's process id.
-    pub fn reap(&mut self) { let _ = self.child.try_wait(); }
-    pub fn stop(&mut self) { if self.child.kill().is_ok() { let _ = self.child.wait(); } }
-}
+impl Server { pub fn close(&self) { self.0.close(); } }
 
 impl Launcher {
-    /// The session of the server that answers now, if any.
-    pub fn find_live(&self) -> Option<Session> { live(&self.session_file) }
-
-    /// Starts `todo.mjs serve` and waits until its session answers.
-    pub fn start(&self) -> Result<(Server, Session), String> {
-        let script = self.kit.join("todo").join("todo.mjs");
-        let mut command = Command::new(&self.node);
-        command.arg(&script).arg("serve").arg("--lang").arg(&self.lang)
-            .env("SDLC_TODO_SESSION", &self.session_file)
-            .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-        }
-        let mut server = Server { child: command.spawn().map_err(|e| format!("{} {}: {e}", self.node, script.display()))? };
-        // The server syncs the whole board before listening. On a busy board this can take over a minute, so give
-        // startup longer than a regular HTTP request.
-        let startup_timeout = Duration::from_secs(90);
-        let deadline = Instant::now() + startup_timeout;
-        while Instant::now() < deadline {
-            if let Some(session) = self.find_live() { return Ok((server, session)); }
-            if let Ok(Some(status)) = server.child.try_wait() { return Err(format!("todo.mjs serve exited: {status}")); }
-            std::thread::sleep(Duration::from_millis(250));
-        }
-        server.stop();
-        Err(format!("todo.mjs serve did not answer in {} seconds", startup_timeout.as_secs()))
+    /// The server that answers for this list, or one started here.
+    pub fn find_or_start(&self) -> Result<(Session, Option<Server>), String> {
+        let options = sdlc_todo_server::Options::for_kit(&self.kit, &self.session_file, &self.node, &self.lang);
+        let (session, handle) = sdlc_todo_server::find_or_start(options)?;
+        Ok((Session { port: session.port, token: session.token }, handle.map(Server)))
     }
 }
 
 fn agent(read_timeout: Duration) -> ureq::Agent {
     ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(2)).timeout_read(read_timeout).build()
-}
-
-fn read_session(file: &Path) -> Option<Session> {
-    let session: Session = serde_json::from_str(&std::fs::read_to_string(file).ok()?).ok()?;
-    // Hexadecimal, as the server writes it: it goes into an address, where nothing else may come along.
-    (session.token.len() == 32 && session.token.bytes().all(|b| b.is_ascii_hexdigit())).then_some(session)
-}
-
-fn live(file: &Path) -> Option<Session> {
-    let session = read_session(file)?;
-    let response = agent(Duration::from_secs(2)).get(&format!("{}/api/live", session.origin()))
-        .set("X-Todo-Token", &session.token).call().ok()?;
-    (response.status() == 200).then_some(session)
 }
 
 /// Reads `/events` until the stream ends; each `data:` frame is the whole list.
@@ -122,12 +80,6 @@ mod tests {
 
     const TOKEN: &str = "0123456789abcdef0123456789abcdef";
 
-    fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("sdlc-todo-{name}-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     /// A server that answers one request with `response` and returns the request.
     fn once(response: &'static str) -> (u16, std::thread::JoinHandle<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -141,27 +93,32 @@ mod tests {
         }))
     }
 
+    /// The app's server end to end: started for a list, found again by its session file, followed, closed.
     #[test]
-    fn a_session_counts_only_while_its_server_answers_and_its_token_is_well_formed() {
-        let dir = scratch("session");
-        let file = dir.join("todo-web.json");
-        assert!(live(&file).is_none(), "no file");
-        std::fs::write(&file, "{ broken").unwrap();
-        assert!(live(&file).is_none());
-        for token in ["short", "0123456789abcdef0123456789abcde&", "0123456789abcdef0123456789abcde\""] {
-            std::fs::write(&file, serde_json::json!({ "port": 1, "token": token }).to_string()).unwrap();
-            assert!(read_session(&file).is_none(), "{token}");
-        }
-        let (port, served) = once("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}");
-        std::fs::write(&file, serde_json::json!({ "port": port, "token": TOKEN, "pid": 1 }).to_string()).unwrap();
-        assert!(live(&file).is_some_and(|session| session.port == port));
-        let request = served.join().unwrap();
-        assert!(request.starts_with("GET /api/live ") && request.to_lowercase().contains(&format!("x-todo-token: {TOKEN}")));
-        // Nothing listens there any more, or it refuses the token: not live.
-        assert!(live(&file).is_none());
-        let (port, _) = once("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-        std::fs::write(&file, serde_json::json!({ "port": port, "token": TOKEN }).to_string()).unwrap();
-        assert!(live(&file).is_none());
+    fn a_server_is_started_once_found_again_and_gone_after_close() {
+        let dir = std::env::temp_dir().join(format!("sdlc-todo-own-server-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("todo.md");
+        std::fs::write(&file, "# To-do\n\n## Open\n\n- [ ] One thing\n  - waiting: which?\n\n## Done\n").unwrap();
+        let launcher = Launcher { session_file: dir.join("todo-web.json"), kit: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."), node: "node".into(), lang: "ko".into() };
+        // Options::for_kit reads the list's path from the environment; no other test does.
+        std::env::set_var("SDLC_TODO", &file);
+        std::env::set_var("SDLC_TODO_FEED", dir.join("feed.json"));
+        let (session, server) = launcher.find_or_start().unwrap();
+        let server = server.expect("none was running");
+        let (again, second) = launcher.find_or_start().unwrap();
+        assert!(again == session && second.is_none(), "the running one is used");
+        let seen = std::sync::Mutex::new(None);
+        std::thread::scope(|scope| {
+            scope.spawn(|| follow(&session, |model| *seen.lock().unwrap() = Some((model.lang.clone(), model.waiting()))));
+            for _ in 0..200 {
+                if seen.lock().unwrap().is_some() { break; }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            server.close();
+        });
+        assert_eq!(*seen.lock().unwrap(), Some(("ko".to_string(), 1)));
+        assert!(!launcher.session_file.exists(), "its session file goes with it");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -180,16 +137,5 @@ mod tests {
         let error = follow(&Session { port, token: TOKEN.into() }, |_| {}).unwrap_err();
         assert!(!error.contains(TOKEN), "{error}");
         assert!(error.contains(&port.to_string()), "the address stays: {error}");
-    }
-
-    #[test]
-    fn a_server_that_cannot_start_or_exits_is_reported() {
-        let dir = scratch("launcher");
-        let launcher = |node: &str| Launcher { session_file: dir.join("none.json"), kit: dir.clone(), node: node.into(), lang: "en".into() };
-        assert!(launcher("/nonexistent/node").start().is_err_and(|e| e.contains("/nonexistent/node")));
-        // `cargo --version serve …` exits at once, on every system that builds this.
-        let error = launcher(env!("CARGO")).start().err().unwrap();
-        assert!(error.contains("exited"), "{error}");
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

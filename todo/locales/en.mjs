@@ -305,6 +305,7 @@ export default {
     'panel.state': 'Where it is',
     'panel.ai': 'AI pick',
     'panel.background': 'Background',
+    'panel.changes': 'Once you answer',
     'panel.why': 'Why',
     'panel.target': 'Your answer goes to “{title}”',
     'panel.noGlance': 'This document has no At a glance section. Open More to read it in full.',

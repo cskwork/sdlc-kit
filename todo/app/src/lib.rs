@@ -37,8 +37,9 @@ struct Shared {
     session: Option<Session>,
     /// The server whose page the board window shows or loads.
     loaded: Option<Session>,
-    /// The server this app started.
+    /// The server this app runs, and whether the app is on its way out.
     server: Option<Server>,
+    leaving: bool,
 }
 
 impl Shared {
@@ -79,13 +80,11 @@ struct Args { session: PathBuf, kit: PathBuf, node: String, lang: String, backgr
 
 const USAGE: &str = "usage: sdlc-todo [--session FILE] [--kit DIR] [--node PATH] [--lang en|ko] [--background]";
 
-/// Reads the environment (`env`) and the command line (`list`, without the program).
-fn args(env: impl Fn(&str) -> Option<String>, list: impl Iterator<Item = String>, exe: Option<PathBuf>) -> Result<Args, String> {
-    let home = env("HOME").or_else(|| env("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
-    let todo = env("SDLC_TODO").map(PathBuf::from).unwrap_or_else(|| home.join(".sdlc").join("todo.md"));
+/// Reads the environment (`env`) and the command line (`list`, without the program); `session` is the server's own
+/// default for the session file.
+fn args(session: PathBuf, env: impl Fn(&str) -> Option<String>, list: impl Iterator<Item = String>, exe: Option<PathBuf>) -> Result<Args, String> {
     let mut parsed = Args {
-        session: env("SDLC_TODO_SESSION").map(PathBuf::from)
-            .unwrap_or_else(|| todo.parent().map(|d| d.join("todo-web.json")).unwrap_or_default()),
+        session,
         // An app bundle names the kit and node in its Info.plist environment; built in place, the binary sits at
         // <kit>/todo/app/target/release/.
         kit: env("SDLC_TODO_KIT").map(PathBuf::from).or_else(|| exe.and_then(|exe| exe.ancestors().nth(5).map(PathBuf::from))).unwrap_or_default(),
@@ -129,26 +128,19 @@ fn connect(app: AppHandle, launcher: Launcher, mut open_once: bool) {
         board::offline(&app);
     };
     loop {
-        let session = match launcher.find_live() {
-            Some(session) => session,
-            None => {
-                {
-                    let mut shared = lock(&shell.shared);
-                    // Reap an exited server before its successor checks file-lock owners.
-                    if let Some(server) = shared.server.as_mut() { server.reap(); }
-                }
-                match launcher.start() {
-                    Ok((server, session)) => {
-                        let old = lock(&shell.shared).server.replace(server);
-                        if let Some(mut old) = old { old.stop(); }
-                        session
-                    }
-                    Err(error) => {
-                        offline(error);
-                        std::thread::sleep(Duration::from_secs(5));
-                        continue;
-                    }
-                }
+        let session = match launcher.find_or_start() {
+            Ok((session, None)) => session,
+            Ok((session, Some(server))) => {
+                // Quitting while this one started: `leave` has run and will not see it.
+                if lock(&shell.shared).leaving { return server.close(); }
+                let old = lock(&shell.shared).server.replace(server);
+                if let Some(old) = old { old.close(); }
+                session
+            }
+            Err(error) => {
+                offline(error);
+                std::thread::sleep(Duration::from_secs(5));
+                continue;
             }
         };
         lock(&shell.shared).session = Some(session.clone());
@@ -175,11 +167,16 @@ fn connect(app: AppHandle, launcher: Launcher, mut open_once: bool) {
     }
 }
 
-/// Ends the app; `leave` then keeps the board's place and stops the server it started.
+/// On every way out (Quit, ⌘Q, logout): keeps the board's place and closes the server this app runs.
 fn leave(app: &AppHandle) {
     board::save_place(app);
-    let server = lock(&app.state::<Shell>().shared).server.take();
-    if let Some(mut server) = server { server.stop(); }
+    let server = {
+        let shell = app.state::<Shell>();
+        let mut shared = lock(&shell.shared);
+        shared.leaving = true;
+        shared.server.take()
+    };
+    if let Some(server) = server { server.close(); }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -198,12 +195,12 @@ fn start() -> Result<(), String> {
         let bundled = std::env::current_exe().is_ok_and(|exe| exe.to_string_lossy().contains(".app/Contents/MacOS/"));
         let _ = notify_rust::set_application(if bundled { "dev.sdlc-kit.todo" } else { "com.apple.Terminal" });
     }
-    let args = args(|name| std::env::var_os(name).map(|value| value.to_string_lossy().to_string()), std::env::args().skip(1), std::env::current_exe().ok())?;
+    let args = args(sdlc_todo_server::session_path(), |name| std::env::var_os(name).map(|value| value.to_string_lossy().to_string()), std::env::args().skip(1), std::env::current_exe().ok())?;
     let lang = Lang::parse(&args.lang);
     let prefs_file = args.session.with_file_name("todo-app.json");
     let (prefs, prefs_error) = Prefs::load(&prefs_file);
     let shell = Shell {
-        shared: Mutex::new(Shared { model: Model::default(), conn: Conn::Connecting, session: None, loaded: None, server: None }),
+        shared: Mutex::new(Shared { model: Model::default(), conn: Conn::Connecting, session: None, loaded: None, server: None, leaving: false }),
         prefs: Mutex::new(prefs), prefs_error: Mutex::new(prefs_error),
         window_file: prefs_file.with_file_name("todo-app-window.json"), prefs_file,
         start_lang: lang, allowed: Mutex::new(HashSet::new()),
@@ -258,7 +255,7 @@ mod tests {
 
     fn session(port: u16) -> Session { Session { port, token: "0123456789abcdef0123456789abcdef".into() } }
     fn shared(conn: Conn, session: Option<Session>, loaded: Option<Session>) -> Shared {
-        Shared { model: Model::default(), conn, session, loaded, server: None }
+        Shared { model: Model::default(), conn, session, loaded, server: None, leaving: false }
     }
 
     #[test]
@@ -295,15 +292,14 @@ mod tests {
         let kit_text = kit.to_string_lossy().to_string();
         let read = |env: &[(&str, &str)], list: &[&str]| {
             let env: Vec<(String, String)> = env.iter().map(|(k, v)| (k.to_string(), v.to_string())).chain([("SDLC_TODO_KIT".to_string(), kit_text.clone())]).collect();
-            args(move |name| env.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone()), list.iter().map(|s| s.to_string()).collect::<Vec<_>>().into_iter(), None)
+            args(PathBuf::from("/d/todo-web.json"), move |name| env.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone()), list.iter().map(|s| s.to_string()).collect::<Vec<_>>().into_iter(), None)
         };
         let plain = read(&[("HOME", "/h")], &[]).unwrap();
-        assert_eq!(plain.session, Path::new("/h").join(".sdlc").join("todo-web.json"));
+        assert_eq!(plain.session, Path::new("/d/todo-web.json"));
         assert_eq!((plain.node.as_str(), plain.lang.as_str(), plain.background), ("node", "en", false));
-        let env = [("SDLC_TODO", "/l/todo.md"), ("SDLC_TODO_NODE", "/n"), ("SDLC_TODO_LANG", "ko"), ("SDLC_TODO_BACKGROUND", "1")];
+        let env = [("SDLC_TODO_NODE", "/n"), ("SDLC_TODO_LANG", "ko"), ("SDLC_TODO_BACKGROUND", "1")];
         let set = read(&env, &[]).unwrap();
-        assert_eq!((set.session, set.node, set.lang, set.background), (Path::new("/l").join("todo-web.json"), "/n".into(), "ko".into(), true));
-        assert_eq!(read(&[("SDLC_TODO_SESSION", "/s.json")], &[]).unwrap().session, Path::new("/s.json"));
+        assert_eq!((set.node, set.lang, set.background), ("/n".into(), "ko".into(), true));
         let flags = read(&env, &["--lang", "en", "--session", "/f.json", "--background", "-psn_0_1"]).unwrap();
         assert_eq!((flags.session, flags.lang), (PathBuf::from("/f.json"), "en".to_string()));
         assert!(read(&[], &["--what", "x"]).unwrap_err().contains("usage:"));

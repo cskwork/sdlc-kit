@@ -1413,8 +1413,8 @@ test('brief template: every At a glance label is one the app reads, so agents an
   const labels = [...glance.matchAll(/^- \*\*([^*]+):\*\* /gm)].map(match => match[1]);
   assert.deepEqual(labels, ['Your call', 'What changes', 'AI pick', 'Phase', 'Background', 'Why']);
   for (const label of labels) {
-    const read = label === 'Phase' ? 'labeled(&glance.1, "Phase")' : `field("${label}")`;
-    assert.ok(app.includes(read), `the app reads ${label}`);
+    const name = label.toLowerCase(), read = [`fields['${name}']`, `fields.${name}`, `['panel-${name.split(' ').pop()}', '${name}']`];
+    assert.ok(read.some(text => app.includes(text)), `the board reads ${label}`);
   }
 });
 

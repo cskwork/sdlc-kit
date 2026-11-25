@@ -549,17 +549,17 @@ function renderPanel(now) {
   panelTarget = item;
   panelCard = card;
   const words = cardWords(card), status = statusOf(item), glance = doc && !doc.pending && !doc.error ? glanceOf(doc.markdown) : null;
+  const fields = glance?.fields || {};
   $('panel-title').textContent = words.key ? words.title : (card.work || item).title;
   // The ticket and project sit with the status under the title, not as a label above it.
   const tags = [[words.key, 'tag key-tag'], [projectChip(card), 'tag'], [t(`board.lane.${card.lane}`), `tag tone-${toneOf(card)}`],
-    [t(`board.column.${card.column}`), 'tag'], [item.done || item.pin ? '' : mustDecide(item, status) ? t('decide.yours') : status.actor === 'you' ? t('decide.suggested') : '', 'tag'], [card.chip, 'tag'], [ageOf(card, now), 'tag']];
+    [t(`board.column.${card.column}`), 'tag'], [card.work || !fields.phase ? '' : phaseLabel(t, fields.phase.toLowerCase()), 'tag'], [item.done || item.pin ? '' : mustDecide(item, status) ? t('decide.yours') : status.actor === 'you' ? t('decide.suggested') : '', 'tag'], [card.chip, 'tag'], [ageOf(card, now), 'tag']];
   $('panel-tags').replaceChildren(...tags.filter(([text]) => text).map(([text, className]) => el('span', className, text)));
 
   // What the human is asked, from the brief's At a glance when there is one.
   const sent = card.members.find(member => member.status !== 'blocked' && statusOf(member).kind === 'handoff');
   $('panel-sent').hidden = !sent;
   if (sent) $('panel-sent').textContent = t('board.sentWhat', { text: lastReply(sent) || '…' });
-  const fields = glance?.fields || {};
   const label = { you: 'panel.ask', blocked: 'panel.problem', others: 'panel.waitingOn', agent: 'panel.state', done: 'panel.state' }[statusOf(item).actor];
   $('panel-ask-label').textContent = t(label);
   // An agent's own question is the ask: a work document's older "your call" does not replace it (a brief does).
@@ -571,10 +571,10 @@ function renderPanel(now) {
   const pick = plain(str(fields['ai pick'])).replace(/^AI\s*(?:권장|pick)\s*[:：]\s*/i, '');
   $('panel-ai').hidden = !pick;
   $('panel-ai-text').textContent = pick;
-  for (const [id, name] of [['panel-background', 'background'], ['panel-why', 'why']]) {
+  for (const [id, name] of [['panel-background', 'background'], ['panel-changes', 'what changes'], ['panel-why', 'why']]) {
     const value = plain(fields[name]);
     $(id).hidden = !value;
-    $(id).replaceChildren(el('span', 'muted-label', t(`panel.${name}`)), document.createTextNode(value));
+    $(id).replaceChildren(el('span', 'muted-label', t(`panel.${id.slice(6)}`)), document.createTextNode(value));
   }
   const target = $('panel-target');
   target.hidden = card.members.length < 2 || item.done;
