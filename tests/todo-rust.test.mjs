@@ -383,3 +383,30 @@ test('rust: a marker whose time cannot be read is left out of the list alone, fa
   assert.ok(text.includes('"what":"odd"'), 'sent without another write once the time can be read');
   assert.equal(core.load(file).items.filter(other => other.title === 'stored once').length, 1);
 });
+
+test('rust: a status refresh that fails after a recorded approval is retried until the card is right, with no further request', posix, async t => {
+  const dir = scratch(t), file = join(dir, 'todo.md'), lock = `${file}.lock`, approved = join(dir, 'approved'), failed = join(dir, 'failed');
+  // After the approval, the first status call leaves the list locked by someone else, so that refresh cannot be written.
+  writeFileSync(join(dir, 'sdlc.sh'), `if [ "$1" = approve ]; then touch '${approved}'; exit; fi
+state=NEEDS-HUMAN; action='approve plan'
+if [ -f '${approved}' ]; then state=READY; action='build it'; [ -f '${failed}' ] || { touch '${failed}'; echo other > '${lock}'; }; fi
+printf '{"store":"${dir}/.sdlc","features":[{"slug":"s","phase":"plan","state":"%s","action":"%s"}]}\\n' "$state" "$action"
+`);
+  writeFileSync(file, `## Open\n\n- [ ] a\n  - project: ${dir}\n  - sdlc: s · plan · NEEDS-HUMAN — approve plan\n`);
+  const server = await startRustWeb({ file, kit: dir, feed: join(dir, 'feed.json'), onUrl() {} });
+  t.after(() => server.close());
+  const at = new URL(server.url), token = new URLSearchParams(at.hash.slice(1)).get('t'), stop = new AbortController();
+  t.after(() => stop.abort());
+  let text = '';
+  const response = await fetch(`${at.origin}/events?t=${token}`, { signal: stop.signal });
+  (async () => { for await (const chunk of response.body) text += Buffer.from(chunk).toString(); })().catch(() => {});
+  const model = core.load(file);
+  const answer = await call(server.url, '/api/approve', { id: model.items[0].id, version: core.itemVersion(model.items[0], model), gate: 'plan', sha: 'a'.repeat(64), words: 'ok' });
+  assert.equal(answer.status, 200, answer.text);
+  assert.equal(core.load(file).items[0].sdlc.state, 'NEEDS-HUMAN', 'the refresh failed');
+  assert.equal(readFileSync(lock, 'utf8'), 'other\n');
+  rmSync(lock);
+  for (let i = 0; i < 300 && !text.includes('"state":"READY"'); i++) await new Promise(done => setTimeout(done, 50));
+  assert.ok(text.includes('"state":"READY"'), 'the stream shows it');
+  assert.equal(core.load(file).items[0].events.filter(event => event.what.startsWith('approved plan')).length, 1);
+});

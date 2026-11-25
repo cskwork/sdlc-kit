@@ -129,6 +129,7 @@ struct Server {
     search_path: OnceLock<String>,
     /// This server's nonce: it knows its own runs, whatever process id they carry.
     run_server: String,
+    resync: Mutex<Option<Resync>>,
     closing: AtomicBool,
     /// Something was left out of a frame or an answer; the watcher sends the whole list when it can.
     incomplete: AtomicBool,
@@ -253,7 +254,7 @@ pub fn start(options: Options) -> Result<Handle, String> {
     let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     let server = Arc::new(Server { options, port, token, list, publishing: Mutex::default(), clients: Mutex::default(), feed, syncing: Mutex::default(), search_path: OnceLock::new(), run_server,
-        closing: AtomicBool::new(false), incomplete: AtomicBool::new(false), connections: AtomicUsize::new(0), strangers: Mutex::default() });
+        resync: Mutex::default(), closing: AtomicBool::new(false), incomplete: AtomicBool::new(false), connections: AtomicUsize::new(0), strangers: Mutex::default() });
     server.mark_dead_runs().map_err(|e| e.message)?;
     let handle = Handle { server };
     match begin(&handle.server, listener, watched) {
@@ -300,6 +301,10 @@ fn spawn(name: &str, work: impl FnOnce() + Send + 'static) -> Result<(), String>
 // ---------- watching ----------
 const RETRY_FIRST: Duration = Duration::from_secs(1);
 const RETRY_MOST: Duration = Duration::from_secs(30);
+/// A status refresh to try again; after `left` more failures the next sync anyone asks for does it.
+#[derive(Clone, Copy)]
+struct Resync { at: Instant, wait: Duration, left: u32 }
+const RESYNC_TRIES: u32 = 10;
 /// When the watcher next has something to do besides a changed file: a marker runs out, or a change not yet shown is tried again.
 struct View { expiry: Option<i64>, retry: Option<(Instant, Duration)>, flush_at: Instant }
 type Stat = Option<(Option<SystemTime>, i64, i64, u64, u64)>;
@@ -314,15 +319,30 @@ fn stat(file: &str) -> Stat {
 
 impl Server {
     /// Polls the list, the working markers and the feed four times a second, as fs.watchFile does.
-    fn watch(&self, mut files: [(Stat, String); 3]) {
+    fn watch(self: Arc<Server>, mut files: [(Stat, String); 3]) {
         // The first look works the expiry out, and repeats it until it can.
         let mut view = View { expiry: None, retry: Some((Instant::now(), RETRY_FIRST)), flush_at: Instant::now() + KEEPALIVE };
         while !self.closing.load(Ordering::SeqCst) {
             std::thread::sleep(Duration::from_millis(250));
-            let round = std::panic::AssertUnwindSafe(|| self.look(&mut files, &mut view));
+            let round = std::panic::AssertUnwindSafe(|| { self.look(&mut files, &mut view); self.sync_again(); });
             // The next round goes on from the state this one left.
             if std::panic::catch_unwind(round).is_err() { eprintln!("to-do watcher: a round failed"); }
         }
+    }
+    /// Starts a due status refresh on its own thread: it takes seconds, and frames must not wait for it.
+    fn sync_again(self: &Arc<Server>) {
+        let due = { let mut slot = locked(&self.resync); if slot.is_some_and(|r| Instant::now() >= r.at) { slot.take() } else { None } };
+        let Some(due) = due else { return };
+        let again = Resync { at: Instant::now() + due.wait, left: due.left - 1, ..due };
+        let server = self.clone();
+        let started = spawn("todo-sync", move || {
+            let Err(error) = server.synced() else { return };
+            eprintln!("to-do sync: {error}");
+            let wait = (due.wait * 2).min(RETRY_MOST);
+            // A newer approval's own retry, if there is one, stays.
+            if due.left > 1 { locked(&server.resync).get_or_insert(Resync { at: Instant::now() + wait, wait, left: due.left - 1 }); }
+        });
+        if started.is_err() && due.left > 1 { locked(&self.resync).get_or_insert(again); }
     }
     fn look(&self, files: &mut [(Stat, String); 3], view: &mut View) {
         let mut changed = [false; 3];
@@ -771,8 +791,11 @@ impl Server {
             item.events.push(core::Event { at: js::stamp(), who: "human".into(), what: format!("approved {gate} — \"{words}\"") });
             Ok(())
         })?;
-        // The approval is recorded; a status refresh that fails now is done by the next sync.
-        if let Err(error) = sync::sync(&self.list, kit, "") { eprintln!("to-do sync: {}", error.message); }
+        // The approval is recorded; a status refresh that fails now is tried again by the watcher.
+        if let Err(error) = sync::sync(&self.list, kit, "") {
+            eprintln!("to-do sync: {}", error.message);
+            *locked(&self.resync) = Some(Resync { at: Instant::now() + RETRY_FIRST, wait: RETRY_FIRST, left: RESYNC_TRIES });
+        }
         Ok(())
     }
 }
