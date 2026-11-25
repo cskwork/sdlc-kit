@@ -717,11 +717,12 @@ async function loadArtifact() {
     if (id !== detailId || request !== artifactRequest) return;
     $('artifact-box').hidden = false;
     show($('artifact-title'), { key: data.gate ? 'artifact.approve' : 'artifact.document' });
-    const { renderMarkdown } = await import('./markdown.js');
+    const { renderMarkdown, addCopyButtons } = await import('./markdown.js');
     const rendered = renderMarkdown(data.markdown || '');
     if (id !== detailId || request !== artifactRequest) return;
     // The renderer escapes all HTML first; this is the page's only innerHTML.
     $('artifact').innerHTML = rendered;
+    addCopyButtons($('artifact'), { t: (key, vars) => t(key, vars), announce });
     $('artifact-file').textContent = data.file || '';
     if (!data.gate) return;
     artifact = { ...data, version };

@@ -141,3 +141,82 @@ export function renderMarkdown(text) {
   const source = String(text ?? '').replace(/<!--[\s\S]*?(?:-->|$)/g, '').replace(/\r\n?/g, '\n');
   return blocks(escape(source).replace(/\t/g, '    ').split('\n'));
 }
+
+// ---------- copy buttons ----------
+// Each fenced block (<pre><code>) gets a [Copy] button above it; inline code does not. The button is built with
+// DOM calls, sits outside the <code>, and copies code.textContent (the parsed, unescaped text), so the copy never
+// contains the label or HTML entities. t is read on every use, so a language change applies to the next label.
+const copyTimers = new WeakMap();
+let lastCopyMessage = '';
+// The renderer ends every block with one newline; a pasted command should wait for the person's Enter.
+export const codeText = code => String(code?.textContent ?? '').replace(/\n$/, '');
+
+function copyWithSelection(doc, text) {
+  const field = doc.createElement('textarea');
+  field.value = text;
+  field.setAttribute('readonly', '');
+  field.style.cssText = 'position:fixed;inset-block-start:0;opacity:0';
+  const before = doc.activeElement;
+  doc.body.append(field);
+  field.select();
+  try { return doc.execCommand('copy') === true; } catch { return false; } finally {
+    field.remove();
+    before?.focus?.({ preventScroll: true });
+  }
+}
+// On failure the block's text is left selected, so ⌘C / Ctrl+C still works.
+function selectCode(doc, code) {
+  const selection = doc.defaultView?.getSelection?.(), range = doc.createRange?.();
+  if (!selection || !range) return;
+  range.selectNodeContents(code);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+function report(button, code, ok, { t, announce }) {
+  const doc = button.ownerDocument;
+  clearTimeout(copyTimers.get(button));
+  button.dataset.state = ok ? 'copied' : 'failed';
+  button.dataset.i18n = ok ? 'copy.done' : 'copy.failed';
+  button.textContent = t(button.dataset.i18n);
+  if (!ok) selectCode(doc, code);
+  // VoiceOver skips a message equal to the last one; a no-break space makes a repeat differ without being read.
+  let message = button.textContent;
+  if (message === lastCopyMessage) message += ' ';
+  lastCopyMessage = message;
+  announce?.(message);
+  copyTimers.set(button, setTimeout(() => {
+    delete button.dataset.state;
+    button.dataset.i18n = 'copy.label';
+    button.textContent = t('copy.label');
+  }, ok ? 1500 : 4000));
+}
+export async function copyCode(button, code, options) {
+  const doc = button.ownerDocument, win = doc.defaultView || globalThis, text = codeText(code);
+  const clipboard = win.isSecureContext !== false ? win.navigator?.clipboard : null;
+  // Without the async clipboard the fallback runs at once, still inside the click that allows it.
+  if (typeof clipboard?.writeText !== 'function') return report(button, code, copyWithSelection(doc, text), options);
+  try {
+    await clipboard.writeText(text);
+    report(button, code, true, options);
+  } catch {
+    report(button, code, copyWithSelection(doc, text), options);
+  }
+}
+// Safe to call again on the same root: a block that already has a button is skipped.
+export function addCopyButtons(root, options) {
+  const doc = root.ownerDocument;
+  for (const pre of root.querySelectorAll('pre')) {
+    const code = pre.firstElementChild;
+    if (code?.tagName !== 'CODE' || pre.parentElement?.classList.contains('code-block')) continue;
+    const box = doc.createElement('div'), button = doc.createElement('button');
+    box.className = 'code-block';
+    button.type = 'button';
+    button.className = 'code-copy';
+    button.dataset.i18n = 'copy.label';
+    button.dataset.i18nTip = 'copy.tip';
+    button.textContent = options.t('copy.label');
+    button.addEventListener('click', () => copyCode(button, code, options));
+    pre.replaceWith(box);
+    box.append(button, pre);
+  }
+}

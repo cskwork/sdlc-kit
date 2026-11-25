@@ -81,3 +81,13 @@ test('phase labels are translated and an unknown phase shows as written', () => 
   assert.equal(phaseLabel(translator('en'), 'evidence'), 'Evidence');
   assert.equal(phaseLabel(translator('ko'), 'review'), 'Review');
 });
+
+test('code copy button words exist in both locales', () => {
+  const words = { en: ['Copy', 'Copied', "Couldn't copy — select it yourself"], ko: ['복사', '복사했어요', '복사하지 못했어요 — 직접 선택해 주세요'] };
+  for (const [language, [label, done, failed]] of Object.entries(words)) {
+    const t = translator(language);
+    assert.deepEqual([t('copy.label'), t('copy.done'), t('copy.failed')], [label, done, failed], language);
+    assert.notEqual(t('copy.tip'), 'copy.tip', `${language} tooltip`);
+    assert.notEqual(t('copy.tip'), label, `${language} tooltip adds words beyond the label`);
+  }
+});
