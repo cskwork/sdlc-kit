@@ -65,10 +65,10 @@ fn ask(kind: &str, value: &str, extra: &str) -> Result<Json, Fail> {
     Ok(answer)
 }
 
-/// Date.parse
-pub fn date(text: &str) -> Option<i64> {
-    if let Some(at) = super::js::parse_iso(text) { return Some(at); }
-    match ask("date", text, "") { Ok(Json::Num(at)) => Some(at as i64), _ => None }
+/// Date.parse, None for NaN.
+pub fn date(text: &str) -> Result<Option<i64>, Fail> {
+    if let Some(at) = super::js::parse_iso(text) { return Ok(Some(at)); }
+    Ok(match ask("date", text, "")? { Json::Num(at) => Some(at as i64), _ => None })
 }
 /// The message JSON.parse throws.
 pub fn json_error(text: &str) -> String { ask("jsonError", text, "").ok().and_then(|v| v.text()).unwrap_or_else(|| "invalid JSON".into()) }

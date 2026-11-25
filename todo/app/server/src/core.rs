@@ -841,7 +841,7 @@ pub fn apply_readings(list: &List, readings: &[Reading], only: &str) -> Result<(
 }
 
 // ---------- working markers ----------
-pub struct Mark { pub what: Text, pub since: Text, pub beat: Text }
+pub struct Mark { pub what: Text, pub since: Text, pub beat: Text, pub at: i64 }
 pub fn working_path(file: &str) -> String { join(&dirname(file), &["todo-working.json"]) }
 pub fn working_ttl() -> i64 {
     // Number(env): only plain decimals are used; anything else keeps the default.
@@ -849,17 +849,18 @@ pub fn working_ttl() -> i64 {
     seconds.map_or(180_000, |s| (s * 1000.0) as i64)
 }
 /// Live markers only; a missing or unreadable file is no marker.
-pub fn read_working(file: &str, now: i64) -> Vec<(Text, Mark)> {
-    let Ok(text) = read_text(&working_path(file)) else { return Vec::new() };
-    let Some(Json::Obj(marks)) = json::parse(&text) else { return Vec::new() };
-    let ttl = working_ttl();
-    marks.into_iter().filter_map(|(id, mark)| {
-        let (Some(Json::Str(since)), Some(Json::Str(beat))) = (mark.get("since"), mark.get("beat")) else { return None };
-        let at = helper::date(&beat.lossy())?;
-        if now - at >= ttl || at > now + 5000 { return None; }
+pub fn read_working(file: &str, now: i64) -> Result<Vec<(Text, Mark)>, Fail> {
+    let Ok(text) = read_text(&working_path(file)) else { return Ok(Vec::new()) };
+    let Some(Json::Obj(marks)) = json::parse(&text) else { return Ok(Vec::new()) };
+    let (ttl, mut live) = (working_ttl(), Vec::new());
+    for (id, mark) in marks {
+        let (Some(Json::Str(since)), Some(Json::Str(beat))) = (mark.get("since"), mark.get("beat")) else { continue };
+        let Some(at) = helper::date(&beat.lossy())? else { continue };
+        if now - at >= ttl || at > now + 5000 { continue; }
         let what = match mark.get("what") { Some(Json::Str(what)) => what.clone(), _ => Text::default() };
-        Some((id, Mark { what, since: since.clone(), beat: beat.clone() }))
-    }).collect()
+        live.push((id, Mark { what, since: since.clone(), beat: beat.clone(), at }));
+    }
+    Ok(live)
 }
 impl Mark {
     pub fn json(&self) -> Json { object(vec![("what", Json::Str(self.what.clone())), ("since", Json::Str(self.since.clone())), ("beat", Json::Str(self.beat.clone()))]) }
@@ -868,7 +869,9 @@ impl Mark {
 fn follow_ids(file: &str, before: &HashMap<u64, String>, model: &Model) -> Result<(), Fail> {
     let moved: Vec<(Text, Text)> = model.items.iter().filter_map(|i| before.get(&i.uid).filter(|old| **old != i.id).map(|old| (old.as_str().into(), i.id.as_str().into()))).collect();
     if moved.is_empty() { return Ok(()); }
-    let mut marks: Vec<(Text, Json)> = read_working(file, js::now_ms()).into_iter().map(|(id, mark)| (id, mark.json())).collect();
+    // The list is saved already: a marker that cannot be read now stays as it is rather than fail that change.
+    let Ok(marks) = read_working(file, js::now_ms()) else { return Ok(()) };
+    let mut marks: Vec<(Text, Json)> = marks.into_iter().map(|(id, mark)| (id, mark.json())).collect();
     let find = |marks: &[(Text, Json)], id: &Text| marks.iter().position(|(k, _)| k == id);
     if !moved.iter().any(|(old, new)| find(&marks, old).is_some() || find(&marks, new).is_some()) { return Ok(()); }
     let carried: Vec<(Text, Option<Json>)> = moved.iter().map(|(old, new)| (new.clone(), find(&marks, old).map(|i| marks[i].1.clone()))).collect();
