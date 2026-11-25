@@ -786,18 +786,22 @@ test('a session is live only when its server proves it holds the token, which ne
   }
   assert.equal(seen.length, 2);
   // One that answers without end is cut off after 4 KiB, before anything is parsed, and is not live.
-  let sent = 0;
+  // 64 MiB is far more than the loopback buffers of any OS take (Linux took the whole 1 MiB a reader never asked for).
+  let sent = 0; const flood64 = 64 << 20;
   const flood = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    const more = () => { while (sent < 1 << 20 && res.write('{"proof":"' + 'a'.repeat(4096))) sent += 4106; if (sent < 1 << 20) res.once('drain', more); else res.end(); };
+    const more = () => { while (sent < flood64 && res.write('{"proof":"' + 'a'.repeat(4096))) sent += 4106; if (sent < flood64) res.once('drain', more); else res.end(); };
     more();
   });
   await new Promise(resolve => flood.listen(port, '127.0.0.1', resolve));
   writeFileSync(session, JSON.stringify({ port, token, pid: 1 }));
+  // The size limit, not the 2 s timeout, is what stops it.
+  const started = performance.now();
   assert.equal(await liveSession(session), null);
+  assert.ok(performance.now() - started < 1800, 'the byte limit stopped the read before the timeout');
   flood.closeAllConnections?.();
   await new Promise(resolve => flood.close(resolve));
-  assert.ok(sent < 1 << 20, `stopped reading after ${sent} bytes were offered`);
+  assert.ok(sent < flood64, `stopped reading after ${sent} bytes were offered`);
   assert.ok(seen.every(([url, headers]) => url.startsWith('/proof?n=') && !url.includes(token) && !headers.includes(token)));
   assert.notEqual(seen[0][0], seen[1][0], 'a fresh nonce each time');
 });
