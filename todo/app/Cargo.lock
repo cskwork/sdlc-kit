@@ -3146,12 +3146,22 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "objc2-web-kit",
  "raw-window-handle",
+ "sdlc-todo-server",
  "serde",
  "serde_json",
  "tray-icon",
  "ttf-parser",
  "ureq",
  "wry",
+]
+
+[[package]]
+name = "sdlc-todo-server"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.3.4",
+ "libc",
+ "sha2",
 ]
 
 [[package]]

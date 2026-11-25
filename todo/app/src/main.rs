@@ -1,5 +1,6 @@
-//! sdlc-todo: a small tray app for the sdlc-kit to-do. It never edits todo.md itself; every
-//! change goes through the same web API as the browser page, so the TUI, page and app agree.
+//! sdlc-todo: a small tray app for the sdlc-kit to-do. Its windows never edit todo.md; every change goes
+//! through the same web API as the browser page, so the TUI, page and app agree. When no server runs, the app
+//! serves that API itself (the sdlc-todo-server crate).
 #![cfg_attr(windows, windows_subsystem = "windows")]
 mod board;
 mod client;
@@ -15,7 +16,6 @@ use prefs::Prefs;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::process::Child;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
@@ -29,7 +29,8 @@ struct Shared {
     conn: Conn,
     session: Option<Session>,
     board_session: Option<Session>,
-    child: Option<Child>,
+    /// The server this app runs when no other one answered.
+    server: Option<sdlc_todo_server::Handle>,
     toast: Option<(String, bool, Instant)>,
     artifacts: HashMap<String, Result<Artifact, String>>,
     busy: HashSet<String>,
@@ -253,9 +254,8 @@ fn quit(state: &State) -> ! {
     // The board's place waits half a second after a move; a quit right after one keeps it too.
     #[cfg(target_os = "macos")]
     board::save_now();
-    if let Ok(mut shared) = state.lock() {
-        if let Some(mut child) = shared.child.take() { let _ = child.kill(); }
-    }
+    let server = state.lock().ok().and_then(|mut shared| shared.server.take());
+    if let Some(server) = server { server.close(); }
     std::process::exit(0)
 }
 
@@ -268,19 +268,12 @@ fn connect(state: State, ctx: egui::Context, launcher: Launcher, lang: Lang, mut
             let session = match client::live(&launcher.session_file) {
                 Some(session) => session,
                 None => {
-                    {
-                        let mut shared = state.lock().unwrap();
-                        shared.conn = Conn::Connecting;
-                        // Reap an exited server before its successor checks file-lock owners.
-                        if let Some(child) = shared.child.as_mut() { let _ = child.try_wait(); }
-                    }
+                    state.lock().unwrap().conn = Conn::Connecting;
                     ctx.request_repaint();
                     match launcher.serve() {
-                        Ok((child, session)) => {
-                            let mut shared = state.lock().unwrap();
-                            if let Some(mut old) = shared.child.replace(child) {
-                                if old.kill().is_ok() { let _ = old.wait(); }
-                            }
+                        Ok((server, session)) => {
+                            let old = state.lock().unwrap().server.replace(server);
+                            if let Some(old) = old { old.close(); }
                             session
                         }
                         Err(error) => {
@@ -334,7 +327,7 @@ impl App {
         theme::install(&cc.egui_ctx, &prefs.font);
         cc.egui_ctx.set_zoom_factor(prefs.zoom);
         let state: State = Arc::new(Mutex::new(Shared {
-            model: None, conn: Conn::Connecting, session: None, board_session: None, child: None,
+            model: None, conn: Conn::Connecting, session: None, board_session: None, server: None,
             toast: prefs_error.map(|error| (error, true, Instant::now())),
             artifacts: HashMap::new(), busy: HashSet::new(),
         }));

@@ -1,11 +1,10 @@
-//! Talks to the to-do web server: finds it through the session file, starts `todo.mjs serve`
+//! Talks to the to-do web server: finds it through the session file, starts the app's own (server/)
 //! when none runs, follows `/events`, and posts the same requests as the web page.
 use serde::Deserialize;
 use serde_json::Value;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[derive(Clone, Deserialize, PartialEq, Eq)]
 pub struct Session {
@@ -133,30 +132,11 @@ pub fn live(file: &PathBuf) -> Option<Session> {
 }
 
 impl Launcher {
-    /// Starts `todo.mjs serve` and waits until its session answers.
-    pub fn serve(&self) -> Result<(Child, Session), String> {
-        let script = self.kit.join("todo").join("todo.mjs");
-        let mut command = Command::new(&self.node);
-        command.arg(&script).arg("serve").arg("--lang").arg(&self.lang)
-            .env("SDLC_TODO_SESSION", &self.session_file)
-            .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-        }
-        let mut child = command.spawn().map_err(|e| format!("{} {}: {e}", self.node, script.display()))?;
-        // The server syncs the whole board before listening. On a busy board this can
-        // take over a minute, so give startup longer than a regular HTTP request.
-        let startup_timeout = Duration::from_secs(90);
-        let deadline = Instant::now() + startup_timeout;
-        while Instant::now() < deadline {
-            if let Some(session) = live(&self.session_file) { return Ok((child, session)); }
-            if let Ok(Some(status)) = child.try_wait() { return Err(format!("todo.mjs serve exited: {status}")); }
-            std::thread::sleep(Duration::from_millis(250));
-        }
-        if child.kill().is_ok() { let _ = child.wait(); }
-        Err(format!("todo.mjs serve did not answer in {} seconds", startup_timeout.as_secs()))
+    /// Starts the server in this process; it answers at once and syncs the list in the background.
+    pub fn serve(&self) -> Result<(sdlc_todo_server::Handle, Session), String> {
+        let handle = sdlc_todo_server::start(sdlc_todo_server::Options::for_kit(&self.kit, &self.session_file, &self.node, &self.lang))?;
+        let session = handle.session();
+        Ok((handle, Session { port: session.port, token: session.token }))
     }
 }
 

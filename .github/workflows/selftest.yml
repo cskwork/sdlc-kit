@@ -32,3 +32,9 @@ jobs:
       - name: selftest
         run: bash tests/selftest.sh
         shell: bash
+      - name: to-do server crate, and its list compared with core.mjs
+        run: |
+          cargo test --locked --release -p sdlc-todo-server --manifest-path todo/app/Cargo.toml
+          cargo build --locked --release -p sdlc-todo-server --manifest-path todo/app/Cargo.toml
+          SDLC_TODO_RUST_SERVE="$PWD/todo/app/target/release/sdlc-todo-serve" node --test tests/todo-rust.test.mjs
+        shell: bash
