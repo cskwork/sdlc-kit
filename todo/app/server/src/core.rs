@@ -488,7 +488,8 @@ pub fn atomic_write(file: &str, text: &str, owns: &dyn Fn() -> Result<bool, Fail
         }
         Ok(())
     })();
-    unlink(&temp)?;
+    let cleaned = unlink(&temp);
+    if result.is_ok() { noted(cleaned); } else { cleaned?; }
     result
 }
 /// The session file: only the owner may read it, from the first byte on.
@@ -598,6 +599,8 @@ fn wait_markers(lock: &str, kind: &str) -> Result<(), Fail> {
 fn owns_lock(lock: &str, owner: &str) -> Result<bool, Fail> {
     match fs::read(lock) { Ok(bytes) => Ok(bytes == owner.as_bytes()), Err(e) if e.kind() == ErrorKind::NotFound => Ok(false), Err(e) => Err(Fail::io(&e, "open", lock)) }
 }
+/// What goes wrong after a change is stored is said here and never becomes the change's answer: the person would send it again.
+fn noted(result: Result<(), Fail>) { if let Err(error) = result { eprintln!("to-do: {}", error.message); } }
 /// Runs `work` while no reclaimer can take the lock; None when the lock is no longer ours and need not be.
 fn committing<T>(lock: &str, owner: &str, required: bool, work: &mut dyn FnMut() -> Result<T, Fail>) -> Result<Option<T>, Fail> {
     loop {
@@ -609,8 +612,14 @@ fn committing<T>(lock: &str, owner: &str, required: bool, work: &mut dyn FnMut()
             if !owns_lock(lock, owner)? { return if required { Err(lost()) } else { Ok(Some(None)) }; }
             work().map(|value| Some(Some(value)))
         })();
-        marker.release()?;
-        if let Some(value) = result? { return Ok(value); }
+        let released = marker.release();
+        match result {
+            // The work is done: a marker that stays (it names this live process) is reported, not turned into a failure.
+            Ok(Some(Some(value))) => { noted(released); return Ok(Some(value)); }
+            Ok(Some(None)) => { released?; return Ok(None); }
+            Ok(None) => released?,
+            Err(error) => { noted(released); return Err(error); }
+        }
     }
 }
 fn reclaim(lock: &str, observed: &[u8]) -> Result<(), Fail> {
@@ -720,7 +729,7 @@ pub fn mutate<T>(list: &List, change: &mut dyn FnMut(&mut Model) -> Result<T, Fa
                     append(&join(&dir, &["todo-archive.md"]), &format!("{}\n\n", blocks.join("\n\n")), "# To-do archive\n\n")?;
                 }
                 atomic_write(file, &serialize(&model)?, &|| owns_lock(&lock, owner), None)?;
-                follow_ids(file, &before, &model)?;
+                noted(follow_ids(file, &before, &model));
                 Ok(value.take())
             })?;
             saved.flatten().ok_or_else(lost)
@@ -733,7 +742,7 @@ pub fn mutate<T>(list: &List, change: &mut dyn FnMut(&mut Model) -> Result<T, Fa
         match result {
             Err(panic) => std::panic::resume_unwind(panic),
             Ok(result) => {
-                released?;
+                if result.is_ok() { noted(released); } else { released?; }
                 match result { Err(error) if error.kind == Kind::LockLost => continue, other => return other }
             }
         }
@@ -842,6 +851,9 @@ pub fn apply_readings(list: &List, readings: &[Reading], only: &str) -> Result<(
 
 // ---------- working markers ----------
 pub struct Mark { pub what: Text, pub since: Text, pub beat: Text, pub at: i64 }
+/// The live markers, and whether some marker's time could not be read: it is left out, the others are not.
+#[derive(Default)]
+pub struct Working { pub live: Vec<(Text, Mark)>, pub unread: bool }
 pub fn working_path(file: &str) -> String { join(&dirname(file), &["todo-working.json"]) }
 pub fn working_ttl() -> i64 {
     // Number(env): only plain decimals are used; anything else keeps the default.
@@ -849,19 +861,21 @@ pub fn working_ttl() -> i64 {
     seconds.map_or(180_000, |s| (s * 1000.0) as i64)
 }
 /// Live markers only; a missing or unreadable file is no marker.
-pub fn read_working(file: &str, now: i64) -> Result<Vec<(Text, Mark)>, Fail> {
-    let Ok(text) = read_text(&working_path(file)) else { return Ok(Vec::new()) };
-    let Some(Json::Obj(marks)) = json::parse(&text) else { return Ok(Vec::new()) };
-    let (ttl, mut live) = (working_ttl(), Vec::new());
-    for (id, mark) in marks {
+pub fn read_working(file: &str, now: i64) -> Working {
+    let mut out = Working::default();
+    for (id, mark) in stored_marks(file) {
         let (Some(Json::Str(since)), Some(Json::Str(beat))) = (mark.get("since"), mark.get("beat")) else { continue };
-        let Some(at) = helper::date(&beat.lossy())? else { continue };
-        if now - at >= ttl || at > now + 5000 { continue; }
-        let what = match mark.get("what") { Some(Json::Str(what)) => what.clone(), _ => Text::default() };
-        live.push((id, Mark { what, since: since.clone(), beat: beat.clone(), at }));
+        let at = match helper::date(&beat.lossy()) { Ok(Some(at)) => at, Ok(None) => continue, Err(_) => { out.unread = true; continue; } };
+        if !live_at(at, now) { continue; }
+        out.live.push((id, Mark { what: what_of(&mark), since: since.clone(), beat: beat.clone(), at }));
     }
-    Ok(live)
+    out
 }
+fn stored_marks(file: &str) -> Vec<(Text, Json)> {
+    match read_text(&working_path(file)).ok().and_then(|text| json::parse(&text)) { Some(Json::Obj(marks)) => marks, _ => Vec::new() }
+}
+fn live_at(at: i64, now: i64) -> bool { now - at < working_ttl() && at <= now + 5000 }
+fn what_of(mark: &Json) -> Text { match mark.get("what") { Some(Json::Str(what)) => what.clone(), _ => Text::default() } }
 impl Mark {
     pub fn json(&self) -> Json { object(vec![("what", Json::Str(self.what.clone())), ("since", Json::Str(self.since.clone())), ("beat", Json::Str(self.beat.clone()))]) }
 }
@@ -869,9 +883,14 @@ impl Mark {
 fn follow_ids(file: &str, before: &HashMap<u64, String>, model: &Model) -> Result<(), Fail> {
     let moved: Vec<(Text, Text)> = model.items.iter().filter_map(|i| before.get(&i.uid).filter(|old| **old != i.id).map(|old| (old.as_str().into(), i.id.as_str().into()))).collect();
     if moved.is_empty() { return Ok(()); }
-    // The list is saved already: a marker that cannot be read now stays as it is rather than fail that change.
-    let Ok(marks) = read_working(file, js::now_ms()) else { return Ok(()) };
-    let mut marks: Vec<(Text, Json)> = marks.into_iter().map(|(id, mark)| (id, mark.json())).collect();
+    // Under the list's lock no Node helper is asked: a time only JavaScript reads keeps its marker, which moves like any other.
+    let now = js::now_ms();
+    let mut marks: Vec<(Text, Json)> = stored_marks(file).into_iter().filter_map(|(id, mark)| {
+        let (Some(Json::Str(since)), Some(Json::Str(beat))) = (mark.get("since"), mark.get("beat")) else { return None };
+        if js::parse_iso(&beat.lossy()).is_some_and(|at| !live_at(at, now)) { return None; }
+        let kept = object(vec![("what", Json::Str(what_of(&mark))), ("since", Json::Str(since.clone())), ("beat", Json::Str(beat.clone()))]);
+        Some((id, kept))
+    }).collect();
     let find = |marks: &[(Text, Json)], id: &Text| marks.iter().position(|(k, _)| k == id);
     if !moved.iter().any(|(old, new)| find(&marks, old).is_some() || find(&marks, new).is_some()) { return Ok(()); }
     let carried: Vec<(Text, Option<Json>)> = moved.iter().map(|(old, new)| (new.clone(), find(&marks, old).map(|i| marks[i].1.clone()))).collect();
@@ -949,6 +968,49 @@ mod tests {
         assert_eq!(add(&List::new(&file), "refused").unwrap_err().message, format!("timed out waiting for lock: {lock}"));
         fs::remove_file(&lock).unwrap();
         assert_eq!(load(&file).unwrap().items.len(), 1);
+        assert!(left_behind(&dir).is_empty(), "{:?}", left_behind(&dir));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_marker_with_an_unreadable_time_holds_no_other_back() {
+        // No helper is configured for this list's times: one is ISO, one is not.
+        let (dir, file) = folder("markers");
+        let list = List::new(&file);
+        fs::write(&file, "## Open\n\n- [ ] a\n\n- [ ] b\n\n- [ ] c\n").unwrap();
+        let id = |title: &str| { let m = load(&file).unwrap(); let i = m.items.iter().find(|i| i.title == title).unwrap(); i.id.clone() };
+        let now = js::iso(js::now_ms());
+        fs::write(working_path(&file), format!("{{\"{}\":{{\"what\":\"w\",\"since\":\"{now}\",\"beat\":\"{now}\"}},\"{}\":{{\"what\":\"odd\",\"since\":\"{now}\",\"beat\":\"Wed Nov 25 2026\"}}}}\n", id("a"), id("b"))).unwrap();
+        for (title, next) in [("a", "a2"), ("b", "b2")] {
+            let model = load(&file).unwrap();
+            let at = model.items.iter().position(|i| i.title == title).unwrap();
+            edit(&list, Some(&model.items[at].id), Some(&versions(&model).unwrap()[at]), next).unwrap();
+        }
+        let marks = stored_marks(&file);
+        let what = |title: &str| marks.iter().find(|(k, _)| *k == id(title).as_str().into()).map(|(_, m)| what_of(m).lossy());
+        assert_eq!((what("a2").as_deref(), what("b2").as_deref(), marks.len()), (Some("w"), Some("odd"), 2));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    // Only macOS lets a test make a rename over a readable file fail for its own user.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_stored_change_succeeds_when_its_marker_cannot_follow() {
+        let (dir, file) = folder("stored");
+        let list = List::new(&file);
+        add(&list, "a").unwrap();
+        let (model, now, working) = (load(&file).unwrap(), js::iso(js::now_ms()), working_path(&file));
+        fs::write(&working, format!("{{\"{}\":{{\"what\":\"w\",\"since\":\"{now}\",\"beat\":\"{now}\"}}}}", model.items[0].id)).unwrap();
+        let flag = |flag: &str| assert!(std::process::Command::new("/usr/bin/chflags").args([flag, &working]).status().unwrap().success());
+        flag("uchg");
+        let before: HashMap<u64, String> = model.items.iter().map(|i| (i.uid, i.id.clone())).collect();
+        let mut renamed = load(&file).unwrap();
+        (renamed.items[0].uid, renamed.items[0].id) = (model.items[0].uid, "other".into());
+        let refused = follow_ids(&file, &before, &renamed).is_err();
+        let edited = edit(&list, Some(&model.items[0].id), Some(&versions(&model).unwrap()[0]), "b");
+        flag("nouchg");
+        assert!(refused && edited.is_ok(), "{edited:?}");
+        assert_eq!(load(&file).unwrap().items[0].title, "b");
         assert!(left_behind(&dir).is_empty(), "{:?}", left_behind(&dir));
         fs::remove_dir_all(dir).unwrap();
     }
