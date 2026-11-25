@@ -389,6 +389,8 @@ A pinned item (`todo.mjs pin <id>`), such as a setting switched with its choices
 
 A ticket the board opens (its link, **T**) shows, on macOS, in your own Google Chrome, where your Jira login lives, in one window docked at the screen's left edge (45% wide, full height) and reused for the next ticket; the board and its panel stay where they are. macOS asks once to let the app control Chrome. Without Chrome, when that fails, and on Windows, the ticket opens in the default browser and does not follow the selection. Only http(s) and `mailto:` links leave the board; the window never leaves its server's origin. Where the webview cannot start, the board opens in the default browser.
 
+When no server runs, the app serves the list's API in its own process (Rust, no `node` server), and that server ends with the app: a browser tab on it goes offline on Quit. The CLI and TUI stay on Node and write the same list under the same lock; the app itself starts Node only for the few inputs JavaScript alone answers exactly (unusual links or dates, broken status output).
+
 In the app's window the page also has what is yours alone: a memo on an item, the text size (also ⌘/Ctrl with +, − and 0) and the font, under **Text**. They stay in `todo-app.json` beside the session file and never reach the list, the server or an agent. The page asks the app for them through five commands that only its own server's origin may call.
 
 On macOS, `todo/app/install-macos.sh [DIR]` builds `sdlc To-do.app` (name: `SDLC_TODO_APP_NAME`) in `~/Applications`; its Info.plist records the kit, node, language and `SDLC_TODO`, because Finder starts apps without a shell `PATH`. Run it again after updating the kit or moving node.
