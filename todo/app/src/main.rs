@@ -1201,11 +1201,8 @@ fn artifact_key(item: &Item) -> String { format!("{}:{}", item.id, item.version)
 struct Args { session: PathBuf, kit: PathBuf, node: String, lang: String, background: bool }
 
 fn args() -> Result<Args, String> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
-    let todo = std::env::var_os("SDLC_TODO").map(PathBuf::from).unwrap_or_else(|| home.join(".sdlc").join("todo.md"));
     let mut parsed = Args {
-        session: std::env::var_os("SDLC_TODO_SESSION").map(PathBuf::from)
-            .unwrap_or_else(|| todo.parent().map(|d| d.join("todo-web.json")).unwrap_or_default()),
+        session: sdlc_todo_server::session_path(),
         // An app bundle names the kit and node in its Info.plist environment; built in place,
         // the binary sits at <kit>/todo/app/target/release/.
         kit: std::env::var_os("SDLC_TODO_KIT").map(PathBuf::from)

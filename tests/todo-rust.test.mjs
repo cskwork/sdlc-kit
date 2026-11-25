@@ -249,3 +249,82 @@ test('rust: a stale lock and the markers of dead processes are taken over', need
   assert.deepEqual(core.load(file).items.map(item => item.title), ['after a dead owner']);
   assert.deepEqual(readdirSync(dir).filter(name => /\.lock|\.tmp$/.test(name)), []);
 });
+
+const posix = { skip: needsRust.skip || process.platform === 'win32' && 'POSIX stub scripts' };
+for (const stream of ['stderr', 'stdout']) test(`rust: an approve child that floods ${stream} and never exits frees the list, as with the Node server`, posix, async t => {
+  for (const [name, start] of [['node', startWeb], ['rust', startRustWeb]]) {
+    const root = join(scratch(t), name), file = join(root, 'todo.md');
+    mkdirSync(join(root, '.sdlc'), { recursive: true });
+    writeFileSync(join(root, 'sdlc.sh'), `if [ "$1" = approve ]; then exec yes ${stream === 'stderr' ? '>&2' : ''}; fi\nprintf '{"store":"${root}/.sdlc","features":[{"slug":"s","phase":"plan","state":"NEEDS-HUMAN","action":"approve plan"}]}\\n'\n`);
+    writeFileSync(file, `## Open\n\n- [ ] a\n  - project: ${root}\n  - sdlc: s · plan · NEEDS-HUMAN — approve plan\n`);
+    const server = await start({ file, kit: root, feed: join(root, 'feed.json'), onUrl() {} });
+    t.after(() => server.close());
+    const model = core.load(file), began = Date.now();
+    const response = await call(server.url, '/api/approve', { id: model.items[0].id, version: core.itemVersion(model.items[0], model), gate: 'plan', sha: 'a'.repeat(64), words: 'ok' });
+    assert.equal(response.status, 409, name);
+    assert.ok(Date.now() - began < 15000, `${name} stopped the child`);
+    if (stream === 'stdout') assert.equal(JSON.parse(response.text).error, 'stdout maxBuffer length exceeded', name);
+    else assert.ok(JSON.parse(response.text).error.startsWith('y\ny\n'), name);
+    await core.add(file, `${name} can write again`);
+    assert.doesNotMatch(readFileSync(file, 'utf8'), /human: approved/);
+  }
+});
+
+test('rust: the default list and session are the ones Node names, with HOME set, empty and unset', needsRust, async () => {
+  const { execFileSync } = await import('node:child_process');
+  const name = process.platform === 'win32' ? 'USERPROFILE' : 'HOME';
+  for (const home of ['/tmp/some home', '', undefined]) for (const todo of [undefined, '', '/tmp/x/list.md']) {
+    if (home === '' && process.platform === 'win32') continue; // os.homedir() throws there
+    const env = { ...process.env, SDLC_TODO: todo };
+    delete env.SDLC_TODO_SESSION;
+    delete env[name];
+    if (todo === undefined) delete env.SDLC_TODO;
+    if (home !== undefined) env[name] = home;
+    const script = `import(${JSON.stringify(new URL('../todo/core.mjs', import.meta.url).href)}).then(c => console.log(c.todoPath() + '\\n' + c.sessionPath()))`;
+    const expected = execFileSync(process.execPath, ['-e', script], { env, encoding: 'utf8' }).trim();
+    assert.equal(execFileSync(rustServer, ['--where'], { env, encoding: 'utf8' }).trim().replaceAll('\r', ''), expected, `home ${home} todo ${todo}`);
+  }
+});
+
+test('rust: silent connections neither hide the server nor stay', needsRust, async t => {
+  const net = await import('node:net');
+  const dir = scratch(t);
+  const server = await startRustWeb({ file: join(dir, 'todo.md'), kit, feed: join(dir, 'feed.json'), onUrl() {} });
+  t.after(() => server.close());
+  const at = new URL(server.url), sockets = [];
+  t.after(() => { for (const socket of sockets) socket.destroy(); });
+  let closed = 0;
+  for (let i = 0; i < 300; i++) {
+    const socket = net.connect(Number(at.port), '127.0.0.1');
+    socket.on('error', () => {});
+    socket.on('close', () => { closed++; });
+    sockets.push(socket);
+    if (i % 2) socket.write('GET / HTT');
+  }
+  await new Promise(done => setTimeout(done, 1000));
+  for (let i = 0; i < 5; i++) {
+    const began = Date.now();
+    assert.equal((await call(server.url, '/api/live')).status, 200);
+    assert.ok(Date.now() - began < 1500, 'answered inside the app\'s 2 s check');
+  }
+  for (const socket of sockets) socket.resume();
+  const end = Date.now() + 15000;
+  while (closed < 300 && Date.now() < end) await new Promise(done => setTimeout(done, 100));
+  assert.equal(closed, 300, 'silent connections are closed');
+});
+
+test('rust: close returns while a Node helper hangs', posix, async t => {
+  const dir = scratch(t), file = join(dir, 'todo.md'), hang = join(dir, 'node'), started = join(dir, 'started');
+  writeFileSync(hang, `#!/bin/sh\ntouch '${started}'\nexec sleep 60\n`, { mode: 0o755 });
+  const server = await startRustWeb({ file, kit, node: hang, feed: join(dir, 'feed.json'), onUrl() {} });
+  const at = new URL(server.url), token = new URLSearchParams(at.hash.slice(1)).get('t');
+  const stream = fetch(`${at.origin}/events?t=${token}`).catch(() => null);
+  await stream;
+  writeFileSync(file, '## Open\n\n- [ ] odd\n  - link: [a](https://한글.example/)\n');
+  for (let i = 0; i < 100 && !existsSync(started); i++) await new Promise(done => setTimeout(done, 50));
+  assert.ok(existsSync(started), 'a frame waits on the helper');
+  assert.equal((await call(server.url, '/api/live')).status, 200, 'still live');
+  const began = Date.now();
+  await server.close();
+  assert.ok(Date.now() - began < 4000, `closed in ${Date.now() - began} ms`);
+});

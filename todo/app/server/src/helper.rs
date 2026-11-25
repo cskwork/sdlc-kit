@@ -3,8 +3,7 @@
 use super::core::Fail;
 use super::json::{self, object, Json};
 use std::collections::HashMap;
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::sync::Mutex;
 
 struct Config { node: String, core: String }
@@ -50,17 +49,13 @@ fn ask(kind: &str, value: &str, extra: &str) -> Result<Json, Fail> {
     };
     let failed = |why: String| Fail::new(format!("{node} could not check a {kind} in the to-do list: {why}"));
     let mut command = Command::new(super::run::on_path(&node));
-    command.arg("-e").arg(SCRIPT).arg(&core).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+    command.arg("-e").arg(SCRIPT).arg(&core);
     super::no_window(&mut command);
-    let mut child = command.spawn().map_err(|e| failed(e.to_string()))?;
     let input = object(vec![("kind", Json::str(kind)), ("value", Json::str(value)), ("extra", Json::str(extra))]).stringify();
-    let mut stdin = child.stdin.take();
-    // Written from its own thread: a long value must not wait on the answer.
-    let writer = std::thread::spawn(move || { if let Some(mut pipe) = stdin.take() { let _ = pipe.write_all(input.as_bytes()); } });
-    let output = child.wait_with_output().map_err(|e| failed(e.to_string()))?;
-    let _ = writer.join();
-    if !output.status.success() { return Err(failed(output.status.to_string())); }
-    let answer = json::parse(&String::from_utf8_lossy(&output.stdout)).ok_or_else(|| failed("no answer".into()))?;
+    // A list lock or a connection may be waiting on the answer.
+    let output = super::run::capture(&mut command, Some(input.into_bytes()), Some(std::time::Duration::from_secs(10))).map_err(|e| failed(e.to_string()))?;
+    match output.status { Some(status) if status.success() && output.over.is_none() => {} Some(status) => return Err(failed(status.to_string())), None => return Err(failed("no answer in 10 s".into())) }
+    let answer = json::parse(&String::from_utf8_lossy(&output.out)).ok_or_else(|| failed("no answer".into()))?;
     if cached {
         let mut answers = ANSWERS.lock().unwrap_or_else(|e| e.into_inner());
         let answers = answers.get_or_insert_with(HashMap::new);

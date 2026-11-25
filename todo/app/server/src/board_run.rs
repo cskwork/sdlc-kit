@@ -1,6 +1,6 @@
 //! The command a person runs from the board: recorded in todo.md before it starts and when it ends, so every server
 //! and tab sees it, and never started twice.
-use super::core::{self, Event, Exec, Fail, Item, Model};
+use super::core::{self, Event, Exec, Fail, Item, List, Model};
 use super::json::{object, Json, Text};
 use super::{js, locked, run, Server};
 use std::collections::HashSet;
@@ -12,8 +12,9 @@ type Write = Box<dyn FnMut(&mut Model) -> Result<(), Fail> + Send>;
 
 /// The runs of this process, not of one server: the app may replace its server while a command still runs.
 static RUNNING: Mutex<Option<HashSet<String>>> = Mutex::new(None);
-/// Results that could not be written yet (run, list, write); until then their run still counts as running.
-static PENDING: Mutex<Vec<(String, String, Write)>> = Mutex::new(Vec::new());
+/// Results that could not be written yet (run, list, write); their run was accepted before any close, so they are still
+/// written after one; until then their run still counts as running.
+static PENDING: Mutex<Vec<(String, List, Write)>> = Mutex::new(Vec::new());
 static HAS_PENDING: AtomicBool = AtomicBool::new(false);
 fn is_running(run: &str) -> bool { locked(&RUNNING).as_ref().is_some_and(|r| r.contains(run)) }
 fn set_running(run: &str, on: bool) {
@@ -102,28 +103,31 @@ impl Server {
     pub fn mark_dead_runs(&self) -> Result<(), Fail> {
         let file = &self.options.file;
         if !core::load(file)?.items.iter().any(|item| unfinished(item).iter().any(|run| !self.live(run))) { return Ok(()); }
-        core::mutate(file, &mut |model| { for item in &mut model.items { self.mark_interrupted(item); } Ok(()) })
+        core::mutate(&self.list, &mut |model| { for item in &mut model.items { self.mark_interrupted(item); } Ok(()) })
     }
     /// Writes results that met a busy lock; called on each request and keepalive tick.
     pub fn flush_finishes(&self) {
         if !HAS_PENDING.load(Ordering::SeqCst) { return; }
         let mut pending = locked(&PENDING);
         while let Some((run, file, write)) = pending.first_mut() {
-            if let Err(error) = core::mutate(file, write) { eprintln!("to-do exec result still not written (run {run}): {}", error.message); return; }
+            // A write that panics would panic on every request: it is dropped, and the run reads as interrupted later.
+            let wrote = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| core::mutate(file, write)));
+            if let Ok(Err(error)) = wrote { eprintln!("to-do exec result still not written (run {run}): {}", error.message); return; }
             set_running(run, false);
             drop(pending.remove(0));
         }
         HAS_PENDING.store(false, Ordering::SeqCst);
     }
     fn write_finish(&self, run: &str, mut write: Write) {
+        let record = List::new(&self.options.file);
         let deadline = Instant::now() + Duration::from_millis(self.options.finish_retry);
         let mut wait = 250;
         loop {
-            let error = match core::mutate(&self.options.file, &mut write) { Ok(()) => return set_running(run, false), Err(error) => error };
+            let error = match core::mutate(&record, &mut write) { Ok(()) => return set_running(run, false), Err(error) => error };
             if Instant::now() + Duration::from_millis(wait) > deadline {
                 eprintln!("to-do exec result not written yet (run {run}): {}", error.message);
                 let mut pending = locked(&PENDING);
-                pending.push((run.into(), self.options.file.clone(), write));
+                pending.push((run.into(), record, write));
                 HAS_PENDING.store(true, Ordering::SeqCst);
                 return;
             }
@@ -140,7 +144,7 @@ impl Server {
         let Some(shown) = shown else { return Fail::at(400, "invalid path") };
         let run_id = js::hex(&js::random::<4>().map_err(Fail::new)?);
         let path = self.command_path().to_string();
-        let (command, snapshot) = core::update(&options.file, Some(id), version, &mut |model, at| {
+        let (command, snapshot) = core::update(&self.list, Some(id), version, &mut |model, at| {
             let item = &mut model.items[at];
             let Some(command) = item.exec.clone().filter(|_| !item.done) else { return Fail::at(409, "item has no command to run") };
             let cwd = command.cwd.lossy();

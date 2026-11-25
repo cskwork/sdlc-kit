@@ -2,7 +2,10 @@
 use super::js;
 use std::io::Read;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::{Duration, Instant};
 
 /// Node's execFile failure: `stderr` when the command wrote any, else `message`.
 pub struct Failed { pub message: String, pub stderr: String }
@@ -81,35 +84,116 @@ pub fn on_path(name: &str) -> String {
     let found = path.split(';').filter(|dir| !dir.is_empty()).flat_map(|dir| [format!("{dir}\\{name}.exe"), format!("{dir}\\{name}.com")]).find(|file| Path::new(file).is_file());
     found.unwrap_or_else(|| name.into())
 }
+/// What a child wrote and how it ended: `over` names the stream that passed the limit, no status means it ran out of time.
+pub struct Captured { pub status: Option<ExitStatus>, pub out: Vec<u8>, pub err: Vec<u8>, pub over: Option<&'static str> }
+
+/// Runs a child to its end, reading at most MAX_BUFFER of each stream: past that, or past `timeout`, it is stopped, as
+/// Node's execFile does. A process it left behind holding a pipe is not waited for then.
+pub fn capture(command: &mut Command, input: Option<Vec<u8>>, timeout: Option<Duration>) -> std::io::Result<Captured> {
+    command.stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() }).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+    let stop = Arc::new(AtomicBool::new(false));
+    let result = follow(&mut child, input, timeout, &stop);
+    stop.store(true, Ordering::SeqCst);
+    if !matches!(&result, Ok(Captured { status: Some(_), over: None, .. })) { end(&mut child); }
+    result
+}
+fn follow(child: &mut Child, input: Option<Vec<u8>>, timeout: Option<Duration>, stop: &Arc<AtomicBool>) -> std::io::Result<Captured> {
+    let until = timeout.map(|t| Instant::now() + t);
+    let (tell, events) = mpsc::channel();
+    let out = collect(child.stdout.take().map(file), "stdout", stop.clone(), tell.clone())?;
+    let err = collect(child.stderr.take().map(file), "stderr", stop.clone(), tell.clone())?;
+    if let (Some(input), Some(mut pipe)) = (input, child.stdin.take()) {
+        std::thread::Builder::new().spawn(move || { use std::io::Write; let _ = pipe.write_all(&input); })?;
+    }
+    let (mut open, mut over, mut late) = (2, None, false);
+    while open > 0 && over.is_none() && !late {
+        let event = match until { Some(at) => events.recv_timeout(at.saturating_duration_since(Instant::now())), None => events.recv().map_err(|_| mpsc::RecvTimeoutError::Disconnected) };
+        match event { Ok(None) => open -= 1, Ok(Some(stream)) => over = Some(stream), Err(mpsc::RecvTimeoutError::Timeout) => late = true, Err(_) => open = 0 }
+    }
+    let status = match until {
+        None if over.is_none() => Some(child.wait()?),
+        _ if over.is_some() => None,
+        // Its output counts once it exited, even if something it left behind still holds the pipe.
+        until => loop {
+            if let Some(status) = child.try_wait()? { break Some(status); }
+            if until.is_none_or(|at| Instant::now() >= at) { break None; }
+            std::thread::sleep(Duration::from_millis(20));
+        },
+    };
+    let take = |bytes: &Mutex<Vec<u8>>| std::mem::take(&mut *super::locked(bytes));
+    Ok(Captured { status, out: take(&out), err: take(&err), over })
+}
+/// TERM first, so a script can clean up, then KILL.
+fn end(child: &mut Child) {
+    #[cfg(unix)]
+    {
+        if matches!(child.try_wait(), Ok(Some(_))) { return; }
+        // SAFETY: a signal to a child not yet reaped.
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM); }
+        let until = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < until {
+            if !matches!(child.try_wait(), Ok(None)) { return; }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+#[cfg(unix)]
+type Pipe = std::fs::File;
+#[cfg(unix)]
+fn file(pipe: impl Into<std::os::fd::OwnedFd>) -> Pipe { Pipe::from(pipe.into()) }
+#[cfg(windows)]
+type Pipe = Box<dyn Read + Send>;
+#[cfg(windows)]
+fn file(pipe: impl Read + Send + 'static) -> Pipe { Box::new(pipe) }
+/// Some bytes of a pipe; 0 at its end or once `stop` is set (Unix: a process left behind may hold it open for ever).
+fn read_some(pipe: &mut Pipe, buffer: &mut [u8], stop: &AtomicBool) -> usize {
+    loop {
+        if stop.load(Ordering::SeqCst) { return 0; }
+        #[cfg(unix)]
+        {
+            use std::os::fd::AsRawFd;
+            let mut poll = libc::pollfd { fd: pipe.as_raw_fd(), events: libc::POLLIN, revents: 0 };
+            // SAFETY: one valid pollfd; the pipe is open here.
+            if unsafe { libc::poll(&mut poll, 1, 100) } <= 0 { continue; }
+        }
+        match pipe.read(buffer) { Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue, read => return read.unwrap_or(0) }
+    }
+}
+type Collected = Arc<Mutex<Vec<u8>>>;
+fn collect(pipe: Option<Pipe>, name: &'static str, stop: Arc<AtomicBool>, tell: mpsc::Sender<Option<&'static str>>) -> std::io::Result<Collected> {
+    let bytes = Collected::default();
+    let Some(mut pipe) = pipe else { let _ = tell.send(None); return Ok(bytes) };
+    let kept = bytes.clone();
+    std::thread::Builder::new().spawn(move || {
+        let mut buffer = [0; 8192];
+        loop {
+            let n = read_some(&mut pipe, &mut buffer, &stop);
+            if n == 0 { break; }
+            let mut kept = super::locked(&kept);
+            let room = (MAX_BUFFER - kept.len()).min(n);
+            kept.extend_from_slice(&buffer[..room]);
+            if n > room { let _ = tell.send(Some(name)); return; }
+        }
+        let _ = tell.send(None);
+    })?;
+    Ok(bytes)
+}
+
 /// execFile(program, args, { cwd }): stdout on exit 0.
 pub fn exec_file(program: &str, args: &[&str], cwd: Option<&str>) -> Result<String, Failed> {
     let start = |e: std::io::Error| Failed { message: spawn_error(program, &spawn_code(&e, cwd)), stderr: String::new() };
     let mut command = Command::new(on_path(program));
-    command.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    command.args(args);
     if let Some(cwd) = cwd { command.current_dir(cwd); }
     super::child_env(&mut command);
     super::no_window(&mut command);
-    let mut child = command.spawn().map_err(start)?;
-    let (mut out, err) = (child.stdout.take(), child.stderr.take());
-    let reader = std::thread::Builder::new().spawn(move || {
-        let mut bytes = Vec::new();
-        // Read to the end so the command never blocks, keeping what Node would.
-        if let Some(mut err) = err { let _ = err.by_ref().take(MAX_BUFFER as u64).read_to_end(&mut bytes); let _ = std::io::copy(&mut err, &mut std::io::sink()); }
-        String::from_utf8_lossy(&bytes).into_owned()
-    });
-    let errors = match reader {
-        Ok(reader) => reader,
-        Err(error) => { let _ = child.kill(); let _ = child.wait(); return Err(Failed { message: format!("no thread to read {program}: {error}"), stderr: String::new() }); }
-    };
-    let mut bytes = Vec::new();
-    if let Some(out) = out.as_mut() { let _ = out.take(MAX_BUFFER as u64 + 1).read_to_end(&mut bytes); }
-    let full = bytes.len() > MAX_BUFFER;
-    if full { let _ = child.kill(); }
-    drop(out);
-    let status = child.wait().map_err(start)?;
-    let stderr = errors.join().unwrap_or_default();
-    if full { return Err(Failed { message: "stdout maxBuffer length exceeded".into(), stderr }); }
-    if status.success() { return Ok(String::from_utf8_lossy(&bytes).into_owned()); }
+    let got = capture(&mut command, None, None).map_err(start)?;
+    let stderr = String::from_utf8_lossy(&got.err).into_owned();
+    if let Some(stream) = got.over { return Err(Failed { message: format!("{stream} maxBuffer length exceeded"), stderr }); }
+    if got.status.is_some_and(|s| s.success()) { return Ok(String::from_utf8_lossy(&got.out).into_owned()); }
     let line = std::iter::once(program).chain(args.iter().copied()).collect::<Vec<_>>().join(" ");
     Err(Failed { message: format!("Command failed: {line}\n{stderr}"), stderr })
 }
@@ -152,26 +236,15 @@ pub fn command_search_path() -> String {
 #[cfg(unix)]
 fn login_path(shell: &str) -> Option<String> {
     let mut command = Command::new(shell);
-    command.args(["-lc", "printf %s \"$PATH\""]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+    command.args(["-lc", "printf %s \"$PATH\""]);
     super::child_env(&mut command);
-    let mut child = command.spawn().ok()?;
-    let mut out = child.stdout.take()?;
-    // Until the shell exits and the pipe ends, at most 5 s: a profile may leave a background process holding the pipe,
-    // and what was printed counts once the shell itself exited 0.
-    let (sent, chunks) = std::sync::mpsc::channel::<Vec<u8>>();
-    std::thread::Builder::new().spawn(move || {
-        let mut buffer = [0; 4096];
-        while let Ok(n) = out.read(&mut buffer) { if n == 0 || sent.send(buffer[..n].to_vec()).is_err() { break; } }
-    }).ok()?;
-    let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    let mut text = Vec::new();
-    while let Ok(chunk) = chunks.recv_timeout(until.saturating_duration_since(std::time::Instant::now())) { text.extend(chunk); }
-    loop {
-        if let Some(status) = child.try_wait().ok()? { return status.success().then(|| String::from_utf8_lossy(&text).into_owned()); }
-        if std::time::Instant::now() >= until { let _ = child.kill(); let _ = child.wait(); return None; }
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
+    let got = capture(&mut command, None, Some(Duration::from_secs(5))).ok()?;
+    (got.over.is_none() && got.status.is_some_and(|s| s.success())).then(|| String::from_utf8_lossy(&got.out).into_owned())
 }
+
+/// Children that outlive their request; the watcher collects the ended ones, so none needs a thread.
+static LAUNCHED: Mutex<Vec<Child>> = Mutex::new(Vec::new());
+pub fn reap() { super::locked(&LAUNCHED).retain_mut(|child| matches!(child.try_wait(), Ok(None))); }
 
 /// Starts a program that outlives this one; 'started' or why not. An error Node throws fails the request.
 pub fn launch(argv: &[String], cwd: &str) -> Result<String, super::Fail> {
@@ -186,7 +259,7 @@ pub fn launch(argv: &[String], cwd: &str) -> Result<String, super::Fail> {
         command.creation_flags(0x0000_0208); // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     }
     match command.spawn() {
-        Ok(mut child) => { std::thread::spawn(move || { let _ = child.wait(); }); Ok("started".into()) }
+        Ok(child) => { super::locked(&LAUNCHED).push(child); Ok("started".into()) }
         Err(error) => {
             let code = spawn_code(&error, Some(cwd));
             if said_later(&code) { Ok(format!("failed: {code}")) } else { Err(super::Fail::new(spawn_error(&argv[0], &code))) }
@@ -212,9 +285,6 @@ mod unix {
     use super::*;
     use std::os::fd::{AsRawFd, OwnedFd};
     use std::os::unix::process::{CommandExt, ExitStatusExt};
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{mpsc, Arc, Mutex};
-    use std::time::{Duration, Instant};
 
     const LIMIT: usize = 64 * 1024;
     const GRACE: u64 = 2000;
@@ -333,6 +403,26 @@ mod unix {
             let found = resolve_command(&argv[0], "/usr/bin:/bin");
             let program = if found.is_empty() { argv[0].clone() } else { found };
             run_argv(Job { program: &program, argv: &argv, cwd: dir, path: "/usr/bin:/bin", timeout, kill_after: 500 })
+        }
+
+        #[test]
+        fn a_child_is_bounded_in_output_and_time_and_a_launched_one_is_reaped() {
+            let sh = |script: &str| { let mut c = Command::new("/bin/sh"); c.args(["-c", script]); c };
+            let started = Instant::now();
+            for (script, stream) in [("yes >&2", "stderr"), ("yes", "stdout"), ("trap '' TERM; while :; do echo x; done 2>/dev/null", "stdout")] {
+                let got = capture(&mut sh(script), None, None).unwrap();
+                assert_eq!(got.over, Some(stream), "{script}");
+            }
+            let flood = capture(&mut sh("yes"), None, Some(Duration::from_secs(5))).unwrap();
+            assert!(flood.over.is_some() && flood.out.len() == MAX_BUFFER);
+            let held = capture(&mut sh("sleep 20 & printf hi"), None, Some(Duration::from_millis(500))).unwrap();
+            assert_eq!((held.out.as_slice(), held.status.unwrap().success()), (&b"hi"[..], true));
+            let slow = capture(&mut sh("sleep 20"), None, Some(Duration::from_millis(300))).unwrap();
+            assert!(slow.status.is_none());
+            assert!(started.elapsed() < Duration::from_secs(15));
+            assert_eq!(launch(&["/usr/bin/true".into()], "/").unwrap(), "started");
+            let until = Instant::now() + Duration::from_secs(5);
+            while !crate::locked(&LAUNCHED).is_empty() { reap(); assert!(Instant::now() < until); std::thread::sleep(Duration::from_millis(20)); }
         }
 
         #[test]

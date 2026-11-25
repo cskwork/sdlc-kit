@@ -37,7 +37,7 @@ impl Request {
         }
     }
     /// The body, None when it is over the limit.
-    pub fn body(&mut self, stream: &mut TcpStream) -> Result<Option<Vec<u8>>, Bad> {
+    pub fn body(&mut self, stream: &mut &TcpStream) -> Result<Option<Vec<u8>>, Bad> {
         if self.all("expect").iter().any(|v| v.eq_ignore_ascii_case("100-continue")) && self.rest.is_empty() { let _ = stream.write_all(b"HTTP/1.1 100 Continue\r\n\r\n"); }
         let mut input = Input { bytes: std::mem::take(&mut self.rest), at: 0, stream, until: Instant::now() + Duration::from_secs(300) };
         let length = self.length()?;
@@ -48,13 +48,21 @@ impl Request {
             return input.take(length).map(Some);
         }
         if length.is_some() || coding.len() != 1 || !coding[0].eq_ignore_ascii_case("chunked") { return Err(Bad::Status(400)); }
-        let mut body = Vec::new();
+        // Chunk extensions and trailers carry nothing here; together they may not pass a head's size.
+        let (mut body, mut spare) = (Vec::new(), HEAD_LIMIT);
         loop {
             let line = input.line()?;
             let size = line.split(';').next().unwrap_or("").trim();
+            spare = spare.checked_sub(line.len() - size.len()).ok_or(Bad::Status(413))?;
             if size.is_empty() || size.len() > 8 || !size.bytes().all(|b| b.is_ascii_hexdigit()) { return Err(Bad::Status(400)); }
             let size = usize::from_str_radix(size, 16).map_err(|_| Bad::Status(400))?;
-            if size == 0 { while !input.line()?.is_empty() {} return Ok(Some(body)); }
+            if size == 0 {
+                loop {
+                    let trailer = input.line()?;
+                    if trailer.is_empty() { return Ok(Some(body)); }
+                    spare = spare.checked_sub(trailer.len() + 2).ok_or(Bad::Status(431))?;
+                }
+            }
             if body.len() + size > BODY_LIMIT { return Ok(None); }
             body.extend(input.take(size)?);
             if !input.line()?.is_empty() { return Err(Bad::Status(400)); }
@@ -62,11 +70,13 @@ impl Request {
     }
 }
 
-struct Input<'a> { bytes: Vec<u8>, at: usize, stream: &'a mut TcpStream, until: Instant }
-impl Input<'_> {
+struct Input<'a, 'b> { bytes: Vec<u8>, at: usize, stream: &'a mut &'b TcpStream, until: Instant }
+impl Input<'_, '_> {
     fn more(&mut self) -> Result<(), Bad> {
         let mut buffer = [0; 8192];
         if Instant::now() > self.until { return Err(Bad::Status(408)); }
+        // What was used is dropped, so a body of any framing keeps only what it still needs.
+        self.bytes.drain(..std::mem::take(&mut self.at));
         match self.stream.read(&mut buffer) { Ok(n) if n > 0 => { self.bytes.extend_from_slice(&buffer[..n]); Ok(()) } _ => Err(Bad::Closed) }
     }
     fn take(&mut self, length: usize) -> Result<Vec<u8>, Bad> {
@@ -128,17 +138,21 @@ fn target(raw: &str) -> Option<(String, String)> {
     Some((format!("/{}", out.join("/")), query.to_string()))
 }
 
-pub fn read_request(stream: &mut TcpStream) -> Result<Request, Bad> {
-    let until = Instant::now() + Duration::from_secs(60);
+/// Reads a head; a connection that sends none in 10 s is closed.
+pub fn read_request(stream: &mut &TcpStream) -> Result<Request, Bad> {
+    let until = Instant::now() + Duration::from_secs(10);
     let mut head = Vec::new();
     let mut buffer = [0; 4096];
     let end = loop {
         if let Some(at) = head.windows(4).position(|w| w == b"\r\n\r\n") { break at; }
         if head.len() > HEAD_LIMIT { return Err(Bad::Status(431)); }
-        if Instant::now() > until { return Err(Bad::Status(408)); }
+        let left = until.saturating_duration_since(Instant::now());
+        if left.is_zero() { return Err(Bad::Status(408)); }
+        let _ = stream.set_read_timeout(Some(left));
         match stream.read(&mut buffer) { Ok(n) if n > 0 => head.extend_from_slice(&buffer[..n]), _ => return Err(Bad::Closed) }
     };
     if end > HEAD_LIMIT { return Err(Bad::Status(431)); }
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(60)));
     let rest = head.split_off(end + 4);
     let bad = || Bad::Status(400);
     // Header bytes outside ASCII are kept as Latin-1, as Node does.
@@ -164,22 +178,24 @@ X-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nCache-Control
 pub fn reason(status: u16) -> &'static str {
     match status {
         200 => "OK", 400 => "Bad Request", 403 => "Forbidden", 404 => "Not Found", 405 => "Method Not Allowed", 408 => "Request Timeout",
-        409 => "Conflict", 413 => "Payload Too Large", 431 => "Request Header Fields Too Large", _ => "Error",
+        409 => "Conflict", 413 => "Payload Too Large", 431 => "Request Header Fields Too Large", 503 => "Service Unavailable", _ => "Error",
     }
 }
 /// Answers and closes the connection; `body` is left out for HEAD.
-pub fn answer(stream: &mut TcpStream, status: u16, kind: &str, content: &[u8], body: bool) {
+pub fn answer(stream: &mut &TcpStream, request: &Request, status: u16, kind: &str, content: &[u8]) {
     let head = format!("HTTP/1.1 {status} {}\r\n{HEADERS}Content-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", reason(status), content.len());
-    if stream.write_all(head.as_bytes()).is_ok() && body { let _ = stream.write_all(content); }
-    finish(stream);
+    if stream.write_all(head.as_bytes()).is_ok() && request.method != "HEAD" { let _ = stream.write_all(content); }
+    // A plain GET has nothing left to read.
+    let bodyless = request.method == "GET" && request.rest.is_empty() && request.all("content-length").is_empty() && request.all("transfer-encoding").is_empty();
+    if !bodyless { finish(stream); }
 }
 /// A request that cannot be read, as Node answers it.
-pub fn refuse(stream: &mut TcpStream, status: u16) {
+pub fn refuse(stream: &mut &TcpStream, status: u16) {
     let _ = stream.write_all(format!("HTTP/1.1 {status} {}\r\nConnection: close\r\n\r\n", reason(status)).as_bytes());
     finish(stream);
 }
 /// Closes after reading what the client still sends for a moment: unread bytes would reset the connection and lose the answer.
-fn finish(stream: &mut TcpStream) {
+fn finish(stream: &mut &TcpStream) {
     let _ = stream.flush();
     if stream.shutdown(std::net::Shutdown::Write).is_err() { return; }
     let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));

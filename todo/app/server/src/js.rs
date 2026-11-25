@@ -85,9 +85,39 @@ pub fn resolve(path: &str) -> String {
     let end = joined.trim_end_matches(if cfg!(windows) { '\\' } else { '/' });
     if end.is_empty() { joined } else { end.to_string() }
 }
+/// An environment variable as Node reads it; undecodable bytes become U+FFFD.
+pub fn env(name: &str) -> Option<String> { std::env::var_os(name).map(|v| v.to_string_lossy().into_owned()) }
+/// os.homedir(): the variable when set (even empty), else the account's own folder.
 pub fn home() -> String {
-    let name = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
-    std::env::var(name).ok().filter(|h| !h.is_empty()).unwrap_or_default()
+    // Windows: os.homedir() refuses a USERPROFILE too short to be a folder; a relative list must not come of it.
+    let set = if cfg!(windows) { env("USERPROFILE").filter(|home| home.len() > 2) } else { env("HOME") };
+    set.unwrap_or_else(account_home)
+}
+#[cfg(unix)]
+fn account_home() -> String {
+    let mut buffer = vec![0u8; 16 * 1024];
+    // SAFETY: getpwuid_r fills the struct and buffer it is given; pw_dir points into the buffer.
+    unsafe {
+        let mut entry: libc::passwd = std::mem::zeroed();
+        let mut found = std::ptr::null_mut();
+        let code = libc::getpwuid_r(libc::geteuid(), &mut entry, buffer.as_mut_ptr().cast(), buffer.len(), &mut found);
+        if code != 0 || found.is_null() || entry.pw_dir.is_null() { return String::new(); }
+        std::ffi::CStr::from_ptr(entry.pw_dir).to_string_lossy().into_owned()
+    }
+}
+#[cfg(windows)]
+fn account_home() -> String {
+    let mut buffer = [0u16; 1024];
+    let mut size = buffer.len() as u32;
+    // SAFETY: the token is closed; the buffer holds `size` units, its final NUL included.
+    unsafe {
+        let mut token = std::ptr::null_mut();
+        if win::OpenProcessToken(win::GetCurrentProcess(), 0x0008, &mut token) == 0 { return String::new(); } // TOKEN_QUERY
+        let got = win::GetUserProfileDirectoryW(token, buffer.as_mut_ptr(), &mut size);
+        win::CloseHandle(token);
+        if got == 0 { return String::new(); }
+    }
+    String::from_utf16_lossy(&buffer[..buffer.iter().position(|u| *u == 0).unwrap_or(0)])
 }
 
 // ---------- random, hashes ----------
@@ -212,6 +242,10 @@ mod win {
         pub fn CloseHandle(handle: *mut c_void) -> i32;
         pub fn GetCurrentProcess() -> *mut c_void;
         pub fn LocalFree(memory: *mut c_void) -> *mut c_void;
+    }
+    #[link(name = "userenv")]
+    unsafe extern "system" {
+        pub fn GetUserProfileDirectoryW(token: *mut c_void, out: *mut u16, size: *mut u32) -> i32;
     }
     #[link(name = "advapi32")]
     unsafe extern "system" {

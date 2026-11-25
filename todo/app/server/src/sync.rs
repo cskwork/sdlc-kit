@@ -52,22 +52,25 @@ fn one_line(text: &str) -> String {
 fn readings(file: &str, kit: &str, only: &str) -> Result<Vec<Reading>, Fail> {
     let items = core::scoped(file, only)?;
     let next = AtomicUsize::new(0);
+    let work = || {
+        let mut done = Vec::new();
+        while let Some((at, item)) = { let at = next.fetch_add(1, Ordering::SeqCst); items.get(at).map(|item| (at, item)) } { done.push((at, read(item, kit))); }
+        done
+    };
     let results: Vec<Result<Option<Reading>, Fail>> = std::thread::scope(|scope| {
-        let readers: Vec<_> = (0..READERS.min(items.len())).map(|_| scope.spawn(|| {
-            let mut done = Vec::new();
-            while let Some((at, item)) = { let at = next.fetch_add(1, Ordering::SeqCst); items.get(at).map(|item| (at, item)) } { done.push((at, read(item, kit))); }
-            done
-        })).collect();
-        let mut all: Vec<_> = readers.into_iter().flat_map(|r| r.join().unwrap_or_else(|_| vec![(0, Err(Fail::new("a status reader failed")))])).collect();
+        // This thread reads too, so every item is read even when no other thread can start.
+        let readers: Vec<_> = (1..READERS.min(items.len())).filter_map(|_| std::thread::Builder::new().spawn_scoped(scope, work).ok()).collect();
+        let mut all = work();
+        all.extend(readers.into_iter().flat_map(|r| r.join().unwrap_or_else(|_| vec![(0, Err(Fail::new("a status reader failed")))])));
         all.sort_by_key(|(at, _)| *at);
         all.into_iter().map(|(_, result)| result).collect()
     });
     results.into_iter().filter_map(Result::transpose).collect()
 }
 /// core.sync: `only` limits the status calls to one item id.
-pub fn sync(file: &str, kit: &str, only: &str) -> Result<(), Fail> {
+pub fn sync(list: &core::List, kit: &str, only: &str) -> Result<(), Fail> {
     loop {
-        let readings = readings(file, kit, only)?;
-        match core::apply_readings(file, &readings, only) { Err(error) if error.kind == Kind::SyncChanged => continue, other => return other }
+        let readings = readings(&list.file, kit, only)?;
+        match core::apply_readings(list, &readings, only) { Err(error) if error.kind == Kind::SyncChanged => continue, other => return other }
     }
 }

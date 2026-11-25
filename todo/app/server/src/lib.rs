@@ -1,6 +1,10 @@
 //! The to-do web server as a library: the routes, checks and answers of todo/web.mjs, so a shell runs no Node
 //! server. The CLI and TUI keep todo.mjs; both write the same files under the same lock (core.rs). A shell calls
 //! `find_or_start`, talks HTTP to 127.0.0.1 with the token, and calls `Handle::close` before it exits.
+// A panic must stay in its thread: the locks tolerate it, the guards undo it, and the watcher goes on.
+#[cfg(panic = "abort")]
+compile_error!("sdlc-todo-server needs panic = \"unwind\"");
+
 mod board_run;
 #[doc(hidden)]
 pub mod core;
@@ -24,7 +28,9 @@ const LANGUAGES: [&str; 2] = ["en", "ko"];
 const KEEPALIVE: Duration = Duration::from_secs(15);
 /// Frames a stream may fall behind by before it is dropped; its page reconnects and gets the whole list.
 const BACKLOG: usize = 64;
-const CONNECTIONS: usize = 256;
+const CONNECTIONS: usize = 128;
+/// Connections that have not shown the token; the oldest makes room, so they cannot keep others out.
+const STRANGERS: usize = 64;
 
 pub struct Options {
     /// The to-do list, its optional feed and the session file ('' for none).
@@ -48,15 +54,19 @@ pub struct Options {
     pub pid: u32,
 }
 
+fn setting(name: &str) -> Option<String> { js::env(name).filter(|v| !v.is_empty()) }
+/// The list and the session file, as core.todoPath and core.sessionPath name them.
+pub fn todo_path() -> String { setting("SDLC_TODO").unwrap_or_else(|| js::join(&js::home(), &[".sdlc", "todo.md"])) }
+pub fn session_path() -> PathBuf { setting("SDLC_TODO_SESSION").unwrap_or_else(|| js::join(&js::dirname(&todo_path()), &["todo-web.json"])).into() }
+
 impl Options {
     /// The server `todo.mjs serve` would be: the list from the environment, pages and scripts from the kit.
     pub fn for_kit(kit: &Path, session: &Path, node: &str, lang: &str) -> Options {
-        let env = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
-        let file = env("SDLC_TODO").unwrap_or_else(|| js::join(&js::home(), &[".sdlc", "todo.md"]));
+        let file = todo_path();
         // Node resolves the kit through links, and its path is part of the error words in the list.
         let kit = plain(std::fs::canonicalize(kit).unwrap_or_else(|_| kit.into()));
         Options {
-            feed: env("SDLC_TODO_FEED").unwrap_or_else(|| js::join(&js::dirname(&file), &["todo-feed.json"])),
+            feed: setting("SDLC_TODO_FEED").unwrap_or_else(|| js::join(&js::dirname(&file), &["todo-feed.json"])),
             file, session: session.into(), pages: Path::new(&kit).join("todo"), kit, node: node.into(),
             lang: if LANGUAGES.contains(&lang) { lang.into() } else { LANGUAGES[0].into() },
             sync_first: false, run_timeout: 300_000, kill_after: 5000, finish_retry: 30_000, search_path: None, can_exec: cfg!(unix), pid: std::process::id(),
@@ -108,7 +118,11 @@ struct Server {
     options: Options,
     port: u16,
     token: String,
-    /// Open event streams. Held while a frame is built and queued, so frames arrive in the order they were built.
+    /// What this server writes; closed with it.
+    list: core::List,
+    /// Held while a frame is built and queued, so frames arrive in the order they were built; close() never takes it.
+    publishing: Mutex<()>,
+    /// Open event streams.
     clients: Mutex<Vec<mpsc::SyncSender<Arc<str>>>>,
     feed: Mutex<Feed>,
     syncing: Mutex<Option<Sync>>,
@@ -117,6 +131,7 @@ struct Server {
     run_server: String,
     closing: AtomicBool,
     connections: AtomicUsize,
+    strangers: Mutex<std::collections::VecDeque<Arc<TcpStream>>>,
 }
 
 /// Where a server answers on 127.0.0.1 and the token it asks for.
@@ -131,10 +146,11 @@ impl Handle {
     /// Stops answering, removes the session file when it is ours, and lets a write in progress finish.
     pub fn close(&self) {
         if self.server.closing.swap(true, Ordering::SeqCst) { return; }
+        self.server.list.close();
         remove_session(&self.server.options.session, &self.server.token);
         locked(&self.server.clients).clear();
         // Wakes the accept loop so it sees that it is closing.
-        let _ = TcpStream::connect(("127.0.0.1", self.server.port));
+        let _ = TcpStream::connect_timeout(&([127, 0, 0, 1], self.server.port).into(), Duration::from_millis(200));
         let_writes_finish();
     }
 }
@@ -203,8 +219,8 @@ fn clean_up_on_signals() -> Result<(), String> {
         if libc::pipe(ends.as_mut_ptr()) != 0 { return Err(std::io::Error::last_os_error().to_string()); }
         for end in ends { libc::fcntl(end, libc::F_SETFD, libc::FD_CLOEXEC); }
         SIGNAL_PIPE.store(ends[1], Ordering::SeqCst);
-        for signal in [libc::SIGTERM, libc::SIGINT] { libc::signal(signal, on_signal as *const () as libc::sighandler_t); }
     }
+    // The reader first: a handler without one would swallow the signal.
     spawn("todo-signal", move || {
         let mut byte = 0u8;
         // SAFETY: reads one byte; then the default action ends the process.
@@ -212,7 +228,10 @@ fn clean_up_on_signals() -> Result<(), String> {
         remove_open_sessions();
         let_writes_finish();
         unsafe { libc::signal(byte as i32, libc::SIG_DFL); libc::kill(libc::getpid(), byte as i32); }
-    })
+    })?;
+    // SAFETY: the handler only writes to the pipe.
+    unsafe { for signal in [libc::SIGTERM, libc::SIGINT] { libc::signal(signal, on_signal as *const () as libc::sighandler_t); } }
+    Ok(())
 }
 
 pub fn configure_helper(options: &Options) { helper::configure(&options.node, &options.pages.join("core.mjs")); }
@@ -223,41 +242,54 @@ pub fn start(options: Options) -> Result<Handle, String> {
     configure_helper(&options);
     if !options.session.as_os_str().is_empty() { *locked(&SESSION_ENV) = Some(options.session.clone()); }
     let token = js::hex(&js::random::<16>()?);
-    if options.sync_first { sync::sync(&options.file, &options.kit, "").map_err(|e| e.message)?; }
+    let list = core::List::new(&options.file);
+    if options.sync_first { sync::sync(&list, &options.kit, "").map_err(|e| e.message)?; }
     let feed = Mutex::new(read_feed(&options.feed));
     // Where each file stands before anything can change it under the watcher.
     let watched = [options.file.clone(), core::working_path(&options.file), options.feed.clone()].map(|f| (stat(&f), f));
     let run_server = js::hex(&js::random::<4>()?);
     let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-    let server = Arc::new(Server { options, port, token, clients: Mutex::default(), feed, syncing: Mutex::default(), search_path: OnceLock::new(), run_server,
-        closing: AtomicBool::new(false), connections: AtomicUsize::new(0) });
+    let server = Arc::new(Server { options, port, token, list, publishing: Mutex::default(), clients: Mutex::default(), feed, syncing: Mutex::default(), search_path: OnceLock::new(), run_server,
+        closing: AtomicBool::new(false), connections: AtomicUsize::new(0), strangers: Mutex::default() });
     server.mark_dead_runs().map_err(|e| e.message)?;
+    let handle = Handle { server };
+    match begin(&handle.server, listener, watched) {
+        Ok(()) => Ok(handle),
+        Err(error) => { handle.close(); Err(error) }
+    }
+}
+/// Starts the threads and shares the session; on an error the caller closes the server, which ends those that started.
+fn begin(server: &Arc<Server>, listener: TcpListener, watched: [(Stat, String); 3]) -> Result<(), String> {
     let (accepting, watching) = (server.clone(), server.clone());
     spawn("todo-accept", move || accepting.accept(listener))?;
     spawn("todo-watch", move || watching.watch(watched))?;
     // The login shell is asked before anything needs its PATH.
     let asking = server.clone();
     let _ = spawn("todo-path", move || { asking.command_path(); });
-    let handle = Handle { server: server.clone() };
     let session = server.options.session.clone();
     if !session.as_os_str().is_empty() {
-        if let Err(error) = write_session(&session, port, &server.token, server.options.pid) { handle.close(); return Err(error.message); }
         let mut open = locked(&OPEN);
         // Windows has neither: a shell there closes the handle, and a leftover file fails the live check.
         #[cfg(unix)]
         if open.is_empty() {
+            clean_up_on_signals()?;
             // SAFETY: at_exit only reads the list and removes files; registered once.
             unsafe { libc::atexit(at_exit); }
-            clean_up_on_signals()?;
         }
-        open.clear();
-        open.push((session, server.token.clone()));
+        // An earlier server's entry goes only once this one's file took its place; removal checks the token anyway.
+        open.push((session.clone(), server.token.clone()));
+        drop(open);
+        write_session(&session, server.port, &server.token, server.options.pid).map_err(|e| e.message)?;
+        let mut open = locked(&OPEN);
+        let newest = open.len() - 1;
+        open.drain(..newest);
     }
     if !server.options.sync_first {
+        let server = server.clone();
         let _ = spawn("todo-sync", move || { if let Err(error) = server.synced() { eprintln!("to-do sync: {error}"); } });
     }
-    Ok(handle)
+    Ok(())
 }
 fn spawn(name: &str, work: impl FnOnce() + Send + 'static) -> Result<(), String> {
     std::thread::Builder::new().name(name.into()).spawn(work).map(|_| ()).map_err(|e| e.to_string())
@@ -277,35 +309,41 @@ fn stat(file: &str) -> Stat {
 impl Server {
     /// Polls the list, the working markers and the feed four times a second, as fs.watchFile does.
     fn watch(&self, mut files: [(Stat, String); 3]) {
-        let mut expiry = self.next_expiry();
+        let mut expiry = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.next_expiry())).unwrap_or_default();
         let mut flush_at = Instant::now() + KEEPALIVE;
         while !self.closing.load(Ordering::SeqCst) {
             std::thread::sleep(Duration::from_millis(250));
-            let mut changed = [false; 3];
-            for (i, (known, file)) in files.iter_mut().enumerate() {
-                let now = stat(file);
-                changed[i] = now != *known;
-                *known = now;
-            }
-            if changed[2] { *locked(&self.feed) = read_feed(&files[2].1); }
-            let expired = expiry.is_some_and(|at| js::now_ms() >= at);
-            if changed[1] || expired { expiry = self.next_expiry(); }
-            if changed.contains(&true) || expired { self.broadcast(); }
-            if Instant::now() >= flush_at { flush_at += KEEPALIVE; self.flush_finishes(); }
+            let round = std::panic::AssertUnwindSafe(|| self.look(&mut files, &mut expiry, &mut flush_at));
+            // The next round goes on from the state this one left.
+            if std::panic::catch_unwind(round).is_err() { eprintln!("to-do watcher: a round failed"); }
         }
+    }
+    fn look(&self, files: &mut [(Stat, String); 3], expiry: &mut Option<i64>, flush_at: &mut Instant) {
+        let mut changed = [false; 3];
+        for (i, (known, file)) in files.iter_mut().enumerate() {
+            let now = stat(file);
+            changed[i] = now != *known;
+            *known = now;
+        }
+        if changed[2] { *locked(&self.feed) = read_feed(&files[2].1); }
+        let expired = expiry.is_some_and(|at| js::now_ms() >= at);
+        if changed[1] || expired { *expiry = self.next_expiry(); }
+        if changed.contains(&true) || expired { self.broadcast(); }
+        if Instant::now() >= *flush_at { *flush_at += KEEPALIVE; self.flush_finishes(); }
+        run::reap();
     }
     /// When the oldest live working marker runs out.
     fn next_expiry(&self) -> Option<i64> {
         core::read_working(&self.options.file, js::now_ms()).iter().filter_map(|(_, mark)| helper::date(&mark.beat.lossy())).min().map(|at| at + core::working_ttl() + 50)
     }
     fn broadcast(&self) {
-        let mut clients = locked(&self.clients);
-        if clients.is_empty() { return; }
+        let _one = locked(&self.publishing);
+        if locked(&self.clients).is_empty() { return; }
         let frame: Arc<str> = match self.frame() {
             Ok(payload) => payload.into(),
             Err(error) => format!("event: error\ndata: {}\n\n", error_json(&error.message)).into(),
         };
-        clients.retain(|client| client.try_send(frame.clone()).is_ok());
+        locked(&self.clients).retain(|client| client.try_send(frame.clone()).is_ok());
     }
 
     // ---------- the list as every view shows it ----------
@@ -384,7 +422,7 @@ impl Server {
             match syncing.as_ref() { Some(flight) => (flight.clone(), false), None => { let flight = Sync::default(); *syncing = Some(flight.clone()); (flight, true) } }
         };
         if mine {
-            let work = std::panic::AssertUnwindSafe(|| sync::sync(&self.options.file, &self.options.kit, "").map_err(|e| e.message));
+            let work = std::panic::AssertUnwindSafe(|| sync::sync(&self.list, &self.options.kit, "").map_err(|e| e.message));
             let result = std::panic::catch_unwind(work).unwrap_or_else(|_| Err("sync failed".into()));
             *locked(&self.syncing) = None;
             *locked(&flight.0) = Some(result.clone());
@@ -402,52 +440,61 @@ impl Server {
     fn accept(self: Arc<Server>, listener: TcpListener) {
         for stream in listener.incoming() {
             if self.closing.load(Ordering::SeqCst) { return; }
-            let Ok(stream) = stream else { std::thread::sleep(Duration::from_millis(50)); continue };
-            if self.connections.fetch_add(1, Ordering::SeqCst) >= CONNECTIONS { self.connections.fetch_sub(1, Ordering::SeqCst); continue; }
-            let server = self.clone();
-            let started = spawn("todo-http", move || {
-                struct Leave<'a>(&'a Server);
-                impl Drop for Leave<'_> { fn drop(&mut self) { self.0.connections.fetch_sub(1, Ordering::SeqCst); } }
-                let _leave = Leave(&server);
-                server.serve(stream);
-            });
-            if started.is_err() { self.connections.fetch_sub(1, Ordering::SeqCst); }
+            let Ok(stream) = stream else { self.make_room(); std::thread::sleep(Duration::from_millis(50)); continue };
+            let full = self.connections.load(Ordering::SeqCst) >= CONNECTIONS;
+            if (full || locked(&self.strangers).len() >= STRANGERS) && !self.make_room() && full { continue; }
+            self.connections.fetch_add(1, Ordering::SeqCst);
+            let (server, stream) = (self.clone(), Arc::new(stream));
+            locked(&self.strangers).push_back(stream.clone());
+            let guest = Guest { server, stream };
+            let _ = spawn("todo-http", move || guest.server.serve(&guest.stream));
         }
     }
-    fn serve(&self, mut stream: TcpStream) {
+    /// Closes the oldest connection that has not shown the token.
+    fn make_room(&self) -> bool {
+        let oldest = locked(&self.strangers).pop_front();
+        oldest.is_some_and(|stream| { let _ = stream.shutdown(std::net::Shutdown::Both); true })
+    }
+    fn known(&self, stream: &TcpStream) { locked(&self.strangers).retain(|other| !std::ptr::eq(&**other, stream)); }
+    fn serve(&self, stream: &TcpStream) {
+        let mut stream = stream;
         let _ = stream.set_nodelay(true);
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(60)));
         let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
         let mut request = match http::read_request(&mut stream) {
             Ok(request) => request,
             Err(http::Bad::Closed) => return,
             Err(http::Bad::Status(status)) => return http::refuse(&mut stream, status),
         };
-        // Liveness answers at once: a result waiting for a busy lock must not make this server look gone.
-        if request.path != "/api/live" { self.flush_finishes(); }
+        if self.closing.load(Ordering::SeqCst) { return http::refuse(&mut stream, 503); }
         if request.http11 && request.all("host").is_empty() { return http::refuse(&mut stream, 400); }
         if request.method == "CONNECT" { return; }
-        let body = request.method != "HEAD";
-        match self.route(&mut request, &mut stream) {
-            Ok(Reply::Json(text)) => http::answer(&mut stream, 200, JSON, text.as_bytes(), body),
-            Ok(Reply::File(kind, bytes)) => http::answer(&mut stream, 200, kind, &bytes, body),
-            Ok(Reply::Error(status, text)) => http::answer(&mut stream, status, JSON, error_json(&text).as_bytes(), body),
+        let reply = self.route(&mut request, &mut stream);
+        let answer = |stream: &mut &TcpStream, status, kind, content: &[u8]| http::answer(stream, &request, status, kind, content);
+        match reply {
+            Ok(Reply::Json(text)) => answer(&mut stream, 200, JSON, text.as_bytes()),
+            Ok(Reply::File(kind, bytes)) => answer(&mut stream, 200, kind, &bytes),
+            Ok(Reply::Error(status, text)) => answer(&mut stream, status, JSON, error_json(&text).as_bytes()),
             Ok(Reply::Done) => {}
-            Err(error) if error.status == 403 => http::answer(&mut stream, 403, "text/plain; charset=utf-8", b"Forbidden\n", body),
-            Err(error) => http::answer(&mut stream, if error.status == 0 { 400 } else { error.status }, JSON, error_json(&error.message).as_bytes(), body),
+            Err(error) if error.status == 403 => answer(&mut stream, 403, "text/plain; charset=utf-8", b"Forbidden\n"),
+            Err(error) => answer(&mut stream, if error.status == 0 { 400 } else { error.status }, JSON, error_json(&error.message).as_bytes()),
         }
     }
     fn authorized(&self, value: Option<&str>) -> bool {
         // Constant time over the token's length.
         value.is_some_and(|v| v.len() == self.token.len() && v.bytes().zip(self.token.bytes()).fold(0, |diff, (a, b)| diff | (a ^ b)) == 0)
     }
-    fn route(&self, request: &mut http::Request, stream: &mut TcpStream) -> Result<Reply, Fail> {
+    fn route(&self, request: &mut http::Request, stream: &mut &TcpStream) -> Result<Reply, Fail> {
         let hosts = [format!("127.0.0.1:{}", self.port), format!("localhost:{}", self.port)];
         let forbidden = || Fail::at(403, "Forbidden");
         if !request.only("host").is_some_and(|host| hosts.iter().any(|h| h == host)) { return forbidden(); }
         let path = request.path.clone();
         if (path == "/api" || path.starts_with("/api/")) && !self.authorized(request.only("x-todo-token")) { return forbidden(); }
         if path == "/events" && !self.authorized(request.param("t").as_deref()) { return forbidden(); }
+        if path.starts_with("/api/") || path == "/events" {
+            self.known(stream);
+            // Liveness answers at once: a result waiting for a busy lock must not make this server look gone.
+            if path != "/api/live" { self.flush_finishes(); }
+        }
         if request.method != "GET" {
             let origin = request.only("origin").and_then(|o| o.strip_prefix("http://"));
             let json = request.all("content-type").first().is_some_and(|kind| js::trim(kind.split(';').next().unwrap_or("")).eq_ignore_ascii_case("application/json"));
@@ -473,13 +520,14 @@ impl Server {
             _ => Ok(Reply::Error(404, "not found".into())),
         }
     }
-    fn events(&self, request: &http::Request, stream: &mut TcpStream) -> Result<Reply, Fail> {
+    fn events(&self, request: &http::Request, stream: &mut &TcpStream) -> Result<Reply, Fail> {
         use std::io::Write;
         let (send, frames) = mpsc::sync_channel::<Arc<str>>(BACKLOG);
         {
-            let mut clients = locked(&self.clients);
+            let _one = locked(&self.publishing);
             let first: Arc<str> = self.frame()?.into();
             let _ = send.try_send(first);
+            let mut clients = locked(&self.clients);
             if !self.closing.load(Ordering::SeqCst) { clients.push(send); }
         }
         let chunked = request.http11;
@@ -502,6 +550,15 @@ impl Server {
             }
         }
         Ok(Reply::Done)
+    }
+}
+
+/// One connection; however it ends (a panic too), it is counted out.
+struct Guest { server: Arc<Server>, stream: Arc<TcpStream> }
+impl Drop for Guest {
+    fn drop(&mut self) {
+        self.server.known(&self.stream);
+        self.server.connections.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
@@ -557,7 +614,7 @@ fn line(value: Option<&Json>, name: &str, max: usize) -> Result<String, Fail> {
 }
 
 impl Server {
-    fn change(&self, request: &mut http::Request, stream: &mut TcpStream, path: &str) -> Result<Reply, Fail> {
+    fn change(&self, request: &mut http::Request, stream: &mut &TcpStream, path: &str) -> Result<Reply, Fail> {
         let body = match request.body(stream) {
             Ok(Some(bytes)) => bytes,
             Ok(None) => return Fail::at(413, "body too large"),
@@ -566,7 +623,7 @@ impl Server {
         };
         let Some(body @ Json::Obj(_)) = json::parse(&String::from_utf8_lossy(&body)) else { return Fail::at(400, "invalid JSON object") };
         if request.method != "POST" { return Ok(Reply::Error(405, "method not allowed".into())); }
-        let file = self.options.file.as_str();
+        let list = &self.list;
         let (id, version) = (body.get("id").and_then(Json::text), body.get("version").and_then(Json::text));
         let (id, version) = (id.as_deref(), version.as_deref());
         let mut launch = None;
@@ -575,17 +632,17 @@ impl Server {
                 let result = self.run_item(id, version, body.get("path").and_then(Json::text).as_deref())?;
                 return self.payload_with(|out| { out.push_str(",\"exec\":"); result.write(out); }).map(Reply::Json);
             }
-            "/api/items" => core::add(file, &line(body.get("text"), "text", usize::MAX)?)?,
+            "/api/items" => core::add(list, &line(body.get("text"), "text", usize::MAX)?)?,
             "/api/item" => match body.get("op").and_then(Json::text).as_deref() {
-                Some("edit") => core::edit(file, id, version, &line(body.get("title"), "title", usize::MAX)?)?,
+                Some("edit") => core::edit(list, id, version, &line(body.get("title"), "title", usize::MAX)?)?,
                 Some("move") => match body.get("delta") {
-                    Some(Json::Num(delta)) if delta.abs() == 1.0 => core::move_by(file, id, version, *delta as i64)?,
+                    Some(Json::Num(delta)) if delta.abs() == 1.0 => core::move_by(list, id, version, *delta as i64)?,
                     _ => return Fail::at(400, "invalid delta"),
                 },
-                Some("done") => core::done(file, id, version)?,
-                Some("undone") => core::undone(file, id, version)?,
-                Some("delete") => core::remove(file, id, version)?,
-                Some("reply") => core::reply(file, id, version, &line(body.get("text"), "reply", usize::MAX)?)?,
+                Some("done") => core::done(list, id, version)?,
+                Some("undone") => core::undone(list, id, version)?,
+                Some("delete") => core::remove(list, id, version)?,
+                Some("reply") => core::reply(list, id, version, &line(body.get("text"), "reply", usize::MAX)?)?,
                 Some("fix") => launch = Some(self.fix(id, version)?),
                 _ => return Fail::at(400, "invalid operation"),
             },
@@ -598,8 +655,8 @@ impl Server {
     /// Records the fix request and starts the agent todo-agent.json names, if it names one.
     fn fix(&self, id: Option<&str>, version: Option<&str>) -> Result<String, Fail> {
         let file = &self.options.file;
-        let (id, project) = core::request_fix(file, id, version)?;
-        let config = std::env::var("SDLC_TODO_AGENT").ok().filter(|v| !v.is_empty()).unwrap_or_else(|| js::join(&js::dirname(file), &["todo-agent.json"]));
+        let (id, project) = core::request_fix(&self.list, id, version)?;
+        let config = setting("SDLC_TODO_AGENT").unwrap_or_else(|| js::join(&js::dirname(file), &["todo-agent.json"]));
         let text = match std::fs::read(&config) {
             Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok("queued".into()),
@@ -639,7 +696,7 @@ impl Server {
     fn artifact(&self, id: Option<String>) -> Result<String, Fail> {
         let mut item = self.item_for(id.as_deref())?;
         if item.brief.is_empty() || item.sdlc.is_some() {
-            sync::sync(&self.options.file, &self.options.kit, &item.id)?;
+            sync::sync(&self.list, &self.options.kit, &item.id)?;
             item = self.item_for(id.as_deref())?;
         }
         if !item.brief.is_empty() && gate_of(&item, false).is_empty() { return brief(&item); }
@@ -662,7 +719,7 @@ impl Server {
         if !matches!(gate.as_str(), "intent" | "plan") || sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) { return Fail::at(400, "invalid approval"); }
         let words = if typed.is_empty() { format!("approved as shown in the to-do web page (version {})", sha[..12].to_ascii_lowercase()) } else { typed };
         let kit = &self.options.kit;
-        core::update(&self.options.file, id, version, &mut |model, at| {
+        core::update(&self.list, id, version, &mut |model, at| {
             let item = &mut model.items[at];
             core::project_path(&item.project)?;
             let shown = gate_of(item, false);
@@ -675,7 +732,7 @@ impl Server {
             item.events.push(core::Event { at: js::stamp(), who: "human".into(), what: format!("approved {gate} — \"{words}\"") });
             Ok(())
         })?;
-        sync::sync(&self.options.file, kit, "")
+        sync::sync(&self.list, kit, "")
     }
 }
 
@@ -706,5 +763,71 @@ fn brief(item: &Item) -> Result<String, Fail> {
     match std::fs::read(&item.brief) {
         Ok(bytes) => Ok(document("", &item.brief, &bytes)),
         Err(e) => Fail::at(if e.kind() == std::io::ErrorKind::NotFound { 404 } else { 409 }, format!("brief not readable: {}", item.brief)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+
+    fn served(name: &str) -> (PathBuf, Handle) {
+        let dir = std::env::temp_dir().join(format!("sdlc-todo-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut options = Options::for_kit(&dir, Path::new(""), "node", "en");
+        (options.file, options.feed, options.search_path) = (dir.join("todo.md").to_string_lossy().into(), dir.join("feed.json").to_string_lossy().into(), Some(String::new()));
+        (dir, start(options).unwrap())
+    }
+    fn ask(handle: &Handle, method: &str, path: &str, more: &str) -> TcpStream {
+        let Session { port, token } = handle.session();
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        write!(stream, "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://127.0.0.1:{port}\r\nContent-Type: application/json\r\nX-Todo-Token: {token}\r\n{more}").unwrap();
+        stream
+    }
+    fn status(mut stream: TcpStream) -> String { let mut text = String::new(); let _ = stream.read_to_string(&mut text); text.chars().skip(9).take(3).collect() }
+
+    #[test]
+    fn a_post_still_sending_its_body_writes_nothing_after_close() {
+        let (dir, handle) = served("late");
+        let mut late = ask(&handle, "POST", "/api/items", "Content-Length: 15\r\n\r\n{\"text\"");
+        std::thread::sleep(Duration::from_millis(300));
+        handle.close();
+        // The first sync may have written the empty list; nothing changes it after close.
+        let before = std::fs::read(dir.join("todo.md")).ok();
+        late.write_all(b":\"late\"}").unwrap();
+        assert_eq!(status(late), "503");
+        assert_eq!(std::fs::read(dir.join("todo.md")).ok(), before);
+        assert!(!dir.join("todo.md.lock").exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_body_is_bounded_however_it_is_framed() {
+        let (dir, handle) = served("frames");
+        let chunked = "Transfer-Encoding: chunked\r\n\r\n";
+        assert_eq!(status(ask(&handle, "POST", "/api/items", &format!("{chunked}5\r\n{{\"tex\r\n9;x=1\r\nt\":\"ok\"}}\r\n0\r\nA: b\r\n\r\n"))), "200");
+        let mut endless = ask(&handle, "POST", "/api/items", &format!("{chunked}2\r\n{{}}\r\n0\r\n"));
+        for _ in 0..4000 { if endless.write_all(b"X-Trailer: aaaaaaaaaaaaaaaa\r\n").is_err() { break; } }
+        assert!(matches!(status(endless).as_str(), "431" | ""));
+        std::fs::remove_dir_all(dir).unwrap();
+        handle.close();
+    }
+
+    #[test]
+    fn a_panic_under_every_lock_leaves_a_working_server() {
+        let (dir, handle) = served("panic-locks");
+        let server = handle.server.clone();
+        let _ = std::thread::spawn(move || {
+            let _all = (locked(&server.publishing), locked(&server.clients), locked(&server.feed), locked(&server.syncing), locked(&server.strangers));
+            panic!("on purpose");
+        }).join();
+        for path in ["/api/live", "/api/items", "/api/feed"] { assert_eq!(status(ask(&handle, "GET", path, "\r\n")), "200", "{path}"); }
+        let mut stream = ask(&handle, "GET", &format!("/events?t={}", handle.session().token), "\r\n");
+        core::add(&handle.server.list, "seen").unwrap();
+        stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let (mut text, mut buffer) = (String::new(), [0; 4096]);
+        while !text.contains("seen") { let n = stream.read(&mut buffer).unwrap(); assert!(n > 0); text.push_str(&String::from_utf8_lossy(&buffer[..n])); }
+        handle.close();
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

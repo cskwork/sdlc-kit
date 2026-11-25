@@ -645,6 +645,15 @@ impl Drop for Heartbeat {
     fn drop(&mut self) { self.stop.take(); if let Some(thread) = self.thread.take() { let _ = thread.join(); } }
 }
 
+/// A list as one server writes it; a closed server may not start another write.
+#[derive(Clone)]
+pub struct List { pub file: String, closed: Arc<std::sync::atomic::AtomicBool> }
+impl List {
+    pub fn new(file: &str) -> List { List { file: file.into(), closed: Arc::default() } }
+    pub fn close(&self) { self.closed.store(true, Ordering::SeqCst); }
+    pub fn is_closed(&self) -> bool { self.closed.load(Ordering::SeqCst) }
+}
+
 /// Changes being written right now, so a quit can let them finish.
 pub static WRITING: AtomicUsize = AtomicUsize::new(0);
 struct Writing;
@@ -675,8 +684,11 @@ fn take_lock(lock: &str, deadline: Instant) -> Result<File, Fail> {
     }
 }
 /// Reads, changes and replaces the list under the lock. `change` runs again when another process took the lock over.
-pub fn mutate<T>(file: &str, change: &mut dyn FnMut(&mut Model) -> Result<T, Fail>) -> Result<T, Fail> {
+pub fn mutate<T>(list: &List, change: &mut dyn FnMut(&mut Model) -> Result<T, Fail>) -> Result<T, Fail> {
     let _writing = Writing::begin();
+    // Counted first, then checked: close() sets the flag, then waits for the count.
+    if list.closed.load(Ordering::SeqCst) { return Fail::at(503, "the to-do server is closing"); }
+    let file = list.file.as_str();
     let dir = dirname(file);
     fs::create_dir_all(&dir).map_err(|e| Fail::io(&e, "mkdir", &dir))?;
     let (lock, deadline) = (format!("{file}.lock"), Instant::now() + Duration::from_millis(2000));
@@ -729,10 +741,10 @@ pub fn mutate<T>(file: &str, change: &mut dyn FnMut(&mut Model) -> Result<T, Fai
 }
 
 // ---------- operations ----------
-pub fn add(file: &str, text: &str) -> Result<(), Fail> {
+pub fn add(list: &List, text: &str) -> Result<(), Fail> {
     let parsed = parse_text(text)?;
     let project = if is_relative_project(&parsed.project) { js::resolve(&parsed.project) } else { parsed.project };
-    mutate(file, &mut |model| {
+    mutate(list, &mut |model| {
         if parsed.title.is_empty() { return Err(Fail::new("title or --slug required")); }
         let mut item = Item::new(parsed.title.clone());
         item.project = project.clone();
@@ -744,8 +756,8 @@ pub fn add(file: &str, text: &str) -> Result<(), Fail> {
     })
 }
 /// Changes the item shown at `version`; anything else about it is a conflict. `change` gets its place in the list.
-pub fn update<T>(file: &str, id: Option<&str>, version: Option<&str>, change: &mut dyn FnMut(&mut Model, usize) -> Result<T, Fail>) -> Result<T, Fail> {
-    mutate(file, &mut |model| {
+pub fn update<T>(list: &List, id: Option<&str>, version: Option<&str>, change: &mut dyn FnMut(&mut Model, usize) -> Result<T, Fail>) -> Result<T, Fail> {
+    mutate(list, &mut |model| {
         let at = id.and_then(|id| model.by_id(id));
         let shown = match at { Some(at) if version.is_some() => versions(model)?.get(at).map(String::as_str) == version, _ => false };
         let Some(at) = at.filter(|_| shown) else { return Fail::at(409, CHANGED) };
@@ -754,11 +766,11 @@ pub fn update<T>(file: &str, id: Option<&str>, version: Option<&str>, change: &m
         Ok(value)
     })
 }
-pub fn edit(file: &str, id: Option<&str>, version: Option<&str>, title: &str) -> Result<(), Fail> {
-    update(file, id, version, &mut |model, at| { let item = &mut model.items[at]; item.title = line(title)?; event(item, "human", "edited"); Ok(()) })
+pub fn edit(list: &List, id: Option<&str>, version: Option<&str>, title: &str) -> Result<(), Fail> {
+    update(list, id, version, &mut |model, at| { let item = &mut model.items[at]; item.title = line(title)?; event(item, "human", "edited"); Ok(()) })
 }
-pub fn move_by(file: &str, id: Option<&str>, version: Option<&str>, delta: i64) -> Result<(), Fail> {
-    update(file, id, version, &mut |model, at| {
+pub fn move_by(list: &List, id: Option<&str>, version: Option<&str>, delta: i64) -> Result<(), Fail> {
+    update(list, id, version, &mut |model, at| {
         let group: Vec<usize> = (0..model.items.len()).filter(|i| model.items[*i].done == model.items[at].done).collect();
         let from = group.iter().position(|i| *i == at).unwrap_or(0) as i64;
         let target = group[(from + delta).clamp(0, group.len() as i64 - 1) as usize];
@@ -767,14 +779,14 @@ pub fn move_by(file: &str, id: Option<&str>, version: Option<&str>, delta: i64) 
         Ok(())
     })
 }
-pub fn remove(file: &str, id: Option<&str>, version: Option<&str>) -> Result<(), Fail> {
-    update(file, id, version, &mut |model, at| { model.items.remove(at); Ok(()) })
+pub fn remove(list: &List, id: Option<&str>, version: Option<&str>) -> Result<(), Fail> {
+    update(list, id, version, &mut |model, at| { model.items.remove(at); Ok(()) })
 }
-pub fn done(file: &str, id: Option<&str>, version: Option<&str>) -> Result<(), Fail> {
-    update(file, id, version, &mut |model, at| { finish(model, at, "human", "done"); Ok(()) })
+pub fn done(list: &List, id: Option<&str>, version: Option<&str>) -> Result<(), Fail> {
+    update(list, id, version, &mut |model, at| { finish(model, at, "human", "done"); Ok(()) })
 }
-pub fn undone(file: &str, id: Option<&str>, version: Option<&str>) -> Result<(), Fail> {
-    update(file, id, version, &mut |model, at| {
+pub fn undone(list: &List, id: Option<&str>, version: Option<&str>) -> Result<(), Fail> {
+    update(list, id, version, &mut |model, at| {
         let mut item = model.items.remove(at);
         item.done = false;
         item.events.push(Event { at: stamp(), who: "human".into(), what: "undone".into() });
@@ -782,8 +794,8 @@ pub fn undone(file: &str, id: Option<&str>, version: Option<&str>) -> Result<(),
         Ok(())
     })
 }
-pub fn reply(file: &str, id: Option<&str>, version: Option<&str>, words: &str) -> Result<(), Fail> {
-    update(file, id, version, &mut |model, at| {
+pub fn reply(list: &List, id: Option<&str>, version: Option<&str>, words: &str) -> Result<(), Fail> {
+    update(list, id, version, &mut |model, at| {
         let item = &mut model.items[at];
         for text in [&mut item.waiting, &mut item.others, &mut item.suggest, &mut item.run] { text.clear(); }
         item.exec = None;
@@ -792,8 +804,8 @@ pub fn reply(file: &str, id: Option<&str>, version: Option<&str>, words: &str) -
     })
 }
 /// The item a fix was requested for: its id and project.
-pub fn request_fix(file: &str, id: Option<&str>, version: Option<&str>) -> Result<(String, String), Fail> {
-    update(file, id, version, &mut |model, at| {
+pub fn request_fix(list: &List, id: Option<&str>, version: Option<&str>) -> Result<(String, String), Fail> {
+    update(list, id, version, &mut |model, at| {
         let item = &mut model.items[at];
         if item.done || item.status != Status::Blocked || item.relative { return Fail::at(409, "only a blocked sdlc item can be fixed by an agent"); }
         event(item, "human", FIX_REQUEST);
@@ -806,8 +818,8 @@ pub fn request_fix(file: &str, id: Option<&str>, version: Option<&str>) -> Resul
 pub struct Reading { pub id: String, pub project: String, pub previous: Sdlc, pub current: Sdlc }
 fn in_scope(item: &Item, only: &str) -> bool { !item.done && !item.project.is_empty() && item.sdlc.is_some() && (only.is_empty() || item.id == only) }
 pub fn scoped(file: &str, only: &str) -> Result<Vec<Item>, Fail> { Ok(load(file)?.items.into_iter().filter(|i| in_scope(i, only)).collect()) }
-pub fn apply_readings(file: &str, readings: &[Reading], only: &str) -> Result<(), Fail> {
-    mutate(file, &mut |model| {
+pub fn apply_readings(list: &List, readings: &[Reading], only: &str) -> Result<(), Fail> {
+    mutate(list, &mut |model| {
         // Status calls run unlocked; retry if any current slug lacks the same preimage.
         let covered = |item: &Item| readings.iter().any(|r| r.id == item.id && r.project == item.project && Some(&r.previous) == item.sdlc.as_ref());
         if model.items.iter().any(|item| in_scope(item, only) && !covered(item)) { return Err(Fail::kind(Kind::SyncChanged)); }
@@ -903,7 +915,7 @@ mod tests {
             });
             let writers: Vec<_> = (0..4).map(|w| { let file = &file; scope.spawn(move || for i in 0..40 {
                 let title = format!("item-{w}-{i}");
-                while let Err(error) = add(file, &title) {
+                while let Err(error) = add(&List::new(file), &title) {
                     if error.message.starts_with("timed out waiting for lock") { continue; }
                     // Windows may report a sharing error after the change was saved.
                     assert!(cfg!(windows), "{}", error.message);
@@ -929,9 +941,9 @@ mod tests {
         fs::write(&lock, "dead owner").unwrap();
         fs::create_dir(format!("{lock}.commit-2147483644-0aa0aa00")).unwrap();
         File::options().write(true).open(&lock).unwrap().set_modified(SystemTime::now() - Duration::from_secs(20)).unwrap();
-        add(&file, "after a dead owner").unwrap();
+        add(&List::new(&file), "after a dead owner").unwrap();
         fs::write(&lock, "live owner").unwrap();
-        assert_eq!(add(&file, "refused").unwrap_err().message, format!("timed out waiting for lock: {lock}"));
+        assert_eq!(add(&List::new(&file), "refused").unwrap_err().message, format!("timed out waiting for lock: {lock}"));
         fs::remove_file(&lock).unwrap();
         assert_eq!(load(&file).unwrap().items.len(), 1);
         assert!(left_behind(&dir).is_empty(), "{:?}", left_behind(&dir));
@@ -941,10 +953,10 @@ mod tests {
     #[test]
     fn an_error_and_a_panic_release_the_lock_and_change_nothing() {
         let (dir, file) = folder("panic");
-        add(&file, "kept").unwrap();
+        add(&List::new(&file), "kept").unwrap();
         let before = fs::read_to_string(&file).unwrap();
-        assert!(mutate(&file, &mut |model| { model.items.clear(); Err::<(), _>(Fail::new("no")) }).is_err());
-        let panicked = std::panic::catch_unwind(|| mutate(&file, &mut |model| -> Result<(), Fail> { model.items.clear(); panic!("on purpose") }));
+        assert!(mutate(&List::new(&file), &mut |model| { model.items.clear(); Err::<(), _>(Fail::new("no")) }).is_err());
+        let panicked = std::panic::catch_unwind(|| mutate(&List::new(&file), &mut |model| -> Result<(), Fail> { model.items.clear(); panic!("on purpose") }));
         assert!(panicked.is_err());
         assert_eq!(fs::read_to_string(&file).unwrap(), before);
         assert!(left_behind(&dir).is_empty(), "{:?}", left_behind(&dir));

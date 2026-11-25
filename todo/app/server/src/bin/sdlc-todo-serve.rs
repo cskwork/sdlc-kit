@@ -25,6 +25,7 @@ fn main() -> Result<(), String> {
     let mut rendering = false;
     while let Some(flag) = args.next() {
         if flag == "--render" { rendering = true; continue; }
+        if flag == "--where" { println!("{}\n{}", server::todo_path(), server::session_path().display()); return Ok(()); }
         let value = args.next().ok_or_else(|| format!("missing value for {flag}"))?;
         match flag.as_str() { "--kit" => kit = value, "--session" => session = value, "--node" => node = value, "--lang" => lang = value, _ => values.push((flag, value)) }
     }

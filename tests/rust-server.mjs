@@ -10,13 +10,13 @@ import { feedPath } from '../todo/web.mjs';
 export const rustServer = process.env.SDLC_TODO_RUST_SERVE || '';
 const kitHere = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-export async function startRustWeb({ file, kit, onUrl, lang, session = '', feed = feedPath(file), statusRunner,
+export async function startRustWeb({ file, kit, node = process.execPath, onUrl, lang, session = '', feed = feedPath(file), statusRunner,
   deferInitialSync = false, runTimeout, killAfter, searchPath, finishRetryMs, platform } = {}) {
   if (statusRunner) throw new Error('a status runner function cannot reach another process');
   // Without a session of the test's own, one in a temp folder carries the address back.
   const temp = session ? '' : mkdtempSync(join(tmpdir(), 'sdlc-todo-rust-'));
   const where = session || join(temp, 'todo-web.json');
-  const flags = { '--kit': kitHere, '--file': file, '--feed': feed, '--session': where, '--node': process.execPath, '--pid': process.pid,
+  const flags = { '--kit': kitHere, '--file': file, '--feed': feed, '--session': where, '--node': node, '--pid': process.pid,
     '--lang': lang, '--status-kit': kit, '--defer': deferInitialSync || undefined, '--run-timeout': runTimeout, '--kill-after': killAfter,
     '--finish-retry': finishRetryMs, '--search-path': searchPath, '--platform': platform };
   const args = Object.entries(flags).filter(([, value]) => value !== undefined).flatMap(([name, value]) => [name, String(value)]);
