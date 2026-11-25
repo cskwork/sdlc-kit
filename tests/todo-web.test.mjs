@@ -1170,3 +1170,19 @@ test('exec: a log that cannot be written never skips the reply', posixOnly, asyn
   assert.equal(result.status, 200, result.text);
   assert.match(items(result, ctx.file).find(i => i.id === item.id).events.at(-1).what, /^reply — 실행함: .* → exit 0 · 출력: "still"$/);
 });
+
+test('an answered request leaves no idle connection to reuse; the event stream stays open', async t => {
+  const ctx = await web(t);
+  const ask = { 'Connection': 'keep-alive' };
+  for (const [path, options] of [['/', {}], ['/api/live', {}], ['/api/nothing', {}], ['/api/live', { token: '' }],
+    ['/api/items', { method: 'POST', body: { text: 'Added over a fresh connection' } }]]) {
+    const response = await request(ctx, path, { ...options, timeout: 30000, headers: ask });
+    assert.equal(response.headers.connection, 'close', `${options.method || 'GET'} ${path} answered ${response.status}`);
+  }
+  const stream = await new Promise((resolveStream, reject) => {
+    const req = http.get({ hostname: ctx.url.hostname, port: ctx.url.port, path: `/events?t=${ctx.token}`, headers: { Host: ctx.url.host } }, resolveStream);
+    req.on('error', reject);
+    t.after(() => req.destroy());
+  });
+  assert.equal(stream.headers.connection, 'keep-alive');
+});
