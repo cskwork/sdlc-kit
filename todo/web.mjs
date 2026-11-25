@@ -389,6 +389,9 @@ export async function startWeb({ file = core.todoPath(), kit = defaultKit, port 
   }
   let actualPort;
   const server = http.createServer(async (req, res) => {
+    // Node closes an idle connection after 6 s; a page reusing it at that moment loses its request
+    // ("cannot reach the to-do list"). Answer each request on its own connection; /events stays open.
+    res.shouldKeepAlive = false;
     if (pendingFinish.size) await flushFinishes();
     res.setHeader('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
     res.setHeader('X-Content-Type-Options', 'nosniff');
