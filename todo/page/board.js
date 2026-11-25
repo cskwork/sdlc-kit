@@ -22,6 +22,8 @@ const clock = ms => new Intl.DateTimeFormat(page.lang, { hour: '2-digit', minute
 const dateTime = ms => new Intl.DateTimeFormat(page.lang, { dateStyle: 'medium', timeStyle: 'short' }).format(ms);
 const alertLevel = alert => ['bad', 'warn'].includes(alert.level) ? alert.level : 'info';
 const feedAlerts = feed => list(feed?.alerts).map(record).filter(alert => alert && str(alert.text));
+// Copy buttons on rendered code blocks (markdown.js) speak the page's current language and announce the result.
+const copyOptions = { t, announce: text => page.announce(text) };
 const typing = target => target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName);
 
 // ---------- words ----------
@@ -596,10 +598,11 @@ function renderGate(item, doc, status) {
   approve.disabled = sending || doc.gate !== status.gate;
   const section = glanceOf(doc.markdown);
   if (!section?.markdown) { glance.replaceChildren(el('p', 'hint', t('panel.noGlance'))); return; }
-  import('./markdown.js').then(({ renderMarkdown }) => {
+  import('./markdown.js').then(({ renderMarkdown, addCopyButtons }) => {
     if (panelTarget?.id !== item.id) return;
     // renderMarkdown escapes all HTML first, as on the list's work document.
     glance.innerHTML = renderMarkdown(section.markdown);
+    addCopyButtons(glance, copyOptions);
   });
 }
 function renderProblem(item, status) {
@@ -634,7 +637,11 @@ function renderDetails(card, item, doc) {
   if (!doc) box.replaceChildren(el('p', 'hint', t('panel.noDocument')));
   else if (doc.pending) box.replaceChildren(el('p', 'hint', t('artifact.loading')));
   else if (doc.error) box.replaceChildren(el('p', 'field-error', t('artifact.failed', { message: doc.error })));
-  else import('./markdown.js').then(({ renderMarkdown }) => { if (panelTarget?.id === item.id) box.innerHTML = renderMarkdown(doc.markdown); });
+  else import('./markdown.js').then(({ renderMarkdown, addCopyButtons }) => {
+    if (panelTarget?.id !== item.id) return;
+    box.innerHTML = renderMarkdown(doc.markdown);
+    addCopyButtons(box, copyOptions);
+  });
   const history = $('panel-history');
   const events = card.members.flatMap(member => member.events.map(event => ({ ...event, member }))).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 40);
   history.replaceChildren(...events.map(event => {
@@ -808,7 +815,7 @@ $('keys-open').addEventListener('click', openKeys);
 // native title (about a second late, never on focus) cannot. While shown it also describes its control, it hides
 // when the person types, scrolls or presses Escape, and it never sits over the text box they are typing in.
 // Controls with a key or no visible words; the list's reply button shares the board's Enter.
-const tip = $('tip'), tipTargets = '#panel button, #panel-resize, #keys-open, #reply-form button';
+const tip = $('tip'), tipTargets = '#panel button, #panel-resize, #keys-open, #reply-form button, .code-copy';
 const popover = typeof tip.showPopover === 'function';
 if (!popover) tip.hidden = true;
 let tipFor = null, tipTimer;

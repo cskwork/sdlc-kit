@@ -35,7 +35,8 @@ for (const mode of ['light', 'dark']) {
     assert.ok(contrast(colors.bad, colors['bad-bg']) >= 4.5, `${mode} error notice text`);
     // Board surfaces: the canvas around it, cards, and the tint of the your-turn lane.
     for (const [foreground, background] of [['accent', 'highlight'], ['busy', 'busy-bg'], ['ok', 'ok-bg'], ['muted', 'open-bg'], ['bad', 'bad-bg'], ['busy', 'paper'], ['busy', 'highlight'],
-      ['ink', 'card'], ['muted', 'card'], ['muted', 'canvas'], ['muted', 'lane-you'], ['accent', 'lane-you'], ['bad', 'lane-you'], ['busy', 'lane-you'], ['ok', 'card'], ['muted', 'paper']]) {
+      ['ink', 'card'], ['muted', 'card'], ['muted', 'canvas'], ['muted', 'lane-you'], ['accent', 'lane-you'], ['bad', 'lane-you'], ['busy', 'lane-you'], ['ok', 'card'], ['muted', 'paper'],
+      ['control', 'open-bg'], ['ok', 'open-bg'], ['bad', 'open-bg']]) {
       const ratio = contrast(colors[foreground], colors[background]);
       assert.ok(ratio >= 4.5, `${mode} status --${foreground} on --${background}: ${ratio.toFixed(3)}:1 < 4.5:1`);
     }
@@ -166,7 +167,7 @@ for (const state of ['visible control', 'hidden mobile control', 'removed contro
 for (const gate of ['', 'intent']) {
   test(`Details shows the work document of a waiting item ${gate ? 'with the decision form for its gate' : 'read-only for a question'}`, async () => {
     const p = page('#t=test-token', {
-      source: source.replace("await import('./markdown.js')", '({ renderMarkdown: text => text })'),
+      source: source.replace("await import('./markdown.js')", '({ renderMarkdown: text => text, addCopyButtons() {} })'),
       fetch: async url => url === '/api/items' ? new Promise(() => {}) : {
         ok: true, text: async () => JSON.stringify({ gate, file: '/p/.sdlc/work/x/intent.md', markdown: '# Scope', sha: 'a'.repeat(64) })
       }
@@ -186,7 +187,7 @@ for (const gate of ['', 'intent']) {
 
 test('Details opens the brief of a plain item as a read-only document', async () => {
   const p = page('#t=test-token', {
-    source: source.replace("await import('./markdown.js')", '({ renderMarkdown: text => text })'),
+    source: source.replace("await import('./markdown.js')", '({ renderMarkdown: text => text, addCopyButtons() {} })'),
     fetch: async url => url === '/api/items' ? new Promise(() => {}) : {
       ok: true, text: async () => JSON.stringify({ gate: '', file: '/briefs/vendor.md', markdown: '# Brief', sha: 'a'.repeat(64) })
     }
@@ -388,7 +389,7 @@ test('a multi-line reply or note is sent as one line, which the server and inbox
 test('B1: an artifact response cannot replace the version of the item shown in Details', async () => {
   const p = page('#t=test-token', {
     // Stub only Markdown rendering; the real artifact request and item binding run in the VM.
-    source: source.replace("await import('./markdown.js')", '({ renderMarkdown: text => text })'),
+    source: source.replace("await import('./markdown.js')", '({ renderMarkdown: text => text, addCopyButtons() {} })'),
     fetch: async url => url === '/api/items' ? new Promise(() => {}) : {
       ok: true, text: async () => JSON.stringify({ gate: 'intent', markdown: '# Scope', sha: 'a'.repeat(64), version: 'server-B' })
     }
@@ -1111,4 +1112,124 @@ test('run box: the list page details show the same block and button', () => {
   button.listeners.click();
   assert.equal(p.nodes.get('run-confirm').open, true);
   assert.equal(p.requests.filter(r => r.url === '/api/exec').length, 0);
+});
+
+// ---------- copy buttons on fenced code (markdown.js) ----------
+// The page module runs from a data URL (as in todo-web.test.mjs) over a small DOM that parses renderMarkdown
+// output the way a browser does for these tags, including the five entities the renderer writes.
+const markdownSource = readFileSync(new URL('../todo/page/markdown.js', import.meta.url), 'utf8');
+const markdownModule = () => import(`data:text/javascript;base64,${Buffer.from(markdownSource).toString('base64')}`);
+function fakeDocument({ clipboard, secure = true, execResult = false } = {}) {
+  const entities = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
+  const doc = { execs: [], selected: null, activeElement: null };
+  const detach = node => { const list = node.parentElement?.childNodes; if (list) list.splice(list.indexOf(node), 1); node.parentElement = null; };
+  class Element {
+    constructor(tag) {
+      Object.assign(this, { tagName: tag.toUpperCase(), childNodes: [], parentElement: null, ownerDocument: doc,
+        className: '', dataset: {}, attributes: {}, listeners: {}, style: {}, value: '' });
+    }
+    get children() { return this.childNodes.filter(node => node instanceof Element); }
+    get firstElementChild() { return this.children[0] || null; }
+    get classList() { return { contains: name => this.className.split(/\s+/).includes(name) }; }
+    get textContent() { return this.childNodes.map(node => node.textContent).join(''); }
+    set textContent(text) { this.childNodes = [{ textContent: String(text) }]; }
+    set innerHTML(html) {
+      this.childNodes = [];
+      const stack = [this];
+      for (const [, close, tag, , text] of html.matchAll(/<(\/?)([a-z0-9]+)([^>]*)>|([^<]+)/g)) {
+        if (text !== undefined) stack.at(-1).childNodes.push({ textContent: text.replace(/&(?:amp|lt|gt|quot|#39);/g, e => entities[e]) });
+        else if (close) stack.pop();
+        else { const node = new Element(tag); stack.at(-1).append(node); if (tag !== 'hr') stack.push(node); }
+      }
+    }
+    append(...nodes) { for (const node of nodes) { detach(node); node.parentElement = this; this.childNodes.push(node); } }
+    replaceWith(node) { const list = this.parentElement.childNodes; detach(node); node.parentElement = this.parentElement; list[list.indexOf(this)] = node; this.parentElement = null; }
+    remove() { detach(this); }
+    setAttribute(name, value) { this.attributes[name] = String(value); }
+    addEventListener(type, fn) { this.listeners[type] = fn; }
+    click() { return this.listeners.click?.({}); }
+    select() { doc.selectedValue = this.value; }
+    focus() { doc.activeElement = this; }
+    querySelectorAll(tag) { return this.children.flatMap(node => [...(node.tagName === tag.toUpperCase() ? [node] : []), ...node.querySelectorAll(tag)]); }
+  }
+  Object.assign(doc, {
+    createElement: tag => new Element(tag), body: new Element('body'),
+    execCommand(command) { doc.execs.push([command, doc.selectedValue]); return execResult; },
+    createRange: () => ({ selectNodeContents(node) { this.node = node; } }),
+    defaultView: { isSecureContext: secure, navigator: { clipboard },
+      getSelection: () => ({ removeAllRanges() { doc.selected = null; }, addRange(range) { doc.selected = range.node; } }) }
+  });
+  const root = new Element('div');
+  doc.body.append(root);
+  return { doc, root };
+}
+const sql = `SELECT '<b>' AS tag, "q" & 'x' FROM t\n  WHERE a < 1 AND b > 2;\n-- &amp; stays literal`;
+const brief = ['# Run sheet', '', 'Run `SELECT 1` first.', '', '```sql', sql, '```', '', '```', 'second block', '```'].join('\n');
+const copyT = key => i18n.translator('ko')(key);
+
+test('copy buttons: one per fenced block, none on inline code, and the exact unescaped text is copied', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { renderMarkdown, addCopyButtons } = await markdownModule();
+  const writes = [], said = [];
+  const { root } = fakeDocument({ clipboard: { writeText: async text => { writes.push(text); } } });
+  root.innerHTML = renderMarkdown(brief);
+  addCopyButtons(root, { t: copyT, announce: text => said.push(text) });
+  const buttons = root.querySelectorAll('button');
+  assert.equal(buttons.length, 2, 'two fenced blocks, two buttons');
+  assert.equal(root.querySelectorAll('p')[0].querySelectorAll('button').length, 0, 'inline code has no button');
+  const [button] = buttons, box = button.parentElement;
+  assert.equal(box.className, 'code-block');
+  assert.deepEqual(box.children.map(node => node.tagName), ['BUTTON', 'PRE'], 'the button sits above the code, outside it');
+  assert.equal(button.type, 'button');
+  assert.equal(button.textContent, '복사');
+  assert.equal(button.dataset.i18nTip, 'copy.tip');
+  await button.click();
+  assert.deepEqual(writes, [sql], 'original text: entities decoded, newlines kept, no trailing newline or label');
+  assert.equal(button.textContent, '복사했어요');
+  assert.deepEqual(said, ['복사했어요']);
+  t.mock.timers.tick(1500);
+  assert.equal(button.textContent, '복사', 'the label comes back after 1.5 s');
+  await buttons[1].click();
+  assert.equal(writes[1], 'second block');
+  assert.equal(said[1], '복사했어요 ', 'a repeated announcement differs so VoiceOver reads it');
+});
+
+test('copy buttons: decorating again or re-rendering never adds a second button', async () => {
+  const { renderMarkdown, addCopyButtons } = await markdownModule();
+  const { root } = fakeDocument({ clipboard: { writeText: async () => {} } });
+  const options = { t: copyT, announce() {} };
+  root.innerHTML = renderMarkdown(brief);
+  addCopyButtons(root, options);
+  addCopyButtons(root, options);
+  assert.equal(root.querySelectorAll('button').length, 2);
+  root.innerHTML = renderMarkdown(brief);
+  addCopyButtons(root, options);
+  assert.equal(root.querySelectorAll('button').length, 2);
+  assert.equal(root.querySelectorAll('pre')[0].textContent, `${sql}\n`, 'the <pre> keeps only the code');
+});
+
+test('copy buttons: without the async clipboard the selection copy runs; when both fail the text is selected', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { renderMarkdown, addCopyButtons } = await markdownModule();
+  const insecure = fakeDocument({ clipboard: { writeText: async () => assert.fail('not in an insecure page') }, secure: false, execResult: true });
+  insecure.root.innerHTML = renderMarkdown(brief);
+  addCopyButtons(insecure.root, { t: copyT, announce() {} });
+  await insecure.root.querySelectorAll('button')[0].click();
+  assert.deepEqual(insecure.doc.execs, [['copy', sql]]);
+  assert.equal(insecure.root.querySelectorAll('button')[0].textContent, '복사했어요');
+  assert.equal(insecure.doc.body.querySelectorAll('textarea').length, 0, 'the helper field is removed');
+
+  const said = [];
+  const denied = fakeDocument({ clipboard: { writeText: async () => { throw new Error('denied'); } } });
+  denied.root.innerHTML = renderMarkdown(brief);
+  addCopyButtons(denied.root, { t: key => i18n.translator('en')(key), announce: text => said.push(text) });
+  const button = denied.root.querySelectorAll('button')[0];
+  await button.click();
+  assert.deepEqual(denied.doc.execs, [['copy', sql]], 'a rejected write falls back once');
+  assert.equal(button.textContent, "Couldn't copy — select it yourself");
+  assert.equal(button.dataset.state, 'failed');
+  assert.equal(denied.doc.selected, denied.root.querySelectorAll('pre')[0].firstElementChild, 'the block is selected for ⌘C');
+  assert.match(said[0], /^Couldn't copy/);
+  t.mock.timers.tick(4000);
+  assert.equal(button.textContent, 'Copy');
 });

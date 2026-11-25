@@ -264,6 +264,18 @@ a.chip { display: inline-block; min-height: 44px; min-width: 44px; line-height: 
 .artifact th, .artifact td { border-bottom: 1px solid var(--line); padding: 0.5rem; text-align: left; vertical-align: top; }
 .artifact code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; }
 .artifact pre { overflow-x: auto; }
+/* A fenced block with its [Copy] button (markdown.js). The button sits in its own row at the top right, so it never
+   covers code, even while a long line is scrolled sideways inside the block. */
+.artifact .code-block { margin: 0.65rem 0; border-radius: 8px; background: var(--open-bg); }
+.artifact .code-block pre { margin: 0; padding: 0 0.75rem 0.75rem; line-height: 1.55; }
+.code-copy {
+  display: block; margin-inline-start: auto; min-height: 2rem; min-width: 2.75rem; padding: 0 0.65rem;
+  color: var(--control); font-size: 0.8125rem; font-weight: 500; white-space: nowrap;
+}
+.code-copy:hover { color: var(--ink); }
+.code-copy:focus-visible { outline-offset: -2px; }
+.code-copy[data-state="copied"] { color: var(--ok); }
+.code-copy[data-state="failed"] { color: var(--bad); white-space: normal; text-align: end; }
 .artifact a { display: inline-block; min-height: 44px; min-width: 44px; padding-block: 0.5rem; }
 .decide { margin-top: 2rem; }
 .decide h3 { margin-bottom: 0.75rem; }
