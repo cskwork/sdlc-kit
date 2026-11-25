@@ -284,6 +284,15 @@
   </div>
   <form method="dialog" class="actions"><button type="submit" class="secondary" data-i18n="keys.close">Close</button></form>
 </dialog>
+<dialog id="delete-confirm" class="run-confirm" role="alertdialog" aria-labelledby="delete-confirm-title" aria-describedby="delete-confirm-item delete-confirm-note">
+  <h1 id="delete-confirm-title" data-i18n="delete.title">Delete this item?</h1>
+  <p id="delete-confirm-item" class="delete-item"></p>
+  <p id="delete-confirm-note" class="hint" data-i18n="delete.note">This cannot be undone.</p>
+  <form method="dialog" class="actions">
+    <button type="submit" value="cancel" id="delete-confirm-cancel" class="secondary" autofocus data-i18n="run.cancel">Cancel</button>
+    <button type="submit" value="delete" id="delete-confirm-delete" class="danger" data-i18n="delete.confirm">Delete</button>
+  </form>
+</dialog>
 <div id="tip" class="tip" popover="manual" role="tooltip"></div>
 <div id="toast" class="toast ok" role="status" hidden></div>
 <div id="announce" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>

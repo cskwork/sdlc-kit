@@ -69,7 +69,9 @@ export default {
     'row.down': '"{title}" 아래로 이동',
     'row.delete': '"{title}" 삭제',
     'row.newTab': '{label} (새 탭에서 열림)',
-    'row.confirmDelete': '"{title}" 항목을 삭제할까요? 되돌릴 수 없습니다.',
+    'delete.title': '이 항목을 삭제할까요?',
+    'delete.note': '삭제하면 되돌릴 수 없어요.',
+    'delete.confirm': '삭제',
 
     'announce.needsYou': '내 차례: {title}',
     'announce.added': '추가함',

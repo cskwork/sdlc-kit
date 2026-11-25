@@ -242,19 +242,75 @@ test('B4: a page without a token explains how to open it without making requests
   assert.equal(p.streams.length, 0);
 });
 
-test('B1: pending delete confirmation submits the shown version even if the row is replaced', async () => {
-  const p = page('#t=test-token');
+function deleting(title = 'Duplicate') {
+  const p = page('#t=test-token', { fetch: async url => url === '/api/items' ? new Promise(() => {}) : { ok: true, text: async () => '{}' } });
+  p.context.title = title;
   vm.runInContext(`
-    const shown = { id: 'abcdef', title: 'Duplicate', version: 'shown-A' };
-    const replacement = { id: 'abcdef', title: 'Duplicate', version: 'current-B' };
-    const li = { dataset: { id: shown.id }, _item: shown };
+    const shown = { id: 'abcdef', title, version: 'shown-A' };
+    const li = { dataset: { id: shown.id }, _item: shown, isConnected: true, focus() { document.activeElement = this; } };
+    const from = { isConnected: true, getClientRects() { return [{}]; } };
     items = [shown];
-    confirm = () => { items = [replacement]; li._item = replacement; return true; };
+    rows.set(shown.id, li);
   `, p.context);
-  await vm.runInContext('remove(li)', p.context);
-  const body = JSON.parse(p.requests.find(r => r.url === '/api/item').options.body);
-  assert.equal(body.id, 'abcdef');
-  assert.equal(body.version, 'shown-A', 'confirmation must keep the item shown before the dialog');
+  const dialog = p.nodes.get('delete-confirm');
+  const start = () => vm.runInContext('remove(li, from)', p.context);
+  return { p, dialog, start, sent: () => p.requests.filter(r => r.url === '/api/item').map(r => JSON.parse(r.options.body)) };
+}
+test('delete: Delete in the dialog deletes the version shown, even if the row is replaced meanwhile', async () => {
+  const { p, dialog, start, sent } = deleting('<b>Duplicate</b>');
+  const done = start();
+  assert.equal(dialog.modal, true);
+  assert.equal(p.nodes.get('delete-confirm-item').textContent, '<b>Duplicate</b>', 'the title is shown as text');
+  assert.equal(p.context.document.activeElement, p.nodes.get('delete-confirm-cancel'), 'focus starts on the safe choice');
+  assert.equal(sent().length, 0, 'nothing is sent before the answer');
+  vm.runInContext("const replacement = { ...shown, version: 'current-B' }; items = [replacement]; li._item = replacement;", p.context);
+  dialog.close('delete');
+  await done;
+  assert.deepEqual(sent(), [{ id: 'abcdef', version: 'shown-A', op: 'delete' }]);
+});
+test('delete: Cancel and Esc delete nothing; focus returns to the button, or to the row when that is gone', async () => {
+  for (const answer of ['cancel', undefined]) {
+    const { p, dialog, start, sent } = deleting();
+    let done = start();
+    dialog.close(answer);
+    await done;
+    assert.deepEqual(sent(), []);
+    assert.equal(vm.runInContext('document.activeElement === li', p.context), false, 'the dialog gave focus back by itself');
+    // An earlier "delete" answer never carries over to the next dialog.
+    dialog.returnValue = 'delete';
+    done = start();
+    vm.runInContext('from.isConnected = false', p.context);
+    dialog.close(answer);
+    await done;
+    assert.deepEqual(sent(), []);
+    assert.equal(vm.runInContext('document.activeElement === li', p.context), true);
+  }
+});
+test('delete: an Enter or Space held or pressed as the dialog opens answers nothing', async () => {
+  const { p, dialog, start } = deleting();
+  let now = 1000;
+  p.context.clock = () => now;
+  vm.runInContext('Date.now = () => clock()', p.context);
+  const done = start();
+  const press = (key, extra = {}) => { const event = { key, prevented: false, preventDefault() { this.prevented = true; }, ...extra }; dialog.listeners.keydown(event); return event.prevented; };
+  now = 1399;
+  assert.deepEqual([press('Enter'), press(' '), press('Escape'), press('Tab')], [true, true, false, false], 'Esc and Tab always work');
+  now = 1400;
+  assert.deepEqual([press('Enter'), press(' ')], [false, false]);
+  assert.deepEqual([press('Enter', { repeat: true }), press('Enter', { isComposing: true })], [true, true]);
+  dialog.close();
+  await done;
+});
+test('delete: no native confirm, alert or prompt is left; the dialog is named in both languages', () => {
+  for (const file of ['app.js', 'board.js', 'markdown.js']) {
+    const text = readFileSync(new URL(`../todo/page/${file}`, import.meta.url), 'utf8').replace(/^\s*\/\/.*$/gm, '');
+    assert.doesNotMatch(text, /(?<![\w.])(?:window\.|globalThis\.)?(?:confirm|alert|prompt)\(/, file);
+  }
+  const html = readFileSync(new URL('../todo/page/index.html', import.meta.url), 'utf8');
+  const dialog = html.match(/<dialog id="delete-confirm"[\s\S]*?<\/dialog>/)[0];
+  assert.match(dialog, /role="alertdialog" aria-labelledby="delete-confirm-title" aria-describedby="delete-confirm-item delete-confirm-note"/);
+  assert.ok(dialog.indexOf('value="cancel"') < dialog.indexOf('value="delete"'), 'Cancel comes first');
+  for (const language of i18n.languages) for (const key of ['delete.title', 'delete.note', 'delete.confirm']) assert.ok(i18n.locales[language].messages[key], `${language} ${key}`);
 });
 test('B1: a changed-target response shows the server message and refreshes the snapshot', async () => {
   let loads = 0;

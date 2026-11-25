@@ -393,9 +393,33 @@ function rowOf(node) { return node.closest('li.row'); }
 async function move(li, delta) {
   try { await op(li._item, 'move', { delta }, t(delta < 0 ? 'announce.movedUp' : 'announce.movedDown')); } catch { /* shown */ }
 }
-async function remove(li) {
-  const item = li._item;
-  if (!confirm(t('row.confirmDelete', { title: item.title }))) return;
+// Deleting asks in the page's own dialog: a webview window may show no confirm() at all and answer it with no.
+const deleteDialog = $('delete-confirm');
+let deleteOpened = 0, deleteAnswer = null;
+// Resolves true only when Delete was pressed; focus starts on Cancel, so Enter cancels.
+function confirmDelete(item) {
+  if (deleteDialog.open) return Promise.resolve(false);
+  $('delete-confirm-item').textContent = item.title;
+  deleteDialog.returnValue = '';
+  deleteOpened = Date.now();
+  deleteDialog.showModal();
+  $('delete-confirm-cancel').focus();
+  return new Promise(resolve => { deleteAnswer = resolve; });
+}
+// A key held or pressed as the dialog opens is meant for the row, not for its buttons.
+deleteDialog.addEventListener('keydown', event => {
+  if ((event.key === 'Enter' || event.key === ' ') && (event.repeat || event.isComposing || Date.now() - deleteOpened < 400)) event.preventDefault();
+});
+deleteDialog.addEventListener('close', () => {
+  const answer = deleteAnswer;
+  deleteAnswer = null;
+  answer?.(deleteDialog.returnValue === 'delete');
+});
+async function remove(li, from) {
+  const item = li._item, confirmed = await confirmDelete(item);
+  // Closing gives focus back to the button; a row redrawn or a button hidden meanwhile cannot take it.
+  if (!from?.isConnected || !from.getClientRects().length) (rows.get(item.id) || addText).focus({ preventScroll: true });
+  if (!confirmed) return;
   try { await op(item, 'delete', {}, t('announce.deleted', { title: item.title })); } catch { /* shown */ }
 }
 
@@ -473,7 +497,7 @@ function wireList(list) {
     }
     else if (role === 'up') move(li, -1);
     else if (role === 'down') move(li, 1);
-    else if (role === 'delete') remove(li);
+    else if (role === 'delete') remove(li, target);
   });
   list.addEventListener('dblclick', event => {
     if (event.target.dataset.role === 'title' && event.target.tagName === 'SPAN') startEdit(rowOf(event.target));
@@ -523,7 +547,7 @@ document.addEventListener('keydown', event => {
   const t = event.target;
   // The list's add shortcut; the board has its own keys.
   if (document.body?.dataset?.view && document.body.dataset.view !== 'list') return;
-  if (($('detail').open && !isWide) || $('run-confirm').open || $('view-settings').open || t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
+  if (($('detail').open && !isWide) || $('run-confirm').open || $('view-settings').open || deleteDialog.open || t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
   event.preventDefault();
   addText.focus();
 });

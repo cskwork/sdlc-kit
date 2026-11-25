@@ -714,5 +714,8 @@ kbd {
 .run-confirm::backdrop { background: rgb(0 0 0 / 0.2); overflow: hidden; overscroll-behavior: contain; }
 .run-confirm h1 { margin: 0; font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; }
 .run-confirm .hint { margin-top: 0.35rem; }
+.delete-item { margin-top: 0.75rem; font-weight: 600; max-block-size: 40dvh; overflow-y: auto; overflow-wrap: anywhere; }
+.danger { background: var(--bad); color: var(--paper); font-weight: 600; padding: 0 1rem; }
+.danger:hover { background: color-mix(in oklab, var(--bad) 88%, var(--ink)); }
 .run-confirm .run-command { margin-top: 1rem; }
 .run-confirm .actions { justify-content: flex-end; margin-top: 1.25rem; }

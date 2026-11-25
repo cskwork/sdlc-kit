@@ -70,7 +70,9 @@ export default {
     'row.down': 'Move "{title}" down',
     'row.delete': 'Delete "{title}"',
     'row.newTab': '{label} (opens in a new tab)',
-    'row.confirmDelete': 'Delete "{title}"? This cannot be undone.',
+    'delete.title': 'Delete this item?',
+    'delete.note': 'This cannot be undone.',
+    'delete.confirm': 'Delete',
 
     'announce.needsYou': 'Your turn: {title}',
     'announce.added': 'Added',
