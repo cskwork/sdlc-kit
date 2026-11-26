@@ -310,7 +310,7 @@ export default {
     'panel.changes': 'Once you answer',
     'panel.why': 'Why',
     'panel.target': 'Your answer goes to “{title}”',
-    'panel.noGlance': 'This document has no At a glance section. Open More to read it in full.',
+    'panel.noGlance': 'No summary is available. Open More to read it in full.',
     'panel.reply': 'Answer in your own words',
     'panel.send': 'Send',
     'panel.ticket': 'Open ticket',

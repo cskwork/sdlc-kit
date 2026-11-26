@@ -37,18 +37,27 @@ function plain(text) {
     .replace(/(?:^|\s)--[\w-]+/g, ' ')
     .replace(/\s+/g, ' ').replace(/\s+([,.)])/g, '$1').trim();
 }
-// "## At a glance" bullets of a brief or work document: { 'your call': '…', 'ai pick': '…', … }.
-function glanceOf(markdown) {
-  const lines = str(markdown).split(/\r?\n/), start = lines.findIndex(line => /^##\s+At a glance\s*$/i.test(line));
-  if (start < 0) return null;
+function readSummary(markdown, heading) {
   const fields = {}, section = [];
-  for (const line of lines.slice(start + 1)) {
+  let inside = false, closingFence = null;
+  for (const line of str(markdown).split(/\r?\n/)) {
+    const fence = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (closingFence || fence) {
+      if (inside) section.push(line);
+      if (!closingFence) closingFence = new RegExp('^ {0,3}' + fence[1][0] + '{' + fence[1].length + ',}\\s*$');
+      else if (closingFence.test(line)) closingFence = null;
+      continue;
+    }
+    if (!inside) {
+      inside = heading.test(line);
+      continue;
+    }
     if (/^#{1,2}\s/.test(line)) break;
     section.push(line);
     const field = line.match(/^\s*[-*]\s+\*\*([^*:]+):?\*\*:?\s*(.*)$/);
     if (field) fields[field[1].trim().toLowerCase()] = field[2].trim();
   }
-  return { fields, markdown: section.join('\n').trim() };
+  return inside ? { fields, markdown: section.join('\n').trim() } : null;
 }
 const tagOf = title => title.match(/^\[([^\]]+)\]\s*/);
 // Line 1 names the ticket (or the [tag] of a title); line 2 is the title without it.
@@ -550,7 +559,7 @@ function renderPanel(now) {
   } else if (seeded !== null) $('panel-reply-text').value = seeded;
   panelTarget = item;
   panelCard = card;
-  const words = cardWords(card), status = statusOf(item), glance = doc && !doc.pending && !doc.error ? glanceOf(doc.markdown) : null;
+  const words = cardWords(card), status = statusOf(item), glance = doc && !doc.pending && !doc.error ? readSummary(doc.markdown, /^##\s+At a glance\s*$/i) : null;
   const fields = glance?.fields || {};
   $('panel-title').textContent = words.key ? words.title : (card.work || item).title;
   // The ticket and project sit with the status under the title, not as a label above it.
@@ -583,7 +592,7 @@ function renderPanel(now) {
   target.textContent = t('panel.target', { title: item.title });
 
   renderChoices(card, item, doc);
-  renderGate(item, doc, status);
+  renderGate(item, doc, status, glance?.markdown);
   renderProblem(item, status);
   renderAgentNext(card, item, asks);
   renderTyped(item);
@@ -642,7 +651,7 @@ function renderAgentNext(card, item, asks) {
   $('panel-agent-next').hidden = !lines.length;
   $('panel-agent-next-list').replaceChildren(...lines.map(line => el('li', '', line)));
 }
-function renderGate(item, doc, status) {
+function renderGate(item, doc, status, glanceMarkdown) {
   const box = $('panel-gate');
   box.hidden = !status.gate;
   if (!status.gate) return;
@@ -660,12 +669,12 @@ function renderGate(item, doc, status) {
     return;
   }
   approve.disabled = sending || doc.gate !== status.gate;
-  const section = glanceOf(doc.markdown);
-  if (!section?.markdown) { glance.replaceChildren(el('p', 'hint', t('panel.noGlance'))); return; }
+  const summary = glanceMarkdown || (status.gate === 'plan' && readSummary(doc.markdown, /^##\s+Summary\s*$/i)?.markdown);
+  if (!summary) { glance.replaceChildren(el('p', 'hint', t('panel.noGlance'))); return; }
   import('./markdown.js').then(({ renderMarkdown, addCopyButtons }) => {
     if (panelTarget?.id !== item.id) return;
     // renderMarkdown escapes all HTML first, as on the list's work document.
-    glance.innerHTML = renderMarkdown(section.markdown);
+    glance.innerHTML = renderMarkdown(summary);
     addCopyButtons(glance, copyOptions);
   });
 }

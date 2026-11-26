@@ -303,7 +303,7 @@ export default {
     'panel.changes': '답하면 하려는 것',
     'panel.why': '이유',
     'panel.target': '답은 “{title}” 항목으로 가요',
-    'panel.noGlance': '이 문서에는 At a glance 절이 없어요. 자세히에서 전체를 읽어 주세요.',
+    'panel.noGlance': '표시할 요약이 없어요. 자세히에서 전체를 읽어 주세요.',
     'panel.reply': '직접 답하기',
     'panel.send': '답 보내기',
     'panel.ticket': '티켓 열기',
